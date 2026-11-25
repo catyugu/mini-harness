@@ -5,7 +5,6 @@ import type { PluginInfo } from '@mini-harness/plugin-api/descriptor';
 
 export const metadata: PluginInfo = {
   scope: 'application',
-  protectServices: ['harnessToolPolicy'],
   title: 'Tool permissions',
   description: 'Inherited restrictions and user tool grants',
 };

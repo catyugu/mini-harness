@@ -9,8 +9,6 @@ export interface PluginInfo {
   title: string;
   description: string;
   scope: PluginScope['kind'];
-  /** Protected host and authorization service ownership. */
-  protectServices?: readonly string[];
   trustedContributor?: boolean;
   web?: boolean;
   browser?: string;

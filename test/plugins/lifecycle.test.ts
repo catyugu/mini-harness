@@ -701,7 +701,7 @@ test('live scoped providers isolate siblings, restore inheritance and roll back 
   };
   const ctx = new Context();
   ctx.provide('authority', {});
-  const host = new PluginHost(ctx, directory, builtins, ['authority'], () => settings);
+  const host = new PluginHost(ctx, directory, builtins, () => settings);
   host.register('workspace', (id) => ({ scope: { kind: 'workspace', workspaceId: id } }), true);
   host.register('session', (id) => {
     const record = records.get(id);
@@ -835,7 +835,7 @@ test('configuration validation resolves the staged scope provider and rejects in
       },
     },
   ];
-  const host = new PluginHost(new Context(), directory, builtins, [], () => settings);
+  const host = new PluginHost(new Context(), directory, builtins, () => settings);
   host.register('workspace', (id) => ({ scope: { kind: 'workspace', workspaceId: id } }), true);
   t.after(async () => {
     await host.close();
@@ -886,7 +886,7 @@ test('setup and live configuration cannot await their own graph transaction', as
     },
   ];
   const ctx = new Context();
-  const host = new PluginHost(ctx, directory, builtins, [], () => settings);
+  const host = new PluginHost(ctx, directory, builtins, () => settings);
   ctx.provide('harnessScopes', host);
   host.register('session', (id) => ({ scope: { kind: 'session', sessionId: id, workspaceId: 'workspace' } }));
   t.after(async () => {
@@ -938,7 +938,7 @@ test('a failed server entry does not publish its browser module', async (t) => {
     plugins: { replacement: true },
     pluginConfig: { replacement: { fail: true } },
   };
-  const host = new PluginHost(new Context(), directory, builtins, [], () => settings);
+  const host = new PluginHost(new Context(), directory, builtins, () => settings);
   t.after(async () => {
     await host.close();
     rmSync(directory, { recursive: true, force: true });

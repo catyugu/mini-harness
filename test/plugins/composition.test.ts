@@ -1,4 +1,3 @@
-import { storedProfile } from '../support/profile.ts';
 import { expectPresent } from '../support/required.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -274,46 +273,29 @@ export const apply = (ctx) => {
   await assert.rejects(granted.execute('revoked', {}), /Tool denied/);
 });
 
-test('the host tool authorization service cannot be replaced at either scope', async (t) => {
+test('explicit Profile composition can replace the default tool policy without a provider whitelist', async (t) => {
   const { app, paths, request } = await fixture(t);
-  for (const scope of ['application', 'session']) {
-    writePlugin(
-      paths.plugins,
-      'tools-' + scope,
-      { scope },
-      `
-export const provide = ['harnessTools'];
-export function apply() { throw new Error('Protected provider must never mount'); }
-`,
-    );
-  }
-  const session = app.runtime.plugins.ctx.harnessRegistry.create();
-  const application = await request('/settings', 'PATCH', {
-    plugins: { 'tools-application': true },
-
+  writePlugin(paths.plugins, 'deny-tools', {}, `
+export const provide = ['harnessToolPolicy'];
+export function apply(ctx) {
+  ctx.provide('harnessToolPolicy', () => false);
+}
+`);
+  const root = app.runtime.plugins.ctx;
+  const session = root.harnessRegistry.create();
+  assert.ok(root.harnessTools.forSession(session.id).some(({ name }) => name === 'read'));
+  const duplicate = await request('/settings', 'PATCH', { plugins: { 'deny-tools': true } });
+  assert.notEqual(duplicate.status, 200);
+  const replacement = await request('/settings', 'PATCH', {
+    plugins: { 'core:tool-policy': false, 'deny-tools': true },
   });
-  assert.equal(application.status, 400);
-  assert.match(application.body.error, /Protected service cannot be overridden: harnessTools/);
-  const implicit = await request('/settings', 'PATCH', {
-    plugins: { 'core:tools': false, 'tools-application': true },
+  assert.equal(replacement.status, 200, JSON.stringify(replacement.body));
+  assert.deepEqual(root.harnessTools.forSession(session.id), []);
+  const restored = await request('/settings', 'PATCH', {
+    plugins: { 'core:tool-policy': true, 'deny-tools': false },
   });
-  assert.equal(implicit.status, 400);
-  assert.match(implicit.body.error, /Protected service cannot be overridden: harnessTools/);
-  assert.equal(app.runtime.settings.plugins['core:tools'], true);
-  assert.equal(app.runtime.settings.plugins['tools-application'], undefined);
-  assert.equal((await storedProfile(paths)).plugins['core:tools'], true);
-  assert.equal((await storedProfile(paths)).plugins['tools-application'], undefined);
-  const scoped = await request('/settings', 'PATCH', {
-    scopes: {
-      ['session:' + session.id]: {
-        plugins: { 'tools-session': true },
-
-      },
-    },
-  });
-  assert.equal(scoped.status, 400);
-  assert.match(scoped.body.error, /Protected service cannot be overridden: harnessTools/);
-  assert.ok(app.runtime.plugins.ctx.harnessTools.forSession(session.id).some(({ name }) => name === 'read'));
+  assert.equal(restored.status, 200, JSON.stringify(restored.body));
+  assert.ok(root.harnessTools.forSession(session.id).some(({ name }) => name === 'read'));
 });
 
 test('file tools and HTTP preview consume the same selected File Access provider', async (t) => {

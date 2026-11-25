@@ -390,9 +390,6 @@ export async function loadProfile(name: string, paths: Paths, context: Context):
     imports.deregister();
     throw error;
   }
-  const infrastructure = modules.flatMap(({ plugin }) =>
-    typeof plugin.provide === 'string' ? [plugin.provide] : (plugin.provide ?? []),
-  );
   const nativeEntries: EntryOptions[] = modules.map(({ row, module, plugin }) => ({
     id: row.id,
     module,
@@ -496,7 +493,6 @@ export async function loadProfile(name: string, paths: Paths, context: Context):
     descriptors,
     nativeEntries,
     entries,
-    infrastructure,
     installed: aliases,
     client(id) {
       return resolved.get(id)?.client ?? descriptors.some((row) => row.browser);

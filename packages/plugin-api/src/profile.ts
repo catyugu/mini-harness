@@ -12,7 +12,6 @@ export interface ProfileRuntime {
   readonly descriptors: ResolvedPlugin[];
   readonly nativeEntries: readonly EntryOptions[];
   readonly entries: EntryTree;
-  readonly infrastructure: readonly string[];
   readonly installed: ReadonlyMap<string, string>;
   client(id: string): boolean;
   read(): ProfileConfiguration;

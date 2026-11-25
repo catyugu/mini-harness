@@ -45,12 +45,9 @@ export interface ConfiguredPlugin {
 
 export class PluginCatalog {
   private readonly builtins: Map<string, DiscoveredPlugin>;
-  readonly lockedPlugins: ReadonlySet<string>;
-  private readonly protectedProviders: ReadonlyMap<string, string>;
   constructor(
     private readonly directory: string,
     builtins: ResolvedPlugin[],
-    rootServices: string[],
     private readonly profile?: Pick<
       import('@mini-harness/plugin-api/profile').ProfileRuntime,
       'installed' | 'client'
@@ -62,11 +59,6 @@ export class PluginCatalog {
         { ...descriptor, resources: builtinBrowserAssets(descriptor) },
       ]),
     );
-    this.protectedProviders = new Map([
-      ...rootServices.map((name) => [name, 'application'] as const),
-      ...builtins.flatMap((row) => row.protectServices?.map((name) => [name, row.id] as const) ?? []),
-    ]);
-    this.lockedPlugins = new Set(this.protectedProviders.values());
     if (this.builtins.size !== builtins.length) throw new Error('Duplicate builtin plugin ID');
   }
 
@@ -166,7 +158,7 @@ export class PluginCatalog {
     context: (scope?: ScopeKey) => Context,
   ): PluginMetadata[] {
     return this.descriptors()
-      .filter(({ id }) => !this.lockedPlugins.has(id) && localPluginIdPattern.test(id))
+      .filter(({ id }) => localPluginIdPattern.test(id))
       .map((descriptor) => {
         const {
           id,
@@ -319,13 +311,6 @@ export class PluginCatalog {
     const isApp = scope === 'application';
     const plans: ConfiguredPlugin[] = [];
     const declared = new Set<string>();
-    if (isApp) {
-      for (const [service, owner] of this.protectedProviders) {
-        const builtin = this.builtins.get(owner);
-        if (builtin && !this.enabled(builtin, settings))
-          throw new DomainError('invalid_input', 'Protected service cannot be overridden: ' + service);
-      }
-    }
     for (const [id, active] of Object.entries(overrides?.plugins ?? {})) {
       if (active && !descriptors.some((item) => item.id === id && item.scope === scope)) {
         const error = new DomainError(
@@ -344,15 +329,9 @@ export class PluginCatalog {
       const { id, scope: kind } = item;
       if (kind !== scope || !(isApp ? this.enabled(item, settings) : overrides?.plugins?.[id] === true))
         continue;
-      // Cordis owns service uniqueness and activation. Child groups isolate their
-      // declared services; only the host/tool authorization boundary is fixed.
+      // Child groups isolate the services declared by their Cordis modules.
       const provide = item.plugin?.provide;
-      for (const service of typeof provide === 'string' ? [provide] : (provide ?? [])) {
-        const owner = this.protectedProviders.get(service);
-        if (owner && (!isApp || owner !== id))
-          throw new DomainError('invalid_input', 'Protected service cannot be overridden: ' + service);
-        declared.add(service);
-      }
+      for (const service of typeof provide === 'string' ? [provide] : (provide ?? [])) declared.add(service);
       try {
         if (item.error) throw new DomainError('invalid_input', 'Invalid plugin ' + id + ': ' + item.error);
         const values = isApp

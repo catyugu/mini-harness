@@ -5,7 +5,6 @@ import { ToolRegistry } from './registry.ts';
 
 export const metadata: PluginInfo = {
   scope: 'application',
-  protectServices: ['harnessTools'],
   title: 'Tools',
   description: 'Tool registration and execution leases',
 };

@@ -50,7 +50,6 @@ export class PluginHost implements ScopePort {
     readonly ctx: Context,
     private readonly directory: string,
     builtins: ResolvedPlugin[],
-    rootServices: string[],
     private readonly settings: () => PluginSettings,
     upgrade?: (path: string, handler: UpgradeHandler) => () => Promise<void>,
     private readonly writePlugin?: (
@@ -88,8 +87,7 @@ export class PluginHost implements ScopePort {
       }),
     };
     for (const [name, value] of Object.entries(services)) owner.provide(name, value);
-    const provided = [...new Set([...rootServices, ...Object.keys(services)])];
-    this.catalog = new PluginCatalog(directory, builtins, provided, ctx.get('harnessProfile'));
+    this.catalog = new PluginCatalog(directory, builtins, ctx.get('harnessProfile'));
     this.imports = bindPluginImports([directory]);
   }
 
@@ -446,10 +444,7 @@ export class PluginHost implements ScopePort {
           'Plugin ' + instance + ': ' + message,
           { cause: error },
         );
-      if (
-        this.catalog.lockedPlugins.has(id) ||
-        previousActive.has(instance)
-      )
+      if (previousActive.has(instance))
         return false;
       failures.set(instance, message);
       return true;
