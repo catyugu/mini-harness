@@ -9,10 +9,19 @@ Copy this directory to an independent project named `task-notes`, then install i
 ```sh
 npm install
 npm run build
-MINI_HARNESS_DEV_PLUGIN="$PWD" npx mini-harness
+npx mini-harness profile init development --from web
 ```
 
-In PowerShell, set `$env:MINI_HARNESS_DEV_PLUGIN = (Get-Location).Path` before running the last command. Enable **Task notes** in Plugins. Start a conversation with a configured model and ask it to save a task note. Edit the label under Settings → Extensions.
+In the generated Profile's `cordis.patch.yml`, add:
+ 
+```yaml
+plugins:
+  - id: task-notes
+    name: /absolute/path/to/task-notes
+    client: true
+```
+
+Start with `npx mini-harness --profile development`. Start a conversation with a configured model and ask it to save a task note. Edit the label under Settings → Extensions.
 
 ## Try the server capabilities
 

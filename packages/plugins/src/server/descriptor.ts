@@ -1,5 +1,6 @@
 import { isAbsolute, join, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createRequire } from 'node:module';
 import { realpathSync } from 'node:fs';
 import { readJson } from '@mini-harness/platform/json';
 import type { PluginInfo, ResolvedPlugin } from '@mini-harness/plugin-api/descriptor';
@@ -28,7 +29,9 @@ export function describePlugin(id: string, folder: string): DiscoveredPlugin {
   }>(packageFile, {});
   let source: string | undefined;
   if (packageInfo.name && (packageInfo.exports !== undefined || packageInfo.main !== undefined)) {
-    const resolved = fileURLToPath(resolveModule(packageInfo.name, packageFile));
+    const resolved = packageInfo.exports !== undefined
+      ? fileURLToPath(resolveModule(packageInfo.name, packageFile))
+      : createRequire(packageFile).resolve(folder);
     const physical = realpathSync(resolved);
     const location = relative(realpathSync(folder), physical);
     if (isAbsolute(location) || location === '..' || location.startsWith('..' + sep) || !isRegularFile(physical))

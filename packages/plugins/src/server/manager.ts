@@ -53,7 +53,6 @@ export class PluginHost implements ScopePort {
     rootServices: string[],
     private readonly settings: () => PluginSettings,
     upgrade?: (path: string, handler: UpgradeHandler) => () => Promise<void>,
-    devPlugin?: string,
     private readonly writePlugin?: (
       id: string,
       key: ScopeKey | undefined,
@@ -90,8 +89,8 @@ export class PluginHost implements ScopePort {
     };
     for (const [name, value] of Object.entries(services)) owner.provide(name, value);
     const provided = [...new Set([...rootServices, ...Object.keys(services)])];
-    this.catalog = new PluginCatalog(directory, builtins, provided, devPlugin, ctx.get('harnessProfile'));
-    this.imports = bindPluginImports([directory, ...(devPlugin ? [devPlugin] : [])]);
+    this.catalog = new PluginCatalog(directory, builtins, provided, ctx.get('harnessProfile'));
+    this.imports = bindPluginImports([directory]);
   }
 
   private browserState = publishBrowser([], [], () => false);

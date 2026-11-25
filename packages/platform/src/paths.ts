@@ -25,7 +25,6 @@ export function getPaths(cwd: string = process.cwd(), env: NodeJS.ProcessEnv = p
     pid: join(home, 'server.json'),
     log: join(home, 'server.log'),
     plugins: join(home, 'plugins'),
-    ...(env.MINI_HARNESS_DEV_PLUGIN ? { devPlugin: resolve(env.MINI_HARNESS_DEV_PLUGIN) } : {}),
   };
 }
 

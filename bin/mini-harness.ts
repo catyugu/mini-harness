@@ -25,7 +25,6 @@ Usage:
   mini-harness stop                      Stop the running server
   mini-harness reset-token               Stop the server and replace its browser credential
   mini-harness profile init <name> [--from web]   Create an independent Profile package
-  mini-harness plugin dev <directory>    Build and reload a plugin in an isolated host
   mini-harness plugin install <id> <package[@version-or-tag]>
   mini-harness plugin update <id> [package[@version-or-tag]]
   mini-harness --help                    Show help
@@ -163,12 +162,6 @@ async function main() {
     } finally {
       await unlock();
     }
-    return;
-  }
-  if (argv[0] === 'plugin' && argv[1] === 'dev') {
-    if (argv.length !== 3) throw new Error('Usage: mini-harness plugin dev <directory>');
-    const { pluginDev } = await import('./plugin-dev.ts');
-    await pluginDev(argv[2], executable);
     return;
   }
   if (argv[0] === 'plugin') {

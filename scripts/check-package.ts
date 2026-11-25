@@ -8,7 +8,6 @@ import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { promisify } from 'node:util';
-import { readJson, writeJson } from '@mini-harness/platform/json';
 import { readServerInfo } from '@mini-harness/host/process';
 import { parseNpmPackResult } from './npm-pack.ts';
 import { waitUntil } from '../test/support/api-fixture.ts';
@@ -46,7 +45,7 @@ async function checkPackage() {
   const { root, paths } = createFixturePaths(mock.url);
   const installed = join(work, 'install');
   const plugin = join(installed, 'task-notes');
-  const env = { ...process.env, MINI_HARNESS_HOME: paths.home, MINI_HARNESS_DEV_PLUGIN: plugin };
+  const env = { ...process.env, MINI_HARNESS_HOME: paths.home };
   let started = false;
   const cli = (...args: string[]) =>
     npm(['exec', '--offline', '--', 'mini-harness', ...args], { cwd: installed, env });
@@ -265,8 +264,11 @@ async function checkPackage() {
     await execFile(process.execPath, [resolve('node_modules/typescript/bin/tsc'), '-p', 'tsconfig.json'], {
       cwd: plugin,
     });
-    const settings = readJson<Record<string, unknown>>(paths.settings, {});
-    writeJson(paths.settings, { ...settings, plugins: { 'task-notes': true } });
+    await cli('profile', 'init', 'web', '--from', 'web');
+    await writeFile(
+      join(paths.home, 'profiles', 'web', 'cordis.patch.yml'),
+      JSON.stringify({ plugins: [{ id: 'task-notes', name: plugin, client: true }] }),
+    );
     const launch = await cli('--detached', '--cwd', paths.cwd, '--port', String(await availablePort()));
     assert.match(launch.stdout, /started independently/);
     started = true;

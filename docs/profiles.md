@@ -62,6 +62,9 @@ plugins:
       label: Progress
   - id: local-tool
     name: ./plugins/tool.mjs
+  - id: local-panel
+    name: /absolute/path/to/local-panel
+    client: true
 ```
 
 Install ordinary npm dependencies in the Profile directory with
@@ -69,7 +72,7 @@ Install ordinary npm dependencies in the Profile directory with
 Installing a package does not activate it. A module may export a native Cordis
 function, class, or object with `apply(ctx, config)`; no plugin.json is needed
 for these entries. Disabled external entries are not imported. Local modules
-resolve relative to the layer that declares the name. YAML layers may include
+resolve relative to the layer that declares the name. A directory entry loads the package's server and browser modules; it can be managed in the Web Plugins page. YAML layers may include
 other fragments using `include`; they cannot use executable YAML tags or cyclic
 references. The final entry ID determines the configuration override.
 

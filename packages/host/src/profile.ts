@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync, statSync } from 'node:fs';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { isDeepStrictEqual } from 'node:util';
@@ -187,6 +187,20 @@ function rows(layers: readonly LoadedLayer[]) {
   return result;
 }
 
+function installedPath(file: string, directory: string) {
+  const path = relative(dirname(file), directory).split(sep).join('/');
+  return isAbsolute(path) || path.startsWith('../') ? path : './' + path;
+}
+
+function localDirectory(row: ResolvedRow, paths: Paths) {
+  const name = row.name!;
+  if (!isAbsolute(name) && !name.startsWith('./') && !name.startsWith('../')) return;
+  const directory = resolve(dirname(row.source!), name);
+  const location = relative(paths.plugins, directory);
+  if (localPluginIdPattern.test(location) || statSync(directory, { throwIfNoEntry: false })?.isDirectory())
+    return relative(paths.plugins, existsSync(directory) ? realpathSync(directory) : directory);
+}
+
 function profileLayers(name: string, paths: Paths) {
   const directory = profileDirectory(name, paths);
   const manifestPath = join(directory, MANIFEST);
@@ -199,6 +213,17 @@ function profileLayers(name: string, paths: Paths) {
   if (!Array.isArray(bundles) || bundles.some((bundle) => typeof bundle !== 'string'))
     throw new Error(manifestPath + ': expected miniHarness.profile.bundles');
   const file = join(directory, PATCH);
+  // Convert the old installed-module specifier in the writable layer once.
+  const patch = load(file);
+  let converted = false;
+  for (const row of patch?.plugins ?? []) {
+    if (!row.name?.startsWith('installed:')) continue;
+    const id = row.name.slice(10);
+    if (!localPluginIdPattern.test(id)) throw new Error('Invalid installed plugin ID: ' + id);
+    row.name = installedPath(file, join(paths.plugins, id));
+    converted = true;
+  }
+  if (converted) writeText(file, stringify(patch));
   return {
     directory,
     file,
@@ -277,17 +302,15 @@ export async function loadProfile(name: string, paths: Paths, context: Context):
   const official = rows(baseLayers);
   const resolved = rows([...shipped, ...userLayers]);
   const merged: Layer = Object.assign({}, ...shipped, ...userLayers);
+  const aliases = new Map<string, string>();
   for (const row of resolved.values()) {
-    if (
-      row.name?.startsWith('installed:') &&
-      (!localPluginIdPattern.test(row.name.slice(10)) || !localPluginIdPattern.test(row.id))
-    )
-      throw new Error(file + ': installed entries use the installed module ID: ' + row.id);
+    const location = localDirectory(row, paths);
+    if (location !== undefined) aliases.set(row.id, location);
   }
   const descriptors = await profileDescriptors(resolved);
   const managedIds = new Set(descriptors.map(({ id }) => id));
   const nativeRows = [...resolved.values()].filter(
-    (row) => !managedIds.has(row.id) && !row.name?.startsWith('installed:'),
+    (row) => !managedIds.has(row.id) && !aliases.has(row.id),
   );
   const nativeIds = new Set(nativeRows.map(({ id }) => id));
   const { legacy: previousSettings, product, scopedTools, migration: pendingMigration, raw } =
@@ -347,6 +370,7 @@ export async function loadProfile(name: string, paths: Paths, context: Context):
     }));
   const roots = [
     directory,
+    ...[...aliases.values()].map((location) => resolve(paths.plugins, location)),
     ...sources.flatMap(({ row, module }) =>
       packagedModules.has(row.name!) ? [] : [dirname(fileURLToPath(module))],
     ),
@@ -380,11 +404,6 @@ export async function loadProfile(name: string, paths: Paths, context: Context):
         },
   }));
   const entries = new EntryTree();
-  const aliases = new Map(
-    [...resolved.values()].flatMap((row) =>
-      row.name?.startsWith('installed:') ? [[row.id, row.name.slice(10)]] : [],
-    ),
-  );
   let current = effective;
   let migrate = migration;
   function commit(settings: ProfileConfiguration) {
@@ -398,7 +417,7 @@ export async function loadProfile(name: string, paths: Paths, context: Context):
       ...Object.keys(settings.plugins),
       ...Object.keys(settings.pluginConfig),
       ...(user.plugins ?? [])
-        .filter((row) => !nativeIds.has(row.id) && !row.name?.startsWith('installed:'))
+        .filter((row) => !nativeIds.has(row.id) && !aliases.has(row.id))
         .map((row) => row.id),
     ])) {
       const base = official.get(id);
@@ -406,7 +425,10 @@ export async function loadProfile(name: string, paths: Paths, context: Context):
       const existing = resolved.get(id);
       const config = settings.pluginConfig[id];
       const row: Row = { id };
-      if (!base || existing?.name !== base.name) row.name = existing?.name ?? 'installed:' + id;
+      if (!base || existing?.name !== base.name)
+        row.name = aliases.has(id)
+          ? installedPath(file, resolve(paths.plugins, aliases.get(id)!))
+          : existing?.name ?? installedPath(file, join(paths.plugins, id));
       const disabled = settings.plugins[id] === undefined ? undefined : !settings.plugins[id];
       if (disabled !== undefined && (!base || disabled !== Boolean(base.disabled))) row.disabled = disabled;
       const changed = Object.fromEntries(

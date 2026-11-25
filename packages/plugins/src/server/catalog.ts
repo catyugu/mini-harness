@@ -4,7 +4,7 @@ import { localPluginIdPattern } from '@mini-harness/plugin-api/selection';
 import { DomainError } from '@mini-harness/platform/errors';
 import { lstatSync, readdirSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
-import { basename, join } from 'node:path';
+import { resolve } from 'node:path';
 import { Check } from 'typebox/value';
 import { scopeKeys, type PluginSettings } from '@mini-harness/plugin-api/configuration';
 import type { PluginScope, ScopeKey, ScopeSettings } from '@mini-harness/plugin-api/scopes';
@@ -51,7 +51,6 @@ export class PluginCatalog {
     private readonly directory: string,
     builtins: ResolvedPlugin[],
     rootServices: string[],
-    private readonly devPlugin?: string,
     private readonly profile?: Pick<
       import('@mini-harness/plugin-api/profile').ProfileRuntime,
       'installed' | 'client'
@@ -91,12 +90,6 @@ export class PluginCatalog {
   }
 
   private discover(): DiscoveredPlugin[] {
-    if (this.devPlugin) {
-      const id = basename(this.devPlugin);
-      if (!localPluginIdPattern.test(id) || this.builtins.has(id))
-        throw new Error('Invalid development plugin ID');
-      return [this.describe(id, this.devPlugin)];
-    }
     const directories = new Map(
       readdirSync(this.directory, { withFileTypes: true }).flatMap((entry) =>
         entry.isDirectory() && localPluginIdPattern.test(entry.name) ? [[entry.name, entry.name]] : [],
@@ -104,7 +97,7 @@ export class PluginCatalog {
     );
     for (const [id, module] of this.profile?.installed ?? []) directories.set(id, module);
     return [...directories].flatMap(([id, module]) =>
-      this.builtins.has(id) ? [] : [this.describe(id, join(this.directory, module))],
+      this.builtins.has(id) ? [] : [this.describe(id, resolve(this.directory, module))],
     );
   }
 

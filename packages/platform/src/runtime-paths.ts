@@ -9,7 +9,6 @@ export interface Paths {
   pid: string;
   log: string;
   plugins: string;
-  devPlugin?: string;
 }
 
 declare module 'mini-harness/cordis' {
