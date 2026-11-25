@@ -12,11 +12,7 @@ import { DomainError } from '@mini-harness/platform/errors';
 import { isDeepStrictEqual } from 'node:util';
 import { createHash } from 'node:crypto';
 import type { ToolExecutorPort } from '@mini-harness/agent/api';
-import type {
-  SessionCatalog,
-  SessionLifecycle,
-  SessionStore,
-} from '@mini-harness/sessions/store';
+import type { SessionCatalog, SessionLifecycle, SessionStore } from '@mini-harness/sessions/store';
 import type { ModelChoice, ThinkingLevel } from '@mini-harness/llm/vocabulary';
 import type { SessionRecord } from '@mini-harness/sessions/identity';
 import {
@@ -312,10 +308,12 @@ export class SessionRun {
             timestamp: 0,
           });
         }
-        return { model, thinkingLevel: resolveThinking(capabilities, item.thinkingLevel, previous.thinkingLevel) };
+        return {
+          model,
+          thinkingLevel: resolveThinking(capabilities, item.thinkingLevel, previous.thinkingLevel),
+        };
       };
-      const nextValid = (mode: InboxItem['mode']) =>
-        inbox.select(mode, (item) => selection(item, true));
+      const nextValid = (mode: InboxItem['mode']) => inbox.select(mode, (item) => selection(item, true));
       const prepare = async (item: Input, model: ModelChoice, inputSource: InputSource) => {
         const prepared = await this.prepareInput(
           ctx,

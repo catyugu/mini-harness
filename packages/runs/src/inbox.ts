@@ -50,7 +50,10 @@ export class Inbox {
       });
   }
 
-  select<T>(mode: InboxItem['mode'], select: (item: InboxItem) => T): { item: InboxItem; value: T } | undefined {
+  select<T>(
+    mode: InboxItem['mode'],
+    select: (item: InboxItem) => T,
+  ): { item: InboxItem; value: T } | undefined {
     for (const item of this.list()) {
       if (item.mode !== mode) continue;
       try {
