@@ -317,6 +317,26 @@ export function readProfile(name: string, paths?: Paths) {
   return rows([...shipped, ...userLayers]);
 }
 
+/** Explicit installation authorization updates the user layer without importing plugin code. */
+export function enableProfileModules(profile: string, paths: Paths, names: readonly string[]) {
+  const directory = ensureProfile(profile, paths);
+  const file = join(directory, PATCH);
+  const layer = load(file) ?? {};
+  const entries = readProfile(profile, paths);
+  const plugins = [...(layer.plugins ?? [])];
+  for (const name of names) {
+    const matches = [...entries.values()].filter((entry) => entry.name === name);
+    if (matches.length > 1) throw new Error('Select an explicit Entry ID for ' + name);
+    const id = matches[0]?.id ?? defaultEntryId(name);
+    if (entries.has(id) && entries.get(id)?.name !== name)
+      throw new Error('Entry ID already belongs to a different module: ' + id);
+    const row = plugins.find((entry) => entry.id === id);
+    if (row) row.disabled = false;
+    else plugins.push({ id, ...(matches.length ? {} : { name }), disabled: false });
+  }
+  writeText(file, stringify({ ...layer, plugins }));
+}
+
 function isPlugin(value: unknown): value is Plugin {
   return typeof value === 'function' || (object(value) && typeof value.apply === 'function');
 }

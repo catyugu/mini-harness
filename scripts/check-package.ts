@@ -42,7 +42,9 @@ async function checkPackage() {
       ? { tool: 'save_task_note', args: { note: 'Installed SDK recorded progress' } }
       : messages.at(-1)?.content === 'Pack scoped test'
         ? { tool: 'scoped_greeting', args: {} }
-        : 'Mock response',
+        : messages.at(-1)?.content === 'Pack minimal tool'
+          ? { tool: 'external_read', args: {} }
+          : 'Mock response',
   );
   const { root, paths } = createFixturePaths(mock.url);
   const installed = join(work, 'install');
@@ -344,6 +346,44 @@ async function checkPackage() {
         ],
       }),
     );
+    const minimal = join(installed, 'minimal-tool');
+    await mkdir(minimal);
+    await writeFile(
+      join(minimal, 'package.json'),
+      JSON.stringify({
+        name: '@example/minimal-tool',
+        version: '1.0.0',
+        type: 'module',
+        exports: './index.js',
+        peerDependencies: { 'mini-harness': '^0.4.0' },
+      }),
+    );
+    await writeFile(
+      join(minimal, 'index.js'),
+      `export const inject = ['harnessTools'];
+export function apply(ctx) {
+  for (const name of ['external_read', 'external_write']) {
+    ctx.effect(() => ctx.harnessTools.register({
+      name, description: name, parameters: { type: 'object', properties: {} },
+      async execute() { return { content: [{ type: 'text', text: 'External tool result' }] }; }
+    }, name === 'external_read' ? { access: 'readOnly' } : undefined));
+  }
+}`,
+    );
+    const minimalPack = parseNpmPackResult(
+      (await npm(['pack', '--json', '--pack-destination', work], { cwd: minimal })).stdout,
+    );
+    await cli(
+      'plugin',
+      '--profile',
+      'web',
+      'add',
+      join(work, minimalPack.filename),
+      '--enable',
+      '--legacy-peer-deps',
+      '--no-audit',
+      '--no-fund',
+    );
     const launch = await cli('--detached', '--cwd', paths.cwd, '--port', String(await availablePort()));
     assert.match(launch.stdout, /started independently/);
     started = true;
@@ -494,6 +534,15 @@ async function checkPackage() {
       assert.match(await (await get(base + '/events?run=' + run.id)).text(), /Mock response/);
       assert.equal((await (await get(base + '/runs')).json()).run.state, 'completed');
     };
+    const readOnly = await (await write('/api/sessions', 'POST', { permission: 'readOnly' })).json();
+    await runIn(readOnly.id, 'Pack minimal tool');
+    const request = mock.requests.find(({ tools }) =>
+      JSON.stringify(tools).includes('"name":"external_read"'),
+    );
+    assert.ok(request);
+    assert.doesNotMatch(JSON.stringify(mock.requests.at(-1)?.tools), /external_write/);
+    const readOnlyHistory = await (await get('/api/sessions/' + readOnly.id)).json();
+    assert.match(JSON.stringify(readOnlyHistory.messages), /External tool result/);
     await runIn(child.childId, 'Pack scoped test');
     assert.match(JSON.stringify(mock.requests.at(-1)), /scoped_greeting/);
     const scopedHistory = await (await get('/api/sessions/' + child.childId)).json();
@@ -561,6 +610,7 @@ async function checkPackage() {
       'web',
       'remove',
       pluginPack.name,
+      minimalPack.name,
       ...additional.map(({ name }) => name),
       '--legacy-peer-deps',
       '--no-audit',
@@ -568,7 +618,7 @@ async function checkPackage() {
     );
     const afterRemoval = JSON.parse(await readFile(join(profileDirectory, 'package.json'), 'utf8'));
     assert.ok(!afterRemoval.dependencies?.[pluginPack.name]);
-    for (const { name } of [pluginPack, ...additional]) {
+    for (const { name } of [pluginPack, minimalPack, ...additional]) {
       assert.ok(!afterRemoval.dependencies?.[name]);
       await assert.rejects(access(join(profileDirectory, 'node_modules', name)));
     }

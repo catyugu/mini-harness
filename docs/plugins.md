@@ -8,11 +8,12 @@ Use the Profile package manager to install, update and remove npm dependencies:
 
 ```sh
 mini-harness plugin --profile web add <package>
+mini-harness plugin --profile web add <package> --enable
 mini-harness plugin --profile web update <package>
 mini-harness plugin --profile web remove <package>
 ```
 
-Installing a package changes only the selected Profile's npm dependencies. Declare an Entry in the Profile to activate it; restart before updating or removing packages used by a running application. npm lifecycle scripts default to disabled; authorize them explicitly with `--ignore-scripts=false`. To develop locally, declare the built package directory as an entry name in a Profile. Multiple local packages can run together. Use the Web Plugins page to enable and configure available entries; it does not install or delete code.
+Installing a package changes only the selected Profile's npm dependencies unless you explicitly pass `--enable`. Declare an Entry in the Profile to activate it, or use that option to create and enable the Entry; restart before updating or removing packages used by a running application. npm lifecycle scripts default to disabled; authorize them explicitly with `--ignore-scripts=false`. To develop locally, declare the built package directory as an entry name in a Profile. Multiple local packages can run together. Use the Web Plugins page to enable and configure available entries; it does not install or delete code.
 
 The manifest supplies display information, scope (`application`, `workspace`, or `session`), and optional configuration-form metadata. Browser modules declare their dependencies and services directly with Cordis `inject` and `provide`. A browser entry receives its configuration as a whole and can update it through `browserPluginSettings(ctx)` when the entry exposes a configuration contract. Keep server-only secrets in `harnessPluginSecrets` or a separate server entry; do not put them in browser entry configuration. Set `browser` to the browser entry module and `browserDirectory` to its dedicated build output directory. JavaScript chunks, styles, fonts and other supported assets inside that directory are published together; never put private files there. Use `browserPreload` for a published module that exports a function receiving an activation signal and optionally returning cleanup.
 

@@ -3,6 +3,7 @@ import { bootProfile } from '@mini-harness/host/application';
 import {
   allowsDetachment,
   dumpProfile,
+  enableProfileModules,
   ensureProfile,
   profileSchema,
   recreateProfile,
@@ -25,6 +26,7 @@ function help() {
 Usage:
   mini-harness [--profile] <name> [options] [app-args...]
   mini-harness plugin --profile <name> <npm-args...>
+  mini-harness plugin --profile <name> add <package> --enable
 
 Options:
   -V, --version                    Print version
@@ -220,7 +222,24 @@ async function main() {
     const unlock = await lockInstance(paths.home);
     try {
       const { runPackageManager } = await import('@mini-harness/plugins/registry-client');
-      await runPackageManager(ensureProfile(name, paths), npmArgs);
+      const directory = ensureProfile(name, paths);
+      const enable = npmArgs.includes('--enable');
+      const args = npmArgs.filter((arg) => arg !== '--enable');
+      if (enable && !['add', 'install', 'i'].includes(args[0]))
+        throw new Error('--enable requires npm add or install');
+      const dependencies = (): Record<string, string> =>
+        JSON.parse(readFileSync(resolve(directory, 'package.json'), 'utf8')).dependencies ?? {};
+      const before = enable ? dependencies() : {};
+      await runPackageManager(directory, args);
+      if (enable) {
+        const after = dependencies();
+        const names = Object.keys(after).filter((key) => before[key] !== after[key]);
+        const explicit = args[1]?.replace(/(?<=.)@[^@/]+$/, '');
+        if (explicit && Object.hasOwn(after, explicit) && !names.includes(explicit)) names.push(explicit);
+        if (!names.length)
+          throw new Error('No direct dependency selected for activation. Use an installed package name.');
+        enableProfileModules(name, paths, names);
+      }
     } finally {
       await unlock();
     }
