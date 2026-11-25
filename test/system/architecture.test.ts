@@ -184,13 +184,12 @@ test('workspace dependencies use domain APIs and keep providers at the applicati
 
   const entries = readProfile('web');
   const plugins = await profileDescriptors(entries);
-  const browserIds = new Set(plugins.filter(({ browser }) => browser).map(({ id }) => id));
   const moduleOwners = new Map(
     [...manifests].flatMap(([owner, manifest]) =>
       Object.keys(manifest.miniHarness?.profileModules ?? {}).map((specifier) => [specifier, owner] as const),
     ),
   );
-  for (const { id, browser, browserStyles, browserRequires } of plugins) {
+  for (const { id, browser, browserStyles } of plugins) {
     if (!browser) {
       assert.ok(!browserStyles?.length, id + ' has styles without a browser entry');
       continue;
@@ -205,8 +204,6 @@ test('workspace dependencies use domain APIs and keep providers at the applicati
         id + ' is missing ' + resource,
       );
     }
-    for (const dependency of browserRequires ?? [])
-      assert.ok(browserIds.has(dependency), id + ' requires ' + dependency);
   }
 
   assert.equal(declared.get('platform')?.size, 0);

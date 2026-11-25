@@ -14,7 +14,7 @@ mini-harness plugin uninstall <id>
 
 Disable an npm plugin and save before updating it. Installed plugins start disabled. Development mode accepts `MINI_HARNESS_DEV_PLUGIN=/absolute/path/to/plugin`. The directory name sets the plugin ID.
 
-The manifest supplies display information, scope (`application`, `workspace`, or `session`), and optional JSON Schema and configuration-form metadata. Use `provides` and `browserProvides` to publish service choices before the module activates. Browser styles and helper modules must be listed in `browserAssets`. Use `browserPreload` for a declared asset that exports a function receiving an activation signal and optionally returning cleanup.
+The manifest supplies display information, scope (`application`, `workspace`, or `session`), and optional JSON Schema and configuration-form metadata. Browser modules declare their dependencies and services directly with Cordis `inject` and `provide`. Browser styles and helper modules must be listed in `browserAssets`. Use `browserPreload` for a declared asset that exports a function receiving an activation signal and optionally returning cleanup.
 
 ## Declare a Cordis plugin
 

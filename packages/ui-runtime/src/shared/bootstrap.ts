@@ -7,8 +7,6 @@ export interface BrowserEntry {
   required?: boolean;
   config: Record<string, unknown>;
   liveConfig?: boolean;
-  requires?: string[];
-  provides?: string[];
 }
 
 export interface BrowserBootstrap {

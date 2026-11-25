@@ -6,6 +6,5 @@ export const manifest: PluginDescriptor = {
   title: 'Workspace data',
   description: 'Live workspaces projection',
   defaultEnabled: true,
-  browserProvides: ['miniWorkspaces'],
   browser: '/packages/workspaces/src/browser/setup.js',
 };

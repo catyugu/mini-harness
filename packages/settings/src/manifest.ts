@@ -3,7 +3,6 @@ import { setup } from './server/setup.ts';
 
 export const manifest: PluginDescriptor = {
   scope: 'application',
-  browserProvides: ['miniSettings', 'miniSettingsData', 'miniSettingsRegistry'],
   id: 'core:settings',
   title: 'Settings',
   description: 'Application settings',

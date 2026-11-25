@@ -100,7 +100,6 @@ export const administrationManifest: PluginDescriptor = {
     ],
     apply: setupAdministration,
   },
-  browserProvides: ['miniModels'],
   browserStyles: ['/packages/models/src/browser/style.css'],
   browser: '/packages/models/src/browser/setup.js',
 };

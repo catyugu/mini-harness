@@ -5,7 +5,6 @@ import { setup } from './server/setup.ts';
 export const manifest: PluginDescriptor = {
   scope: 'application',
   trustedContributor: true,
-  browserProvides: ['miniFileTree'],
   plugin: {
     inject: [
       'harnessFileAccess',

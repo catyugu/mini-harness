@@ -9,7 +9,7 @@ import type { PluginMetadata } from '../shared/metadata.ts';
 
 type PluginFilesHost = {
   paths: { plugins: string };
-  settings: Pick<PluginSettings, 'plugins' | 'scopes' | 'providers' | 'browserProviders'>;
+  settings: Pick<PluginSettings, 'plugins' | 'scopes' | 'providers'>;
   plugins: { metadata(): PluginMetadata[]; reserved(id: string): boolean };
 };
 export function installPlugin(runtime: PluginFilesHost, input: any) {
@@ -120,8 +120,7 @@ export function assertDisabled(settings: PluginFilesHost['settings'], id: string
     Object.values(settings.scopes).some(
       (scope) => scope?.plugins?.[id] === true || Object.values(scope?.providers ?? {}).includes(id),
     ) ||
-    Object.values(settings.providers).includes(id) ||
-    Object.values(settings.browserProviders ?? {}).includes(id)
+    Object.values(settings.providers).includes(id)
   )
     throw new DomainError('conflict', 'Disable and save this plugin before changing its files');
 }

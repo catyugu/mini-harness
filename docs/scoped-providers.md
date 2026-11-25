@@ -38,11 +38,10 @@ with the new service. A failed settings update restores the committed entries.
 Deleting a session or workspace releases its entries and removes its overrides.
 Optional instance failures are shown in Plugins and can be repaired there.
 
-The browser's `browserProviders` map selects application-wide browser services.
-The selected plugin declares its offered services in `browserProvides`.
+Browser services use Cordis dependency injection directly. Enable the browser modules that supply the desired services.
 
 A user can grant specific registered tools to a trusted local plugin in that plugin’s Settings detail, or through `readOnlyTools` in `settings.json` or the settings API. For example, `{ "readOnlyTools": { "workspace-greeting": ["greet"] } }` allows its `greet` registration to be considered in read-only conversations when it declares read-only access. Update the map to revoke a grant. Descendant and workspace restrictions still apply before invocation.
 
-Setup and live configuration callbacks register and update plugin resources. Scope preparation, session writes, execution submission and configuration writes are available from runtime handlers after the configuration commits. Use those operations from normal runtime handlers. A prepared scoped service is a current provider reference, not a stable proxy: resolve it again after configuration changes. The browser bootstrap is published only when its required capabilities remain available after server mounting, including replacements.
+Setup and live configuration callbacks register and update plugin resources. Scope preparation, session writes, execution submission and configuration writes are available from runtime handlers after the configuration commits. Use those operations from normal runtime handlers. A prepared scoped service is a current provider reference, not a stable proxy: resolve it again after configuration changes. Browser entries are published for active server entries; the browser resolves its own dependencies through Cordis.
 
 Provider selections and scoped plugin configuration are written to the active [Profile](profiles.md). Tool grants and scoped tool restrictions are saved as domain settings.

@@ -26,7 +26,7 @@ Uses [Plugin API](../plugin-api/README.md) for selection contracts and [Platform
 
 The active YAML Profile owns plugin configuration, provider selections and scoped composition. `settings.json` stores domain policy, including tool grants and restrictions.
 
-`readOnlyTools` holds user grants indexed by plugin ID. `browserProviders` selects application-level browser services independently of server providers.
+`readOnlyTools` holds user grants indexed by plugin ID. Browser services are composed directly through Cordis.
 
 Plugin detail content can be contributed through the settings registry and is tied to the lifetime of the displayed detail.
 

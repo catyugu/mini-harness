@@ -4,7 +4,6 @@ import { extname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { PluginDescriptor } from '@mini-harness/plugin-api/descriptor';
 import type { BrowserEntry } from '@mini-harness/ui-runtime/bootstrap';
-import { selectProviders } from './providers.ts';
 import type { ConfiguredPlugin } from './catalog.ts';
 
 export interface Asset {
@@ -108,41 +107,19 @@ export function readBrowserAssets(
   };
 }
 
-export function planBrowser(
-  plans: ConfiguredPlugin[],
-  choices: Record<string, string>,
-  required: ReadonlySet<string>,
-): BrowserEntry[] {
-  const browser = new Map(
-    plans.filter(({ descriptor }) => descriptor.resources).map((plan) => [plan.id, plan]),
-  );
-  const runtime = new Map(
-    ['miniProjections', 'miniSwitch', 'miniBrowserFailures'].map((name) => [name, 'browser-runtime']),
-  );
-  const { selected } = selectProviders(
-    [...browser.values()].map(({ id, descriptor }) => ({
+export function planBrowser(plans: ConfiguredPlugin[]): BrowserEntry[] {
+  return plans.flatMap(({ id, descriptor, config }) => {
+    const resources = descriptor.resources;
+    if (!resources) return [];
+    return [{
       id,
-      provides: descriptor.browserProvides,
-    })),
-    runtime,
-    choices,
-  );
-  return selected.map((descriptor) => {
-    const plan = browser.get(descriptor.id);
-    const resources = plan?.descriptor.resources;
-    if (!plan || !resources) throw new Error('Composed browser capability is unavailable: ' + descriptor.id);
-    return {
-      id: plan.id,
-      requires: plan.descriptor.browserRequires,
-      provides: plan.descriptor.browserProvides,
       browser: resources.entry,
       styles: resources.styles,
       preload: resources.preload,
-      config: plan.config ?? {},
-      liveConfig: plan.descriptor.configChanges === 'live',
-      required:
-        plan.descriptor.required || plan.descriptor.browserProvides?.some((name) => required.has(name)),
-    };
+      config: config ?? {},
+      liveConfig: descriptor.configChanges === 'live',
+      required: descriptor.required,
+    }];
   });
 }
 

@@ -28,7 +28,6 @@ interface Layer {
   include?: string[];
   plugins?: Row[];
   providers?: ProfileConfiguration['providers'];
-  browserProviders?: ProfileConfiguration['browserProviders'];
   scopes?: ProfileConfiguration['scopes'];
 }
 
@@ -120,7 +119,7 @@ function load(file: string, optional = false): Layer | undefined {
       throw new Error([...doc.errors, ...doc.warnings].map((error) => error.message).join('\n'));
     const value: unknown = doc.toJS({ maxAliasCount: 0 });
     if (value == null) return {};
-    const fields = ['include', 'detached', 'plugins', 'providers', 'browserProviders', 'scopes'];
+    const fields = ['include', 'detached', 'plugins', 'providers', 'scopes'];
     if (!object(value) || Object.keys(value).some((key) => !fields.includes(key)))
       throw new Error('Expected a Profile object');
     if (value.detached !== undefined && typeof value.detached !== 'boolean')
@@ -286,8 +285,6 @@ export async function profileDescriptors(entries: ReadonlyMap<string, Row>) {
           required: row.required,
           browser: row.client ? descriptor.browser : undefined,
           browserStyles: row.client ? descriptor.browserStyles : undefined,
-          browserRequires: row.client ? descriptor.browserRequires : undefined,
-          browserProvides: row.client ? descriptor.browserProvides : undefined,
         };
       }),
   );
@@ -328,7 +325,6 @@ export async function loadProfile(name: string, paths: Paths, context: Context):
         .map((row) => [row.id, { ...row.config, ...legacy.pluginConfig[row.id] }]),
     ),
     providers: legacy.providers,
-    browserProviders: legacy.browserProviders,
     scopes: legacy.scopes,
   };
   Object.assign(overrides.plugins, legacy.plugins);
@@ -350,7 +346,6 @@ export async function loadProfile(name: string, paths: Paths, context: Context):
     ...overrides,
     port: configuredPort ?? legacy.port,
     providers: merged.providers ?? overrides.providers,
-    browserProviders: merged.browserProviders ?? overrides.browserProviders,
     scopes: withToolRules(merged.scopes ?? overrides.scopes, scopedTools),
   });
   if (
@@ -463,7 +458,6 @@ export async function loadProfile(name: string, paths: Paths, context: Context):
       ...(user.detached === undefined ? {} : { detached: user.detached }),
       plugins,
       providers: settings.providers,
-      browserProviders: settings.browserProviders ?? {},
       scopes,
     };
     const text = stringify(next);
@@ -552,7 +546,7 @@ function withToolRules(scopes: ProfileConfiguration['scopes'], rules: Record<str
 
 function legacySettings(paths: Paths) {
   const raw = readJson<Record<string, unknown>>(paths.settings, {});
-  const migration = ['plugins', 'pluginConfig', 'providers', 'browserProviders', 'scopes', 'port'].some(
+  const migration = ['plugins', 'pluginConfig', 'providers', 'scopes', 'port'].some(
     (key) => Object.hasOwn(raw, key),
   );
   const legacy = parseSettings(raw);

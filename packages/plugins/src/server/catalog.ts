@@ -47,7 +47,6 @@ export interface ConfiguredPlugin {
 export class PluginCatalog {
   private readonly builtins: Map<string, DiscoveredPlugin>;
   readonly lockedPlugins: ReadonlySet<string>;
-  readonly requiredClientCapabilities: ReadonlySet<string>;
   private readonly protectedProviders: ReadonlyMap<string, string>;
   constructor(
     private readonly directory: string,
@@ -75,9 +74,6 @@ export class PluginCatalog {
           },
         ];
       }),
-    );
-    this.requiredClientCapabilities = new Set(
-      builtins.filter((row) => row.required).flatMap((row) => row.browserProvides ?? []),
     );
     this.protectedProviders = new Map([
       ...rootServices.map((name) => [name, 'application'] as const),
@@ -132,8 +128,6 @@ export class PluginCatalog {
       const descriptor = describePlugin(id, folder);
       if (this.profile && !this.profile.client(id)) {
         delete descriptor.resources;
-        delete descriptor.browserProvides;
-        delete descriptor.browserRequires;
       }
       return { ...descriptor, package: installedPackage };
     } catch (error) {
@@ -219,8 +213,6 @@ export class PluginCatalog {
           plugin: _plugin,
           optional,
           browserStyles,
-          browserRequires,
-          browserProvides,
           configChanges,
           validateConfig,
           ...metadata
@@ -445,7 +437,6 @@ export function changedSelection(
     return (
       settings.plugins[id] !== previous.plugins[id] ||
       !isDeepStrictEqual(previous.providers, settings.providers) ||
-      !isDeepStrictEqual(previous.browserProviders, settings.browserProviders) ||
       !isDeepStrictEqual(previous.pluginConfig[id], settings.pluginConfig[id])
     );
   const before = previous.scopes[key],

@@ -906,7 +906,7 @@ test('setup and live configuration cannot await their own graph transaction', as
   await host.prepare('session:session');
 });
 
-test('required browser services must survive server mounting, including replacement providers', async (t) => {
+test('a failed server entry does not publish its browser module', async (t) => {
   const directory = mkdtempSync(join(tmpdir(), 'mini-required-browser-'));
   const browser = '/packages/ui-runtime/src/browser/boot.js';
   const builtins: PluginDescriptor[] = [
@@ -918,7 +918,6 @@ test('required browser services must survive server mounting, including replacem
       defaultEnabled: true,
       required: true,
       browser,
-      browserProvides: ['miniTest'],
     },
     {
       id: 'replacement',
@@ -926,7 +925,6 @@ test('required browser services must survive server mounting, including replacem
       title: 'Replacement',
       description: '',
       browser,
-      browserProvides: ['miniTest'],
       plugin: {
         apply(_ctx: Context, config: Record<string, unknown>) {
           if (config.fail) throw new Error('Unavailable replacement');
@@ -937,7 +935,6 @@ test('required browser services must survive server mounting, including replacem
   const settings = {
     ...structuredClone(DEFAULTS),
     plugins: { replacement: true },
-    browserProviders: { miniTest: 'replacement' },
     pluginConfig: { replacement: { fail: true } },
   };
   const host = new PluginHost(new Context(), directory, builtins, [], () => settings);
@@ -945,5 +942,7 @@ test('required browser services must survive server mounting, including replacem
     await host.close();
     rmSync(directory, { recursive: true, force: true });
   });
-  await assert.rejects(host.start(settings), /Required browser service is unavailable: miniTest/);
+  await host.start(settings);
+  assert.deepEqual(host.browser().map(({ id }) => id), ['ui']);
+  assert.equal(host.metadata().find(({ id }) => id === 'replacement')?.state, 'failed');
 });

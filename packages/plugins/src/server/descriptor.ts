@@ -42,7 +42,7 @@ export function describePlugin(id: string, folder: string): DiscoveredPlugin {
   if (scope !== 'application' && scope !== 'workspace' && scope !== 'session')
     throw new Error('Invalid plugin scope');
   const names = (
-    field: 'requires' | 'inject' | 'optional' | 'provides' | 'browserRequires' | 'browserProvides',
+    field: 'requires' | 'inject' | 'optional' | 'provides',
     pattern: RegExp,
   ) => {
     const input = manifest[field] ?? [];
@@ -58,10 +58,6 @@ export function describePlugin(id: string, folder: string): DiscoveredPlugin {
   const provides = names('provides', serviceNamePattern);
   const inject = names('inject', serviceNamePattern);
   const optional = names('optional', serviceNamePattern);
-  const browserRequires = names('browserRequires', pluginIdPattern);
-  const browserProvides = names('browserProvides', serviceNamePattern);
-  if (!hasWeb && (browserRequires.length || browserProvides.length))
-    throw new Error('Browser dependencies require web.js');
   if (!hasHost && (provides.length || inject.length || optional.length))
     throw new Error('Server services require plugin.js');
   if (
@@ -129,8 +125,6 @@ export function describePlugin(id: string, folder: string): DiscoveredPlugin {
     provides: manifest.provides === undefined ? undefined : provides,
     inject: manifest.inject === undefined ? undefined : inject,
     optional,
-    browserRequires,
-    browserProvides,
     configSchema,
     configGroups,
     configHint,

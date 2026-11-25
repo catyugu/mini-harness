@@ -539,11 +539,7 @@ export class PluginHost implements ScopePort {
       released,
       [...requiredScopes, ...validations.flatMap(({ key }) => (key ? [key] : []))],
     );
-    const browser = planBrowser(
-      plans,
-      settings.browserProviders ?? {},
-      this.catalog.requiredClientCapabilities,
-    );
+    const browser = planBrowser(plans);
     const mounts = [
       ...plans
         .filter(({ id }) => !failures.has(id))
@@ -618,10 +614,6 @@ export class PluginHost implements ScopePort {
       }
       {
         const browserState = publishBrowser(browser, plans, (id) => this.entries.get(id)?.active === true);
-        const provided = new Set(browserState.entries.flatMap(({ provides }) => provides ?? []));
-        for (const service of this.catalog.requiredClientCapabilities)
-          if (!provided.has(service))
-            throw new DomainError('unavailable', 'Required browser service is unavailable: ' + service);
         commit();
         this.started = true;
         this.scopes = scoped.contexts;

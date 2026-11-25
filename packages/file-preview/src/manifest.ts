@@ -13,6 +13,5 @@ export const manifest: PluginDescriptor = {
     apply: setup,
   },
   browser: '/packages/file-preview/src/browser/setup.js',
-  browserProvides: ['miniFilePreview'],
   browserStyles: ['/packages/file-preview/src/browser/style.css'],
 };

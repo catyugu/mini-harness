@@ -29,8 +29,6 @@ export interface PluginDescriptor {
   validateConfig?(config: Readonly<Record<string, unknown>>, context: ConfigValidationContext): void;
   inject?: string[];
   optional?: string[];
-  browserRequires?: string[];
-  browserProvides?: string[];
   plugin?: Plugin;
 }
 

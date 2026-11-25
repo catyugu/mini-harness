@@ -8,5 +8,4 @@ export const manifest: PluginDescriptor = {
   defaultEnabled: true,
   inject: ['harnessApprovals'],
   browser: '/packages/approvals/src/browser/setup.js',
-  browserProvides: ['miniApprovals'],
 };

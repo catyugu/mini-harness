@@ -15,7 +15,6 @@ export const DEFAULTS = Object.freeze({
   plugins: {},
   pluginConfig: {},
   providers: {},
-  browserProviders: {},
   scopes: {},
   readOnlyTools: {},
 });
@@ -32,12 +31,11 @@ function section(value: unknown, name: string) {
 
 export function validateSettings(input: unknown): asserts input is Settings {
   if (!isObject(input)) throw new DomainError('invalid_input', 'Invalid settings object');
-  const { plugins, pluginConfig, providers, browserProviders, scopes, port, readOnlyTools } = input;
+  const { plugins, pluginConfig, providers, scopes, port, readOnlyTools } = input;
   for (const [key, value] of Object.entries({ plugins, pluginConfig, providers, scopes, readOnlyTools }))
     if (!isObject(value)) throw new DomainError('invalid_input', 'Invalid settings section: ' + key);
   validatePluginSettings(section(plugins, 'plugins'), section(pluginConfig, 'pluginConfig'));
   validateProviderChoices(section(providers, 'providers'));
-  validateProviderChoices(section(browserProviders, 'browserProviders'));
   for (const [key, scope] of Object.entries(section(scopes, 'scopes'))) {
     if (
       !isScopeKey(key) ||
@@ -83,7 +81,6 @@ export function parseSettings(input: unknown): Settings {
     plugins: section(input.plugins, 'plugins'),
     pluginConfig: section(input.pluginConfig, 'pluginConfig'),
     providers: section(input.providers, 'providers'),
-    browserProviders: section(input.browserProviders, 'browserProviders'),
     scopes: section(input.scopes, 'scopes'),
     readOnlyTools: section(input.readOnlyTools, 'readOnlyTools'),
   };
@@ -102,10 +99,6 @@ export function mergeSettings(current: Settings, patch: unknown): Settings {
     ...current,
     ...patch,
     providers: patch.providers === undefined ? current.providers : section(patch.providers, 'providers'),
-    browserProviders:
-      patch.browserProviders === undefined
-        ? current.browserProviders
-        : section(patch.browserProviders, 'browserProviders'),
     scopes: patch.scopes === undefined ? current.scopes : section(patch.scopes, 'scopes'),
     plugins: { ...current.plugins, ...plugins },
     pluginConfig: { ...current.pluginConfig, ...pluginConfig },
