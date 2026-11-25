@@ -437,7 +437,6 @@ export async function loadProfile(
       const settings = current;
       const errors = new Map<string, unknown>();
       const plans = catalog.plans(
-        settings,
         await catalog.runtimeDescriptors(settings),
         undefined,
         (id, error) => {

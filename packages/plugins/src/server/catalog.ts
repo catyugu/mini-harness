@@ -31,15 +31,8 @@ export class PluginCatalog {
     >,
   ) {}
 
-  enabled(descriptor: ResolvedPlugin, settings: ProfileConfiguration) {
-    const entry = descriptor.scopeAddress
-      ? settings.scopes[descriptor.scopeAddress]?.entries?.[descriptor.id]
-      : settings.entries[descriptor.id];
-    return !!entry && entry.disabled !== true;
-  }
-
-  reserved(id: string) {
-    return !this.resolved.get(id)?.external;
+  origin(instanceId: string) {
+    return this.resolved.get(instanceId)?.external ? 'local' : 'built-in';
   }
 
   private locateModule(name: string, source: string) {
@@ -57,9 +50,15 @@ export class PluginCatalog {
       if (local) throw error;
       directory = dirname(fileURLToPath(resolveModule(name + '/client', source)));
     }
-    if (!local)
-      while (!existsSync(join(directory, 'package.json')) && dirname(directory) !== directory)
-        directory = dirname(directory);
+    const containing = directory;
+    while (!existsSync(join(directory, 'package.json')) && !existsSync(join(directory, 'plugin.json'))) {
+      const parent = dirname(directory);
+      if (parent === directory) {
+        directory = containing;
+        break;
+      }
+      directory = parent;
+    }
     return { folder: directory, entry };
   }
 
@@ -76,12 +75,12 @@ export class PluginCatalog {
       if (!name) throw new Error('Profile entry requires a module name: ' + id);
       const location = bundled || this.locateModule(name, this.profile.source(id, name));
       const key = scopeAddress ? scopeAddress + '/' + id : id;
-      const descriptor = await describePlugin(id, location, client, !entry.disabled, this.resolved.get(key));
-      return { ...descriptor, name, scopeAddress, external };
+      const descriptor = await describePlugin(id, location, client, entry, this.resolved.get(key));
+      return { ...descriptor, scopeAddress, external };
     } catch (error) {
       return {
         id,
-        name,
+        configuration: entry,
         scopeAddress,
         external,
         info: { title: id, description: name ?? '' },
@@ -114,7 +113,6 @@ export class PluginCatalog {
   }
 
   metadata(
-    settings: ProfileConfiguration,
     failures: ReadonlyMap<string, string>,
     mounted: (id: string) => boolean,
   ): PluginMetadata[] {
@@ -126,24 +124,21 @@ export class PluginCatalog {
     }
     return [...groups.values()].map((group) => {
       const descriptor = group.find((item) => !item.scopeAddress) ?? group[0];
-      const { id, name, external, package: packageInfo, info, error: descriptorError } = descriptor;
+      const { id, configuration, external, package: packageInfo, info, error: descriptorError } = descriptor;
       const instances: PluginMetadata['instances'] = group.map((item) => {
         const key = item.scopeAddress ? item.scopeAddress + '/' + item.id : item.id;
-        const enabled = this.enabled(item, settings);
+        const enabled = !item.configuration.disabled;
         let error = failures.get(key) ?? item.error;
         if (!error && !mounted(key) && (item.native?.Config || item.info.configSchema)) {
           try {
-            const config = item.scopeAddress
-              ? settings.scopes[item.scopeAddress]?.entries?.[item.id]?.config
-              : settings.entries[item.id]?.config;
-            this.configValues(item, config);
+            this.configValues(item, item.configuration.config);
           } catch (cause) {
             error = cause instanceof Error ? cause.message : String(cause);
           }
         }
         return {
           scope: item.scopeAddress ?? 'application',
-          name: item.name,
+          name: item.configuration.name,
           configSchema: item.info.configSchema,
           error,
           state: !enabled ? 'disabled' : error ? 'failed' : mounted(key) ? 'ready' : 'inactive',
@@ -164,7 +159,7 @@ export class PluginCatalog {
       return {
         ...info,
         id,
-        name,
+        name: configuration.name,
         external,
         package: packageInfo,
         instances,
@@ -177,14 +172,12 @@ export class PluginCatalog {
   entry(plan: ConfiguredPlugin, context: Context, id = plan.id): EntryOptions {
     const { descriptor } = plan;
     const plugin = descriptor.native?.plugin;
-    if (!plugin) throw new Error('Missing server module: ' + plan.id);
+    if (!plugin || !descriptor.location) throw new Error('Missing server module: ' + plan.id);
     return {
       id,
       context,
       config: plan.config ?? {},
-      module: descriptor.location
-        ? descriptor.location.url + '#' + (descriptor.location.exportName ?? 'default')
-        : plan.id,
+      module: descriptor.location.url + '#' + (descriptor.location.exportName ?? 'default'),
       live: plan.live,
       load: () => plugin,
       prepare: (ctx) => {
@@ -198,19 +191,17 @@ export class PluginCatalog {
   validateDisabled(
     descriptors: ResolvedPlugin[],
     previous: ProfileConfiguration,
-    settings: ProfileConfiguration,
   ) {
     for (const descriptor of descriptors) {
       const { id, scopeAddress } = descriptor;
       const before = scopeAddress ? previous.scopes[scopeAddress]?.entries?.[id] : previous.entries[id];
-      const after = scopeAddress ? settings.scopes[scopeAddress]?.entries?.[id] : settings.entries[id];
-      if (!this.enabled(descriptor, settings) && !isDeepStrictEqual(before?.config, after?.config))
-        this.configValues(descriptor, after?.config);
+      const { configuration } = descriptor;
+      if (configuration.disabled && !isDeepStrictEqual(before?.config, configuration.config))
+        this.configValues(descriptor, configuration.config);
     }
   }
 
   plans(
-    settings: ProfileConfiguration,
     descriptors: ResolvedPlugin[],
     scopeAddress?: ScopeAddress,
     unavailable?: (id: string, error: unknown) => boolean,
@@ -218,13 +209,13 @@ export class PluginCatalog {
     const plans: ConfiguredPlugin[] = [];
     for (const item of descriptors) {
       const { id } = item;
-      if (item.scopeAddress !== scopeAddress || !this.enabled(item, settings)) continue;
-      const entry = scopeAddress ? settings.scopes[scopeAddress]?.entries?.[id] : settings.entries[id];
+      const entry = item.configuration;
+      if (item.scopeAddress !== scopeAddress || entry.disabled) continue;
       try {
         if (item.error) throw new DomainError('invalid_input', 'Invalid plugin ' + id + ': ' + item.error);
-        const values = entry?.config;
+        const values = entry.config;
         const config = item.native?.plugin ? structuredClone(values ?? {}) : this.configValues(item, values);
-        plans.push({ descriptor: item, id, config, live: entry?.live ?? false });
+        plans.push({ descriptor: item, id, config, live: entry.live ?? false });
       } catch (error) {
         if (!unavailable?.(id, error)) throw error;
       }

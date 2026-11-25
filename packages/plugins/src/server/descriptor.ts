@@ -3,6 +3,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createRequire } from 'node:module';
 import { lstatSync, realpathSync } from 'node:fs';
 import { readJson } from '@mini-harness/platform/json';
+import type { EntryConfiguration, ScopeAddress } from '@mini-harness/plugin-api/configuration';
 import type { PluginInfo, PluginLocation } from '@mini-harness/plugin-api/descriptor';
 import { readBrowserAssets, type BrowserAssets } from './browser-assets.ts';
 import { loadPluginModule, resolveModule } from './module-resolution.ts';
@@ -13,8 +14,8 @@ import type { PluginMetadata } from '../shared/metadata.ts';
 export interface ResolvedPlugin extends Pick<PluginMetadata, 'external' | 'package' | 'error'> {
   id: string;
   info: PluginInfo;
-  name?: string;
-  scopeAddress?: import('@mini-harness/plugin-api/configuration').ScopeAddress;
+  configuration: EntryConfiguration;
+  scopeAddress?: ScopeAddress;
   location?: { url: string; exportName?: string };
   native?: Awaited<ReturnType<typeof loadPluginModule>>;
   resources?: BrowserAssets;
@@ -25,7 +26,7 @@ export async function describePlugin(
   id: string,
   { folder, entry, exportName, clientOnly: explicitClient }: PluginLocation,
   client: boolean,
-  enabled: boolean,
+  configuration: EntryConfiguration,
   previous?: ResolvedPlugin,
 ): Promise<ResolvedPlugin> {
   assertPeerCompatibility(folder);
@@ -100,6 +101,7 @@ export async function describePlugin(
   const location = source
     ? { url: pathToFileURL(source).href + '?v=' + lstatSync(source).mtimeMs, exportName }
     : undefined;
+  const enabled = !configuration.disabled;
   const native = !location
     ? undefined
     : enabled
@@ -109,7 +111,8 @@ export async function describePlugin(
         : undefined;
   const info = { ...staticInfo, ...native?.metadata };
   const browser =
-    info.browser ?? standardClient ?? (isRegularFile(join(folder, 'web.js')) ? 'web.js' : undefined);
+    (clientOnly ? standardClient : undefined) ?? info.browser ?? standardClient ??
+    (isRegularFile(join(folder, 'web.js')) ? 'web.js' : undefined);
   if (browser !== undefined && typeof browser !== 'string') throw new Error('Invalid browser entry');
   if (!source && !browser) throw new Error('Provide a server or browser module');
   const title = typeof info.title === 'string' ? info.title.slice(0, 100) : id;
@@ -162,6 +165,7 @@ export async function describePlugin(
     throw new Error('Invalid plugin icon: ' + id);
   return {
     id,
+    configuration,
     location,
     native,
     resources,

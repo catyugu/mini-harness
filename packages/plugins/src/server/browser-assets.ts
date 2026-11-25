@@ -99,37 +99,26 @@ export function readBrowserAssets(
   };
 }
 
-export function planBrowser(plans: ConfiguredPlugin[], effective: (id: string) => unknown): BrowserEntry[] {
-  return plans.flatMap(({ id, descriptor, config, live }) => {
-    const resources = descriptor.resources;
-    if (!resources) return [];
-    return [
-      {
-        id,
-        browser: resources.entry,
-        styles: resources.styles,
-        config: (effective(id) ?? config) as Record<string, unknown>,
-        live,
-      },
-    ];
-  });
-}
-
 export function publishBrowser(
-  browser: BrowserEntry[],
   plans: ConfiguredPlugin[],
   mounted: (id: string) => boolean,
+  effective: (id: string) => unknown = () => undefined,
 ) {
-  const entries = browser.filter(({ id }) => mounted(id));
-  const ready = new Set(entries.map(({ id }) => id));
-  const resources = plans.filter(({ id }) => ready.has(id));
-  return {
-    entries,
-    assets: new Map(resources.flatMap(({ descriptor }) => [...(descriptor.resources?.urls ?? [])])),
-    configurable: new Set(
-      resources
-        .filter(({ descriptor }) => descriptor.native?.Config || descriptor.info.configSchema)
-        .map(({ id }) => id),
-    ),
-  };
+  const entries: BrowserEntry[] = [];
+  const assets = new Map<string, Asset>();
+  const configurable = new Set<string>();
+  for (const { id, descriptor, config, live } of plans) {
+    const resources = descriptor.resources;
+    if (!resources || !mounted(id)) continue;
+    entries.push({
+      id,
+      browser: resources.entry,
+      styles: resources.styles,
+      config: (effective(id) ?? config) as Record<string, unknown>,
+      live,
+    });
+    for (const [url, asset] of resources.urls) assets.set(url, asset);
+    if (descriptor.native?.Config || descriptor.info.configSchema) configurable.add(id);
+  }
+  return { entries, assets, configurable };
 }
