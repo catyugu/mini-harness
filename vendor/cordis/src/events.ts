@@ -160,28 +160,45 @@ export class EventsService {
     })
   }
 
+  private select(name: keyof Events, scope: any) {
+    const filter = scope?.[Context.filter]
+    return (this._hooks[name] ?? [])
+      .filter(hook => !hook.ctx.fiber.signal.aborted && (hook.global || !filter || filter.call(scope, hook.ctx)))
+      .sort((a, b) => {
+        const order = (a.order ?? 0) - (b.order ?? 0) || Number(Boolean(b.prepend)) - Number(Boolean(a.prepend))
+        if (order) return order
+        const left = a.ctx.fiber.entry?.options.id ?? ''
+        const right = b.ctx.fiber.entry?.options.id ?? ''
+        return left < right ? -1 : left > right ? 1 : 0
+      })
+  }
+
+  private callback(name: keyof Events, hook: Hook, skip?: (...args: any[]) => unknown) {
+    const service = this
+    const signal = hook.ctx.fiber.signal
+    return function (this: unknown, ...args: unknown[]) {
+      if (signal.aborted || !service._hooks[name]?.includes(hook)) return skip?.(...args)
+      return Reflect.apply(hook.callback, this, args)
+    }
+  }
+
   /** Return scoped listeners and their owning fibers for domain pipelines. */
   listeners<K extends keyof Events>(name: K, scope = this.ctx) {
-    const filter = scope[Context.filter]
-    return (this._hooks[name] ?? [])
-      .filter(hook => !hook.ctx.fiber.signal.aborted && (!filter || filter.call(scope, hook.ctx)))
-      .sort((a, b) => (a.order ?? 0) - (b.order ?? 0) ||
-        ((a.ctx.fiber.entry?.options.id ?? '') < (b.ctx.fiber.entry?.options.id ?? '') ? -1 :
-          (a.ctx.fiber.entry?.options.id ?? '') > (b.ctx.fiber.entry?.options.id ?? '') ? 1 : 0))
-      .map(hook => ({ context: hook.ctx, callback: hook.callback as Events[K] }))
+    return this.select(name, scope).map(hook => ({
+      context: hook.ctx,
+      callback: this.callback(name, hook) as Events[K],
+    }))
   }
 
   private _resolve(type: string, args: any[]) {
-    const thisArg = typeof args[0] === 'object' || typeof args[0] === 'function' ? args.shift() : null
-    const name: string | symbol = args.shift()
+    const thisArg = typeof args[0] === 'object' || typeof args[0] === 'function' ? args.shift() : undefined
+    const name: keyof Events = args.shift()
     if ((typeof name !== 'string' || !name.startsWith('internal/')) && this._hooks['internal/dispatch']?.length) {
       this.emit('internal/dispatch', type, name, args, thisArg)
     }
-    const filter = thisArg?.[Context.filter]
-    const callbacks = (this._hooks[name] || [])
-      .filter(hook => hook.global || !filter || filter.call(thisArg, hook.ctx))
-      .map(hook => hook.callback)
-    return [thisArg, callbacks, name] as const
+    const skip = type === 'waterfall' ? (...args: any[]) => args.at(-1)() : undefined
+    const callbacks = this.select(name, thisArg ?? this.ctx).map(hook => this.callback(name, hook, skip))
+    return [thisArg ?? null, callbacks, name] as const
   }
 
   /**
@@ -280,15 +297,16 @@ export class EventsService {
     const method = options.prepend ? 'unshift' : 'push'
     return this.ctx.fiber.effect(() => {
       const hooks = this._hooks[name] ??= []
-      hooks[method]({ ctx: this.ctx, callback, ...options })
-      return () => this.unregister(name, callback)
+      const hook = { ctx: this.ctx, callback, ...options }
+      hooks[method](hook)
+      return () => this.unregister(name, hook)
     }, label)
   }
 
-  private unregister(name: string | symbol, callback: any) {
+  private unregister(name: string | symbol, hook: Hook) {
     const hooks = this._hooks[name]
     if (!hooks) return
-    const index = hooks.findIndex(hook => hook.callback === callback)
+    const index = hooks.indexOf(hook)
     if (index >= 0) {
       hooks.splice(index, 1)
       if (!hooks.length) delete this._hooks[name]

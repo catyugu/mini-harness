@@ -70,3 +70,48 @@ test('each Cordis activation aborts and drains owned calls before releasing effe
   assert.equal(fiber.signal.aborted, false);
   await fiber.dispose();
 });
+
+test('EntryTree distinguishes configuration, dependency changes and failed setup', async () => {
+  const context = new Context();
+  const tree = new EntryTree();
+  let starts = 0;
+  const load: EntryOptions['load'] = () => ({
+    apply(_ctx, config) {
+      starts++;
+      if (config.fail) throw new Error('rejected config');
+    },
+  });
+  const entry = { context, id: 'test', module: 'test', config: { a: 1, b: 2 }, load };
+  await tree.update([entry]);
+  await assert.rejects(tree.update([entry, entry]), /Duplicate loader entry ID/);
+  await tree.update([{ ...entry, config: { b: 2, a: 1 } }]);
+  assert.equal(starts, 1);
+  await tree.update([{ ...entry, inject: ['fixtureService'] }]);
+  assert.equal(tree.get(entry.id)?.fiber?.state, FiberState.PENDING);
+  const failed = await tree.update([{ ...entry, config: { fail: true } }]);
+  assert.match(String(failed.get(entry.id)), /rejected config/);
+  assert.equal((await tree.update([entry])).size, 0);
+  assert.equal(tree.get(entry.id)?.active, true);
+  await tree.close();
+  await assert.rejects(tree.update([entry]), /closed/);
+  assert.equal(context.registry.size, 0);
+});
+
+test('event dispatch shares scoped priority and skips removed listeners after awaiting', async () => {
+  const context = new Context();
+  const event = Symbol('test');
+  const visits: string[] = [];
+  const included = context.extend();
+  const excluded = context.extend();
+  const scope = context.extend({ [Context.filter]: (listener: Context) => listener === included });
+  const remove = included.on(event, () => { visits.push('removed'); }, { order: 4 });
+  excluded.on(event, () => { visits.push('excluded'); });
+  excluded.on(event, () => { visits.push('global'); }, { global: true, order: 3 });
+  included.on(event, async () => { visits.push('first'); await Promise.resolve(); remove(); }, { order: 1 });
+  assert.equal(context.events.listeners(event, scope).length, 3);
+  await context.serial(scope, event);
+  assert.deepEqual(visits, ['first', 'global']);
+  visits.length = 0;
+  context.emit(scope, event);
+  assert.deepEqual(visits, ['first', 'global']);
+});

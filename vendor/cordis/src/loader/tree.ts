@@ -2,6 +2,8 @@ import { Entry, type EntryOptions } from './entry.js'
 
 /** Store the desired entries and their Cordis fibers for one runtime. */
 export class EntryTree {
+  private tail: Promise<unknown> = Promise.resolve()
+  private closed = false
   private readonly entries = new Map<string, Entry>()
 
   get(id: string) {
@@ -12,19 +14,32 @@ export class EntryTree {
     return this.entries.values()
   }
 
+  /** Settle the desired graph, returning entry failures for the host to handle. */
   async update(options: readonly EntryOptions[]) {
+    if (this.closed) throw new Error('Entry tree is closed')
     const desired = new Map(options.map(option => [option.id, option]))
+    if (desired.size !== options.length) throw new Error('Duplicate loader entry ID')
+    return this.enqueue(() => this.reconcile(desired))
+  }
+
+  private enqueue<T>(work: () => Promise<T>) {
+    const next = this.tail.then(work)
+    this.tail = next.catch(() => {})
+    return next
+  }
+
+  private async reconcile(desired: ReadonlyMap<string, EntryOptions>) {
     const removed: Entry[] = []
     for (const [id, entry] of this.entries) {
       const next = desired.get(id)
-      if (next?.context === entry.options.context && next.module === entry.options.module) continue
+      if (next && entry.matches(next)) continue
       this.entries.delete(id)
       removed.push(entry)
     }
     // Cordis tears down dependent fibers before their providers. Start every
     // disposal before waiting so sibling scopes can also settle concurrently.
     await Promise.all(removed.map(entry => entry.stop()))
-    await Promise.all(options.map(option => {
+    await Promise.all([...desired.values()].map(option => {
       const previous = this.entries.get(option.id)
       if (previous) return previous.update(option)
       const entry = new Entry(option)
@@ -32,6 +47,11 @@ export class EntryTree {
       return entry.start()
     }))
     await this.settle()
+    const failures = new Map<string, unknown>()
+    for (const [id, entry] of this.entries) {
+      if (entry.error !== undefined) failures.set(id, entry.error)
+    }
+    return failures
   }
 
   private async settle() {
@@ -43,6 +63,7 @@ export class EntryTree {
   }
 
   close() {
-    return this.update([])
+    this.closed = true
+    return this.enqueue(async () => { await this.reconcile(new Map()) })
   }
 }
