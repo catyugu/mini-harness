@@ -6,8 +6,8 @@ export const metadata: PluginInfo = {
   title: 'Git changes',
   description: 'Inspect staged, unstaged, and untracked files.',
   icon: 'list-checks',
-  browser: '/packages/git-diff/src/browser/setup.js',
-  browserStyles: ['/packages/git-diff/src/browser/style.css'],
+  browser: 'packages/git-diff/src/browser/setup.js',
+  browserStyles: ['packages/git-diff/src/browser/style.css'],
 };
 
 const plugin: Plugin.Object = {
