@@ -27,7 +27,7 @@ The current host infrastructure and final tool authorization services are
 protected. Business services use the normal Cordis composition mechanism.
 
 Plugins declare required services in their Cordis `inject` declaration. A running
-plugin can use `await sessionService(ctx, sessionId, name, signal)` to access a declared service in a visible session. The native
+plugin can use `await sessionService(ctx, sessionId, name, signal)` to access an available service in a visible session. The native
 agent uses the selected LLM, tools, and environment through the session context.
 
 Cordis deactivates consumers when a required provider leaves and activates them

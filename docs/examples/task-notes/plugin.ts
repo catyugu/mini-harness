@@ -10,7 +10,6 @@ export const inject = [
   'harnessPrompt',
   'harnessTools',
   'harnessPluginRoutes',
-  'harnessModels',
 ];
 import { sessionService } from 'mini-harness/plugin-scope';
 import { HttpError } from 'mini-harness/transport';

@@ -48,7 +48,7 @@ A service provider declares `provide = ['exampleGreeting']` and calls `ctx.provi
 
 | Service                                        | Contract                                                                                                                                                                                                        |
 | ---------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `harnessTools`                                 | Register a definition or a `{ name, bind(sessionId) }` factory. Read-only access also requires authorization for the selected registration.                                                                     |
+| `harnessTools`                                 | Register a definition or a `{ name, bind(sessionId) }` factory. Declare read-only access for tools without material side effects; the session policy applies to every registration.                                                                     |
 | `harnessPrompt`                                | Register a named section, with an optional order and a render callback. The nearest scope wins for a shared ID.                                                                                                 |
 | `harnessSessions`                              | `access()` returns the caller's visible conversation directory. `records(id)` reads or appends the instance's records on the active branch. Use `append(data, { title, content })` to publish a display record. |
 | `harnessExecution`                             | `submit(id, input, { signal })` goes through normal admission and returns a handle with its own result and cancellation.                                                                                        |
@@ -58,11 +58,11 @@ A service provider declares `provide = ['exampleGreeting']` and calls `ctx.provi
 | `harnessPluginSettings`                        | Read the current effective config, subscribe to committed changes or write this instance's configuration when the Profile marks its Entry as live.                                                              |
 | `harnessPluginChanges`                         | Invalidate the plugin's browser projection after a domain mutation.                                                                                                                                             |
 
-Use `await sessionService(ctx, sessionId, serviceName, signal)` to prepare a visible conversation and access a declared service with the caller's identity. Session writes and scope preparation belong in runtime calls after plugin setup. See [scoped providers](scoped-providers.md).
+Use `await sessionService(ctx, sessionId, serviceName, signal)` to prepare a visible conversation and access the selected service with the caller's identity, without declaring it as an application dependency. Session writes and scope preparation belong in runtime calls after plugin setup. See [scoped providers](scoped-providers.md).
 
 ### Events
 
-Use `agent/setup` to register capabilities for a particular running Agent. The callback receives its Cordis context, session ID and cancellation signal. Register run-local tools and prompt sections with `run.effect(() => run.get('harnessTools')!.register(...))` and `run.effect(() => run.get('harnessPrompt')!.register(...))`. These contributions are disposed with the run; child runs inherit active parent capabilities and keep their own overrides. Run-local registrations do not acquire a plugin's read-only authorization automatically.
+Use `agent/setup` to register capabilities for a particular running Agent. The callback receives its Cordis context, session ID and cancellation signal. Register run-local tools and prompt sections with `run.effect(() => run.get('harnessTools')!.register(...))` and `run.effect(() => run.get('harnessPrompt')!.register(...))`. These contributions are disposed with the run; child runs inherit active parent capabilities and keep their own overrides. Run-local registrations follow the same read-only contract and inherited restrictions as other tools.
 
 Register listeners with `ctx.on(event, handler, { order })`. Listeners are owned by the Fiber and visibility follows the target session's ancestry. Pipeline order is ascending, then by plugin instance ID.
 

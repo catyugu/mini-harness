@@ -24,7 +24,7 @@ Enabled entries are mounted by Cordis. Child Contexts isolate the services decla
 
 ## Configuration
 
-The active YAML Profile enables entries by scope. Installed plugins declare dependency injection in their Cordis entry. Native Cordis `Config` defines validation and defaults; `plugin.json` optionally describes presentation and browser build output. Plugin detail pages display settings contributions, including tool grant controls owned by Sessions.
+The active YAML Profile enables entries by scope. Installed plugins declare dependency injection in their Cordis entry. Native Cordis `Config` defines validation and defaults; `plugin.json` optionally describes presentation and browser build output. Plugin detail pages display settings contributions.
 
 Scoped requests target a mounted plugin address and use its invocation lease. Discovery checks npm peer ranges, and mounted plugins may export a synchronous semantic validator.
 
