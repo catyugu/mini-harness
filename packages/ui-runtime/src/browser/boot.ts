@@ -82,7 +82,7 @@ async function boot() {
     if (changed) for (const [id, error] of failures) console.warn('Browser plugin ' + id, error);
     currentFailures = nextFailures;
     const status = document.getElementById('startupStatus');
-    if (failures.size && status) {
+    if (failures.size && !ctx.get('miniLayout') && status) {
       status.hidden = false;
       status.textContent = 'Browser entries failed: ' + [...nextFailures].map(([id, message]) => id + ': ' + message).join('; ');
     } else if (status?.textContent?.startsWith('Browser entries failed: ')) {

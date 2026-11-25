@@ -4,7 +4,7 @@ import { Context } from './context.ts'
 import { getTraceable, symbols, withProps } from './utils.ts'
 import { Fiber, FiberState } from './fiber.ts'
 
-declare module './context.js' {
+declare module './context.ts' {
   interface Context {
     /**
      * Read a service from the store without the inject requirement.

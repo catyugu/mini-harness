@@ -6,7 +6,7 @@ import { buildOuterStack, composeError, DisposableList, getTraceable, isConstruc
 import type { Impl } from './reflect.ts'
 import type { StandardSchemaV1 } from '@standard-schema/spec'
 
-declare module './context.js' {
+declare module './context.ts' {
   export interface Context extends Pick<Fiber, 'effect'> {
     /** The fiber (plugin runtime instance) that owns this context. */
     fiber: Fiber

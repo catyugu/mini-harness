@@ -30,7 +30,7 @@ export type ThisType<F> = F extends (this: infer T, ...args: any) => any ? T : n
  */
 export type DispatchMode = 'emit' | 'parallel' | 'serial' | 'bail' | 'waterfall'
 
-declare module './context.js' {
+declare module './context.ts' {
   export interface Context {
     /* eslint-disable max-len */
     /**

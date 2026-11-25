@@ -161,7 +161,7 @@ type GetPluginConfig<P> =
   ? S
   : GetPluginParameters<P>[0]
 
-declare module './context.js' {
+declare module './context.ts' {
   export interface Context {
     /**
      * Run a callback once the requested services are available.
