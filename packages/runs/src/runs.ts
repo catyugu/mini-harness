@@ -8,6 +8,7 @@ import { imageMimeType } from '@mini-harness/input/prepare';
 import { validateModelOptions } from '@mini-harness/llm/options';
 import type { Attachment, InputSource } from '@mini-harness/input/message';
 import type { CapabilityObservation } from '@mini-harness/plugin-api/observations';
+import { Inbox } from './inbox.ts';
 import { SessionRun } from './session-run.ts';
 import { RunInterrupted } from './stream.ts';
 import type { StreamEvent, RunEvent } from './stream.ts';
@@ -188,17 +189,11 @@ export class Runs implements RunPort {
       });
     };
     const finish = (state: RunInfo['state'], error?: string) => {
-      for (const item of log.inbox()) {
-        if (item.mode === 'steer')
-          log.append({
-            type: 'inbox-failed',
-            inboxId: item.id,
-            reason:
-              state === 'interrupted'
-                ? 'The target run was interrupted before delivery'
-                : 'The target run ended before delivery',
-          });
-      }
+      const inbox = new Inbox(log);
+      if (state === 'cancelled') inbox.cancel('Run cancelled');
+      else inbox.failPending('steer', state === 'interrupted'
+        ? 'The target run was interrupted before delivery'
+        : 'The target run ended before delivery');
       const terminal = {
         ...info,
         state,
@@ -450,17 +445,20 @@ export class Runs implements RunPort {
     const signal = activity?.inputSignal;
     if (!activity?.context || !signal || signal.aborted)
       throw new DomainError('conflict', 'The agent is not streaming; send a new message');
-    return this.sessionRun.queueInput(activity.context, id, message, mode, attachments, {
-      model,
-      thinkingLevel,
-      fallback: this.preference.recent(),
-    });
+    this.registry.assertAvailable(id);
+    const models = activity.context.get('harnessModels');
+    if (!models) throw new DomainError('unavailable', 'Required service is unavailable: harnessModels');
+    return new Inbox(this.registry.log(id)).enqueue(
+      mode, () => this.registry.prepareInput(id, message, attachments), models,
+      { model, thinkingLevel, fallback: this.preference.recent() },
+    );
   }
 
   async cancelQueue(id: string, itemId?: string, signal?: AbortSignal) {
     signal?.throwIfAborted();
     this.assertOpen();
-    return this.sessionRun.cancelQueue(id, itemId);
+    this.registry.assertAvailable(id);
+    return new Inbox(this.registry.log(id)).cancel('User cancelled', itemId);
   }
 
   cancel(id: string) {

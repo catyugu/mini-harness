@@ -1,7 +1,6 @@
 import { conversationTools } from './tool-selection.ts';
 import type { Context } from 'mini-harness/cordis';
 import { scopeTarget } from '@mini-harness/plugin-api/scopes';
-import { validateModelOptions } from '@mini-harness/llm/options';
 import type {
   InputContext,
   ModelFailure,
@@ -10,7 +9,6 @@ import type {
 } from '@mini-harness/agent/events';
 import { DomainError } from '@mini-harness/platform/errors';
 import { isDeepStrictEqual } from 'node:util';
-import type { ToolExecutorPort } from '@mini-harness/agent/api';
 import type { SessionCatalog, SessionLifecycle, SessionStore } from '@mini-harness/sessions/store';
 import type { ModelChoice, ThinkingLevel } from '@mini-harness/llm/vocabulary';
 import type { SessionRecord } from '@mini-harness/sessions/identity';
@@ -22,9 +20,8 @@ import {
   type NativeUserMessage,
   type ToolCallPart,
 } from '@mini-harness/llm/api';
-import type { PromptPort } from '@mini-harness/agent/prompt-api';
-import { RunInterrupted, type AgentEvent } from './stream.ts';
-import type { Attachment, ImageInput, InputSource, PreparedMessage } from '@mini-harness/input/message';
+import type { AgentEvent } from './stream.ts';
+import type { ImageInput, InputSource, PreparedMessage } from '@mini-harness/input/message';
 import type { SessionLogPort, InboxItem } from '@mini-harness/sessions/log-api';
 import { Inbox } from './inbox.ts';
 import { isToolContent } from '@mini-harness/tools/api';
@@ -86,115 +83,9 @@ export class SessionRun {
   constructor(
     private readonly sessions: Pick<SessionCatalog, 'workspacePath'> &
       Pick<SessionLifecycle, 'assertAvailable' | 'rename'> &
-      Pick<SessionStore, 'log' | 'prepareInput'>,
+      Pick<SessionStore, 'log'>,
     private readonly policy: () => { autoCompact: boolean },
   ) {}
-
-  queueInput(
-    ctx: Context,
-    id: string,
-    text: string,
-    mode: 'steer' | 'followUp',
-    attachments?: Attachment[],
-    options: Pick<InboxItem, 'model' | 'thinkingLevel'> & { fallback?: ModelChoice } = {},
-  ) {
-    this.sessions.assertAvailable(id);
-    validateModelOptions(options.model, options.thinkingLevel);
-    const log = this.sessions.log(id);
-    const models = requireService(ctx, 'harnessModels');
-    const choice = selectModel(models, {
-      explicit: options.model,
-      stored: log.projection().model,
-      fallback: options.fallback,
-      preferStored: true,
-    });
-    resolveThinking(models.capabilities(choice), options.thinkingLevel);
-    return new Inbox(log).enqueue(mode, () => this.sessions.prepareInput(id, text, attachments), {
-      model: choice,
-      thinkingLevel: options.thinkingLevel,
-    });
-  }
-
-  cancelQueue(id: string, itemId?: string) {
-    this.sessions.assertAvailable(id);
-    return new Inbox(this.sessions.log(id)).cancel('User cancelled', itemId);
-  }
-
-  private async prepareInput(
-    ctx: Context,
-    sessionId: string,
-    model: ModelChoice,
-    source: InputSource,
-    text: string,
-    images: ImageInput[],
-    input: PreparedMessage,
-    signal: AbortSignal,
-  ) {
-    const hooks = ctx.events.listeners('agent/prepare-input', scopeTarget(ctx));
-    const context: InputContext = {
-      sessionId,
-      model,
-      source,
-      signal,
-      original: { ...input, images },
-      cwd: this.sessions.workspacePath(sessionId),
-    };
-    const initial: NativeUserMessage['content'] = [{ type: 'text', text }, ...images];
-    const content = await applyTransforms(hooks, initial, context);
-    validateNativeMessage({ role: 'user', content, timestamp: 0 });
-    const preparedImages = typeof content === 'string' ? [] : content.filter((part) => part.type === 'image');
-    if (
-      preparedImages.length &&
-      !requireService(ctx, 'harnessModels').capabilities(model)?.input.includes('image')
-    )
-      throw new Error(
-        'The selected model does not support image input. Choose an image-capable model and retry.',
-      );
-    return {
-      content,
-      presentation: isDeepStrictEqual(images, preparedImages) ? input : { ...input, images },
-    };
-  }
-
-  private async user(
-    log: SessionLogPort,
-    prepared: Awaited<ReturnType<SessionRun['prepareInput']>>,
-    images: ImageInput[],
-    emit: (event: AgentEvent) => void | Promise<void>,
-    source: InputSource,
-    delivery: {
-      submissionId?: string;
-      inboxId?: string;
-      selection: { model: ModelChoice; thinkingLevel?: ThinkingLevel };
-    },
-    revision?: { parentId: string | null; expectedLeafId: string | null },
-  ) {
-    const { content, presentation: input } = prepared;
-    const event = {
-      type: 'message',
-      message: { role: 'user', content, timestamp: Date.now() },
-      presentation: input,
-      ...delivery,
-    } as const;
-    const entry = revision
-      ? log.revise(event, revision.parentId, revision.expectedLeafId)
-      : log.append(event);
-    const displayed = input.userText ? [{ type: 'text', text: input.userText }, ...images] : images;
-    await emit({
-      type: 'user',
-      source,
-      model: delivery.selection.model,
-      thinkingLevel: delivery.selection.thinkingLevel,
-      id: entry.id,
-      parentId: entry.parentId,
-      revised: Boolean(revision),
-      submissionId: delivery.submissionId,
-      inboxId: delivery.inboxId,
-      timestamp: event.message.timestamp,
-      content: displayed,
-      attachments: input.attachments,
-    });
-  }
 
   /** Never retry an unknown tool outcome after restart or provider failure. */
   private closeUnfinishedTools(log: SessionLogPort) {
@@ -248,273 +139,258 @@ export class SessionRun {
         fallback,
         beginSubmission,
       } = options;
-    let runLog: SessionLogPort | undefined;
-    try {
-      signal.throwIfAborted();
-      const log = (runLog = this.sessions.log(id));
-      if (!revision) this.closeUnfinishedTools(log);
-      const inbox = new Inbox(log);
-      const manual = {
-        text: prompt,
-        images,
-        input,
-        model: choice,
-        thinkingLevel,
-      };
-      type Input = typeof manual | InboxItem;
-      const selection = (item: Input, queued: boolean, previous = log.projection()) => {
-        const models = requireService(ctx, 'harnessModels');
-        const explicit = queued ? (item.model ?? previous.model ?? fallback) : item.model;
-        if (queued && (!explicit || !models.resolve(explicit)))
-          throw new Error('The queued model is no longer available');
-        const model = selectModel(models, {
-          explicit,
-          stored: previous.model,
-          fallback,
-          preferStored: Boolean(record.parentId) || source !== 'user',
-        });
-        const capabilities = models.capabilities(model);
-        if (queued) {
-          if (item.images.length && !capabilities?.input.includes('image'))
-            throw new Error('The selected model does not support queued image input');
-          validateNativeMessage({
-            role: 'user',
-            content: [{ type: 'text', text: item.text }, ...item.images],
-            timestamp: 0,
-          });
-        }
-        return {
-          model,
-          thinkingLevel: resolveThinking(capabilities, item.thinkingLevel, previous.thinkingLevel),
-        };
-      };
-      const nextValid = (mode: InboxItem['mode']) => inbox.select(mode, (item) => selection(item, true));
-      const prepare = async (item: Input, model: ModelChoice, inputSource: InputSource) => {
-        const prepared = await this.prepareInput(
-          ctx,
-          id,
-          model,
-          inputSource,
-          item.text,
-          item.images,
-          item.input ?? { userText: item.text, attachments: [] },
-          signal,
-        );
-        signal.throwIfAborted();
-        this.sessions.assertAvailable(id);
-        return prepared;
-      };
-      const deliver = async (mode: InboxItem['mode']) => {
-        signal.throwIfAborted();
-        for (let next = nextValid(mode); next; next = nextValid(mode)) {
-          const { item, value } = next;
-          let prepared: Awaited<ReturnType<typeof prepare>>;
-          try {
-            prepared = await prepare(item, value.model, 'user');
-          } catch (error) {
-            signal.throwIfAborted();
-            inbox.fail(item, error);
-            continue;
-          }
-          if (inbox.next(mode)?.id !== item.id) continue;
-          await this.user(log, prepared, item.images, emit, 'user', {
-            submissionId,
-            inboxId: item.id,
-            selection: value,
-          });
-          return true;
-        }
-        return false;
-      };
-      // Drain recovered follow-ups as turns before committing the new manual input.
-      let submitted = false;
-      const submit = async () => {
-        signal.throwIfAborted();
-        beginSubmission?.();
-        const previous = log.projection(revision?.parentId);
-        const chosen = selection(manual, false, previous);
-        const prepared = await prepare(manual, chosen.model, source);
-        await this.user(log, prepared, images, emit, source, { submissionId, selection: chosen }, revision);
-        if (record.titleSource === 'auto' && !previous.messages.some((item) => item.role === 'user'))
-          this.sessions.rename(
-            id,
-            (input.userText || input.attachments[0]?.name || prompt).slice(0, 72),
-            'auto',
-          );
-        if (revision) this.closeUnfinishedTools(log);
-        submitted = true;
-      };
-      if (revision || !(await deliver('followUp'))) await submit();
-      const answer = await requireService(ctx, 'harnessAgent').run(ctx, {
-        signal,
-        retry: (failure) => retryModel(ctx, { ...failure, sessionId: id }),
-        onEvent: (event) => {
-          if (event.type === 'request') {
-            log.recordRequest(event.request);
-            return;
-          }
-          if (event.type !== 'assistant') {
-            emit(event);
-            return;
-          }
-          const { diagnostic, message: result } = event;
-          if (diagnostic) log.append({ type: 'diagnostic', code: diagnostic.code, data: diagnostic.message });
-          const assistant = log.append({ type: 'message', message: result });
-          emit({
-            type: 'assistant-end',
-            message: {
-              id: assistant.id,
-              parentId: assistant.parentId,
-              role: 'assistant',
-              content: result.content,
-              timestamp: result.timestamp,
-              error: result.stopReason === 'aborted' ? undefined : result.errorMessage,
-            },
-          });
-        },
-        afterTurn: async (calls) => {
-          if (await deliver('steer')) return 'continue';
-          if (calls.length) return;
-          if (await deliver('followUp')) return 'continue';
-          if (!submitted) {
-            await submit();
-            return 'restart';
-          }
-        },
-        prepare: async (turn) => {
-          const previous = log.projection();
-          const model = previous.model;
-          if (!model) throw new Error('Configure a model before sending a message');
-          const capabilities = requireService(ctx, 'harnessModels').capabilities(model);
-          const cwd = this.sessions.workspacePath(id);
-          const step: StepContext = { sessionId: id, turn, phase: 'turn', cwd, model, signal };
-          if (
-            this.policy().autoCompact &&
-            capabilities &&
-            ctx
-              .get('harnessCompaction')
-              ?.shouldCompact(
-                previous.contextMessages,
-                Math.max(1024, capabilities.contextWindow * 0.8 - capabilities.maxTokens),
-              )
-          )
-            await this.compactLog(ctx, id, log, signal, true);
-          const current = log.projection();
-          const executor: ToolExecutorPort = requireService(ctx, 'harnessToolExecutor');
-          const tools = conversationTools(ctx, id);
-          const advertisedTools = new Map(tools.map((tool) => [tool.name, tool]));
-          const toolMetadata = tools.map(
-            ({ name, description, parameters, label, promptSnippet, promptGuidelines }) => ({
-              name,
-              description,
-              parameters,
-              label,
-              promptSnippet,
-              promptGuidelines,
-            }),
-          );
-          const promptService: PromptPort = requireService(ctx, 'harnessPrompt');
-          const systemPrompt = await promptService.build({ sessionId: id, cwd, tools: toolMetadata, signal });
-          const request = await this.prepareRequest(
-            ctx,
-            step,
-            { systemPrompt, messages: current.contextMessages, thinkingLevel: current.thinkingLevel },
-            (content) => {
-              for (const [name, tool] of advertisedTools) if (!tool.available()) advertisedTools.delete(name);
-              const available = toolMetadata
-                .filter(({ name }) => advertisedTools.has(name))
-                .map(({ name, description, parameters }) => ({ name, description, parameters }));
-              return executor.present(content, available, { model: step.model, turn, signal });
-            },
-          );
+    signal.throwIfAborted();
+    const log = this.sessions.log(id);
+    if (!revision) this.closeUnfinishedTools(log);
+    const inbox = new Inbox(log);
+    type Input = Pick<InboxItem, 'text' | 'images' | 'input' | 'model' | 'thinkingLevel'>;
+    const manual: Input = { text: prompt, images, input, model: choice, thinkingLevel };
 
-          const hooks = ctx.events.listeners('agent/tool-result', scopeTarget(ctx));
-          return {
-            request,
-            executor,
-            tools: advertisedTools,
-            execution: {
-              start(call) {
-                emit({
-                  type: 'tool',
-                  id: call.id,
-                  name: call.name,
-                  state: 'running',
-                  arguments: call.arguments,
-                });
-                if (signal.aborted) return 'Agent run cancelled';
-                if (nextValid('steer')) return 'Skipped because a steering message arrived.';
-                const tool = advertisedTools.get(call.name);
-                if (tool && ctx.get('harnessToolPolicy')?.(id, tool) === false)
-                  return 'Tool denied by conversation policy: ' + call.name;
-              },
-              update(call, value) {
-                const pending = value.details?.approvalPending;
-                if (pending === undefined && hooks.length) return;
-                emit({
-                  type: 'tool',
-                  id: call.id,
-                  name: call.name,
-                  state: pending === true ? 'approval' : 'running',
-                  arguments: call.arguments,
-                  content: hooks.length ? undefined : value.content,
-                });
-              },
-            },
-            async deliver(output, toolSignal, call) {
-              let executionId: string | undefined;
-              let transformError: Error | undefined;
-              if (!output.isError && hooks.length) {
-                executionId = log.append({ type: 'tool-execution', result: output }).id;
-                try {
-                  const resultContext = { ...step, signal: toolSignal, tool: call.name, callId: call.id };
-                  const content = await applyTransforms(hooks, output.content, resultContext);
-                  if (!isToolContent(content)) throw new Error('Invalid tool result content');
-                  output = { ...output, content };
-                } catch (error) {
-                  output = {
-                    ...failedTool(
-                      call,
-                      'Tool execution completed, but the model-visible result transformation failed.',
-                    ),
-                    elapsedMs: output.elapsedMs,
-                  };
-                  transformError = new Error('Could not transform the result of ' + call.name, {
-                    cause: error,
-                  });
-                }
-              }
-              const entry =
-                executionId && !transformError
-                  ? log.acceptToolResult(executionId, output.content)
-                  : log.append({ type: 'message', message: output, elapsedMs: output.elapsedMs });
-              const details = output.details;
-              if (!output.isError && typeof details?.changedPath === 'string') changed?.(details.changedPath);
+    const selection = (item: Input, previous = log.projection(), queued = false) => {
+      const models = requireService(ctx, 'harnessModels');
+      const selected = selectModel(models, {
+        explicit: queued ? (item.model ?? previous.model ?? fallback) : item.model,
+        stored: queued ? undefined : previous.model,
+        fallback: queued ? undefined : fallback,
+        preferStored: Boolean(record.parentId) || source !== 'user',
+        thinkingLevel: item.thinkingLevel,
+        inherited: previous.thinkingLevel,
+        unavailable: queued ? 'The queued model is no longer available' : undefined,
+      });
+      if (queued) {
+        if (item.images.length && !models.capabilities(selected.model)?.input.includes('image'))
+          throw new Error('The selected model does not support queued image input');
+        validateNativeMessage({
+          role: 'user', content: [{ type: 'text', text: item.text }, ...item.images], timestamp: 0,
+        });
+      }
+      return selected;
+    };
+    const queuedSelection = (item: InboxItem) => selection(item, log.projection(), true);
+
+    const prepare = async (item: Input, selected: ReturnType<typeof selection>, inputSource: InputSource) => {
+      const presentation = item.input ?? { userText: item.text, attachments: [] };
+      const context: InputContext = {
+        sessionId: id, model: selected.model, source: inputSource, signal,
+        original: { ...presentation, images: item.images },
+        cwd: this.sessions.workspacePath(id),
+      };
+      const initial: NativeUserMessage['content'] = [{ type: 'text', text: item.text }, ...item.images];
+      const content = await applyTransforms(ctx.events.listeners('agent/prepare-input', scopeTarget(ctx)), initial, context);
+      validateNativeMessage({ role: 'user', content, timestamp: 0 });
+      const preparedImages = typeof content === 'string' ? [] : content.filter((part) => part.type === 'image');
+      if (preparedImages.length && !requireService(ctx, 'harnessModels').capabilities(selected.model)?.input.includes('image'))
+        throw new Error('The selected model does not support image input. Choose an image-capable model and retry.');
+      signal.throwIfAborted();
+      this.sessions.assertAvailable(id);
+      return {
+        selection: selected,
+        presentation: isDeepStrictEqual(item.images, preparedImages) ? presentation : { ...presentation, images: item.images },
+        content,
+      };
+    };
+
+    const commit = async (item: Input, prepared: Awaited<ReturnType<typeof prepare>>, inboxId?: string) => {
+      signal.throwIfAborted();
+      this.sessions.assertAvailable(id);
+      const edit = inboxId ? undefined : revision;
+      const event = {
+        type: 'message', message: { role: 'user', content: prepared.content, timestamp: Date.now() },
+        presentation: prepared.presentation, selection: prepared.selection, submissionId, inboxId,
+      } as const;
+      const entry = edit ? log.revise(event, edit.parentId, edit.expectedLeafId) : log.append(event);
+      const { userText, attachments } = prepared.presentation;
+      await emit({
+        type: 'user', source: inboxId ? 'user' : source, ...prepared.selection,
+        id: entry.id, parentId: entry.parentId, revised: Boolean(edit), submissionId, inboxId,
+        timestamp: event.message.timestamp,
+        content: userText ? [{ type: 'text', text: userText }, ...item.images] : item.images, attachments,
+      });
+    };
+    const deliver = (mode: InboxItem['mode']) => inbox.deliver(
+      mode, signal, queuedSelection, (item, selected) => prepare(item, selected, 'user'),
+      (item, prepared) => commit(item, prepared, item.id),
+    );
+    // Drain recovered follow-ups as turns before committing the new manual input.
+    let submitted = false;
+    const submit = async () => {
+      signal.throwIfAborted();
+      beginSubmission?.();
+      const previous = log.projection(revision?.parentId);
+      await commit(manual, await prepare(manual, selection(manual, previous), source));
+      if (record.titleSource === 'auto' && !previous.messages.some((item) => item.role === 'user'))
+        this.sessions.rename(id, (input.userText || input.attachments[0]?.name || prompt).slice(0, 72), 'auto');
+      if (revision) this.closeUnfinishedTools(log);
+      submitted = true;
+    };
+    if (revision || !(await deliver('followUp'))) await submit();
+    const answer = await requireService(ctx, 'harnessAgent').run(ctx, {
+      signal,
+      retry: (failure) => retryModel(ctx, { ...failure, sessionId: id }),
+      onEvent: (event) => {
+        if (event.type === 'request') {
+          log.recordRequest(event.request);
+          return;
+        }
+        if (event.type !== 'assistant') {
+          emit(event);
+          return;
+        }
+        const { diagnostic, message: result } = event;
+        if (diagnostic) log.append({ type: 'diagnostic', code: diagnostic.code, data: diagnostic.message });
+        const assistant = log.append({ type: 'message', message: result });
+        emit({
+          type: 'assistant-end',
+          message: {
+            id: assistant.id,
+            parentId: assistant.parentId,
+            role: 'assistant',
+            content: result.content,
+            timestamp: result.timestamp,
+            error: result.stopReason === 'aborted' ? undefined : result.errorMessage,
+          },
+        });
+      },
+      afterTurn: async (calls) => {
+        if (await deliver('steer')) return 'continue';
+        if (calls.length) return;
+        if (await deliver('followUp')) return 'continue';
+        if (!submitted) {
+          await submit();
+          return 'restart';
+        }
+      },
+      prepare: async (turn) => {
+        let current = log.projection();
+        const model = current.model;
+        if (!model) throw new Error('Configure a model before sending a message');
+        const capabilities = requireService(ctx, 'harnessModels').capabilities(model);
+        const cwd = this.sessions.workspacePath(id);
+        const step: StepContext = { sessionId: id, turn, phase: 'turn', cwd, model, signal };
+        if (
+          this.policy().autoCompact &&
+          capabilities &&
+          ctx
+            .get('harnessCompaction')
+            ?.shouldCompact(
+              current.contextMessages,
+              Math.max(1024, capabilities.contextWindow * 0.8 - capabilities.maxTokens),
+            )
+        ) {
+          await this.compactLog(ctx, id, log, signal, true);
+          current = log.projection();
+        }
+        const executor = requireService(ctx, 'harnessToolExecutor');
+        const tools = conversationTools(ctx, id);
+        const advertisedTools = new Map(tools.map((tool) => [tool.name, tool]));
+        const toolMetadata = tools.map(
+          ({ name, description, parameters, label, promptSnippet, promptGuidelines }) => ({
+            name,
+            description,
+            parameters,
+            label,
+            promptSnippet,
+            promptGuidelines,
+          }),
+        );
+        const promptService = requireService(ctx, 'harnessPrompt');
+        const systemPrompt = await promptService.build({ sessionId: id, cwd, tools: toolMetadata, signal });
+        const request = await this.prepareRequest(
+          ctx,
+          step,
+          { systemPrompt, messages: current.contextMessages, thinkingLevel: current.thinkingLevel },
+          (content) => {
+            for (const [name, tool] of advertisedTools) if (!tool.available()) advertisedTools.delete(name);
+            const available = toolMetadata
+              .filter(({ name }) => advertisedTools.has(name))
+              .map(({ name, description, parameters }) => ({ name, description, parameters }));
+            return executor.present(content, available, { model: step.model, turn, signal });
+          },
+        );
+
+        const hooks = ctx.events.listeners('agent/tool-result', scopeTarget(ctx));
+        return {
+          request,
+          executor,
+          tools: advertisedTools,
+          execution: {
+            start(call) {
               emit({
                 type: 'tool',
                 id: call.id,
                 name: call.name,
-                state: details?.approvalDenied === true ? 'denied' : output.isError ? 'error' : 'finished',
+                state: 'running',
                 arguments: call.arguments,
-                content: output.content,
-                entry: { id: entry.id, parentId: entry.parentId, timestamp: output.timestamp },
-                elapsedMs: output.elapsedMs,
-                approvalMs: typeof details?.approvalMs === 'number' ? details.approvalMs : undefined,
-                sessionId: typeof details?.sessionId === 'string' ? details.sessionId : undefined,
-                exitCode: typeof details?.exitCode === 'number' ? details.exitCode : undefined,
               });
-              if (transformError) throw transformError;
+              if (signal.aborted) return 'Agent run cancelled';
+              if (inbox.select('steer', queuedSelection)) return 'Skipped because a steering message arrived.';
+              const tool = advertisedTools.get(call.name);
+              if (tool && ctx.get('harnessToolPolicy')?.(id, tool) === false)
+                return 'Tool denied by conversation policy: ' + call.name;
             },
-          };
-        },
-      });
-      const text = textOf(answer);
-      emit({ type: 'complete', text });
-      return text;
-    } finally {
-      if (runLog && signal.aborted && !(signal.reason instanceof RunInterrupted))
-        new Inbox(runLog).cancel('Run cancelled');
-    }
+            update(call, value) {
+              const pending = value.details?.approvalPending;
+              if (pending === undefined && hooks.length) return;
+              emit({
+                type: 'tool',
+                id: call.id,
+                name: call.name,
+                state: pending === true ? 'approval' : 'running',
+                arguments: call.arguments,
+                content: hooks.length ? undefined : value.content,
+              });
+            },
+          },
+          async deliver(output, toolSignal, call) {
+            let executionId: string | undefined;
+            let transformError: Error | undefined;
+            if (!output.isError && hooks.length) {
+              executionId = log.append({ type: 'tool-execution', result: output }).id;
+              try {
+                const resultContext = { ...step, signal: toolSignal, tool: call.name, callId: call.id };
+                const content = await applyTransforms(hooks, output.content, resultContext);
+                if (!isToolContent(content)) throw new Error('Invalid tool result content');
+                output = { ...output, content };
+              } catch (error) {
+                output = {
+                  ...failedTool(
+                    call,
+                    'Tool execution completed, but the model-visible result transformation failed.',
+                  ),
+                  elapsedMs: output.elapsedMs,
+                };
+                transformError = new Error('Could not transform the result of ' + call.name, {
+                  cause: error,
+                });
+              }
+            }
+            const entry =
+              executionId && !transformError
+                ? log.acceptToolResult(executionId, output.content)
+                : log.append({ type: 'message', message: output, elapsedMs: output.elapsedMs });
+            const details = output.details;
+            if (!output.isError && typeof details?.changedPath === 'string') changed?.(details.changedPath);
+            emit({
+              type: 'tool',
+              id: call.id,
+              name: call.name,
+              state: details?.approvalDenied === true ? 'denied' : output.isError ? 'error' : 'finished',
+              arguments: call.arguments,
+              content: output.content,
+              entry: { id: entry.id, parentId: entry.parentId, timestamp: output.timestamp },
+              elapsedMs: output.elapsedMs,
+              approvalMs: typeof details?.approvalMs === 'number' ? details.approvalMs : undefined,
+              sessionId: typeof details?.sessionId === 'string' ? details.sessionId : undefined,
+              exitCode: typeof details?.exitCode === 'number' ? details.exitCode : undefined,
+            });
+            if (transformError) throw transformError;
+          },
+        };
+      },
+    });
+    const text = textOf(answer);
+    emit({ type: 'complete', text });
+    return text;
   }
 
   private async prepareRequest(

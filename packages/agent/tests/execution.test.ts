@@ -8,6 +8,9 @@ import assert from 'node:assert/strict';
 import { rmSync } from 'node:fs';
 import { Type } from 'typebox';
 import { AgentLoop } from '../src/agent.ts';
+import { Inbox } from '../../runs/src/inbox.ts';
+import type { Attachment } from '@mini-harness/input/message';
+import type { InboxItem } from '@mini-harness/sessions/log-api';
 import { SessionRun } from '../../runs/src/session-run.ts';
 import { nativeExecutor } from '../src/strategies.ts';
 import { basicCompaction } from '../src/compaction.ts';
@@ -81,6 +84,13 @@ function fixture(
   const agent = new SessionRun(sessions, () => ({ autoCompact: false }));
   const record = sessions.create();
   return { agent, ctx, sessions, tools, record };
+}
+
+function queueInput(
+  ctx: Context, sessions: SessionRegistry, id: string, text: string,
+  mode: InboxItem['mode'], attachments?: Attachment[], options?: Pick<InboxItem, 'model' | 'thinkingLevel'>,
+) {
+  return new Inbox(sessions.log(id)).enqueue(mode, () => sessions.prepareInput(id, text, attachments), ctx.harnessModels, options);
 }
 
 test('an alternative executor owns the model protocol and executes without the registered implementation', async (t) => {
@@ -389,10 +399,10 @@ test('identical queued text preserves each attachment identity and is delivered 
   });
   await ready;
   const data = Buffer.from('89504e470d0a1a0a', 'hex').toString('base64');
-  await agent.queueInput(ctx, record.id, 'Same text', 'followUp', [
+  await queueInput(ctx, sessions, record.id, 'Same text', 'followUp', [
     { name: 'first.png', mimeType: 'image/png', data },
   ]);
-  await agent.queueInput(ctx, record.id, 'Same text', 'followUp', [
+  await queueInput(ctx, sessions, record.id, 'Same text', 'followUp', [
     { name: 'second.png', mimeType: 'image/png', data },
   ]);
   release();
@@ -472,14 +482,14 @@ test('steering accepts off, skips deterministic failures and resets incompatible
       thinkingLevel: 'high',
     },
   });
-  await agent.queueInput(ctx, record.id, 'Actual instruction', 'steer');
-  await agent.queueInput(ctx, record.id, 'Keep reasoning', 'followUp', undefined, { thinkingLevel: 'high' });
-  await agent.queueInput(ctx, record.id, 'Switch model', 'followUp', undefined, {
+  await queueInput(ctx, sessions, record.id, 'Actual instruction', 'steer');
+  await queueInput(ctx, sessions, record.id, 'Keep reasoning', 'followUp', undefined, { thinkingLevel: 'high' });
+  await queueInput(ctx, sessions, record.id, 'Switch model', 'followUp', undefined, {
     model: { ...model, id: 'new-model' },
   });
-  const queue = await agent.queueInput(ctx, record.id, 'Cancel me', 'followUp');
-  agent.cancelQueue(
-    record.id,
+  const queue = await queueInput(ctx, sessions, record.id, 'Cancel me', 'followUp');
+  new Inbox(log).cancel(
+    'User cancelled',
     expectPresent(
       queue.find(({ summary }) => summary === 'Cancel me'),
       'cancelled entry',
@@ -684,7 +694,7 @@ test('a queued follow-up can preselect the next model and thinking level', async
     signal: new AbortController().signal,
   });
   await started;
-  await agent.queueInput(ctx, record.id, 'Follow up', 'followUp', undefined, {
+  await queueInput(ctx, sessions, record.id, 'Follow up', 'followUp', undefined, {
     model: { provider: 'fixture', id: 'next-model' },
     thinkingLevel: 'medium',
   });
