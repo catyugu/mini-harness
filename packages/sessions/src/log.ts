@@ -609,7 +609,7 @@ function storedEntry(entry: StoredEntry): SessionEntry {
   const shown = namespace.startsWith('display:');
   const instanceId = shown ? namespace.slice('display:'.length) : namespace;
   const pluginId = instanceId.slice(instanceId.lastIndexOf('/') + 1);
-  if (pluginIdPattern.test(pluginId) && ownsRecord(pluginId, instanceId)) {
+  if (/^(?:core:)?[a-z][a-z0-9-]{0,63}$/.test(pluginId) && ownsRecord(pluginId, instanceId)) {
     const owner = { pluginId, instanceId };
     if (!shown) return { ...identity, type: 'plugin-record', owner, data };
     const envelope = data as { data?: unknown; display?: { title?: unknown; content?: unknown } } | undefined;

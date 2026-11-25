@@ -166,7 +166,7 @@ export function apply(ctx, config) {
   await assert.rejects(bootProfile(standalone, paths, launch), /Invalid Profile name/);
   writeText(
     standalone,
-    'plugins:\n  - id: provider\n    config:\n      value: temporary\n  - name: \'@example/profile-consumer\'\n',
+    "plugins:\n  - id: provider\n    config:\n      value: temporary\n  - name: '@example/profile-consumer'\n",
   );
   const patched = await bootProfile('custom', paths, { ...launch, patches: [standalone] });
   try {
