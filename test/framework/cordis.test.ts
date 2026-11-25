@@ -126,12 +126,9 @@ test('event dispatch preserves prepend and registration order and skips removed 
   const included = context.extend();
   const excluded = context.extend();
   const scope = context.extend({ [Context.filter]: (listener: Context) => listener === included });
-  const remove = included.on(
-    event,
-    () => {
-      visits.push('removed');
-    },
-  );
+  const remove = included.on(event, () => {
+    visits.push('removed');
+  });
   excluded.on(event, () => {
     visits.push('excluded');
   });

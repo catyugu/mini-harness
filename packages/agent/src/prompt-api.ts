@@ -14,7 +14,6 @@ export interface PromptSection {
   render(context: PromptContext): string | undefined | Promise<string | undefined>;
 }
 
-
 export interface PromptPort {
   build(request: PromptContext): Promise<string>;
   register(section: PromptSection): () => void;

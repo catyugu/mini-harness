@@ -11,7 +11,13 @@ export class MessageExtensions {
 
   readonly report = (error: unknown) => console.error('Conversation extension failed', error);
 
-  private replace<T>(registry: KeyedRegistry<string, T>, key: string, value: T, event: string, priority: number) {
+  private replace<T>(
+    registry: KeyedRegistry<string, T>,
+    key: string,
+    value: T,
+    event: string,
+    priority: number,
+  ) {
     const remove = registry.add(key, value, priority);
     const change = () => this.events.dispatchEvent(new CustomEvent(event, { detail: key }));
     change();
