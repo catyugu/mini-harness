@@ -16,11 +16,11 @@ Owns model selection for each delivery, request preparation, retries, inbox deli
 
 ## Dependencies
 
-Resolves scoped LLM, model, prompt and tool providers through the session’s Cordis Context. Appends the accepted inputs, model requests and execution results through [Sessions](../sessions/README.md).
+Receives a run-owned Cordis Context and resolves LLM, model, prompt, tool and execution services directly from it. Appends the accepted inputs, model requests and execution results through [Sessions](../sessions/README.md).
 
 ## Lifecycle
 
-`core:agent` and `core:prompt` mount at application scope. Runs owns the execution reservation and prepares the session scope. Agent turns carry the run’s abort signal.
+`core:agent` and `core:prompt` mount at application scope. Runs owns the execution reservation, prepares the session scope and creates a child Cordis Fiber for each run or compaction. The Agent contract receives this context explicitly; its lifetime is aborted and disposed when the run ends.
 
 ## Configuration
 

@@ -1,19 +1,19 @@
+import type { Context } from 'mini-harness/cordis';
+import { sessionEvent } from '@mini-harness/plugin-api/instance';
+import { observe } from '@mini-harness/plugin-api/observations';
 import { imageMimeType } from '@mini-harness/input/prepare';
 import { validateModelOptions } from '@mini-harness/llm/options';
 import type {
-  ToolResultTransform,
   InputContext,
   InputPreparation,
   ModelFailure,
   ModelRequestContent,
-  ModelRequestTransform,
-  ModelRetry,
   StepContext,
 } from './events.ts';
 import { DomainError } from '@mini-harness/platform/errors';
 import { isDeepStrictEqual } from 'node:util';
 import { createHash } from 'node:crypto';
-import type { AgentPort, CompactionPort, ToolExecutorPort } from './api.ts';
+import type { AgentPort, ToolExecutorPort } from './api.ts';
 import type {
   SessionCatalog,
   SessionHistory,
@@ -38,28 +38,31 @@ import type { PromptPort } from './prompt-api.ts';
 import { RunInterrupted, type AgentEvent } from './stream.ts';
 import type { Attachment, ImageInput, InputSource, PreparedMessage } from '@mini-harness/input/message';
 import type { SessionLogPort, MessagePatch, InboxItem } from '@mini-harness/sessions/log-api';
-import type { CapabilityObservation } from '@mini-harness/plugin-api/observations';
 import { Inbox } from './inbox.ts';
 import { isToolContent, type ToolPort } from '@mini-harness/tools/api';
 import { contentDelta } from '@mini-harness/sessions/content-delta';
-import { applyTransforms, type AgentListener } from './transforms.ts';
+import { applyTransforms } from './transforms.ts';
 import { dispatchTools, executeTool } from './tool-pipeline.ts';
 import { resolveThinking, selectModel } from './model-selection.ts';
 import { requestModel } from './model-request.ts';
 
-interface AgentServices {
-  models(id: string): ModelCatalogPort;
-  llm(id: string): LlmPort;
-  tools(id: string): ToolPort;
-  prompt(id: string): PromptPort;
-  executor(id: string): ToolExecutorPort;
-  compaction(id: string): CompactionPort | undefined;
-  inputHooks?(id: string): AgentListener<InputPreparation>[];
-  policy(): { maxTurns: number; autoCompact: boolean };
-  observe(event: CapabilityObservation, signal?: AbortSignal): void;
-  modelRequestHooks?(id: string): AgentListener<ModelRequestTransform>[];
-  toolResultHooks?(id: string): AgentListener<ToolResultTransform>[];
-  retryModel?(failure: ModelFailure): Promise<ModelRetry | undefined>;
+function requireService<K extends keyof Context & string>(ctx: Context, name: K): NonNullable<Context[K]> {
+  const value = ctx.get(name);
+  if (value == null) throw new DomainError('unavailable', 'Required service is unavailable: ' + name);
+  return value;
+}
+
+async function retryModel(ctx: Context, failure: ModelFailure) {
+  const { signal, ...input } = failure;
+  for (const { context, callback } of ctx.events.listeners('agent/model-retry', sessionEvent(ctx, failure.sessionId))) {
+    const retry = await context.fiber.run((signal) => callback({ ...structuredClone(input), signal }), signal);
+    if (retry === undefined) continue;
+    if (
+      !retry || typeof retry !== 'object' ||
+      (retry.delayMs !== undefined && (!Number.isFinite(retry.delayMs) || retry.delayMs < 0 || retry.delayMs > 30000))
+    ) throw new Error('Invalid model retry decision');
+    return { delayMs: retry.delayMs };
+  }
 }
 
 const textOf = (message: NativeAssistantMessage) =>
@@ -118,7 +121,7 @@ export class NativeAgent implements AgentPort {
       Pick<SessionHistory, 'inspectLog'> &
       Pick<SessionLifecycle, 'assertAvailable' | 'rename'> &
       Pick<SessionStore, 'log' | 'prepareInput'>,
-    private readonly services: AgentServices,
+    private readonly policy: () => { maxTurns: number; autoCompact: boolean },
   ) {}
 
   revisionTarget(id: string, sourceEntryId: string, expectedLeafId: string | null) {
@@ -163,6 +166,7 @@ export class NativeAgent implements AgentPort {
   }
 
   queueInput(
+    ctx: Context,
     id: string,
     text: string,
     mode: 'steer' | 'followUp',
@@ -172,7 +176,7 @@ export class NativeAgent implements AgentPort {
     this.sessions.assertAvailable(id);
     validateModelOptions(options.model, options.thinkingLevel);
     const log = this.sessions.log(id);
-    const models = this.services.models(id);
+    const models = requireService(ctx, 'harnessModels');
     const choice = selectModel(models, {
       explicit: options.model,
       stored: log.projection().model,
@@ -192,6 +196,7 @@ export class NativeAgent implements AgentPort {
   }
 
   private async prepareInput(
+    ctx: Context,
     sessionId: string,
     model: ModelChoice,
     source: InputSource,
@@ -200,7 +205,7 @@ export class NativeAgent implements AgentPort {
     input: PreparedMessage,
     signal: AbortSignal,
   ) {
-    const hooks = this.services.inputHooks?.(sessionId) ?? [];
+    const hooks = ctx.events.listeners('agent/prepare-input', sessionEvent(ctx, sessionId));
     const context: InputContext = {
       sessionId,
       model,
@@ -230,7 +235,7 @@ export class NativeAgent implements AgentPort {
     const preparedImages = typeof content === 'string' ? [] : content.filter((part) => part.type === 'image');
     if (
       preparedImages.length &&
-      !this.services.models(sessionId).capabilities(model)?.input.includes('image')
+      !requireService(ctx, 'harnessModels').capabilities(model)?.input.includes('image')
     )
       throw new Error(
         'The selected model does not support image input. Choose an image-capable model and retry.',
@@ -318,10 +323,11 @@ export class NativeAgent implements AgentPort {
   }
 
   async prompt(
+    ctx: Context,
     record: SessionRecord,
     prompt: string,
     emit: (event: AgentEvent) => void | Promise<void>,
-    options: Parameters<AgentPort['prompt']>[3],
+    options: Parameters<AgentPort['prompt']>[4],
   ): Promise<string> {
     const { id } = record,
       {
@@ -347,7 +353,7 @@ export class NativeAgent implements AgentPort {
       if (!revision) this.closeUnfinishedTools(log);
       const inbox = new Inbox(log);
       const queuedSelection = (item: InboxItem) => {
-        const models = this.services.models(id);
+        const models = requireService(ctx, 'harnessModels');
         const choice = item.model ?? log.projection().model ?? fallback;
         const chosen = choice && models.resolve(choice);
         if (!chosen) return { ok: false, failure: 'The queued model is no longer available' } as const;
@@ -386,6 +392,7 @@ export class NativeAgent implements AgentPort {
           let prepared: Awaited<ReturnType<NativeAgent['prepareInput']>>;
           try {
             prepared = await this.prepareInput(
+              ctx,
               id,
               chosen,
               'user',
@@ -425,7 +432,7 @@ export class NativeAgent implements AgentPort {
         signal.throwIfAborted();
         beginSubmission?.();
         const previous = log.projection(revision?.parentId);
-        const models = this.services.models(id);
+        const models = requireService(ctx, 'harnessModels');
         model = selectModel(models, {
           explicit: choice,
           stored: previous.model,
@@ -434,7 +441,7 @@ export class NativeAgent implements AgentPort {
         });
         capabilities = models.capabilities(model);
         activeThinking = resolveThinking(capabilities, thinkingLevel, previous.thinkingLevel);
-        const prepared = await this.prepareInput(id, model, source, prompt, images, input, signal);
+        const prepared = await this.prepareInput(ctx, id, model, source, prompt, images, input, signal);
         await this.user(
           log,
           prepared,
@@ -454,24 +461,24 @@ export class NativeAgent implements AgentPort {
         submitted = true;
       };
       if (revision || !(await deliver('followUp'))) await submit();
-      const maxTurns = this.services.policy().maxTurns;
+      const maxTurns = this.policy().maxTurns;
       for (let turn = 0; turn < maxTurns; turn++) {
         signal.throwIfAborted();
         if (!model) throw new Error('Configure a model before sending a message');
         const cwd = this.sessions.workspacePath(id);
         const step: StepContext = { sessionId: id, turn: turn + 1, phase: 'turn', cwd, model, signal };
-        this.services.observe({ type: 'step-started', sessionId: id, turn: step.turn }, signal);
+        observe(ctx, { type: 'step-started', sessionId: id, turn: step.turn }, signal);
         if (
-          this.services.policy().autoCompact &&
+          this.policy().autoCompact &&
           capabilities &&
-          this.services.compaction(id)?.shouldCompact(
+          ctx.get('harnessCompaction')?.shouldCompact(
             log.projection().contextMessages,
             Math.max(1024, capabilities.contextWindow * 0.8 - capabilities.maxTokens),
           )
         )
-          await this.compactLog(id, log, signal, true);
+          await this.compactLog(ctx, id, log, signal, true);
         const current = log.projection();
-        const registry = this.services.tools(id);
+        const registry: ToolPort = requireService(ctx, 'harnessTools');
         const tools = registry.forSession(id);
         const advertisedTools = new Map(tools.map((tool) => [tool.name, tool]));
         const toolMetadata = tools.map(
@@ -484,10 +491,10 @@ export class NativeAgent implements AgentPort {
             promptGuidelines,
           }),
         );
-        const systemPrompt = await this.services
-          .prompt(id)
-          .build({ sessionId: id, cwd, tools: toolMetadata, signal });
+        const promptService: PromptPort = requireService(ctx, 'harnessPrompt');
+        const systemPrompt = await promptService.build({ sessionId: id, cwd, tools: toolMetadata, signal });
         const request = await this.prepareRequest(
+          ctx,
           log,
           step,
           { systemPrompt, messages: current.contextMessages, thinkingLevel: current.thinkingLevel },
@@ -500,7 +507,7 @@ export class NativeAgent implements AgentPort {
           },
         );
         emit({ type: 'assistant-start' });
-        let result = await this.request(id, request, (text) => emit({ type: 'delta', text }));
+        let result = await this.request(ctx, id, request, (text) => emit({ type: 'delta', text }));
         const knownCalls = new Set(
           [...current.contextMessages, ...request.messages].flatMap((message) =>
             message.role === 'assistant'
@@ -542,7 +549,8 @@ export class NativeAgent implements AgentPort {
           );
         signal.throwIfAborted();
         const calls = result.content.filter((part): part is ToolCallPart => part.type === 'toolCall');
-        await dispatchTools(this.services.executor(id), calls, advertisedTools, signal, async (call, tool, toolSignal) => {
+        const executor: ToolExecutorPort = requireService(ctx, 'harnessToolExecutor');
+        await dispatchTools(executor, calls, advertisedTools, signal, async (call, tool, toolSignal) => {
           const steering = nextValid('steer');
           let output: NativeToolMessage;
           let executionId: string | undefined;
@@ -554,7 +562,7 @@ export class NativeAgent implements AgentPort {
               steering ? 'Skipped because a steering message arrived.' : 'Agent run cancelled',
             );
           else {
-            const hooks = this.services.toolResultHooks?.(id) ?? [];
+            const hooks = ctx.events.listeners('agent/tool-result', sessionEvent(ctx, id));
             output = await executeTool(call, tool, {
               sessionId: id,
               cwd,
@@ -602,7 +610,7 @@ export class NativeAgent implements AgentPort {
                   content: failure.content,
                   entry: { id: entry.id, parentId: entry.parentId, timestamp: failure.timestamp },
                 });
-                this.services.observe(
+                observe(ctx, 
                   {
                     type: 'tool-ended',
                     sessionId: id,
@@ -639,7 +647,7 @@ export class NativeAgent implements AgentPort {
             sessionId: typeof details?.sessionId === 'string' ? details.sessionId : undefined,
             exitCode: typeof details?.exitCode === 'number' ? details.exitCode : undefined,
           });
-          this.services.observe(
+          observe(ctx, 
             {
               type: 'tool-ended',
               sessionId: id,
@@ -672,6 +680,7 @@ export class NativeAgent implements AgentPort {
   }
 
   private async prepareRequest(
+    ctx: Context,
     log: SessionLogPort,
     context: StepContext,
     requestContent: ModelRequestContent,
@@ -679,7 +688,7 @@ export class NativeAgent implements AgentPort {
   ): Promise<LlmRequest> {
     const projected = log.projection();
     const base = { model: context.model };
-    const capabilities = this.services.models(context.sessionId).capabilities(context.model);
+    const capabilities = requireService(ctx, 'harnessModels').capabilities(context.model);
     const validate = (value: ModelRequestContent) => {
       if (!value || !Array.isArray(value.messages)) throw new Error('Invalid model request messages');
       validateRequestSnapshot({ ...value, ...base });
@@ -687,7 +696,7 @@ export class NativeAgent implements AgentPort {
       return value;
     };
     const transformed = await applyTransforms(
-      this.services.modelRequestHooks?.(context.sessionId) ?? [],
+      ctx.events.listeners('agent/model-request', sessionEvent(ctx, context.sessionId)),
       requestContent,
       context,
       validate,
@@ -743,20 +752,20 @@ export class NativeAgent implements AgentPort {
     return { ...snapshot, sessionId: context.sessionId, signal: context.signal };
   }
 
-  private request(id: string, request: Parameters<LlmPort['stream']>[0], delta = (_text: string) => {}) {
-    return requestModel(this.services.llm(id), request, {
+  private request(ctx: Context, id: string, request: Parameters<LlmPort['stream']>[0], delta = (_text: string) => {}) {
+    return requestModel(requireService(ctx, 'harnessLlm'), request, {
       delta,
       ended: (attempt, failed) =>
-        this.services.observe(
+        observe(ctx, 
           { type: 'model-attempt-ended', sessionId: id, attempt, failed },
           request.signal,
         ),
-      retry: this.services.retryModel,
+      retry: (failure) => retryModel(ctx, failure),
     });
   }
 
-  private async compactLog(id: string, log: SessionLogPort, signal: AbortSignal, automatic = false) {
-    const strategy = this.services.compaction(id);
+  private async compactLog(ctx: Context, id: string, log: SessionLogPort, signal: AbortSignal, automatic = false) {
+    const strategy = ctx.get('harnessCompaction');
     if (!strategy) {
       if (automatic) return;
       throw new DomainError('unavailable', 'Context compaction is disabled');
@@ -775,7 +784,7 @@ export class NativeAgent implements AgentPort {
       request: async (content) => {
         signal.throwIfAborted();
         const choice = projection.model;
-        const model = choice && this.services.models(id).resolve(choice);
+        const model = choice && requireService(ctx, 'harnessModels').resolve(choice);
         if (!model) throw new DomainError('invalid_input', 'Configure a model before compacting');
         const context: StepContext = {
           sessionId: id,
@@ -785,7 +794,7 @@ export class NativeAgent implements AgentPort {
           phase: 'compaction',
           signal,
         };
-        return this.request(id, await this.prepareRequest(log, context, content));
+        return this.request(ctx, id, await this.prepareRequest(ctx, log, context, content));
       },
     });
     signal.throwIfAborted();
@@ -804,9 +813,9 @@ export class NativeAgent implements AgentPort {
     );
   }
 
-  async compact(id: string, signal: AbortSignal) {
+  async compact(ctx: Context, id: string, signal: AbortSignal) {
     signal.throwIfAborted();
     this.sessions.assertAvailable(id);
-    await this.compactLog(id, this.sessions.log(id), signal);
+    await this.compactLog(ctx, id, this.sessions.log(id), signal);
   }
 }

@@ -1,3 +1,5 @@
+import type { Context } from 'mini-harness/cordis';
+import { agentContext } from '@mini-harness/plugin-api/instance';
 import type { ThinkingLevel, ModelChoice } from '@mini-harness/llm/vocabulary';
 import type { ScopeKey, ScopePort } from '@mini-harness/plugin-api/scopes';
 import { DomainError } from '@mini-harness/platform/errors';
@@ -31,6 +33,7 @@ interface Activity {
   done?: Promise<unknown>;
   events?: RunEvents;
   inputSignal?: AbortSignal;
+  context?: Context;
 }
 
 export class Runs implements RunPort {
@@ -154,14 +157,15 @@ export class Runs implements RunPort {
       this.observe({ type: 'run-started', sessionId: id, run: running }, cancellation);
       if (!preparedScope) await this.scopes.prepare(`session:${id}`, cancellation);
       cancellation.throwIfAborted();
-      activity.inputSignal = cancellation;
-      try {
-        return await this.agent(id).prompt(record, prepared.text, publish, {
+      return this.withAgentContext(id, activity, cancellation, async (ctx, signal) => {
+        activity.inputSignal = signal;
+        try {
+          return await this.agent(id).prompt(ctx, record, prepared.text, publish, {
           fallback,
           beginSubmission: () => {
             info.inputEntryId = null;
           },
-          signal: cancellation,
+          signal,
           source,
           submissionId: info.id,
           choice: model,
@@ -172,10 +176,11 @@ export class Runs implements RunPort {
           changed: (path) => {
             info.changedFiles = [...new Set([...(info.changedFiles ?? []), path])];
           },
-        });
-      } finally {
-        activity.inputSignal = undefined;
-      }
+          });
+        } finally {
+          activity.inputSignal = undefined;
+        }
+      });
     };
     const finish = (state: RunInfo['state'], error?: string) => {
       for (const item of log.inbox()) {
@@ -436,10 +441,11 @@ export class Runs implements RunPort {
     { message, mode, attachments, model, thinkingLevel }: Parameters<RunPort['queueInput']>[1],
   ) {
     this.mutations.admit(this.scopes.address(`session:${id}`));
-    const signal = this.work.get(id)?.inputSignal;
-    if (!signal || signal.aborted)
+    const activity = this.work.get(id);
+    const signal = activity?.inputSignal;
+    if (!activity?.context || !signal || signal.aborted)
       throw new DomainError('conflict', 'The agent is not streaming; send a new message');
-    return this.agent(id).queueInput(id, message, mode, attachments, {
+    return this.agent(id).queueInput(activity.context, id, message, mode, attachments, {
       model,
       thinkingLevel,
       fallback: this.preference.recent(),
@@ -469,11 +475,29 @@ export class Runs implements RunPort {
     const { signal } = activity.controller;
     const done = (activity.done = this.scopes
       .prepare(`session:${id}`, signal)
-      .then(() => this.agent(id).compact(id, signal)));
+      .then(() => this.withAgentContext(id, activity, signal, (ctx, signal) => this.agent(id).compact(ctx, id, signal))));
     try {
       await done;
     } finally {
       this.work.delete(id);
+    }
+  }
+
+  private async withAgentContext<T>(
+    id: string,
+    activity: Activity,
+    signal: AbortSignal,
+    work: (ctx: Context, signal: AbortSignal) => Promise<T>,
+  ) {
+    const scope = this.scopes.context(`session:${id}`);
+    const fiber = agentContext(scope, id).plugin(function agentRun() {});
+    try {
+      await fiber;
+      activity.context = fiber.ctx;
+      return await fiber.run((signal) => work(fiber.ctx, signal), signal);
+    } finally {
+      activity.context = undefined;
+      await fiber.dispose();
     }
   }
 

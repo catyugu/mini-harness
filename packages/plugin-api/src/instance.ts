@@ -10,6 +10,16 @@ interface PluginInstance {
 }
 
 const identities = new WeakMap<FiberEntry, PluginInstance>();
+const agentScope = Symbol('agentScope');
+
+/** Attach the runtime conversation identity without granting a plugin identity. */
+export function agentContext(ctx: Context, sessionId: string) {
+  return ctx.extend({ [agentScope]: `session:${sessionId}` });
+}
+
+function agentScopeOf(ctx: Context): ScopeKey | undefined {
+  return (ctx as Context & { [agentScope]?: ScopeKey })[agentScope];
+}
 
 export function bindInstance(entry: FiberEntry, identity: PluginInstance) {
   identities.set(entry, Object.freeze(identity));
@@ -25,8 +35,8 @@ export function pluginInstance(ctx: Context) {
 }
 
 export function sessionVisible(ctx: Context, id: string) {
-  const scope = pluginInstance(ctx).scopeKey;
-  return !scope || sessionAddress(ctx, id).includes(scope);
+  const scope = agentScopeOf(ctx) ?? pluginInstance(ctx).scopeKey;
+  return !scope || scope === `session:${id}` || sessionAddress(ctx, id).includes(scope);
 }
 
 export function sessionAddress(ctx: Context, id: string) {
@@ -41,6 +51,8 @@ export function sessionEvent(ctx: Context, id: string) {
 export function scopedEvent(ctx: Context, scopes: readonly string[]) {
   return ctx.extend({
     [Context.filter]: (listener: Context) => {
+      const runScope = agentScopeOf(listener);
+      if (runScope && !scopes.includes(runScope)) return false;
       for (let fiber = listener.fiber; fiber.runtime; fiber = fiber.parent.fiber) {
         const identity = fiber.entry && identities.get(fiber.entry);
         if (identity) return !identity.scopeKey || scopes.includes(identity.scopeKey);
