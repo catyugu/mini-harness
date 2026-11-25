@@ -2,6 +2,8 @@ import { registerHooks } from 'node:module';
 import { readFileSync } from 'node:fs';
 import { isAbsolute, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import type { Plugin } from 'mini-harness/cordis';
+import type { PluginInfo } from '@mini-harness/plugin-api/descriptor';
 
 const manifest = new URL('../../../../../package.json', import.meta.url);
 const { exports: publicModules } = JSON.parse(readFileSync(manifest, 'utf8')) as {
@@ -43,4 +45,20 @@ export function resolveModule(name: string, source: string) {
   } finally {
     hook.deregister();
   }
+}
+
+/** Load the same native Cordis exports regardless of how the module was located. */
+export async function loadPluginModule(url: string, exportName = 'default') {
+  const exports = await import(url);
+  const value: unknown = exportName === 'default' ? (exports.default ?? exports) : exports[exportName];
+  const plugin =
+    typeof value === 'function' ||
+    (value !== null && typeof value === 'object' && 'apply' in value && typeof value.apply === 'function')
+      ? (value as Plugin)
+      : undefined;
+  const metadata: PluginInfo | undefined =
+    exports[exportName === 'default' ? 'metadata' : exportName + 'Metadata'];
+  const Config: Plugin.Base['Config'] =
+    plugin?.Config ?? exports[exportName === 'default' ? 'Config' : exportName + 'Config'];
+  return { plugin, metadata, Config };
 }

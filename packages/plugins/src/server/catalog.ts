@@ -7,11 +7,11 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { dirname, join, resolve } from 'node:path';
 import { scopeKeys, type CompositionConfig } from '@mini-harness/plugin-api/configuration';
 import type { PluginScope, ScopeKey, ScopeSettings } from '@mini-harness/plugin-api/scopes';
-import { resolveConfig, type Context, type EntryOptions, type Plugin } from 'mini-harness/cordis';
+import { resolveConfig, type Context, type EntryOptions } from 'mini-harness/cordis';
 import type { ResolvedPlugin } from '@mini-harness/plugin-api/descriptor';
 import { builtinBrowserAssets } from './browser-assets.ts';
 import { describePlugin, type DiscoveredPlugin } from './descriptor.ts';
-import { resolveModule } from './module-resolution.ts';
+import { loadPluginModule, resolveModule } from './module-resolution.ts';
 import { bindInstance } from '@mini-harness/plugin-api/instance';
 
 export interface ConfiguredPlugin {
@@ -121,8 +121,8 @@ export class PluginCatalog {
   async runtimeDescriptors(settings: CompositionConfig): Promise<DiscoveredPlugin[]> {
     const descriptors = await Promise.all(
       this.descriptors().map(async (descriptor) => {
-        const { id, source, scope } = descriptor;
-        if (!source || descriptor.error) return descriptor;
+        const { id, source, scope, location } = descriptor;
+        if ((!source && !location) || descriptor.error) return descriptor;
         const enabled =
           scope === 'application'
             ? this.enabled(descriptor, settings)
@@ -132,13 +132,9 @@ export class PluginCatalog {
               );
         if (!enabled) return descriptor;
         try {
-          const module = pathToFileURL(source).href + '?v=' + lstatSync(source).mtimeMs;
-          const exports = await import(module);
-          const value = exports.default ?? exports;
-          const plugin: Plugin | undefined =
-            typeof value === 'function' || typeof value?.apply === 'function' ? value : undefined;
-          const Config = plugin ? plugin.Config : exports.Config;
-          if (!plugin && !(descriptor.resources && Config))
+          const module = location?.url ?? pathToFileURL(source!).href + '?v=' + lstatSync(source!).mtimeMs;
+          const { plugin, Config, metadata } = await loadPluginModule(module, location?.exportName);
+          if (!plugin && !descriptor.resources && !metadata?.browser)
             throw new Error('Plugin ' + id + ' must export a Cordis plugin with apply(ctx, config)');
           return this.withSchema({ ...descriptor, plugin, module, Config });
         } catch (error) {
@@ -172,6 +168,7 @@ export class PluginCatalog {
           plugin: _plugin,
           browserStyles,
           Config: _Config,
+          location: _location,
           module: _module,
           ...metadata
         } = descriptor;

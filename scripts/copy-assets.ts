@@ -1,7 +1,10 @@
 import { build } from 'esbuild';
 import { createRequire } from 'node:module';
 import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { dirname, join, relative } from 'node:path';
+import { dirname, join, relative, resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
+import type { PluginInfo } from '@mini-harness/plugin-api/descriptor';
+import { loadPluginModule } from '@mini-harness/plugins/module-resolution';
 
 const require = createRequire(import.meta.url);
 const profileModules = new Map<string, { path: string; exportName: string }>();
@@ -36,6 +39,19 @@ for (const { name, parentPath } of readdirSync('packages', { withFileTypes: true
 writeFileSync(
   'dist/packages/host/src/profile-modules.json',
   JSON.stringify(Object.fromEntries(profileModules), null, 2) + '\n',
+);
+
+// Produce display data separately from the module locator. Loading an inactive
+// Entry at runtime never requires importing its executable module.
+const profileMetadata = new Map<string, Partial<PluginInfo>>();
+for (const [name, { path, exportName }] of profileModules) {
+  const { metadata, Config } = await loadPluginModule(pathToFileURL(resolve('dist', path)).href, exportName);
+  const schema = (Config as { jsonSchema?: PluginInfo['configSchema'] } | undefined)?.jsonSchema;
+  profileMetadata.set(name, { ...metadata, ...(schema ? { configSchema: schema } : {}) });
+}
+writeFileSync(
+  'dist/packages/host/src/profile-metadata.json',
+  JSON.stringify(Object.fromEntries(profileMetadata), null, 2) + '\n',
 );
 
 mkdirSync('dist/packages/ui-primitives/src/browser/vendor', { recursive: true });

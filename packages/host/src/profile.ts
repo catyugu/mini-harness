@@ -3,7 +3,7 @@ import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { isDeepStrictEqual } from 'node:util';
 import { parseDocument, stringify } from 'yaml';
-import { Context, EntryTree, type Plugin } from 'mini-harness/cordis';
+import { Context, EntryTree } from 'mini-harness/cordis';
 import { readJson, writeJson, writeText } from '@mini-harness/platform/json';
 import type { Paths } from '@mini-harness/platform/runtime-paths';
 import type { ResolvedPlugin, PluginInfo } from '@mini-harness/plugin-api/descriptor';
@@ -308,48 +308,31 @@ export function readProfile(name: string, paths?: Paths) {
   return rows([...shipped, ...userLayers]);
 }
 
-function isPlugin(value: unknown): value is Plugin {
-  return typeof value === 'function' || (object(value) && typeof value.apply === 'function');
-}
-
-async function moduleFor(
-  name: string,
-): Promise<{ plugin?: Plugin; metadata?: PluginInfo; Config?: Plugin.Base['Config'] }> {
-  const target = packagedModules.get(name);
-  if (!target) throw new Error('Unknown packaged Profile plugin: ' + name);
-  const exports = await import(new URL(target.path, installed).href);
-  const value: unknown = exports[target.exportName];
-  const metadata: PluginInfo | undefined =
-    exports[target.exportName === 'default' ? 'metadata' : target.exportName + 'Metadata'];
-  if (value !== undefined && !isPlugin(value))
-    throw new Error('Profile module must export a Cordis plugin: ' + name);
-  if (!value && !metadata?.browser) throw new Error('Profile module export not found: ' + name);
-  const Config =
-    value?.Config ?? exports[target.exportName === 'default' ? 'Config' : target.exportName + 'Config'];
-  return { plugin: value, metadata, Config };
-}
-
-export async function profileDescriptors(entries: ReadonlyMap<string, Row>): Promise<ResolvedPlugin[]> {
-  const descriptors = await Promise.all(
-    [...entries.values()]
-      .filter((row) => row.name && packagedModules.has(row.name))
-      .map(async (row) => {
-        const { plugin, metadata, Config } = await moduleFor(row.name!);
-        return {
-          title: row.id,
-          description: '',
-          scope: 'application' as const,
-          ...metadata,
-          plugin,
-          Config,
-          id: row.id,
-          defaultEnabled: !row.disabled,
-          browser: row.client ? metadata?.browser : undefined,
-          browserStyles: row.client ? metadata?.browserStyles : undefined,
-        };
-      }),
+/** Resolve shipped module locations and static display metadata without executing plugin code. */
+export function profileDescriptors(entries: ReadonlyMap<string, Row>): ResolvedPlugin[] {
+  const metadata = readJson<Record<string, PluginInfo>>(
+    fileURLToPath(new URL('./profile-metadata.json', import.meta.url)),
+    {},
   );
-  return descriptors;
+  return [...entries.values()].flatMap((row) => {
+    const name = row.name!;
+    const target = packagedModules.get(name);
+    if (!target) return [];
+    const info = metadata[name];
+    return [
+      {
+        title: row.id,
+        description: '',
+        scope: 'application' as const,
+        ...info,
+        location: { url: new URL(target.path, installed).href, exportName: target.exportName },
+        id: row.id,
+        defaultEnabled: !row.disabled,
+        browser: row.client ? info?.browser : undefined,
+        browserStyles: row.client ? info?.browserStyles : undefined,
+      },
+    ];
+  });
 }
 
 export async function loadProfile(
@@ -369,7 +352,7 @@ export async function loadProfile(
     const location = localDirectory(row, paths);
     if (location !== undefined) aliases.set(row.id, location);
   }
-  const descriptors = await profileDescriptors(resolved);
+  const descriptors = profileDescriptors(resolved);
   const managedIds = new Set(descriptors.map(({ id }) => id));
   const overlayFiles = new Set(overlays.map(({ file }) => file));
   const modules = new Map(

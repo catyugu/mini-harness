@@ -25,6 +25,8 @@ export interface PluginInfo {
 export interface ResolvedPlugin extends PluginInfo {
   id: string;
   defaultEnabled?: boolean;
+  /** A resolved executable entry, loaded only while enabled. */
+  location?: { url: string; exportName?: string };
   plugin?: Plugin;
   Config?: Plugin.Base['Config'];
 }
