@@ -10,7 +10,12 @@ import { bindPopover, iconButton, recordRow } from '@mini-harness/ui-primitives/
 import { renderMarkdown } from '@mini-harness/ui-primitives/markdown';
 import { browserRequest, payload } from '@mini-harness/ui-runtime/http';
 import { browserPluginId, browserPluginSettings } from '@mini-harness/ui-runtime/plugin-settings';
-import { defaultContextSettings, type ContextSettings, type ContextState, type TokenTotals } from '../shared/state.ts';
+import {
+  defaultContextSettings,
+  type ContextSettings,
+  type ContextState,
+  type TokenTotals,
+} from '../shared/state.ts';
 import { settingsForm } from './form.ts';
 
 const number = new Intl.NumberFormat(undefined, { maximumFractionDigits: 1 });
