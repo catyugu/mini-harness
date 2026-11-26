@@ -14,6 +14,7 @@ import {
 } from './api.ts';
 import { TaskOutputRing, readTaskOutput } from './output.ts';
 import { RecentTasks } from './history.ts';
+import { TaskPool } from './pool.ts';
 
 interface Entry {
   snapshot: TaskSnapshot;
@@ -43,9 +44,14 @@ export class TaskRuntime implements TaskPort {
     } = {},
   ) {}
 
+  pool(limit: number) {
+    return new TaskPool(limit);
+  }
+
   service(): TaskPort {
     const runtime = this;
     return Service.track<TaskPort>({
+      pool: runtime.pool.bind(runtime),
       start<T>(options: TaskOptions, execute: (context: TaskContext) => Promise<T>) {
         return runtime.start({ ...options, provider: options.provider ?? Service.caller(this) }, execute);
       },
@@ -75,7 +81,7 @@ export class TaskRuntime implements TaskPort {
 
   start<T>(options: TaskOptions, execute: (context: TaskContext) => Promise<T>): TaskHandle<T> {
     if (this.closing) throw new Error('Task runtime is closing');
-    const { signal: lifetime, provider, acquire, retain = true, ...metadata } = options;
+    const { signal: lifetime, provider, pool, retain = true, ...metadata } = options;
     if (this.removing.has(options.owner)) throw new Error('Task owner has been removed');
     this.domain.admit?.(options.owner);
     const parent = options.parentId ? this.entries.get(options.parentId) : undefined;
@@ -118,7 +124,7 @@ export class TaskRuntime implements TaskPort {
     };
     const enter = async () => {
       signal.throwIfAborted();
-      release = await acquire?.(signal);
+      release = await pool?.acquire(signal);
       signal.throwIfAborted();
       transition({ state: 'running', startedAt: snapshot.startedAt ?? new Date().toISOString() });
     };

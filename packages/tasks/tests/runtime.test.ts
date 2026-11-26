@@ -44,26 +44,22 @@ test('suspending releases admission and resumes only after reacquisition', async
   const runtime = new TaskRuntime();
   const ready = gate();
   const wake = gate();
-  let held = 0;
-  const acquire = async () => {
-    held++;
-    return () => held--;
-  };
-  const task = runtime.start({ owner: 'session:one', acquire }, async (context) => {
-    assert.equal(held, 1);
+  const pool = runtime.pool(1);
+  const task = runtime.start({ owner: 'session:one', pool }, async (context) => {
+    assert.equal(pool.active, 1);
     await context.suspend(async () => {
       ready.release();
       await wake.promise;
     });
-    assert.equal(held, 1);
+    assert.equal(pool.active, 1);
     return 42;
   });
   await ready.promise;
-  assert.equal(held, 0);
+  assert.equal(pool.active, 0);
   assert.equal(runtime.get(task.id)?.state, 'waiting');
   wake.release();
   assert.equal(await task.result, 42);
-  assert.equal(held, 0);
+  assert.equal(pool.active, 0);
   assert.equal((await runtime.wait(task.id)).state, 'completed');
   await runtime.removeOwner('session:one');
   assert.equal(runtime.get(task.id), undefined);
@@ -140,33 +136,24 @@ test('a durable projection fault cannot acknowledge a successful task', async ()
 
 test('a caught whole-task wait error reacquires admission', async () => {
   const runtime = new TaskRuntime();
-  let held = 0;
-  const task = runtime.start(
-    {
-      owner: 'one',
-      acquire: async () => {
-        held++;
-        return () => held--;
-      },
-    },
-    async (context) => {
-      await assert.rejects(
-        context.suspend(async () => {
-          assert.equal(held, 0);
-          await assert.rejects(
-            context.suspend(async () => {}),
-            /whole-task/,
-          );
-          throw new Error('wait failed');
-        }),
-        /wait failed/,
-      );
-      assert.equal(held, 1);
-      assert.equal(runtime.get(context.id)?.state, 'running');
-    },
-  );
+  const pool = runtime.pool(1);
+  const task = runtime.start({ owner: 'one', pool }, async (context) => {
+    await assert.rejects(
+      context.suspend(async () => {
+        assert.equal(pool.active, 0);
+        await assert.rejects(
+          context.suspend(async () => {}),
+          /whole-task/,
+        );
+        throw new Error('wait failed');
+      }),
+      /wait failed/,
+    );
+    assert.equal(pool.active, 1);
+    assert.equal(runtime.get(context.id)?.state, 'running');
+  });
   await task.result;
-  assert.equal(held, 0);
+  assert.equal(pool.active, 0);
 });
 
 test('owner removal rejects new work immediately and emits deletion after cleanup', async () => {
@@ -331,4 +318,29 @@ test('observation data is detached from arbitrary result objects', async () => {
   const copy = snapshot.result as { value: string };
   copy.value = 'modified again';
   assert.deepEqual(runtime.get(handle.id)?.result, { value: 'answer' });
+});
+
+test('pool resizing, queued cancellation and failed execution return capacity', async () => {
+  const runtime = new TaskRuntime();
+  const pool = runtime.pool(1);
+  const hold = gate();
+  const entered = gate();
+  const first = runtime.start({ owner: 'one', pool }, async () => {
+    entered.release();
+    await hold.promise;
+  });
+  await entered.promise;
+  const cancelled = runtime.start({ owner: 'two', pool }, async () => assert.fail('cancelled work ran'));
+  const third = runtime.start({ owner: 'three', pool }, async () => {
+    assert.equal(pool.active, 2);
+    throw new Error('expected');
+  });
+  cancelled.cancel();
+  await assert.rejects(cancelled.result);
+  pool.limit = 2;
+  await assert.rejects(third.result, /expected/);
+  assert.equal(pool.active, 1);
+  hold.release();
+  await first.result;
+  assert.equal(pool.active, 0);
 });

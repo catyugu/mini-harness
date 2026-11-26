@@ -6,8 +6,8 @@ which work is drained when a resource is deleted; `parentId` binds an inline chi
 Creator and resource annotations are ordinary metadata. The provider Cordis fiber controls the lifetime of executing code.
 
 Cancellation is cooperative. A task remains active until its executor and owned work have settled.
-`suspend` is a whole-task waiting point: it releases the caller-defined admission slot and reacquires
-it before returning or propagating an ordinary wait error. A cancelled wait does not resume work.
+`pool(limit)` creates a shared concurrency budget with a live limit. `suspend` is a whole-task
+waiting point: it releases pool capacity and reacquires it before returning or propagating an ordinary wait error. A cancelled wait does not resume work.
 Waiting reuses the execution promise and observes the committed terminal state, even for ephemeral tasks.
 
 `subscribe` observes creation, updates, output and removal from the recent runtime view. Subscriptions

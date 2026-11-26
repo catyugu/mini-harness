@@ -1,4 +1,6 @@
 import type { Context } from 'mini-harness/cordis';
+import type { TaskPool } from './pool.ts';
+export type { TaskPool } from './pool.ts';
 
 export type TaskState =
   | 'queued'
@@ -15,9 +17,6 @@ export const terminal = (state: TaskState) =>
 /** Serializable observation data, not the arbitrary JavaScript value returned by the executor. */
 export type TaskData = null | boolean | number | string | TaskData[] | { [key: string]: TaskData };
 
-/** Acquire a caller-defined execution slot. Release is called exactly once per acquisition. */
-export type TaskAdmission = (signal: AbortSignal) => Promise<() => void>;
-
 export interface TaskOptions {
   /** Opaque resource lifetime key. */
   owner: string;
@@ -29,7 +28,8 @@ export interface TaskOptions {
   /** The fiber whose code/resources execute the work, defaulting to the submitting caller. */
   provider?: Context;
   signal?: AbortSignal;
-  acquire?: TaskAdmission;
+  /** Capacity is held during execution and released at a whole-task wait point. */
+  pool?: TaskPool;
   /** Inline callers can discard runtime history after terminal observation and result delivery. */
   retain?: boolean;
 }
@@ -98,6 +98,7 @@ export interface TaskHistoryRecord {
 }
 
 export interface TaskPort {
+  pool(limit: number): TaskPool;
   start<T>(options: TaskOptions, execute: (context: TaskContext) => Promise<T>): TaskHandle<T>;
   get(id: string): TaskSnapshot | undefined;
   /** Active tasks and bounded recent history; older durable records remain queryable by ID. */

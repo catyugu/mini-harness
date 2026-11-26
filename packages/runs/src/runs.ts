@@ -178,7 +178,7 @@ export class Runs implements RunPort {
     id: string,
     prompt: string,
     emit: ((event: StreamEvent) => void) | undefined,
-    { signal, source, model, attachments, thinkingLevel, revision, acquire, metadata, provider }: RunOptions,
+    { signal, source, model, attachments, thinkingLevel, revision, pool, metadata, provider }: RunOptions,
     reserved?: Activity,
   ) {
     const activity = reserved ?? this.reserve(id);
@@ -212,7 +212,7 @@ export class Runs implements RunPort {
           metadata,
           provider,
           signal,
-          acquire,
+          pool,
         },
         async (task) => {
           try {

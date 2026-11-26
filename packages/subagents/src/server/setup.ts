@@ -12,11 +12,12 @@ export function setup(ctx: Context) {
       throw new DomainError('invalid_input', 'Unknown child model: ' + model.provider + '/' + model.id);
   };
   validate(policy());
-  const delegation = new Delegation(ctx.harnessSessions, ctx.harnessRuns, policy, ctx);
+  const pool = ctx.harnessTasks.pool(policy().maxParallel);
+  const delegation = new Delegation(ctx.harnessSessions, ctx.harnessRuns, policy, ctx, pool);
   ctx.on('internal/update', (next) => {
     const config = next as unknown as SubagentPolicy;
     validate(config);
-    delegation.semaphore.setLimit(config.maxParallel);
+    pool.limit = config.maxParallel;
   });
   const tool = (id: string) =>
     defineTool({
