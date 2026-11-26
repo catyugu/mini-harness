@@ -21,6 +21,7 @@ const setup = (ctx: Context) => {
             const label = document.createElement('label');
             label.textContent = 'Theme';
             const theme = document.createElement('select');
+            theme.name = 'appearance';
             theme.add(new Option('System', 'system'));
             theme.add(new Option('Light', 'light'));
             theme.add(new Option('Dark', 'dark'));

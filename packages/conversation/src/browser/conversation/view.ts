@@ -43,13 +43,19 @@ export function mountConversationLayout(ctx: Context) {
     const welcome =
       !isRunning(state.run) &&
       state.interaction.operation !== 'submit' &&
+      state.interaction.operation !== 'open' &&
       !state.history.records.length &&
+      !state.history.terminations.length &&
       !state.history.messages.some(
         (message) =>
           message.role === 'toolResult' ||
           (typeof message.content === 'string'
             ? message.content
-            : message.content.some((part) => part.type === 'text' && part.text)) ||
+            : message.content.some(
+                (part) =>
+                  (part.type === 'text' && part.text) ||
+                  (part.type === 'thinking' && part.thinking && !part.redacted),
+              )) ||
           message.attachments?.length ||
           message.error ||
           (Array.isArray(message.content) && message.content.some((part) => part.type === 'image')),

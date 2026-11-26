@@ -126,6 +126,7 @@ function pluginCatalog(
     const fields = required(form.querySelector<HTMLElement>('.detail-fields'));
     const outcome = required(form.querySelector<HTMLElement>('[role="status"]'));
     const scopePicker = document.createElement('select');
+    scopePicker.name = 'plugin-scope';
     const scopedControls = document.createElement('div');
     const enabled = toggle('Enabled in this scope', false);
     const configFields = document.createElement('div');
@@ -312,8 +313,10 @@ function pluginCatalog(
             inactive: 'Inactive',
             disabled: 'Disabled',
           }[plugin.state];
-          required(row.querySelector('small')).textContent =
-            state + ' · ' + (plugin.error ?? plugin.description);
+          const stateDetail = (plugin.error ?? plugin.description).trim();
+          required(row.querySelector('small')).textContent = stateDetail
+            ? state + ' · ' + stateDetail
+            : state;
           const controls = required(row.querySelector('.catalog-controls'));
           const scoped = !plugin.instances.some(({ scope }) => scope === 'application');
           const checked = scoped

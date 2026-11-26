@@ -198,6 +198,12 @@ test('startup durably interrupts runs, fails stale steering, and recovers idempo
   const interrupted = restored.runSummary(child.id);
   assert.ok(interrupted);
   assert.equal(interrupted.state, 'interrupted');
+  assert.deepEqual(
+    restored.inspectLog(child.id, (log) =>
+      log.projection().terminations.map(({ id, state, afterEntryId }) => [id, state, afterEntryId]),
+    ),
+    [['fixture-run', 'interrupted', null]],
+  );
   assert.deepEqual(restored.descendants([parent.id]), [parent.id, child.id]);
   const bytes = readFileSync(file);
   assert.match(bytes.toString(), /"state":"interrupted"/);
@@ -223,6 +229,10 @@ test('startup durably interrupts runs, fails stale steering, and recovers idempo
       return Array.isArray(content) ? content.map(({ text }) => text).join('') : content;
     });
     assert.deepEqual(prompts, ['Recovered follow-up', 'New manual input']);
+    assert.equal(
+      restarted.runtime.plugins.ctx.harnessSessions.log(child.id).projection().terminations[0]?.state,
+      'interrupted',
+    );
     assert.deepEqual(
       restarted.runtime.plugins.ctx.harnessSessions
         .log(child.id)

@@ -1,8 +1,11 @@
+import type { ToolResultState } from '@mini-harness/tools/api';
 import type { InputAttachment } from '@mini-harness/input/message';
 
 export interface ContentBlock {
   type: string;
   text?: string;
+  thinking?: string;
+  redacted?: boolean;
   name?: string;
   id?: string;
   data?: string;
@@ -14,6 +17,7 @@ export type MessageContent = string | ContentBlock[];
 export interface ViewMessage {
   /** Stable Session Log entry identity (absent for stream previews). */
   id?: string;
+  runId?: string;
   submissionId?: string;
   inboxId?: string;
   parentId?: string | null;
@@ -29,6 +33,6 @@ export interface ViewMessage {
   isError?: boolean;
   elapsedMs?: number;
   approvalMs?: number;
-  approvalDenied?: boolean;
+  toolState?: ToolResultState;
   exitCode?: number;
 }

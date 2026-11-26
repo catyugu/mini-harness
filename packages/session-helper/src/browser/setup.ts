@@ -10,7 +10,8 @@ const setup = (ctx: Context) => {
       successLabel: 'Copied',
       icon: 'copy',
       order: 10,
-      visible: ({ message }) => message.role === 'user' || message.role === 'assistant',
+      visible: ({ message, rawText }) =>
+        Boolean(rawText) && (message.role === 'user' || message.role === 'assistant'),
       async run({ rawText }) {
         await navigator.clipboard.writeText(rawText);
       },

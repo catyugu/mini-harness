@@ -57,6 +57,7 @@ export function sessionTree(
       }
       if (selecting) {
         const checkbox = document.createElement('input');
+        checkbox.name = 'selected-sessions';
         checkbox.type = 'checkbox';
         checkbox.id = 'select-' + item.id;
         checkbox.checked = selection.has(item.id);

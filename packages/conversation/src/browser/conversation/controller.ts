@@ -16,7 +16,7 @@ import { payload } from '@mini-harness/ui-runtime/http';
 import { workspaceRoute } from '@mini-harness/workspaces/browser/route';
 import { readConversation, observeRun } from '../session-client.ts';
 
-const emptyHistory = { messages: [], records: [], leafId: null };
+const emptyHistory = { messages: [], records: [], terminations: [], leafId: null };
 const path = (id: string, suffix = '') => '/sessions/' + id + suffix;
 
 export function createConversationController(ctx: Context): ConversationController {
@@ -72,9 +72,9 @@ export function createConversationController(ctx: Context): ConversationControll
   }
 
   function display(item: ConversationView, signal: AbortSignal, revealWorkspace: boolean) {
-    const { run, messages, records, leafId, partial = '', tools, queue, ...session } = item;
+    const { run, messages, records, terminations, leafId, partial = '', tools, queue, ...session } = item;
     queueRevision++;
-    update({ session, run, history: { messages, records, leafId }, partial, tools, queue });
+    update({ session, run, history: { messages, records, terminations, leafId }, partial, tools, queue });
     selection.selectConversation(item, revealWorkspace);
     status(item.logError ?? '', Boolean(item.logError));
     if (!signal.aborted && isRunning(run)) void observe(item, signal);
@@ -128,7 +128,17 @@ export function createConversationController(ctx: Context): ConversationControll
             thinkingLevel,
           } = event;
           append(
-            { id, parentId, submissionId, inboxId, timestamp, content, attachments, role: 'user' },
+            {
+              id,
+              parentId,
+              submissionId,
+              inboxId,
+              timestamp,
+              content,
+              attachments,
+              role: 'user',
+              runId: event.runId,
+            },
             { session: state.session && { ...state.session, model, thinkingLevel } },
           );
           break;
@@ -140,7 +150,7 @@ export function createConversationController(ctx: Context): ConversationControll
           update({ partial: state.partial + event.text });
           break;
         case 'assistant-end':
-          append(event.message, { partial: '' });
+          append({ ...event.message, runId: event.runId }, { partial: '' });
           break;
         case 'tool': {
           const tools = state.tools.filter(({ id }) => id !== event.id);
@@ -150,6 +160,7 @@ export function createConversationController(ctx: Context): ConversationControll
                 id: event.entry.id,
                 parentId: event.entry.parentId,
                 role: 'toolResult',
+                runId: event.runId,
                 toolCallId: event.id,
                 toolName: event.name,
                 content: event.content ?? '',
@@ -159,8 +170,8 @@ export function createConversationController(ctx: Context): ConversationControll
                 elapsedMs: event.elapsedMs,
                 approvalMs: event.approvalMs,
                 exitCode: event.exitCode,
-                approvalDenied: event.state === 'denied',
-                isError: event.state === 'error',
+                toolState: event.state === 'approval' || event.state === 'running' ? undefined : event.state,
+                isError: event.isError,
               },
               { tools },
             );
@@ -193,6 +204,7 @@ export function createConversationController(ctx: Context): ConversationControll
               ...state.history,
               messages: event.messages,
               records: event.records,
+              terminations: event.terminations,
               leafId: event.leafId,
             },
             partial: event.partial ?? '',

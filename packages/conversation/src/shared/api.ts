@@ -3,7 +3,7 @@ import type { SessionDisplayRecord } from '@mini-harness/sessions/display-record
 import type { ViewMessage } from '@mini-harness/sessions/message';
 import type { QueueEntry } from '@mini-harness/sessions/queue';
 import type { StreamEvent } from '@mini-harness/runs/stream';
-import type { RunInfo } from '@mini-harness/sessions/run-state';
+import type { RunInfo, RunTermination } from '@mini-harness/sessions/run-state';
 import type { SessionRecord } from '@mini-harness/sessions/identity';
 
 export interface Conversation extends SessionRecord {
@@ -24,6 +24,7 @@ export interface SessionSearchResult {
 export interface ConversationView extends Conversation {
   messages: ViewMessage[];
   records: SessionDisplayRecord[];
+  terminations: RunTermination[];
   leafId: string | null;
   thinkingLevel?: ThinkingLevel;
   partial?: string;

@@ -132,7 +132,7 @@ test('drafts isolate attachments and discover workspace files and skills', async
     await expect(cards.locator('.file-card')).toHaveCount(2);
     await expect(cards.getByRole('button', { name: 'Preview task.txt' })).toContainText('TXT · 13 B');
     await expect(cards.getByRole('button', { name: 'Preview document.pdf' })).toContainText('PDF');
-    await expect(bubble.locator('.file-card, img')).toHaveCount(0);
+    await expect(bubble.locator('.file-card, img')).toHaveCount(4);
     await cards.getByRole('button', { name: 'Preview task.txt' }).click();
     await expect(panel.locator('.file-preview:visible')).toHaveText('ATTACHED TASK');
     const fileDownload = page.waitForEvent('download');
@@ -200,6 +200,12 @@ test('drafts isolate attachments and discover workspace files and skills', async
     await confirmation.getByRole('button', { name: 'Delete', exact: true }).click();
     await expect(page.locator('#sessions .session-row')).toHaveCount(0);
     await expect(page.getByRole('heading', { name: 'What are we working on?' })).toBeVisible();
+    await page.getByRole('button', { name: 'Open workspace panel', exact: true }).click();
+    await expect(panel.getByRole('tab', { name: 'notes.md', exact: true })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
+    await expect(panel.getByRole('heading', { name: 'Notes' })).toBeVisible();
   } finally {
     await page.close();
     await service.stop();

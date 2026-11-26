@@ -4,7 +4,7 @@ import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { createFixturePaths, createMockProvider } from '../helpers/mock-provider.ts';
 import { join } from 'node:path';
 import { writeJson } from '@mini-harness/platform/json';
-import { startIsolatedHost } from '../support/browser.ts';
+import { settingsSection, startIsolatedHost } from '../support/browser.ts';
 import { writePlugin } from '../support/plugin-fixture.ts';
 
 test('renders Markdown and tool results, and stops a pending reply', async ({ page }) => {
@@ -18,6 +18,10 @@ test('renders Markdown and tool results, and stops a pending reply', async ({ pa
   const delayed = new Promise<void>((done) => {
     release = done;
   });
+  let resumeSteering = () => {};
+  const steering = new Promise<void>((done) => {
+    resumeSteering = done;
+  });
   const mock = await createMockProvider(async ({ messages }) => {
     const last = expectPresent(messages.at(-1), 'model message');
     if (last.content === 'Stop this response') {
@@ -25,7 +29,12 @@ test('renders Markdown and tool results, and stops a pending reply', async ({ pa
       await delayed;
       return 'Late response';
     }
-    if (last.role === 'user') return { tool: 'ls', args: { path: '.' } };
+    if (last.content === 'Steer this response') {
+      await steering;
+      return { tool: 'ls', args: { path: '.' } };
+    }
+    if (last.content === 'Change course') return 'Steering accepted';
+    if (last.role === 'user') return { tool: 'ls', args: { path: '.' }, text: 'Checking the workspace' };
     return '### Workspace\n\n```text\nExample\n```\n\n<img src=x onerror="alert(1)">\n\n<p class="overlay">A tool note</p>';
   });
   const { root, paths } = createFixturePaths(mock.url);
@@ -88,6 +97,16 @@ export const apply = (ctx) => {
       'Copied',
     );
     const copied = (await page.evaluate(() => navigator.clipboard.readText())).replace(/\r\n?/g, '\n');
+    expect(copied).toMatch(/^Checking the workspace/);
+    expect(copied).not.toContain('(empty directory)');
+    const turn = page.locator('.assistant-turn');
+    await expect(turn).toHaveCount(1);
+    await expect(turn.locator(':scope > .message, :scope > .tool-card')).toHaveText([
+      'Checking the workspace',
+      /ls.*Done/s,
+      /Workspace.*Example.*A tool note/s,
+    ]);
+    await expect(turn.locator('.message-actions time')).toHaveCount(1);
     expect(copied).toMatch(/```text[ \t]*\nExample[ \t]*\n```/);
     await expect(page.locator('.message img, .message .overlay')).toHaveCount(0);
     await expect(page.getByText('A tool note')).toBeVisible();
@@ -114,8 +133,35 @@ export const apply = (ctx) => {
     await expect(page.getByLabel('Latest run')).toHaveAttribute('data-state', 'cancelled');
     await expect(prompt).toHaveText('Stop before acceptance');
     expect(mock.requests.length).toBe(requests);
+    await expect(page.getByText(/^Run cancelled/)).toHaveCount(2);
+    await page.reload();
+    await expect(page.getByText(/^Run cancelled/)).toHaveCount(2);
+    await expect(page.locator('.assistant-turn .message-actions time')).toHaveCount(1);
+
+    await page.getByRole('button', { name: 'Settings', exact: true }).click();
+    await settingsSection(page, 'General').click();
+    const mode = page.getByRole('switch', { name: 'Add instructions' });
+    await mode.check();
+    await expect(mode).toBeEnabled();
+    await page.getByRole('button', { name: 'Close settings' }).click();
+    await prompt.fill('Steer this response');
+    await page.getByRole('button', { name: 'Send', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Stop response' })).toBeVisible();
+    await prompt.fill('Change course');
+    await page.getByRole('button', { name: 'Queue', exact: true }).click();
+    await expect(page.locator('#queuedMessages')).toContainText('Change course');
+    resumeSteering();
+    const skipped = page.locator('.tool-card[data-state=skipped]');
+    await expect(skipped.locator('summary')).toContainText('Skipped');
+    await expect(page.getByText('Steering accepted', { exact: true })).toBeVisible();
+    await expect(page.getByLabel('Latest run')).toHaveAttribute('data-state', 'completed');
+    await page.reload();
+    await expect(skipped.locator('summary')).toContainText('Skipped');
+    await expect(page.locator('.tool-card[data-state=finished]')).toHaveCount(1);
+    await expect(page.getByText(/^Run cancelled/)).toHaveCount(2);
   } finally {
     release();
+    resumeSteering();
     await page.close();
     await service.stop();
     rmSync(root, { recursive: true, force: true });
@@ -134,12 +180,14 @@ test('a long response updates only its view and restores from current state when
   const end = new Promise<void>((resolve) => {
     finish = resolve;
   });
+  const paragraphs = Array.from({ length: 48 }, (_, index) => 'Paragraph ' + (index + 1)).join('\n\n');
   const mock = await createMockProvider(async function* () {
     yield 'Beginning ';
     await more;
     for (let count = 0; count < 2300; count++) yield 'x';
-    yield ' through the window';
+    yield ' through the window\n\n' + paragraphs;
     await end;
+    yield '\n\nFinal paragraph';
   });
   const { root, paths } = createFixturePaths(mock.url);
   const folder = join(paths.plugins, 'stream-observer');
@@ -209,17 +257,34 @@ export const apply = (ctx) => {
     });
     releaseMore();
     const expected = 'Beginning ' + 'x'.repeat(2300) + ' through the window';
-    await expect(streamed).toHaveText(expected);
+    await expect(streamed).toHaveText(expected + '\n\n' + paragraphs);
     await expect(streamed).toHaveAttribute('data-messages', '1');
     await expect(streamed).toHaveAttribute('data-events', 'false');
     await expect(page.locator('body')).toHaveAttribute('data-unrelated-updates', '0');
     await page.evaluate(() => window.dispatchEvent(new Event('restore-history')));
-    await expect(page.locator('.message.assistant')).toHaveText(expected);
+    const history = page.locator('#messages');
+    const distanceFromEnd = () =>
+      history.evaluate((node) => node.scrollHeight - node.clientHeight - node.scrollTop);
+    await expect(history.getByText('Paragraph 48', { exact: false })).toBeVisible();
+    await expect.poll(distanceFromEnd).toBeLessThan(8);
+    await page.reload();
+    await expect(page.locator('#replacement-stream')).toContainText('Paragraph 48');
+    await page.evaluate(() => window.dispatchEvent(new Event('restore-history')));
+    await expect.poll(distanceFromEnd).toBeLessThan(8);
+    await history.hover();
+    await page.mouse.wheel(0, -3000);
+    await expect.poll(() => history.evaluate((node) => node.scrollTop)).toBeLessThan(8);
     finish();
     await expect(page.getByLabel('Latest run')).toHaveAttribute('data-state', 'completed');
     await expect(page.locator('.message.assistant')).toHaveCount(1);
     await expect(page.locator('.message.user')).toHaveCount(1);
-    await expect(page.locator('.message.assistant')).toHaveText(expected);
+    await expect(history.getByText('Final paragraph', { exact: true })).toBeAttached();
+    expect(await history.evaluate((node) => node.scrollTop)).toBeLessThan(8);
+    await page.reload();
+    await expect(page.locator('#replacement-stream')).toBeAttached();
+    await page.evaluate(() => window.dispatchEvent(new Event('restore-history')));
+    await expect(history.getByText('Final paragraph', { exact: true })).toBeInViewport();
+    await expect.poll(distanceFromEnd).toBeLessThan(8);
   } finally {
     releaseMore();
     finish();

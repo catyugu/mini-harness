@@ -2,6 +2,7 @@ import type { MessageContent, ViewMessage } from '@mini-harness/sessions/message
 import type { InputSource } from '@mini-harness/input/message';
 import type { ModelChoice } from '@mini-harness/llm/vocabulary';
 import type { SessionProjection } from '@mini-harness/sessions/log-api';
+import type { ToolResultState } from '@mini-harness/tools/api';
 import type { RunInfo } from '@mini-harness/sessions/run-state';
 
 export type StreamEvent =
@@ -13,7 +14,10 @@ export type StreamEvent =
       partial?: string;
       tools?: Extract<StreamEvent, { type: 'tool' }>[];
       run: RunInfo;
-    } & Pick<SessionProjection, 'messages' | 'records' | 'model' | 'thinkingLevel' | 'leafId'>);
+    } & Pick<
+      SessionProjection,
+      'messages' | 'records' | 'terminations' | 'model' | 'thinkingLevel' | 'leafId'
+    >);
 
 export type RunEvent = StreamEvent & { runId: string; runSessionId: string; sequence: number };
 
@@ -45,7 +49,8 @@ export type AgentEvent =
       type: 'tool';
       id: string;
       name: string;
-      state: 'approval' | 'running' | 'finished' | 'denied' | 'error';
+      state: 'approval' | 'running' | ToolResultState;
+      isError?: boolean;
       arguments?: unknown;
       content?: MessageContent;
       sessionId?: string;

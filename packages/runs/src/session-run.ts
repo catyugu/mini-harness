@@ -19,7 +19,7 @@ import type { AgentEvent } from './stream.ts';
 import type { ImageInput, InputSource, PreparedMessage } from '@mini-harness/input/message';
 import type { SessionLogPort, InboxItem } from '@mini-harness/sessions/log-api';
 import { Inbox } from './inbox.ts';
-import { isToolContent } from '@mini-harness/tools/api';
+import { isToolContent, toolResultState } from '@mini-harness/tools/api';
 import { applyTransforms } from './transforms.ts';
 import { failedTool } from '@mini-harness/tools/execution';
 import {
@@ -322,6 +322,12 @@ export class SessionRun {
           tools: advertisedTools,
           execution: {
             start(call) {
+              if (signal.aborted) return { outcome: 'skipped', reason: 'Agent run cancelled' };
+              if (inbox.hasValid('steer', queuedSelection))
+                return { outcome: 'skipped', reason: 'Skipped because a steering message arrived.' };
+              const tool = advertisedTools.get(call.name);
+              if (tool && ctx.get('harnessToolPolicy')?.(id, tool) === false)
+                return { outcome: 'denied', reason: 'Tool denied by conversation policy: ' + call.name };
               emit({
                 type: 'tool',
                 id: call.id,
@@ -329,12 +335,7 @@ export class SessionRun {
                 state: 'running',
                 arguments: call.arguments,
               });
-              if (signal.aborted) return 'Agent run cancelled';
-              if (inbox.hasValid('steer', queuedSelection))
-                return 'Skipped because a steering message arrived.';
-              const tool = advertisedTools.get(call.name);
-              if (tool && ctx.get('harnessToolPolicy')?.(id, tool) === false)
-                return 'Tool denied by conversation policy: ' + call.name;
+              return undefined;
             },
             update(call, value) {
               const pending = value.details?.approvalPending;
@@ -352,7 +353,7 @@ export class SessionRun {
           async deliver(output, toolSignal, call) {
             let executionId: string | undefined;
             let transformError: Error | undefined;
-            if (!output.isError && hooks.length) {
+            if (toolResultState(output) === 'finished' && hooks.length) {
               executionId = log.append({ type: 'tool-execution', result: output }).id;
               try {
                 const resultContext = { ...step, signal: toolSignal, tool: call.name, callId: call.id };
@@ -377,12 +378,15 @@ export class SessionRun {
                 ? log.acceptToolResult(executionId, output.content)
                 : log.append({ type: 'message', message: output, elapsedMs: output.elapsedMs });
             const details = output.details;
-            if (!output.isError && typeof details?.changedPath === 'string') changed?.(details.changedPath);
+            const state = toolResultState(output);
+            if (state === 'finished' && typeof details?.changedPath === 'string')
+              changed?.(details.changedPath);
             emit({
               type: 'tool',
               id: call.id,
               name: call.name,
-              state: details?.approvalDenied === true ? 'denied' : output.isError ? 'error' : 'finished',
+              state,
+              isError: output.isError,
               arguments: call.arguments,
               content: output.content,
               entry: { id: entry.id, parentId: entry.parentId, timestamp: output.timestamp },

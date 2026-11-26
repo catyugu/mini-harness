@@ -71,3 +71,5 @@ const plugin: Plugin.Object = {
   },
 };
 export default plugin;
+
+export const metadata = { title: 'Default Prompt' };

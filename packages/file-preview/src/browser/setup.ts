@@ -92,7 +92,6 @@ function sidebar(ctx: Context, resource: PreviewResource, scope: WorkspaceView, 
         content.append(code);
         if (ext === 'md' || ext === 'markdown') {
           const markdown = document.createElement('div');
-          markdown.className = 'markdown file-markdown';
           renderMarkdown(markdown, preview.text);
           content.append(markdown);
           raw.hidden = false;
@@ -127,7 +126,7 @@ function setup(ctx: Context) {
   });
   let active: ReturnType<typeof mediaDialog> | undefined;
   ctx.provide('miniFilePreview', {
-    open(resource: PreviewResource, placement: PreviewPlacement) {
+    open(resource: PreviewResource, placement: PreviewPlacement, caller?: AbortSignal) {
       if (lifetime.aborted) return;
       if (resource.kind === 'workspace' && resource.path.endsWith('/')) {
         const files = ctx.get('miniFileTree');
@@ -139,17 +138,20 @@ function setup(ctx: Context) {
       const workspaceId = resource.workspaceId;
       const sessionId = resource.kind === 'workspace' ? undefined : resource.sessionId;
       const scope = { workspaceId, sessionId };
-      const signal = resource.kind === 'memory' ? AbortSignal.any([resource.signal, lifetime]) : lifetime;
+      const signals = [lifetime];
+      if (caller) signals.push(caller);
+      if (resource.kind === 'memory') signals.push(resource.signal);
+      const signal = AbortSignal.any(signals);
       if (signal.aborted) return;
       if (placement === 'sidebar') {
         const key =
           resource.kind === 'workspace'
             ? resource.path
             : resource.kind === 'attachment'
-              ? resource.id + ':' + resource.name
+              ? resource.sessionId + ':' + resource.id
               : resource.key;
         tab.open({
-          owner: sessionId ? { workspaceId, sessionId } : { workspaceId },
+          owner: { workspaceId },
           key: resource.kind + ':' + key,
           data: resource,
           signal,
@@ -166,9 +168,7 @@ function setup(ctx: Context) {
         },
         { once: true },
       );
-      // Layout owns the selected scope, including sessions with identical workspace IDs.
-      const stop = ctx.miniTabs.onScopeChange(() => dialog.close(), dialog.signal);
-      dialog.signal.addEventListener('abort', stop, { once: true });
+      ctx.miniTabs.onWorkspaceChange(() => dialog.close(), dialog.signal);
       const status = document.createElement('p');
       status.setAttribute('role', 'status');
       const failure = (message: string) => {

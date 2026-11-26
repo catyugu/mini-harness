@@ -58,6 +58,7 @@ export class SessionLog extends RecordLog<SessionEvent> implements SessionLogPor
   private readonly pendingInbox = new Map<string, InboxItem>();
   private readonly inboxFailures: QueueEntry[] = [];
   private run?: RunInfo;
+  private readonly runEvents: Extract<SessionEntry, { type: 'run' }>[] = [];
   private cachedProjection?: SessionProjection;
   private recovery = { leaf: null as string | null, checker: new RequestMessages() };
 
@@ -153,7 +154,10 @@ export class SessionLog extends RecordLog<SessionEvent> implements SessionLogPor
 
   protected recordAdded(entry: SessionEntry) {
     if (!operational(entry) || entry.type === 'run') this.cachedProjection = undefined;
-    if (entry.type === 'run') this.run = entry.run;
+    if (entry.type === 'run') {
+      this.run = entry.run;
+      this.runEvents.push(entry);
+    }
     if (entry.type === 'tool-schema') this.schemas.set(entry.hash, entry.tools);
     if (entry.type === 'inbox-enqueued') {
       this.inboxIds.add(entry.item.id);
@@ -187,7 +191,7 @@ export class SessionLog extends RecordLog<SessionEvent> implements SessionLogPor
         const raw = this.byId.get(id);
         return raw?.type === 'tool-execution' ? raw.result : undefined;
       },
-      this.run,
+      this.runEvents,
     );
   }
 

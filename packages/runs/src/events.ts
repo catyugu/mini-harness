@@ -46,7 +46,7 @@ export class RunEvents {
     emit: (event: RunEvent) => void,
     history: () => Pick<
       Extract<StreamEvent, { type: 'snapshot' }>,
-      'messages' | 'records' | 'model' | 'thinkingLevel' | 'leafId'
+      'messages' | 'records' | 'terminations' | 'model' | 'thinkingLevel' | 'leafId'
     >,
     end = () => {},
   ) {

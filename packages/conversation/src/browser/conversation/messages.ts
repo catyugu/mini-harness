@@ -1,6 +1,7 @@
 import type { Context } from 'mini-harness/cordis';
 import type { SessionDisplayRecord } from '@mini-harness/sessions/display-record';
 import type { MessageContent, ViewMessage } from '@mini-harness/sessions/message';
+import type { RunInfo, RunTermination } from '@mini-harness/sessions/run-state';
 import type { StreamEvent } from '@mini-harness/runs/stream';
 import type { ToolView, MessageAction, MessageActionContext } from '../history-api.ts';
 import { icon } from '@mini-harness/ui-primitives/icons';
@@ -12,6 +13,7 @@ import { renderReferences } from './file-references.ts';
 export function createMessageView(
   ctx: Context,
   signal: AbortSignal,
+  viewport: HTMLElement,
   messages: HTMLElement,
   extensions: {
     render(tool: ToolView, signal: AbortSignal, action?: boolean): HTMLElement | undefined;
@@ -34,7 +36,27 @@ export function createMessageView(
   const actionContext = new WeakMap<HTMLElement, Omit<MessageActionContext, 'signal'>>();
   const actionOwners = new WeakMap<HTMLButtonElement, MessageAction>();
   const saved = new Map<string, { node: HTMLElement; source: ViewMessage }>();
-  let previewAnswer: { node: HTMLElement; bubble: HTMLElement } | undefined;
+  const turns = new Map<string, HTMLElement>();
+  const markdown = new WeakMap<HTMLElement, string>();
+  const preview = document.createElement('div');
+  preview.className = 'message assistant';
+  let following = true;
+
+  const scrollToEnd = () => {
+    if (following && viewport.clientHeight) viewport.scrollTop = viewport.scrollHeight;
+  };
+  viewport.addEventListener(
+    'scroll',
+    () => {
+      if (viewport.clientHeight)
+        following = viewport.scrollHeight - viewport.clientHeight - viewport.scrollTop < 8;
+    },
+    { signal },
+  );
+  const resize = new ResizeObserver(scrollToEnd);
+  resize.observe(viewport);
+  resize.observe(messages);
+  signal.addEventListener('abort', () => resize.disconnect(), { once: true });
   const liveTools = new Map<string, HTMLDetailsElement>();
 
   function textOf(value?: MessageContent) {
@@ -59,66 +81,27 @@ export function createMessageView(
     });
   }
 
-  function addMessage(
-    role: 'user' | 'assistant' | 'error',
-    text: string,
-    timestamp = Date.now(),
-    source?: ViewMessage,
-    target: HTMLElement = messages,
-  ) {
-    const item = document.createElement('article');
-    item.className = 'message ' + role;
-    if (role === 'assistant') renderMarkdown(item, text);
-    else if (role === 'user')
-      renderReferences(item, text, (path) => {
-        const { workspaceId } = current();
-        if (workspaceId)
-          ctx.get('miniFilePreview')?.open({ kind: 'workspace', workspaceId, path }, 'sidebar');
-      });
-    else item.textContent = text;
-    const wrapper = document.createElement('div');
-    wrapper.className = 'message-row ' + role;
-    wrapper.append(item);
-    const actions = document.createElement('div');
-    actions.className = 'message-actions';
-    actions.setAttribute('role', 'group');
-    actions.setAttribute('aria-label', 'Message actions');
-    wrapper.append(actions);
-
-    function action(label: string, symbol: Parameters<typeof icon>[0], run: () => void) {
-      const button = document.createElement('button');
-      button.type = 'button';
-      button.className = 'message-action';
-      button.setAttribute('aria-label', label);
-      button.title = label;
-      button.append(icon(symbol));
-      button.onclick = run;
-      return button;
+  function messageActions(wrapper: HTMLElement, message: ViewMessage, rawText: string) {
+    actionContext.set(wrapper, { ...current(), message, rawText });
+    let group = wrapper.querySelector<HTMLElement>(':scope > .message-actions');
+    if (!group) {
+      group = document.createElement('div');
+      group.className = 'message-actions';
+      group.setAttribute('role', 'group');
+      group.setAttribute('aria-label', 'Message actions');
     }
-
-    if (role === 'error') actions.append(action('Retry', 'refresh', retryLast));
-    if (source) {
-      const snapshot = current();
-      actionContext.set(wrapper, {
-        sessionId: snapshot.sessionId,
-        leafId: snapshot.leafId,
-        message: source,
-        rawText: text,
-      });
-      renderMessageActions(wrapper);
-    }
-    if (source && Number.isFinite(timestamp)) {
-      const time = document.createElement('time');
+    let time = group.querySelector('time');
+    if (!time) {
+      time = document.createElement('time');
       time.className = 'message-time';
-      updateTimestamp(time, timestamp);
-      actions.append(time);
+      group.append(time);
     }
-    target.append(wrapper);
-    return item;
+    updateTimestamp(time, message.timestamp);
+    return group;
   }
 
   function renderMessageActions(wrapper: HTMLElement) {
-    const group = wrapper.querySelector<HTMLElement>('.message-actions');
+    const group = wrapper.querySelector<HTMLElement>(':scope > .message-actions');
     const context = actionContext.get(wrapper);
     if (!group || !context) return;
     const available = new Map(
@@ -220,6 +203,7 @@ export function createMessageView(
       running: 'Running',
       approval: 'Waiting for approval',
       denied: 'Denied',
+      skipped: 'Skipped',
       error: 'Failed',
     };
     status.textContent = labels[data.state] ?? data.state;
@@ -302,7 +286,7 @@ export function createMessageView(
       return toolCard(
         {
           name: message.toolName ?? 'Tool',
-          state: message.approvalDenied ? 'denied' : message.isError ? 'error' : 'finished',
+          state: message.toolState ?? 'finished',
           id: message.toolCallId,
           content: message.content,
           arguments: message.arguments,
@@ -315,53 +299,65 @@ export function createMessageView(
       );
     }
     const entry = document.createElement('div');
-    entry.className = 'message-entry';
+    entry.className = 'message-row user';
     const text = textOf(message.content);
     const blocks = typeof message.content === 'string' ? [] : message.content;
     const images = blocks.filter(
       (block) => block.type === 'image' && imageMime.test(block.mimeType ?? '') && block.data,
     );
     const attachments = message.attachments ?? [];
-    if (text || images.length || attachments.length) {
-      const bubble = addMessage(message.role, text, message.timestamp, message, entry);
-      const list = document.createElement('div');
-      list.className = 'message-attachments';
-      list.setAttribute('aria-label', 'Attachments');
-      const { workspaceId, sessionId } = current();
-      const remaining = [...images];
-      const resource = new AbortController();
-      resources.set(entry, resource);
-      const signal = resource.signal;
-      const memory = (image: (typeof images)[number], name: string, mimeType: string, key: string) =>
-        workspaceId && image.data
-          ? { kind: 'memory' as const, workspaceId, sessionId, key, name, mimeType, data: image.data, signal }
-          : undefined;
+    if (!text && !images.length && !attachments.length) return entry;
+    const bubble = document.createElement('article');
+    bubble.className = 'message user';
+    const list = document.createElement('div');
+    list.className = 'message-attachments';
+    list.setAttribute('role', 'group');
+    list.setAttribute('aria-label', 'Attachments');
+    const { workspaceId, sessionId } = current();
+    const remaining = [...images];
+    const resource = new AbortController();
+    resources.set(entry, resource);
+    const signal = resource.signal;
+    const memory = (image: (typeof images)[number], name: string, mimeType: string, key: string) =>
+      workspaceId && image.data
+        ? { kind: 'memory' as const, workspaceId, sessionId, key, name, mimeType, data: image.data, signal }
+        : undefined;
 
-      for (const [index, file] of attachments.entries()) {
-        const image = imageMime.test(file.mimeType) ? remaining.shift() : undefined;
-        const stored =
-          file.id && workspaceId && sessionId
-            ? { ...file, kind: 'attachment' as const, id: file.id, workspaceId, sessionId }
-            : undefined;
-        list.append(
-          attachmentView(
-            ctx,
-            file,
-            stored ?? (image && memory(image, file.name, file.mimeType, 'image:' + index)),
-            signal,
-          ),
-        );
-      }
-      for (const [index, image] of remaining.entries()) {
-        const name = 'Attached image ' + (index + 1);
-        const mimeType = image.mimeType!;
-        list.append(
-          attachmentView(ctx, { name, mimeType }, memory(image, name, mimeType, 'inline:' + index), signal),
-        );
-      }
-      if (list.childElementCount) bubble.before(list);
+    for (const [index, file] of attachments.entries()) {
+      const image = imageMime.test(file.mimeType) ? remaining.shift() : undefined;
+      const stored =
+        file.id && workspaceId && sessionId
+          ? { ...file, kind: 'attachment' as const, id: file.id, workspaceId, sessionId }
+          : undefined;
+      list.append(
+        attachmentView(
+          ctx,
+          file,
+          stored ?? (image && memory(image, file.name, file.mimeType, 'image:' + index)),
+          signal,
+          image?.data,
+        ),
+      );
     }
-    if (message.error) addMessage('error', message.error, undefined, undefined, entry);
+    for (const [index, image] of remaining.entries()) {
+      const name = 'Attached image ' + (index + 1);
+      const mimeType = image.mimeType!;
+      list.append(
+        attachmentView(ctx, { name, mimeType }, memory(image, name, mimeType, 'inline:' + index), signal),
+      );
+    }
+    if (list.childElementCount) bubble.append(list);
+    if (text) {
+      const body = document.createElement('div');
+      body.className = 'user-text';
+      renderReferences(body, text, (path) => {
+        if (workspaceId)
+          ctx.get('miniFilePreview')?.open({ kind: 'workspace', workspaceId, path }, 'sidebar');
+      });
+      bubble.append(body);
+    }
+    entry.append(bubble, messageActions(entry, message, text));
+    renderMessageActions(entry);
     return entry;
   }
 
@@ -372,164 +368,241 @@ export function createMessageView(
     }
   }
 
-  function preserveScroll(update: () => void, reset = false) {
-    const pinned = messages.scrollHeight - messages.clientHeight - messages.scrollTop < 96;
-    const top = messages.getBoundingClientRect().top;
-    const visible =
-      !reset &&
-      !pinned &&
-      [...messages.querySelectorAll<HTMLElement>('.message-row, .tool-card')].find(
-        (node) => node.getBoundingClientRect().bottom > top,
-      );
-    const offset = visible ? visible.getBoundingClientRect().top : 0;
-    update();
-    if (reset || pinned) messages.scrollTop = messages.scrollHeight;
-    else if (visible && visible.isConnected)
-      messages.scrollTop += visible.getBoundingClientRect().top - offset;
-  }
-
   function remove(node: HTMLElement) {
-    for (const button of node.querySelectorAll<HTMLElement>('[data-message-action]')) {
-      resources.get(button)?.abort();
-      resources.delete(button);
-    }
     resources.get(node)?.abort();
     resources.delete(node);
     node.remove();
   }
 
+  function reconcile(target: HTMLElement, nodes: HTMLElement[]) {
+    const kept = new Set(nodes);
+    for (const child of [...target.children]) if (!kept.has(child as HTMLElement)) child.remove();
+    for (const [index, node] of nodes.entries())
+      if (target.children[index] !== node) target.insertBefore(node, target.children[index] ?? null);
+  }
+
+  function terminalNode(run: RunTermination, retry: boolean) {
+    const node = document.createElement('div');
+    node.className = 'run-termination';
+    node.dataset.state = run.state;
+    const label = document.createElement('div');
+    label.className = run.state === 'failed' ? 'message error' : 'hint';
+    const seconds = (Date.parse(run.finishedAt ?? '') - Date.parse(run.startedAt)) / 1000;
+    label.textContent =
+      run.state === 'failed'
+        ? 'Run failed' + (run.error ? ': ' + run.error : '')
+        : run.state === 'interrupted'
+          ? 'Run interrupted'
+          : 'Run cancelled' + (seconds >= 1 ? ' after ' + Math.round(seconds) + ' s' : '');
+    node.append(label);
+    if (retry) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'link-button';
+      button.textContent = 'Retry';
+      button.onclick = retryLast;
+      node.append(button);
+      node.dataset.retry = '';
+    }
+    return node;
+  }
+
   function history(
     entries: readonly ViewMessage[],
     records: readonly { record: SessionDisplayRecord; node: HTMLElement }[],
-    error?: string,
-    reset = false,
+    terminations: readonly RunTermination[],
+    run: RunInfo | undefined,
+    partial: string,
+    tools: readonly Extract<StreamEvent, { type: 'tool' }>[],
+    reset: boolean,
   ) {
-    preserveScroll(() => {
-      if (reset) {
-        for (const node of resources.keys()) remove(node);
-        messages.replaceChildren();
-        saved.clear();
-        liveTools.clear();
-        previewAnswer = undefined;
+    if (reset) {
+      following = true;
+      for (const node of resources.keys()) remove(node);
+      messages.replaceChildren();
+      saved.clear();
+      turns.clear();
+      liveTools.clear();
+    }
+    const desired: HTMLElement[] = [];
+    const activeMessages = new Set<string>();
+    const activeTurns = new Set<string>();
+    const anchors = new Map<string | null, (typeof records)[number][]>();
+    const endings = new Map<string | null, RunTermination[]>();
+    const failures = new Set(terminations.filter((item) => item.state === 'failed').map(({ id }) => id));
+    const previousEndings = new Map(
+      [...messages.querySelectorAll<HTMLElement>('[data-run-termination]')].map((node) => [
+        node.dataset.runTermination,
+        node,
+      ]),
+    );
+    for (const item of records) {
+      const key = item.record.afterMessageId ?? null;
+      const list = anchors.get(key) ?? [];
+      list.push(item);
+      anchors.set(key, list);
+    }
+    for (const item of terminations) {
+      const list = endings.get(item.afterEntryId) ?? [];
+      list.push(item);
+      endings.set(item.afterEntryId, list);
+    }
+
+    type Block = { key: string; text: string; type: 'text' | 'thinking' } | HTMLElement;
+    type Turn = { key: string; runId?: string; blocks: Block[]; latest?: ViewMessage; copy: string[] };
+    let turn: Turn | undefined;
+    let boundary = '';
+    const finish = () => {
+      if (!turn) return;
+      const { key, blocks, latest, copy } = turn;
+      turn = undefined;
+      if (!blocks.length) return;
+      let wrapper = turns.get(key);
+      if (!wrapper) {
+        wrapper = document.createElement('div');
+        wrapper.className = 'message-row assistant assistant-turn';
+        turns.set(key, wrapper);
       }
-      const desired: HTMLElement[] = [];
-      const anchors = new Map<string | null, HTMLElement[]>();
-      for (const { record, node } of records) {
-        const list = anchors.get(record.afterMessageId ?? null) ?? [];
-        list.push(node);
-        anchors.set(record.afterMessageId ?? null, list);
-      }
-      const place = (key: string | null) => {
-        desired.push(...(anchors.get(key) ?? []));
-        anchors.delete(key);
-      };
-      place(null);
-      const currentEntries = new Set<string>();
-      for (const [index, message] of entries.entries()) {
-        const key = message.id ?? message.role + ':' + index;
-        const prior = saved.get(key);
-        if (
-          message.role === 'toolResult' ||
-          textOf(message.content) ||
-          message.attachments?.length ||
-          message.error ||
-          (Array.isArray(message.content) && message.content.some(({ type }) => type === 'image'))
-        ) {
-          let node = prior?.node;
-          if (message.role === 'toolResult') {
-            const tool = message.toolCallId && liveTools.get(message.toolCallId);
-            node = renderEntry(message, node ?? (tool || undefined));
-            if (message.toolCallId) liveTools.delete(message.toolCallId);
-          } else if (
-            !node ||
-            (prior?.source !== message && JSON.stringify(prior?.source) !== JSON.stringify(message))
-          ) {
-            const text = textOf(message.content);
-            if (
-              index === entries.length - 1 &&
-              message.role === 'assistant' &&
-              !message.error &&
-              previewAnswer &&
-              text.startsWith(previewAnswer.bubble.textContent ?? '') &&
-              !message.attachments?.length
-            ) {
-              const { node: previewNode, bubble } = previewAnswer;
-              renderMarkdown(bubble, text);
-              const row = bubble.parentElement!;
-              actionContext.set(row, { ...current(), message, rawText: text });
-              const time = document.createElement('time');
-              time.className = 'message-time';
-              updateTimestamp(time, message.timestamp);
-              row.querySelector('.message-actions')?.append(time);
-              renderMessageActions(row);
-              node = previewNode;
-              previewAnswer = undefined;
-            } else node = renderEntry(message);
-          }
-          saved.set(key, { node, source: message });
-          currentEntries.add(key);
-          desired.push(node);
+      const prior = new Map(
+        [...wrapper.children].map((child) => [
+          (child as HTMLElement).dataset.assistantBlock,
+          child as HTMLElement,
+        ]),
+      );
+      const children = blocks.map((block) => {
+        if (block instanceof HTMLElement) return block;
+        let node = prior.get(block.key);
+        if (!node) {
+          node = document.createElement(block.type === 'thinking' ? 'details' : 'div');
+          node.dataset.assistantBlock = block.key;
+          if (block.type === 'thinking') {
+            node.className = 'assistant-reasoning';
+            const summary = document.createElement('summary');
+            summary.textContent = 'Reasoning';
+            node.append(summary, document.createElement('p'));
+          } else node.className = 'message assistant';
         }
-        if (message.id) place(message.id);
-      }
-      for (const nodes of anchors.values()) desired.push(...nodes);
-      for (const key of saved.keys()) if (!currentEntries.has(key)) saved.delete(key);
-      if (error && !entries.some((entry) => entry.error === error)) {
-        const previous = messages.querySelector<HTMLElement>('[data-run-error]');
-        const node =
-          previous?.querySelector('.message.error')?.textContent === error ? previous : errorEntry(error);
-        node.dataset.runError = '';
+        if (markdown.get(node) !== block.text) {
+          if (block.type === 'thinking') node.lastElementChild!.textContent = block.text;
+          else renderMarkdown(node, block.text);
+          markdown.set(node, block.text);
+        }
+        return node;
+      });
+      if (latest) children.push(messageActions(wrapper, latest, copy.join('\n\n')));
+      reconcile(wrapper, children);
+      if (latest) renderMessageActions(wrapper);
+      desired.push(wrapper);
+      activeTurns.add(key);
+    };
+    const assistant = (runId?: string) => {
+      if (turn && turn.runId !== runId) finish();
+      return (turn ??= { key: JSON.stringify([boundary, runId]), runId, blocks: [], copy: [] });
+    };
+    const placeEndings = (id: string | null) => {
+      for (const item of endings.get(id) ?? []) {
+        finish();
+        const retry = run?.id === item.id && run.state === 'failed';
+        const prior = previousEndings.get(item.id);
+        const node = prior && prior.hasAttribute('data-retry') === retry ? prior : terminalNode(item, retry);
+        node.dataset.runTermination = item.id;
         desired.push(node);
+        boundary = item.id;
       }
-      if (previewAnswer) desired.push(previewAnswer.node);
-      desired.push(...liveTools.values());
-      const kept = new Set(desired);
-      for (const child of [...messages.children])
-        if (child instanceof HTMLElement && !kept.has(child)) remove(child);
-      for (const [index, node] of desired.entries())
-        if (messages.children[index] !== node) messages.insertBefore(node, messages.children[index] ?? null);
-    }, reset);
-  }
-
-  function errorEntry(error: string) {
-    const container = document.createElement('div');
-    const bubble = addMessage('error', error, undefined, undefined, container);
-    return bubble.parentElement!;
-  }
-
-  function partial(text: string) {
-    if (!text && !previewAnswer) return;
-    preserveScroll(() => {
-      if (!text) {
-        previewAnswer?.node.remove();
-        previewAnswer = undefined;
-        return;
+    };
+    const place = (id: string | null) => {
+      placeEndings(id);
+      for (const { record, node } of anchors.get(id) ?? []) {
+        (turn?.blocks ?? desired).push(node);
+        placeEndings(record.id);
       }
-      if (!previewAnswer) {
-        const node = document.createElement('div');
-        node.className = 'message-entry';
-        previewAnswer = { node, bubble: addMessage('assistant', '', undefined, undefined, node) };
-        messages.insertBefore(node, liveTools.values().next().value ?? null);
-      }
-      previewAnswer.bubble.textContent = text;
-    });
-  }
-
-  function activity(tools: readonly Extract<StreamEvent, { type: 'tool' }>[]) {
-    preserveScroll(() => {
-      const active = new Set(tools.map(({ id }) => id));
-      for (const [id, card] of liveTools)
-        if (!active.has(id)) {
-          remove(card);
-          liveTools.delete(id);
+      anchors.delete(id);
+    };
+    place(null);
+    for (const [index, message] of entries.entries()) {
+      const key = message.id ?? message.role + ':' + index;
+      const prior = saved.get(key);
+      if (message.role === 'user') {
+        finish();
+        boundary = key;
+        const same =
+          prior && (prior.source === message || JSON.stringify(prior.source) === JSON.stringify(message));
+        const node = same ? prior.node : renderEntry(message);
+        if (node.childElementCount) desired.push(node);
+        saved.set(key, { node, source: message });
+        activeMessages.add(key);
+      } else if (message.role === 'toolResult') {
+        const tool = message.toolCallId && liveTools.get(message.toolCallId);
+        const node = renderEntry(message, prior?.node ?? (tool || undefined));
+        if (message.toolCallId) liveTools.delete(message.toolCallId);
+        saved.set(key, { node, source: message });
+        activeMessages.add(key);
+        assistant(message.runId).blocks.push(node);
+      } else {
+        const group = assistant(message.runId);
+        const parts =
+          typeof message.content === 'string' ? [{ type: 'text', text: message.content }] : message.content;
+        let previous = group.blocks.at(-1);
+        let canMerge = true;
+        for (const [partIndex, part] of parts.entries()) {
+          if (part.type === 'text' && part.text) {
+            if (canMerge && previous && !(previous instanceof HTMLElement) && previous.type === 'text')
+              previous.text += (partIndex === 0 ? '\n\n' : '') + part.text;
+            else {
+              previous = { key: key + ':' + partIndex, text: part.text, type: 'text' };
+              group.blocks.push(previous);
+            }
+            canMerge = true;
+          } else if (part.type === 'thinking' && part.thinking && !part.redacted) {
+            group.blocks.push({ key: key + ':' + partIndex, text: part.thinking, type: 'thinking' });
+            canMerge = false;
+          } else canMerge = false;
         }
-      for (const tool of tools) {
-        const card = toolCard(tool, liveTools.get(tool.id));
-        if (!liveTools.has(tool.id)) messages.append(card);
-        liveTools.set(tool.id, card);
+        const body = textOf(message.content);
+        if (body) group.copy.push(body);
+        group.latest = message;
+        if (message.error && !failures.has(message.runId ?? '')) {
+          const error = document.createElement('div');
+          error.className = 'message error';
+          error.textContent = message.error;
+          group.blocks.push(error);
+        }
       }
-    });
+      if (message.id) place(message.id);
+    }
+    if (partial) {
+      preview.textContent = partial;
+      assistant(run?.id).blocks.push(preview);
+    }
+    const activeTools = new Set(tools.map(({ id }) => id));
+    for (const id of liveTools.keys()) if (!activeTools.has(id)) liveTools.delete(id);
+    for (const tool of tools) {
+      const card = toolCard(tool, liveTools.get(tool.id));
+      liveTools.set(tool.id, card);
+      assistant(run?.id).blocks.push(card);
+    }
+    for (const id of anchors.keys()) place(id);
+    finish();
+    for (const key of saved.keys()) if (!activeMessages.has(key)) saved.delete(key);
+    for (const key of turns.keys()) if (!activeTurns.has(key)) turns.delete(key);
+    reconcile(messages, desired);
+    for (const node of resources.keys()) if (!messages.contains(node)) remove(node);
+    scrollToEnd();
   }
 
-  return { history, partial, activity, refreshTools, refreshActions };
+  return {
+    history,
+    partial(text: string) {
+      if (!text || !messages.contains(preview)) return false;
+      preview.textContent = text;
+      scrollToEnd();
+      return true;
+    },
+    follow() {
+      following = true;
+      scrollToEnd();
+    },
+    refreshTools,
+    refreshActions,
+  };
 }

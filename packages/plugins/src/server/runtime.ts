@@ -38,3 +38,5 @@ export default {
     ctx.effect(() => () => host.close());
   },
 };
+
+export const metadata = { title: 'Plugin Runtime' };

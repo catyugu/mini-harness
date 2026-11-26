@@ -26,11 +26,10 @@ const setup = (ctx: Context) => {
       node.title = selected?.path ?? '';
       node.hidden = !selected;
     }
-    tabs.selectScope(select.scope() || undefined);
-    tabs.prune(new Set(sessions.get().map(({ id }) => id)), new Set(workspaces.get().map(({ id }) => id)));
+    tabs.selectWorkspace(selected?.id);
+    tabs.prune(new Set(workspaces.get().map(({ id }) => id)));
   };
   select.subscribe(update, signal);
-  sessions.subscribe(update, signal);
   update();
 };
 
@@ -51,6 +50,7 @@ function workspacePicker(ctx: Context, sessions: () => { workspaceId: string | n
   const form = document.createElement('form');
   form.className = 'workspace-form';
   const path = document.createElement('input');
+  path.name = 'path';
   path.required = true;
   const go = button('Browse');
   const up = button('Up', 'quiet');
@@ -135,6 +135,7 @@ function workspacePicker(ctx: Context, sessions: () => { workspaceId: string | n
   const editForm = document.createElement('form');
   editForm.className = 'workspace-rename-form';
   const name = document.createElement('input');
+  name.name = 'name';
   name.required = true;
   name.maxLength = 140;
   name.autocomplete = 'off';

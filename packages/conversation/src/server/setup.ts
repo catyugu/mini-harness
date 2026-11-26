@@ -36,6 +36,7 @@ export function setup(ctx: Context) {
       messages: projectHistory(ctx, id, history?.messages ?? []),
       leafId: history?.leafId ?? null,
       records: history?.records ?? [],
+      terminations: history?.terminations ?? [],
       model: history?.model,
       thinkingLevel: history?.thinkingLevel,
       queue: history?.queue ?? [],

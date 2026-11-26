@@ -11,6 +11,7 @@ import { AgentLoop } from '../src/agent.ts';
 import { Inbox } from '../../runs/src/inbox.ts';
 import type { Attachment } from '@mini-harness/input/message';
 import type { InboxItem } from '@mini-harness/sessions/log-api';
+import type { AgentEvent } from '../../runs/src/stream.ts';
 import { SessionRun } from '../../runs/src/session-run.ts';
 import { nativeExecutor } from '@mini-harness/tools/execution';
 import { basicCompaction } from '../src/compaction.ts';
@@ -454,6 +455,7 @@ test('steering accepts off, skips deterministic failures and resets incompatible
   });
   t.after(() => release());
   const levels: (string | undefined)[] = [];
+  const events: AgentEvent[] = [];
   const { agent, ctx, sessions, record, tools } = fixture(
     t,
     {
@@ -463,7 +465,14 @@ test('steering accepts off, skips deterministic failures and resets incompatible
           started();
           await hold;
           yield { type: 'done', message: toolsAnswer(call('steered-call', 'first')) };
-        } else yield { type: 'done', message: answer() };
+        } else {
+          if (levels.length === 2) {
+            const result = request.messages.find((message) => message.role === 'toolResult');
+            assert.equal(result?.isError, true);
+            assert.match(JSON.stringify(result?.content), /steering message arrived/);
+          }
+          yield { type: 'done', message: answer() };
+        }
       },
     },
     undefined,
@@ -475,15 +484,24 @@ test('steering accepts off, skips deterministic failures and resets incompatible
       description: 'Should be skipped',
       parameters: Type.Object({}),
       async execute() {
-        assert.fail('Steering did not skip the next tool');
+        events.push({ type: 'error', error: 'The skipped tool was executed' });
+        return { content: [] };
       },
     }),
   );
-  const run = agent.prompt(ctx, record, 'Initial', () => {}, {
-    fallback: model,
-    signal: new AbortController().signal,
-    thinkingLevel: 'off',
-  });
+  const run = agent.prompt(
+    ctx,
+    record,
+    'Initial',
+    (event) => {
+      events.push(event);
+    },
+    {
+      fallback: model,
+      signal: new AbortController().signal,
+      thinkingLevel: 'off',
+    },
+  );
   await ready;
   const log = sessions.log(record.id);
   log.append({
@@ -515,6 +533,15 @@ test('steering accepts off, skips deterministic failures and resets incompatible
   release();
   await run;
   assert.deepEqual(levels, ['off', 'off', 'high', undefined]);
+  assert.ok(!events.some(({ type }) => type === 'error'));
+  assert.deepEqual(
+    events.flatMap((event) => (event.type === 'tool' ? [event.state] : [])),
+    ['skipped'],
+  );
+  assert.equal(
+    log.projection().messages.find(({ toolCallId }) => toolCallId === 'steered-call')?.toolState,
+    'skipped',
+  );
   assert.deepEqual(log.inbox(), []);
   assert.deepEqual(
     log.queue().map(({ id, state }) => [id, state]),

@@ -156,11 +156,13 @@ export function registerSessionRoutes(ctx: Context, read: (id: string) => Conver
             tools: event.tools?.map((tool) => projectToolEvent(ctx, id, tool)),
           });
         } else if (event.type === 'user' && event.revised) {
-          const { messages, records, leafId, model, thinkingLevel, partial, tools, run } = read(id);
+          const { messages, records, terminations, leafId, model, thinkingLevel, partial, tools, run } =
+            read(id);
           stream.send({
             type: 'snapshot',
             messages,
             records,
+            terminations,
             leafId,
             model,
             thinkingLevel,

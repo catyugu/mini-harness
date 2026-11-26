@@ -23,7 +23,7 @@ export type PreviewPlacement = 'sidebar' | 'dialog';
 declare module 'mini-harness/cordis' {
   interface Context {
     miniFilePreview: {
-      open(resource: PreviewResource, placement: PreviewPlacement): void;
+      open(resource: PreviewResource, placement: PreviewPlacement, signal?: AbortSignal): void;
       thumbnail(
         resource: Exclude<PreviewResource, { kind: 'workspace' }>,
         image: HTMLImageElement,

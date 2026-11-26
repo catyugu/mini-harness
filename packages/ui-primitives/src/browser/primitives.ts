@@ -57,6 +57,7 @@ export function field(label: string, control: HTMLInputElement | HTMLSelectEleme
 export function toggle(label: string, checked: boolean) {
   const node = document.createElement('input');
   node.type = 'checkbox';
+  node.name = label;
   node.className = 'toggle';
   node.setAttribute('role', 'switch');
   node.setAttribute('aria-label', label);

@@ -1,3 +1,5 @@
+import { isRunning } from './shared/run-state.ts';
+import { toolResultState } from '@mini-harness/tools/api';
 import type { NativeMessage, NativeToolMessage } from '@mini-harness/llm/api';
 import type { MessageContent, ViewMessage } from './shared/message.ts';
 import type { SessionEntry, SessionProjection } from './log-api.ts';
@@ -23,21 +25,45 @@ export function projectMessage(
 export function projectLog(
   branch: SessionEntry[],
   execution: (id: string) => NativeToolMessage | undefined,
-  run?: SessionProjection['run'],
+  runs: readonly Extract<SessionEntry, { type: 'run' }>[],
 ): SessionProjection {
   const state: SessionProjection = {
     leafId: branch.at(-1)?.id ?? null,
     messages: [],
     records: [],
+    terminations: [],
     contextMessages: [],
     contextEntryIds: [],
   };
-  if (run) state.run = run;
+  const lastRun = runs.at(-1)?.run;
+  if (lastRun) state.run = lastRun;
   const messageOf = (entry: SessionEntry) => projectMessage(entry, execution);
   const calls = new Map<string, unknown>();
   const edits = new Map<string, NativeMessage['content'] | null>();
   let compaction: Extract<SessionEntry, { type: 'compaction' }> | undefined;
+  const ancestry = new Set(branch.map(({ id }) => id));
+  let runIndex = 0;
+  let runId: string | undefined;
+  let afterEntryId: string | null = null;
+  function projectRuns(before: number) {
+    for (; runs[runIndex] && runs[runIndex].seq < before; runIndex++) {
+      const { parentId, run } = runs[runIndex];
+      runId = isRunning(run) ? run.id : undefined;
+      if (parentId !== null && !ancestry.has(parentId)) continue;
+      const { id, state: outcome, error, startedAt, finishedAt } = run;
+      if (outcome === 'failed' || outcome === 'cancelled' || outcome === 'interrupted')
+        state.terminations.push({
+          id,
+          state: outcome,
+          afterEntryId,
+          startedAt,
+          finishedAt,
+          error,
+        });
+    }
+  }
   for (const entry of branch) {
+    projectRuns(entry.seq);
     if (entry.type === 'model') state.model = entry.model;
     if (entry.type === 'thinking') state.thinkingLevel = entry.level ?? undefined;
     if (entry.type === 'message' && entry.selection) {
@@ -46,7 +72,8 @@ export function projectLog(
     }
     if (entry.type === 'compaction') compaction = entry;
     if (entry.type === 'context-edit') edits.set(entry.targetId, entry.replacement);
-    if (entry.type === 'plugin-record' && entry.display)
+    if (entry.type === 'plugin-record' && entry.display) {
+      afterEntryId = entry.id;
       state.records.push({
         id: entry.id,
         plugin: entry.owner.pluginId,
@@ -55,6 +82,7 @@ export function projectLog(
         title: entry.display.title,
         content: entry.display.content,
       });
+    }
     const message = messageOf(entry);
     if (!message) continue;
     if (message.role === 'assistant')
@@ -63,6 +91,7 @@ export function projectLog(
     const view: ViewMessage = {
       id: entry.id,
       parentId: entry.parentId,
+      runId,
       role: message.role,
       content: message.content as MessageContent,
       timestamp: message.timestamp,
@@ -90,7 +119,7 @@ export function projectLog(
       view.toolName = message.toolName;
       view.toolCallId = message.toolCallId;
       view.isError = message.isError;
-      if (message.details?.approvalDenied === true) view.approvalDenied = true;
+      view.toolState = toolResultState(message);
       if (typeof message.details?.approvalMs === 'number') view.approvalMs = message.details.approvalMs;
       view.arguments = calls.get(message.toolCallId);
       view.elapsedMs = (entry.type === 'message' ? entry.elapsedMs : undefined) ?? message.elapsedMs;
@@ -99,7 +128,9 @@ export function projectLog(
         view.exitCode = message.details.exitCode;
     }
     state.messages.push(view);
+    afterEntryId = entry.id;
   }
+  projectRuns(Infinity);
   let context = branch;
   if (compaction) {
     const from = compaction.keepFromId && branch.findIndex(({ id }) => id === compaction.keepFromId);

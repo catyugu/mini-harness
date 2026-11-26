@@ -50,6 +50,7 @@ export function sessionNavigation(ctx: Context, options: NavigationServices) {
   ctx.effect(() => ctx.miniSlots.register('sidebar.navigation', panel));
   const { element, value } = scopedElements(panel);
   const title = document.createElement('input');
+  title.name = 'title';
   title.required = true;
   title.maxLength = 140;
   const renameForm = document.createElement('form');

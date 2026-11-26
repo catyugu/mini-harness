@@ -78,7 +78,14 @@ export function createComposer(
           : undefined;
         const wrapper = document.createElement('div');
         wrapper.className = 'attachment';
-        const card = attachmentView(ctx, { ...file, size }, resource, thumbnails.signal);
+        const card = attachmentView(
+          ctx,
+          { ...file, size },
+          resource,
+          thumbnails.signal,
+          undefined,
+          controller.signal,
+        );
         const remove = document.createElement('button');
         remove.type = 'button';
         remove.className = 'icon-button';
@@ -122,6 +129,7 @@ export function createComposer(
   );
   const input = document.createElement('input');
   input.type = 'file';
+  input.name = 'attachments';
   input.multiple = true;
   input.hidden = true;
   input.onchange = () => {

@@ -30,7 +30,7 @@ test('shell approval gates execution, handles rejection and cancellation', async
     assert.deepEqual(tool.arguments, { command: 'echo approved' });
     assert.ok(Number.isFinite(tool.approvalMs) && tool.approvalMs >= 0);
     if (!allow) {
-      assert.equal(tool.approvalDenied, true);
+      assert.equal(tool.toolState, 'denied');
       assert.equal(tool.elapsedMs, 0);
     }
     if (allow) {
@@ -272,7 +272,7 @@ test('repeating a denied command in the same run does not open a new approval', 
   assert.deepEqual(
     history
       .filter((message: { role: string }) => message.role === 'toolResult')
-      .map((message: { approvalDenied: boolean }) => message.approvalDenied),
+      .map((message: { toolState: string }) => message.toolState === 'denied'),
     [true, true],
   );
 });

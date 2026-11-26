@@ -124,7 +124,15 @@ export const apply = (ctx) => {
   await expect(assistant.getByRole('button', { name: 'Copied' })).toBeVisible();
   await expect(page.locator('body')).toHaveAttribute('data-copied-message', 'Response: Original prompt');
 
-  const thumbnail = user.getByRole('button', { name: 'Preview reference.png' });
+  const thumbnail = user.locator('.message.user').getByRole('button', { name: 'Preview reference.png' });
+  await expect
+    .poll(() =>
+      thumbnail.locator('img').evaluate((img) => {
+        const { width, height } = img.getBoundingClientRect();
+        return width / height;
+      }),
+    )
+    .toBeCloseTo(480 / 280, 1);
   await thumbnail.focus();
   await page.keyboard.press('Enter');
   const preview = page.getByRole('dialog', { name: 'reference.png' });
@@ -221,7 +229,12 @@ test('retry keeps the attachment when switching to an image-capable model', asyn
   await expect(attachment).toBeVisible();
   await page.getByRole('textbox', { name: 'Message', exact: true }).fill('Read the picture');
   await page.getByRole('button', { name: 'Send', exact: true }).click();
+  await expect(page.locator('.run-termination[data-state=failed]')).toContainText('Run failed:');
   await expect(page.locator('.message.error')).toContainText('does not support image input');
+  await page.reload();
+  await expect(page.locator('.run-termination[data-state=failed]')).toContainText(
+    'does not support image input',
+  );
   await expect(attachment).toBeVisible();
   await chooseModel(page, 'vision-model');
   await page.getByRole('button', { name: 'Retry', exact: true }).click();

@@ -4,7 +4,7 @@ import type { StreamEvent } from '@mini-harness/runs/stream';
 import type { ModelChoice, ThinkingLevel } from '@mini-harness/llm/vocabulary';
 import type { Attachment } from '@mini-harness/input/message';
 import type { ViewMessage } from '@mini-harness/sessions/message';
-import type { RunInfo } from '@mini-harness/sessions/run-state';
+import type { RunInfo, RunTermination } from '@mini-harness/sessions/run-state';
 import type { SessionDisplayRecord } from '@mini-harness/sessions/display-record';
 
 export interface ConversationRevision {
@@ -34,6 +34,7 @@ export interface ConversationState {
   history: {
     readonly messages: readonly ViewMessage[];
     readonly records: readonly SessionDisplayRecord[];
+    readonly terminations: readonly RunTermination[];
     leafId: string | null;
   };
   run?: RunInfo;

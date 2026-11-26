@@ -5,13 +5,17 @@ import { createMessageView } from './messages.ts';
 
 export function mountHistory(ctx: Context, extensions: MessageExtensions, signal: AbortSignal) {
   const control = ctx.miniConversation;
-  const messages = document.createElement('section');
-  messages.id = 'messages';
-  messages.className = 'messages';
-  messages.setAttribute('aria-label', 'Messages');
+  const viewport = document.createElement('section');
+  viewport.id = 'messages';
+  viewport.className = 'messages';
+  viewport.setAttribute('aria-label', 'Messages');
+  const messages = document.createElement('div');
+  messages.className = 'message-list';
+  viewport.append(messages);
   const view = createMessageView(
     ctx,
     signal,
+    viewport,
     messages,
     {
       render: (tool, lifetime, action) => extensions.render(tool, lifetime, action),
@@ -42,11 +46,30 @@ export function mountHistory(ctx: Context, extensions: MessageExtensions, signal
     },
     { once: true },
   );
-  let sessionId: string | undefined;
+  let previous: ReturnType<typeof control.get> | undefined;
+  let loadedSession: string | undefined;
   function render() {
-    const { session, history, run } = control.get();
-    const reset = session?.id !== sessionId;
-    sessionId = session?.id;
+    const state = control.get();
+    const { session, history, run, partial, tools } = state;
+    const sessionId = session?.id;
+    const reset = sessionId !== previous?.session?.id;
+    if (reset) loadedSession = undefined;
+    const onlyPartial =
+      previous?.history === history &&
+      previous.session === session &&
+      previous.tools === tools &&
+      previous.run === run &&
+      previous.partial !== partial;
+    const firstHistory =
+      sessionId !== undefined &&
+      loadedSession !== sessionId &&
+      (history.leafId !== null || history.terminations.length > 0 || state.interaction.operation !== 'open');
+    if (firstHistory) {
+      loadedSession = sessionId;
+      view.follow();
+    }
+    previous = state;
+    if (onlyPartial && view.partial(partial)) return;
     const active = new Set(history.records.map(({ id }) => id));
     for (const [id, item] of records)
       if (reset || !active.has(id)) {
@@ -84,16 +107,22 @@ export function mountHistory(ctx: Context, extensions: MessageExtensions, signal
           return item;
         })
       : [];
-    view.history(history.messages, nodes, run?.state === 'failed' ? run.error : undefined, reset);
+    view.history(history.messages, nodes, history.terminations, run, partial, tools, reset);
   }
   extensions.subscribe(view.refreshActions, signal);
   extensions.subscribeToTools(view.refreshTools, signal);
   extensions.subscribeToRecords(render, signal);
-  control.subscribe(['session', 'history', 'run'], render, signal);
-  control.subscribe(['partial'], () => view.partial(control.get().partial), signal);
-  control.subscribe(['tools'], () => view.activity(control.get().tools), signal);
+  control.subscribe(['session', 'history', 'run', 'partial', 'tools'], render, signal);
+  let operation = control.get().interaction.operation;
+  control.subscribe(
+    ['interaction'],
+    () => {
+      const next = control.get().interaction.operation;
+      if (next !== operation && (next === 'submit' || next === 'queue')) view.follow();
+      operation = next;
+    },
+    signal,
+  );
   render();
-  view.partial(control.get().partial);
-  view.activity(control.get().tools);
-  return messages;
+  return viewport;
 }

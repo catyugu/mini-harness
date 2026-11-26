@@ -11,7 +11,10 @@ export interface MockProvider {
   close(): Promise<void>;
 }
 
-type MockAnswer = string | AsyncIterable<string> | { tool: string; args: Record<string, unknown> };
+type MockAnswer =
+  | string
+  | AsyncIterable<string>
+  | { tool: string; args: Record<string, unknown>; text?: string };
 
 export async function createMockProvider(
   reply?: (request: { messages: { role: string; content: string }[] }) => MockAnswer | Promise<MockAnswer>,
@@ -59,6 +62,8 @@ export async function createMockProvider(
         for await (const content of answer) res.write('data: ' + item({ content }, null) + '\n\n');
         res.write('data: ' + item({}, 'stop') + '\n\n');
       } else {
+        if (answer.text)
+          res.write('data: ' + item({ role: 'assistant', content: answer.text }, null) + '\n\n');
         res.write(
           'data: ' +
             item(

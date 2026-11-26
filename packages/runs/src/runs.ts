@@ -425,6 +425,7 @@ export class Runs implements RunPort {
       return {
         messages: projection?.messages ?? [],
         records: projection?.records ?? [],
+        terminations: projection?.terminations ?? [],
         leafId: projection?.leafId ?? null,
         model: projection?.model,
         thinkingLevel: projection?.thinkingLevel,

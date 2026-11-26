@@ -12,7 +12,7 @@ import type {
   NativeToolMessage,
 } from '@mini-harness/llm/api';
 import type { ViewMessage } from './shared/message.ts';
-import type { RunInfo } from './shared/run-state.ts';
+import type { RunInfo, RunTermination } from './shared/run-state.ts';
 
 export interface InboxItem {
   id: string;
@@ -76,6 +76,7 @@ export interface SessionProjection {
   leafId: string | null;
   messages: ViewMessage[];
   records: SessionDisplayRecord[];
+  terminations: RunTermination[];
   /** Selected branch after the latest compaction, including its summary. */
   contextMessages: NativeMessage[];
   /** Stable source identity parallel to contextMessages; summaries use their compaction event ID. */

@@ -49,11 +49,9 @@ export function setup(ctx: Context) {
             return {
               content: [{ type: 'text', text: error instanceof Error ? error.message : String(error) }],
               isError: true,
+              outcome: error instanceof ApprovalDenied ? ('denied' as const) : undefined,
               elapsedMs: 0,
-              details: {
-                approvalMs: performance.now() - requestedAt,
-                approvalDenied: error instanceof ApprovalDenied,
-              },
+              details: { approvalMs: performance.now() - requestedAt },
             };
           }
           approvalMs = performance.now() - requestedAt;

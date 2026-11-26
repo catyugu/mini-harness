@@ -2,13 +2,13 @@ import { icon } from '@mini-harness/ui-primitives/icons';
 import { button, iconButton } from '@mini-harness/ui-primitives/primitives';
 import { Service } from 'mini-harness/cordis';
 import type { createLayout } from './layout.ts';
-import type { RightPanelEntry, RightTab, RightTabType, TabOwner, TabScope } from './api.ts';
+import type { RightPanelEntry, RightTab, RightTabType, TabScope } from './api.ts';
 
 interface Tab {
   id: string;
   type: symbol;
   key: string;
-  owner: TabOwner;
+  owner: TabScope;
   title: string;
   create(scope: TabScope, signal: AbortSignal): HTMLElement;
   view?: { node: HTMLElement; controller: AbortController };
@@ -18,7 +18,7 @@ interface Tab {
 interface WorkspaceTabs {
   open: boolean;
   tabs: Tab[];
-  active: Map<string, Tab>;
+  active?: Tab;
 }
 
 export function createRightTabs(
@@ -33,24 +33,21 @@ export function createRightTabs(
 ) {
   const states = new Map<string, WorkspaceTabs>();
   const entries = new Set<RightPanelEntry>();
-  const scopeChanges = new EventTarget();
+  const workspaceChanges = new EventTarget();
   let scope: TabScope | undefined;
   let nextId = 0;
-  let selection = new AbortController();
   const inspector = Symbol('inspector');
 
   const state = (id: string) => {
     let workspace = states.get(id);
     if (!workspace) {
-      workspace = { open: false, tabs: [], active: new Map() };
+      workspace = { open: false, tabs: [] };
       states.set(id, workspace);
     }
     return workspace;
   };
   const current = () => scope && states.get(scope.workspaceId);
-  const selected = () => current()?.active.get(scope?.sessionId ?? '');
-  const visible = () =>
-    (current()?.tabs ?? []).filter((tab) => !tab.owner.sessionId || tab.owner.sessionId === scope?.sessionId);
+  const visible = () => current()?.tabs ?? [];
   const home = document.createElement('div');
   home.className = 'right-start';
   const menu = document.createElement('div');
@@ -63,10 +60,11 @@ export function createRightTabs(
 
   function render(focus = false) {
     const tabs = visible();
-    const active = selected();
+    const active = current()?.active;
     const start = iconButton('Workspace panel home', 'plus');
     start.onclick = () => {
-      current()?.active.delete(scope?.sessionId ?? '');
+      const workspace = current();
+      if (workspace) workspace.active = undefined;
       render(true);
     };
     view.bar.replaceChildren(
@@ -128,34 +126,24 @@ export function createRightTabs(
   }
 
   function activate(tab: Tab) {
-    current()?.active.set(scope?.sessionId ?? '', tab);
+    const workspace = current();
+    if (workspace) workspace.active = tab;
     render(true);
     tab.view?.node.dispatchEvent(new Event('tab-activate'));
   }
 
-  function selectScope(next?: TabScope) {
-    if (scope?.workspaceId === next?.workspaceId && scope?.sessionId === next?.sessionId) return;
-    selection.abort();
-    selection = new AbortController();
+  function selectWorkspace(workspaceId?: string) {
+    if (scope?.workspaceId === workspaceId) return;
     const workspace = current();
     const open = layout.panelOpen();
-    if (workspace) workspace.open = open;
-    for (const tab of visible()) unmount(tab);
-    const openedBeforeSelection = !scope && open;
-    const previous = selected();
-    scope = next;
-    scopeChanges.dispatchEvent(new Event('change'));
-    if (next) {
-      const target = state(next.workspaceId);
-      if (openedBeforeSelection) target.open = true;
-      if (
-        previous &&
-        !previous.owner.sessionId &&
-        previous.owner.workspaceId === next.workspaceId &&
-        !target.active.has(next.sessionId ?? '')
-      )
-        target.active.set(next.sessionId ?? '', previous);
+    if (workspace) {
+      workspace.open = open;
+      for (const tab of workspace.tabs) if (tab.view) tab.view.node.hidden = true;
     }
+    const openedBeforeSelection = !scope && open;
+    scope = workspaceId ? { workspaceId } : undefined;
+    if (workspaceId && openedBeforeSelection) state(workspaceId).open = true;
+    workspaceChanges.dispatchEvent(new Event('change'));
     render();
     layout.setPanel(current()?.open ?? false);
   }
@@ -186,9 +174,7 @@ export function createRightTabs(
   function open<T>(type: symbol, definition: RightTabType<T>, { owner, key, data, signal }: RightTab<T>) {
     if (signal?.aborted) return;
     const target = state(owner.workspaceId);
-    let tab = target.tabs.find(
-      (item) => item.type === type && item.key === key && item.owner.sessionId === owner.sessionId,
-    );
+    let tab = target.tabs.find((item) => item.type === type && item.key === key);
     if (!tab) {
       const created: Tab = {
         id: 'right-tab-' + ++nextId,
@@ -214,7 +200,7 @@ export function createRightTabs(
       layout.setPanel(true, true);
       activate(tab);
     } else {
-      target.active.set(owner.sessionId ?? '', tab);
+      target.active = tab;
       target.open = true;
     }
   }
@@ -224,37 +210,24 @@ export function createRightTabs(
     const index = target?.tabs.indexOf(tab) ?? -1;
     if (!target || index < 0) return;
     target.tabs.splice(index, 1);
-    for (const [id, active] of target.active)
-      if (active === tab) {
-        const next = target.tabs
-          .filter((item) => !item.owner.sessionId || item.owner.sessionId === id)
-          .at(-1);
-        if (next) target.active.set(id, next);
-        else target.active.delete(id);
-      }
+    if (target.active === tab) target.active = target.tabs.at(-1);
     tab.stop?.();
     unmount(tab);
   }
 
-  function prune(sessions: ReadonlySet<string>, workspaces: ReadonlySet<string>) {
+  function prune(workspaces: ReadonlySet<string>) {
+    if (scope && !workspaces.has(scope.workspaceId)) selectWorkspace();
     for (const [id, target] of states) {
-      for (const tab of [...target.tabs])
-        if (!workspaces.has(id) || (tab.owner.sessionId && !sessions.has(tab.owner.sessionId))) remove(tab);
-      if (!workspaces.has(id)) states.delete(id);
-      else
-        for (const session of target.active.keys())
-          if (session && !sessions.has(session)) target.active.delete(session);
+      if (workspaces.has(id)) continue;
+      for (const tab of [...target.tabs]) remove(tab);
+      states.delete(id);
     }
-    if (scope && !workspaces.has(scope.workspaceId)) selectScope();
-    else if (scope?.sessionId && !sessions.has(scope.sessionId))
-      selectScope({ workspaceId: scope.workspaceId });
-    else render();
   }
 
   view.toggle.onclick = () => {
     const opening = !layout.panelOpen();
     layout.setPanel(opening, true);
-    if (opening) selected()?.view?.node.dispatchEvent(new Event('tab-activate'));
+    if (opening) current()?.active?.view?.node.dispatchEvent(new Event('tab-activate'));
   };
   view.bar.addEventListener(
     'keydown',
@@ -288,7 +261,7 @@ export function createRightTabs(
   );
 
   return Service.track({
-    selectScope,
+    selectWorkspace,
     prune,
     register<T>(type: string, definition: RightTabType<T>) {
       const identity = Symbol(type);
@@ -315,15 +288,15 @@ export function createRightTabs(
         };
       }, 'Workspace panel entry: ' + id);
     },
-    onScopeChange(listener: () => void, signal: AbortSignal) {
-      scopeChanges.addEventListener('change', listener, { signal });
-      return () => scopeChanges.removeEventListener('change', listener);
+    onWorkspaceChange(listener: () => void, signal: AbortSignal) {
+      workspaceChanges.addEventListener('change', listener, { signal });
+      return () => workspaceChanges.removeEventListener('change', listener);
     },
     inspect(title: string, node: HTMLElement, lifetime: AbortSignal) {
       if (!scope) return;
       const owner = Service.caller(this).fiber;
       const key = String(owner.uid);
-      const signal = AbortSignal.any([owner.signal, selection.signal, lifetime]);
+      const signal = AbortSignal.any([owner.signal, lifetime]);
       if (signal.aborted) return;
       const previous = visible().find((tab) => tab.type === inspector && tab.key === key);
       if (previous) remove(previous);

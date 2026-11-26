@@ -24,3 +24,6 @@ export const http = {
     ctx.on('harness/drain', () => routes.drain());
   },
 };
+
+export const metadata = { title: 'Transport' };
+export const httpMetadata = { title: 'HTTP Routing' };

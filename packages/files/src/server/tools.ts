@@ -2,7 +2,8 @@ import { dirname, resolve } from 'node:path';
 import { TextDecoder } from 'node:util';
 import { Type } from 'typebox';
 import { defineTool, type ToolDefinition, type ToolResult } from '@mini-harness/tools/api';
-import type { RootedFileAccess } from '@mini-harness/file-access/api';
+import { FileTypeError, type RootedFileAccess } from '@mini-harness/file-access/api';
+import { DomainError } from '@mini-harness/platform/errors';
 import { WorkspaceSearch, readLimited } from './search.ts';
 
 export const fileToolNames = ['read', 'write', 'edit', 'ls', 'find', 'grep'] as const;
@@ -41,7 +42,8 @@ export function fileTools(cwd: string, access: () => RootedFileAccess): ToolDefi
     defineTool({
       name: 'read',
       label: 'Read',
-      description: 'Read a UTF-8 file or image inside the workspace. Text offsets are 1-based line numbers.',
+      description:
+        'Read the contents of a UTF-8 file or image. Use ls to list a directory. Text offsets are 1-based line numbers.',
       metadata: { guidance: ['Read workspace files'] },
       parameters: Type.Object(
         { path: pathSchema, offset: Type.Optional(Type.Integer({ minimum: 1 })), limit: limitSchema },
@@ -50,7 +52,15 @@ export function fileTools(cwd: string, access: () => RootedFileAccess): ToolDefi
       async execute(_id, { path, offset = 1, limit = 2000 }, signal) {
         const files = access();
         signal?.throwIfAborted();
-        const bytes = await readLimited(files, path, undefined, signal);
+        const bytes = await readLimited(files, path, undefined, signal).catch((error: unknown) => {
+          if (error instanceof FileTypeError && error.kind === 'directory')
+            throw new DomainError(
+              'invalid_input',
+              `Cannot read "${path}": the path is a directory. Use ls to list its contents.`,
+              { cause: error },
+            );
+          throw error;
+        });
         const mimeType = imageType(bytes.subarray(0, 12));
         signal?.throwIfAborted();
         if (mimeType) {
@@ -152,7 +162,7 @@ export function fileTools(cwd: string, access: () => RootedFileAccess): ToolDefi
       name: 'find',
       label: 'Find',
       description:
-        'Find files and directories matching a glob in the workspace. Respects .gitignore and skips links.',
+        'Find workspace-relative paths matching a glob. Directories end with /. Respects .gitignore and skips links.',
       metadata: { guidance: ['Find files by workspace glob'] },
       parameters: Type.Object(
         {
