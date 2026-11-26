@@ -12,3 +12,17 @@ The optional `@mini-harness/task-control` plugin registers `task_control` indepe
 Subagents. It only uses the Task Runtime contract.
 
 Sessions may supply a tool policy, but registration and execution require no Session service.
+
+## Public API and usage
+
+Import [`mini-harness/tools`](src/api.ts) and [`mini-harness/tools/execution`](src/execution.ts). The [tool cookbook](../../docs/cookbook/adding-a-tool.md) provides a minimal registration example.
+
+A definition supplies its schema and async execution function. Its context exposes the call ID, task, signal, update callback and `waitFor`. Calls are serial unless `isConcurrencySafe(args)` permits parallelism. A serial tool may wait on behalf of the enclosing run. Register resource-specific factories when resolution requires an opaque resource ID; do not assume a session. Independent invocation uses the same handle contract as inline work and can bind durable observations explicitly.
+
+## Testing
+
+[Registry tests](tests/registry.test.ts) exercise registration and invocation.
+
+## Related documentation
+
+[Package index](../README.md) · [Execution](../../docs/subsystems/execution.md)

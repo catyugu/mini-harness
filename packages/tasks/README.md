@@ -39,3 +39,28 @@ before their observation. `registerHistory` attaches a read-only history source;
 `readOutput` can retrieve its records, never recreate historical execution handles. `list`
 contains only active and recently settled tasks. Tasks does not interpret owner keys, task types,
 or metadata, and has no dependency on Sessions, Runs, Tools or Agent.
+
+## Public contract and usage
+
+Import types from [`mini-harness/tasks`](src/api.ts) and inject `harnessTasks`. Use `start` for both independent and inline work; an inline child explicitly supplies its parent ID.
+
+```ts
+const parent = tasks.start({ owner: 'resource' }, async (task) => {
+  const child = tasks.start(
+    { owner: task.owner, parentId: task.id, retain: false },
+    async () => 'child result',
+  );
+  return child.result;
+});
+await parent.result;
+```
+
+For independent work, omit the parent ID and retain the handle ID. External observers use `tasks.wait(id)`; an executing task uses `task.waitFor(id)` at a whole-task boundary to yield pool capacity. A lane remains exclusive while waiting. Changing `pool.limit` does not preempt admitted work. Cancellation is cooperative; there is no guarantee of forcibly terminating arbitrary async functions or replaying unknown side effects.
+
+## Testing
+
+[Runtime tests](tests/runtime.test.ts) cover scheduling, ownership, cancellation, waiting and history.
+
+## Related documentation
+
+[Package index](../README.md) · [Execution](../../docs/subsystems/execution.md)
