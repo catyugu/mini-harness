@@ -1,6 +1,6 @@
 import type { Context } from 'mini-harness/cordis';
 import type { BrowserPrimitives } from './api.ts';
-import { button, field, dialog, iconButton, positionFloating, bindPopover } from './primitives.ts';
+import { button, field, dialog, iconButton, positionFloating, bindPopover, recordRow } from './primitives.ts';
 import { hydrateIcons, icon } from './icons.ts';
 
 /** Elements contributed by plugins are hydrated without a global app-entry pass. */
@@ -13,6 +13,7 @@ const setup = (ctx: Context) => {
     iconButton,
     positionFloating,
     bindPopover,
+    recordRow,
     status(text, kind = 'status') {
       const node = document.createElement('p');
       node.className = 'hint';

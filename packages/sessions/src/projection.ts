@@ -1,10 +1,10 @@
 import { userContent } from './user-content.ts';
-import type { ContextCheckpoint, SessionDisplayRecord } from './shared/display-record.ts';
+import type { SessionDisplayRecord } from './shared/display-record.ts';
 import { isRunning, type RunInfo } from './shared/run-state.ts';
 import { toolResultState } from '@mini-harness/tools/api';
 import type { NativeMessage, NativeToolMessage } from '@mini-harness/llm/api';
 import type { MessageContent, ViewMessage } from './shared/message.ts';
-import type { ContextReplacement, SessionContext, SessionEntry, SessionProjection } from './log-api.ts';
+import type { ContextReplacement, SessionContext, SessionEntry, SessionEvent, SessionProjection } from './log-api.ts';
 import { applyContentDelta } from './content-delta.ts';
 
 export function projectMessage(
@@ -77,30 +77,37 @@ export function displayMessage(
   return view;
 }
 
-export function displayRecord(entry: SessionEntry): SessionDisplayRecord | ContextCheckpoint | undefined {
-  if (entry.type === 'context-replace' && entry.measurement)
-    return {
-      type: 'checkpoint',
-      id: entry.id,
-      summary: entry.replacements
-        .flatMap(({ insert }) =>
-          insert.flatMap(({ content }) =>
-            typeof content === 'string'
-              ? [content]
-              : content.flatMap((part) => (part.type === 'text' ? [part.text] : [])),
-          ),
-        )
-        .join('\n\n'),
-    };
-  if (entry.type === 'plugin-record' && entry.display)
-    return {
-      type: 'record',
-      id: entry.id,
-      plugin: entry.owner.pluginId,
-      instanceId: entry.owner.instanceId,
-      title: entry.display.title,
-      content: entry.display.content,
-    };
+/** Select content explicitly from the event, without interpreting its business meaning. */
+export function displayContent(event: SessionEvent): unknown {
+  const display = event.display;
+  if (!display) return;
+  if (!display.source) return display.content;
+  let value: unknown = event;
+  for (const key of display.source) {
+    if (
+      (typeof key !== 'string' && (typeof key !== 'number' || !Number.isSafeInteger(key) || key < 0)) ||
+      !value ||
+      typeof value !== 'object' ||
+      !Object.hasOwn(value, key)
+    )
+      throw new Error('Invalid record display source');
+    value = (value as Record<string | number, unknown>)[key];
+  }
+  return value;
+}
+
+export function displayRecord(entry: SessionEntry): SessionDisplayRecord | undefined {
+  if (!entry.display) return;
+  const { owner, kind, title } = entry.display;
+  return {
+    type: 'record',
+    id: entry.id,
+    plugin: owner.pluginId,
+    instanceId: owner.instanceId,
+    kind,
+    title,
+    content: displayContent(entry),
+  };
 }
 
 export function newContext(): SessionContext {

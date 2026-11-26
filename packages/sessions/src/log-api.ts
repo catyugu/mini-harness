@@ -1,4 +1,5 @@
 import type { PluginRecord } from './records.ts';
+import type { RecordPresentation } from './shared/display-record.ts';
 import type { TaskHistoryRecord } from '@mini-harness/tasks/api';
 import type { LogEntry } from './record-log.ts';
 import type { MessageMode, MessageOrigin, QueueEntry } from './shared/queue.ts';
@@ -58,7 +59,7 @@ export interface ModelAttempt {
 }
 
 /** The durable session protocol is independent of any model SDK. */
-export type SessionEvent<Data = unknown> =
+type SessionOperation<Data = unknown> =
   | {
       type: 'message';
       message: NativeMessage;
@@ -81,7 +82,7 @@ export type SessionEvent<Data = unknown> =
   | { type: 'thinking'; level: ThinkingLevel | null }
   | {
       type: 'diagnostic';
-      code: 'invalid-tool-calls' | 'executor-response' | 'historical-record';
+      code: 'invalid-tool-calls' | 'executor-response';
       data: unknown;
     }
   | PluginRecord<Data>
@@ -99,6 +100,8 @@ export type SessionEvent<Data = unknown> =
   | { type: 'run'; run: RunInfo }
   | ({ type: 'task'; run?: RunDetails } & TaskHistoryRecord)
   | { type: 'branch' };
+
+export type SessionEvent<Data = unknown> = SessionOperation<Data> & { display?: RecordPresentation };
 
 export type SessionEntry<Data = unknown> = LogEntry<SessionEvent<Data>>;
 

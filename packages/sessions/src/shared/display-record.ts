@@ -1,6 +1,18 @@
+export interface RecordOwner {
+  pluginId: string;
+  instanceId: string;
+}
+
+export type RecordDisplay = {
+  kind: string;
+  title: string;
+} & ({ content?: unknown; source?: never } | { source: (string | number)[]; content?: never });
+
+export type RecordPresentation = RecordDisplay & { owner: RecordOwner };
+
 export interface RecordAppend {
   leafId: string;
-  display?: SessionDisplayRecord | ContextCheckpoint;
+  display?: SessionDisplayRecord;
 }
 
 export interface SessionDisplayRecord {
@@ -8,13 +20,7 @@ export interface SessionDisplayRecord {
   id: string;
   plugin: string;
   instanceId: string;
+  kind: string;
   title: string;
   content?: unknown;
-}
-
-/** The visible result of a committed summarizing context replacement. */
-export interface ContextCheckpoint {
-  type: 'checkpoint';
-  id: string;
-  summary: string;
 }

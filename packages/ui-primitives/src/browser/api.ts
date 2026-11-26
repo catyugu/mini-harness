@@ -22,6 +22,7 @@ export interface BrowserPrimitives {
   dialog(title: string, content: HTMLElement): HTMLDialogElement;
   status(text: string, kind?: 'status' | 'alert'): HTMLElement;
   menu(label: string, items: HTMLElement[]): HTMLElement;
+  recordRow(title: string | HTMLElement, body: HTMLElement, trailing?: HTMLElement[]): HTMLDetailsElement;
 }
 
 declare module 'mini-harness/cordis' {

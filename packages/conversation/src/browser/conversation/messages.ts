@@ -10,6 +10,7 @@ import type {
 } from '../history-api.ts';
 import { icon } from '@mini-harness/ui-primitives/icons';
 import { renderMarkdown } from '@mini-harness/ui-primitives/markdown';
+import { recordRow } from '@mini-harness/ui-primitives/primitives';
 import { imageMime } from './attachment-card.ts';
 import { attachmentView } from './attachment-view.ts';
 import { renderReferences } from './file-references.ts';
@@ -189,11 +190,11 @@ export function createMessageView(
   ) {
     const item = card ?? document.createElement('details');
     toolItems.set(item, data);
-    item.className = 'tool-card process-disclosure ui-disclosure';
+    item.className = 'tool-card ui-record ui-disclosure';
     item.dataset.state = data.state;
     const summary = document.createElement('summary');
     const name = document.createElement('strong');
-    name.className = 'process-label';
+    name.className = 'ui-record-label';
     name.textContent = data.name.replaceAll('_', ' ');
     name.title = data.name;
     const status = document.createElement('span');
@@ -272,7 +273,7 @@ export function createMessageView(
     const origin = message.origin;
     const notification = notificationLabel(origin, message.inboxId);
     const entry = document.createElement(notification ? 'details' : 'div');
-    entry.className = notification ? 'async-message process-disclosure ui-disclosure' : 'message-row user';
+    entry.className = notification ? 'async-message ui-record ui-disclosure' : 'message-row user';
     const text = textOf(message.content);
     const attachments = message.attachments ?? [];
     const bubble = document.createElement('article');
@@ -282,7 +283,7 @@ export function createMessageView(
       const sender = origin?.senderSessionId;
       const title = sender ? ctx.get('harnessBrowser')?.session(sender)?.title : undefined;
       const label = document.createElement('span');
-      label.className = 'process-label';
+      label.className = 'ui-record-label';
       label.textContent = notification + (title ? ' · ' + title : '');
       summary.append(icon('chevron'), label);
       entry.append(summary);
@@ -408,7 +409,7 @@ export function createMessageView(
     }
 
     function record(entry: SessionDisplayRecord) {
-      const render = extensions.recordRenderer(entry.plugin);
+      const render = extensions.recordRenderer(entry.plugin, entry.kind);
       return retain('record:' + entry.id, render, (previous) => {
         if (previous) remove(previous);
         const lifetime = new AbortController();
@@ -431,35 +432,12 @@ export function createMessageView(
       });
     }
 
-    function processDisclosure(label: string, body: HTMLElement, kind: string) {
-      const details = document.createElement('details');
-      details.className = kind + ' process-disclosure ui-disclosure';
-      const summary = document.createElement('summary');
-      const title = document.createElement('span');
-      title.className = 'process-label';
-      title.textContent = label;
-      summary.append(icon('chevron'), title);
-      details.append(summary, body);
-      return details;
-    }
-
-    function checkpoint(entry: Extract<HistoryEntry, { type: 'checkpoint' }>) {
-      return retain('checkpoint:' + entry.id, entry.summary, () => {
-        const body = document.createElement('div');
-        body.className = 'checkpoint-body';
-        renderMarkdown(body, entry.summary);
-        return processDisclosure('Context compacted', body, 'context-checkpoint');
-      });
-    }
-
     function renderPart(
       part: Extract<ReturnType<typeof groupHistory>[number], { type: 'turn' }>['parts'][number],
     ) {
       switch (part.type) {
         case 'record':
           return record(part);
-        case 'checkpoint':
-          return checkpoint(part);
         case 'message':
           return retain('tool-result:' + part.id, part, (node?: HTMLDetailsElement) => {
             const key = progressKey(part.runId, part.toolCallId);
@@ -492,7 +470,9 @@ export function createMessageView(
           return retain('thinking:' + part.id, part.text, () => {
             const body = document.createElement('p');
             body.textContent = part.text;
-            return processDisclosure('Reasoning', body, 'assistant-reasoning');
+            const node = recordRow('Reasoning', body);
+            node.classList.add('assistant-reasoning');
+            return node;
           });
         default:
           return retain(part.type + ':' + part.id, part.text, (previous) => {
@@ -509,8 +489,6 @@ export function createMessageView(
       switch (row.type) {
         case 'record':
           return record(row);
-        case 'checkpoint':
-          return checkpoint(row);
         case 'termination': {
           const retry = run?.id === row.id && run.state === 'failed';
           return retain('run:' + row.id, retry, () => terminalNode(row, retry));

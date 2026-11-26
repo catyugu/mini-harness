@@ -27,7 +27,7 @@ export function hasContent(entry: HistoryEntry) {
 type TurnPart =
   | { type: 'text' | 'thinking' | 'error'; id: string; text: string }
   | { type: 'partial' }
-  | Extract<HistoryEntry, { type: 'record' | 'checkpoint' } | { role: 'toolResult' }>
+  | Extract<HistoryEntry, { type: 'record' } | { role: 'toolResult' }>
   | ToolProgress;
 
 interface Turn {
@@ -77,7 +77,7 @@ export function groupHistory(
       if (hasContent(entry)) rows.push(entry);
       continue;
     }
-    if (entry.type === 'record' || entry.type === 'checkpoint') {
+    if (entry.type === 'record') {
       (turn?.parts ?? rows).push(entry);
       continue;
     }

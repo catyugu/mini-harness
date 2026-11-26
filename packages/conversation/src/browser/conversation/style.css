@@ -223,34 +223,7 @@
   color: var(--muted);
   font: var(--font-meta) / 1.5 var(--font-mono);
 }
-.process-disclosure {
-  min-width: 0;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-}
-.process-disclosure > summary {
-  min-height: 24px;
-  gap: 6px;
-  padding: 2px 0;
-  color: var(--muted);
-  font-size: var(--font-meta);
-  line-height: var(--line-ui);
-}
-@media (hover: hover) {
-  .process-disclosure > summary:hover {
-    background: transparent;
-    color: var(--ink);
-  }
-}
-.process-disclosure > summary > .process-label {
-  color: inherit;
-  font: var(--font-meta) / var(--line-ui) var(--font-mono);
-  min-width: 0;
-  overflow-wrap: anywhere;
-  margin-right: auto;
-}
-.tool-card > summary > .process-label {
+.tool-card > summary > .ui-record-label {
   font-weight: 500;
 }
 .tool-duration,
@@ -280,13 +253,11 @@
 }
 .tool-content:not(:empty),
 .assistant-reasoning > p,
-.async-message-body,
-.checkpoint-body {
+.async-message-body {
   padding: 5px 0 8px 20px;
 }
 .assistant-reasoning > p,
-.async-message-body,
-.checkpoint-body {
+.async-message-body {
   color: var(--muted);
   font-size: var(--font-meta);
   overflow-wrap: anywhere;

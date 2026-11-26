@@ -54,7 +54,7 @@ declare module 'mini-harness/cordis' {
   interface Context {
     miniMessages: {
       registerTurnFooter(id: string, render: TurnFooterRenderer): () => void;
-      registerRecord(plugin: string, render: RecordRenderer, priority?: number): () => void;
+      registerRecord(plugin: string, kind: string, render: RecordRenderer, priority?: number): () => void;
       registerAction(action: MessageAction): () => void;
       registerTool(name: string, render: ToolRenderer, action?: boolean, priority?: number): () => void;
     };

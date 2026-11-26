@@ -600,4 +600,37 @@
       min-block-size: var(--row-size, var(--control-touch));
     }
   }
+  .ui-record {
+    min-width: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+  }
+  .ui-record > summary {
+    min-height: 24px;
+    gap: 6px;
+    padding: 2px 0;
+    color: var(--muted);
+    font-size: var(--font-meta);
+    line-height: var(--line-ui);
+  }
+  @media (hover: hover) {
+    .ui-record > summary:hover {
+      background: transparent;
+      color: var(--ink);
+    }
+  }
+  .ui-record > summary > .ui-record-label {
+    color: inherit;
+    font: var(--font-meta) / var(--line-ui) var(--font-mono);
+    min-width: 0;
+    overflow-wrap: anywhere;
+    margin-right: auto;
+  }
+  .ui-record-body {
+    padding: 5px 0 8px 20px;
+    color: var(--muted);
+    font-size: var(--font-meta);
+    overflow-wrap: anywhere;
+  }
 }

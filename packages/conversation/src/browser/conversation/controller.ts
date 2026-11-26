@@ -155,7 +155,7 @@ export function createConversationController(ctx: Context): ConversationControll
         }
         case 'branch':
           if (event.display) append(event.display);
-          else update({ history: { timeline: state.history?.timeline ?? [], leafId: event.leafId } });
+          update({ history: { timeline: state.history?.timeline ?? [], leafId: event.leafId } });
           break;
         case 'snapshot':
           if (!isRunning(event.run)) {

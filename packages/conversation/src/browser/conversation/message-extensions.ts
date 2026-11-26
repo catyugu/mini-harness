@@ -35,16 +35,16 @@ export class MessageExtensions {
     };
   }
 
-  registerRecord(plugin: string, render: RecordRenderer, priority = 0) {
-    return this.replace(this.records, plugin, render, 'records', priority);
+  registerRecord(plugin: string, kind: string, render: RecordRenderer, priority = 0) {
+    return this.replace(this.records, JSON.stringify([plugin, kind]), render, 'records', priority);
   }
 
   subscribeToRecords(listener: () => void, signal: AbortSignal) {
     this.events.addEventListener('records', listener, { signal });
   }
 
-  recordRenderer(plugin: string) {
-    return this.records.get(plugin);
+  recordRenderer(plugin: string, kind: string) {
+    return this.records.get(JSON.stringify([plugin, kind]));
   }
 
   private renderWithLifetime(parent: AbortSignal, render: (signal: AbortSignal) => HTMLElement | undefined) {

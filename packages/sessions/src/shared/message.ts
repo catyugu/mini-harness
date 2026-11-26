@@ -1,4 +1,4 @@
-import type { ContextCheckpoint, SessionDisplayRecord } from './display-record.ts';
+import type { SessionDisplayRecord } from './display-record.ts';
 import type { MessageOrigin } from './queue.ts';
 import type { RunTermination } from './run-state.ts';
 import type { ToolResultState } from '@mini-harness/tools/api';
@@ -51,7 +51,7 @@ export type ViewMessage = MessageFields &
     | { role: 'toolResult'; toolState: ToolResultState; toolName: string; toolCallId: string }
   );
 
-export type HistoryEntry = ViewMessage | SessionDisplayRecord | ContextCheckpoint | RunTermination;
+export type HistoryEntry = ViewMessage | SessionDisplayRecord | RunTermination;
 
 export function isViewMessage(entry: HistoryEntry): entry is ViewMessage {
   return entry.type === 'message';

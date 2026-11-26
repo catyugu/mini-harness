@@ -204,3 +204,17 @@ export function scopedElements(root: HTMLElement) {
   }
   return { element, value: (id: string) => element<'input'>(id).value.trim() };
 }
+
+/** A compact, neutral timeline row. Its content and actions belong to the caller. */
+export function recordRow(title: string | HTMLElement, body: HTMLElement, trailing: HTMLElement[] = []) {
+  const details = document.createElement('details');
+  details.className = 'ui-record ui-disclosure';
+  const summary = document.createElement('summary');
+  const label = typeof title === 'string' ? document.createElement('span') : title;
+  if (typeof title === 'string') label.textContent = title;
+  label.classList.add('ui-record-label');
+  body.classList.add('ui-record-body');
+  summary.append(icon('chevron'), label, ...trailing);
+  details.append(summary, body);
+  return details;
+}
