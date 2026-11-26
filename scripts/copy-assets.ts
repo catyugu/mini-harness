@@ -5,7 +5,7 @@ import { dirname, join, relative, resolve, sep } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import ts from 'typescript';
 import { moduleReferences } from './module-references.ts';
-import { readBrowserAssets } from '../packages/plugins/src/server/browser-assets.ts';
+import { readBrowserAssets } from '@mini-harness/plugins/browser-assets';
 import { loadPluginModule } from '@mini-harness/plugins/module-resolution';
 
 const require = createRequire(import.meta.url);

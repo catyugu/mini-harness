@@ -25,7 +25,7 @@ Use a separate `MINI_HARNESS_HOME` for experiments that should not touch your no
 | `pnpm run pack:check`   | Build and verify the published tarball and external SDK consumers |
 | `pnpm run check`        | Formatting check, build and Node tests                            |
 
-After building, run a focused test with `node --test dist/packages/tasks/tests/runtime.test.js` (substitute the relevant compiled test file). The Node test runner also covers [framework](../test/framework/), [plugin integration](../test/plugins/) and [system](../test/system/) suites. For browser tests, first run `pnpm exec playwright install chromium --only-shell`; the [browser suites](../test/browser/) cover desktop, tablet, and mobile workflows.
+Choose the suite according to [test ownership](code-style/testing.md) and follow [module import boundaries](code-style/module-imports.md). After building, run a focused test with `node --test dist/packages/tasks/tests/runtime.test.js` (substitute the relevant compiled test file). The Node test runner also covers [framework](../test/framework/), [plugin integration](../test/plugins/) and [system](../test/system/) suites. For browser tests, first run `pnpm exec playwright install chromium --only-shell`; the [browser suites](../test/browser/) cover desktop, tablet, and mobile workflows.
 
 ## Distribution
 

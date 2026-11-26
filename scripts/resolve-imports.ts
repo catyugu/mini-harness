@@ -40,7 +40,7 @@ function rewrite(file: string) {
     const owner = exportsByPackage.get(name);
     const entry = owner?.exports?.[subpath.length ? './' + subpath.join('/') : '.'];
     if (!entry) throw new Error('Missing workspace export ' + literal.text + ' in ' + file);
-    const target = resolve(output, owner.directory, name, entry.replace(/(?:\.d)?\.ts$/, '.js'));
+    const target = resolve(output, owner.directory, name, entry.replace(/\.ts$/, '.js'));
     const emitted = declaration ? target.replace(/\.js$/, '.d.ts') : target;
     if (!existsSync(emitted)) throw new Error('Missing build output ' + emitted);
     const path = relative(dirname(file), target).split(sep).join('/');

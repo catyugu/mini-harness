@@ -12,7 +12,7 @@ import { getPaths, ensurePaths } from '@mini-harness/platform/paths';
 import { Context } from 'mini-harness/cordis';
 import { allowsDetachment, initializeProfile, loadProfile } from '@mini-harness/host/profile';
 import { bootProfile } from '@mini-harness/host/application';
-import { createFixturePaths, createMockProvider } from '../helpers/mock-provider.ts';
+import { createFixturePaths, createMockProvider } from '../support/mock-provider.ts';
 
 test('YAML Profile composes through Cordis and persists Web entry changes', async (t) => {
   const mock = await createMockProvider();

@@ -6,8 +6,6 @@
   "exports": {
     "./api": "./src/api.ts",
     "./events": "./src/events.ts",
-    "./manifests/agent": "./src/manifests/agent.ts",
-    "./manifests/prompt": "./src/manifests/prompt.ts",
     "./prompt-api": "./src/prompt-api.ts",
     "./model-request": "./src/model-request.ts"
   },

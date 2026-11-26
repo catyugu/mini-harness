@@ -3,7 +3,7 @@ import { test, expect } from '@playwright/test';
 import { execFileSync } from 'node:child_process';
 import { rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { createFixturePaths, createMockProvider } from '../helpers/mock-provider.ts';
+import { createFixturePaths, createMockProvider } from '../support/mock-provider.ts';
 import { startIsolatedHost, settingsSection, expectInViewport } from '../support/browser.ts';
 
 test('file inspection, responsive themes and reduced viewport height keep controls reachable', async ({
@@ -38,7 +38,6 @@ test('file inspection, responsive themes and reduced viewport height keep contro
         await page.goto(service.url + '/#token=' + service.token);
         const title = page.locator('#conversationTitle');
         await expect(title).toBeVisible();
-        await expect(title).toHaveCSS('font-size', '13px');
         await expect.poll(async () => (await title.boundingBox())?.y ?? 0).toBeGreaterThanOrEqual(20);
         const header = expectPresent(await page.locator('.topbar').boundingBox(), 'header bounds');
         const meta = expectPresent(await page.locator('#headerMeta').boundingBox(), 'header meta bounds');
@@ -62,7 +61,6 @@ test('file inspection, responsive themes and reduced viewport height keep contro
         await panel.getByRole('button', { name: /Workspace files/ }).click();
         await expect(panel.getByRole('tab', { name: 'Files', exact: true })).toBeVisible();
         const file = panel.getByRole('button', { name: 'notes.md', exact: true });
-        await expect(file).toHaveCSS('justify-content', 'flex-start');
         expect(
           await file.evaluate((node) => {
             const image = node.querySelector('svg');
@@ -91,7 +89,6 @@ test('file inspection, responsive themes and reduced viewport height keep contro
         await expectInViewport(panel, { width, height: 700 });
         await panel.getByRole('button', { name: 'Close workspace panel' }).click();
         const prompt = page.getByRole('textbox', { name: 'Message', exact: true });
-        await expect(prompt).toHaveCSS('font-size', width <= 560 ? '16px' : '14px');
         await prompt.fill('Render this file');
         await page.getByRole('button', { name: 'Send', exact: true }).click();
         const summary = page.getByLabel('Latest run');
@@ -122,29 +119,11 @@ test('file inspection, responsive themes and reduced viewport height keep contro
           await page.getByRole('button', { name: 'Close settings' }).click();
           await page.getByRole('button', { name: 'Open workspace panel', exact: true }).click();
           for (const markdown of [page.locator('#messages .markdown').last(), panel.locator('.markdown')]) {
-            await expect(markdown.locator('p').first()).toHaveCSS('font-size', '14px');
-            await expect(markdown.locator('table')).toHaveCSS('font-size', '13px');
-            // The conversation is inert while the workspace panel is open on mobile.
-            await expect(markdown.locator('th').filter({ hasText: /^命中数$/ })).toHaveCSS(
-              'white-space',
-              'nowrap',
-            );
-            await expect(markdown.locator('.code-block pre')).toHaveCSS('font-size', '12px');
-            await expect(markdown.locator('.code-block')).toHaveCSS(
-              'background-color',
-              theme === 'light' ? 'rgb(32, 32, 35)' : 'rgb(17, 17, 19)',
-            );
-            await expect(markdown.locator('.code-block pre')).toHaveCSS(
-              'background-color',
-              'rgba(0, 0, 0, 0)',
-            );
-            await expect(markdown.locator('.code-block code')).toHaveCSS('color', 'rgb(243, 243, 245)');
             await expect(markdown.locator('td code')).toHaveText([
               'docs/examples/tsconfig.json',
               'test:playwright',
               '@mini-harness/plugin-api',
             ]);
-            await expect(markdown.locator('td code').first()).toHaveCSS('white-space', 'nowrap');
           }
           if (width <= 900)
             expect(

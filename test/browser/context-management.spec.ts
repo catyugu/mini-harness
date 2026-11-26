@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { rmSync } from 'node:fs';
-import { checkpointFixture, createFixturePaths, createMockProvider } from '../helpers/mock-provider.ts';
+import { checkpointFixture, createFixturePaths, createMockProvider } from '../support/mock-provider.ts';
 import { settingsSection, startIsolatedHost } from '../support/browser.ts';
 
 test('context settings and statistics stay usable at desktop and mobile widths', async ({ page }) => {

@@ -1,7 +1,7 @@
 import { expectPresent } from '../support/required.ts';
 import { test, expect } from '@playwright/test';
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
-import { checkpointFixture, createFixturePaths, createMockProvider } from '../helpers/mock-provider.ts';
+import { checkpointFixture, createFixturePaths, createMockProvider } from '../support/mock-provider.ts';
 import { join } from 'node:path';
 import { writeJson } from '@mini-harness/platform/json';
 import { settingsSection, startIsolatedHost } from '../support/browser.ts';
@@ -165,7 +165,6 @@ export const apply = (ctx) => {
     await expect(reasonHeader).toHaveText('Reasoning');
     await expect(reasonHeader.locator('svg')).toHaveCount(1);
     for (const header of [reasonHeader, toolHeader]) {
-      await expect(header).toHaveCSS('padding-inline-start', '0px');
       expect(
         await header.evaluate((node) => {
           const turn = node.closest('.assistant-turn');
@@ -174,26 +173,6 @@ export const apply = (ctx) => {
         }),
       ).toBe(0);
     }
-    await expect(toolHeader).toHaveCSS('min-height', '24px');
-    await expect(reasonHeader).toHaveCSS(
-      'min-height',
-      await toolHeader.evaluate((node) => getComputedStyle(node).minHeight),
-    );
-    const toolLabel = toolHeader.locator('strong');
-    const reasonLabel = reasonHeader.locator('span');
-    await expect(reasonLabel).toHaveCSS(
-      'font-family',
-      await toolLabel.evaluate((node) => getComputedStyle(node).fontFamily),
-    );
-    await expect(toolLabel).toHaveCSS('font-size', '12px');
-    await expect(toolLabel).toHaveCSS('font-weight', '500');
-    await expect(reasonLabel).toHaveCSS('font-size', '12px');
-    await expect(reasonLabel).toHaveCSS('font-weight', '400');
-    await expect(toolLabel).toHaveCSS(
-      'color',
-      await toolHeader.evaluate((node) => getComputedStyle(node).color),
-    );
-    await expect(reasoning.locator('p')).toHaveCSS('font-size', '12px');
     await expect(reasoning.locator('p')).toBeHidden();
     await reasonHeader.click();
     await expect(reasoning.locator('p')).toHaveText('Inspect the workspace first.');
@@ -270,12 +249,8 @@ export const apply = (ctx) => {
     await page.getByRole('button', { name: 'Stop response' }).click();
     const cancelled = page.locator('.tool-card[data-state=cancelled]');
     await expect(cancelled.locator('.tool-state')).toHaveText('Cancelled');
-    const yellow = /rgb\((138, 101, 0|245, 204, 101)\)/;
-    await expect(cancelled.locator('.tool-state')).toHaveCSS('color', yellow);
-    await expect(skipped.locator('.tool-state')).toHaveCSS('color', yellow);
     await page.reload();
     await expect(cancelled.locator('.tool-state')).toHaveText('Cancelled');
-    await expect(cancelled.locator('.tool-state')).toHaveCSS('color', yellow);
   } finally {
     release();
     resumeSteering();

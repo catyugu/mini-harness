@@ -4,9 +4,7 @@
   "private": true,
   "type": "module",
   "exports": {
-    "./api": "./src/api.ts",
-    "./manifest": "./src/manifest.ts",
-    "./root": "./src/root.ts"
+    "./api": "./src/api.ts"
   },
   "miniHarness": {
     "api": [

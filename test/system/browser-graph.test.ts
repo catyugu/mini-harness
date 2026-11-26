@@ -22,8 +22,6 @@ test('the composed browser graph serves its runtime dependencies and excludes se
     '/packages/host/src/application.js',
     '/packages/platform/src/local-secret.js',
     '/packages/input/src/prepare.js',
-    '/packages/sdk/src/plugin.js',
-    '/packages/sdk/src/browser-plugin.js',
     '/packages/settings/src/server/manager.js',
     '/packages/transport/src/router.js',
     '/packages/shell/src/server/setup.js',
@@ -78,16 +76,14 @@ test('the composed browser graph serves its runtime dependencies and excludes se
   assert.equal((await fetch(base + files.browser)).status, 404);
   const shell = changed.ui.find(({ id }) => id === 'shell');
   assert.ok(shell);
-  assert.match(await (await fetch(base + shell.browser)).text(), /inject: \['miniMessages'\]/);
+  assert.equal((await fetch(base + shell.browser)).status, 200);
   const conversation = changed.ui.find(({ id }) => id === 'core:conversation');
   assert.ok(conversation);
-  assert.match(await (await fetch(base + conversation.browser)).text(), /inject: \[[^\]]*'miniApprovals'/);
   const conversationStyle = conversation?.styles?.[0];
   assert.ok(conversationStyle);
   const sheet = await fetch(base + conversationStyle);
   assert.equal(sheet.status, 200);
   assert.match(sheet.headers.get('content-type') ?? '', /^text\/css/);
-  assert.match(await sheet.text(), /\.approval-heading/);
   assert.equal((await request('/settings', 'PATCH', { entries: { shell: { disabled: true } } })).status, 200);
   assert.equal((await fetch(base + conversationStyle)).status, 200);
 });

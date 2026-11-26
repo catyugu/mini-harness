@@ -1,7 +1,7 @@
 import { expectPresent } from '../support/required.ts';
 import { test, expect } from '@playwright/test';
 import { rmSync, mkdirSync, writeFileSync } from 'node:fs';
-import { createFixturePaths, createMockProvider } from '../helpers/mock-provider.ts';
+import { createFixturePaths, createMockProvider } from '../support/mock-provider.ts';
 import { writePlugin } from '../support/plugin-fixture.ts';
 import { startIsolatedHost, settingsSection } from '../support/browser.ts';
 import { join } from 'node:path';

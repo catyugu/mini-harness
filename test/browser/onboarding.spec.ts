@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { rmSync, mkdirSync, realpathSync } from 'node:fs';
 import { join } from 'node:path';
-import { createFixturePaths, createMockProvider } from '../helpers/mock-provider.ts';
+import { createFixturePaths, createMockProvider } from '../support/mock-provider.ts';
 import { startIsolatedHost, chooseModel } from '../support/browser.ts';
 
 // Resolve Windows 8.3 aliases (e.g. RUNNER~1) and symlinks before comparing paths.

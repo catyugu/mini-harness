@@ -4,7 +4,6 @@
   "private": true,
   "type": "module",
   "exports": {
-    "./manifest": "./src/manifest.ts",
     "./browser/api": "./src/browser/api.ts"
   },
   "dependencies": {

@@ -1,5 +1,4 @@
 import { containsPath } from '@mini-harness/platform/paths';
-import { RootedFiles } from '@mini-harness/file-access/root';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdirSync, realpathSync, writeFileSync, rmSync, symlinkSync } from 'node:fs';
@@ -10,7 +9,8 @@ import { GitInspection } from '../src/server/git.ts';
 
 import { fixture } from '../../../test/support/api-fixture.ts';
 test('Git inspection includes staged, unstaged and untracked files and rejects out-of-scope files', async (t) => {
-  const { paths, root } = await fixture(t);
+  const { paths, root, app } = await fixture(t);
+  const access = app.runtime.plugins.ctx.harnessFileAccess;
   const git = (...args: string[]) => execFileSync('git', args, { cwd: paths.cwd, encoding: 'utf8' });
   git('init', '-q');
   git('config', 'user.name', 'Test');
@@ -23,7 +23,10 @@ test('Git inspection includes staged, unstaged and untracked files and rejects o
   writeFileSync(join(paths.cwd, 'file.txt'), 'after\n');
   writeFileSync(join(paths.cwd, 'new.txt'), 'new\n');
   const cwd = realpathSync.native(paths.cwd);
-  const inspection = new GitInspection(cwd, new RootedFiles(cwd, (path) => containsPath(paths.home, path)));
+  const inspection = new GitInspection(
+    cwd,
+    access.open(cwd, { exclude: (path) => containsPath(paths.home, path) }),
+  );
   const changes = await inspection.changes();
   assert.equal(
     changes.available,
@@ -38,8 +41,12 @@ test('Git inspection includes staged, unstaged and untracked files and rejects o
   const alias = join(root, 'workspace-alias');
   symlinkSync(paths.cwd, alias, process.platform === 'win32' ? 'junction' : 'dir');
   assert.equal(
-    (await new GitInspection(alias, new RootedFiles(cwd, (path) => containsPath(paths.home, path))).changes())
-      .available,
+    (
+      await new GitInspection(
+        alias,
+        access.open(cwd, { exclude: (path) => containsPath(paths.home, path) }),
+      ).changes()
+    ).available,
     true,
     'Directory aliases must resolve to the same repository root',
   );
@@ -60,7 +67,7 @@ test('Git inspection includes staged, unstaged and untracked files and rejects o
   git('commit', '-qm', 'track state for denial test');
   rmSync(join(nestedState, 'secret.txt'));
   await assert.rejects(
-    new GitInspection(cwd, new RootedFiles(cwd, (path) => containsPath(nestedState, path))).diff(
+    new GitInspection(cwd, access.open(cwd, { exclude: (path) => containsPath(nestedState, path) })).diff(
       'private/secret.txt',
     ),
   );

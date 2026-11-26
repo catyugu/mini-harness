@@ -5,9 +5,7 @@
   "type": "module",
   "exports": {
     "./api": "./src/server/api.ts",
-    "./browser/api": "./src/browser/api.ts",
-    "./manifest": "./src/manifest.ts",
-    "./browser/manifest": "./src/browser/manifest.ts"
+    "./browser/api": "./src/browser/api.ts"
   },
   "miniHarness": {
     "api": [

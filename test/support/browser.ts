@@ -4,7 +4,7 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import { existsSync, readFileSync, rmSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { join, resolve } from 'node:path';
-import { createFixturePaths, createMockProvider } from '../helpers/mock-provider.ts';
+import { createFixturePaths, createMockProvider } from './mock-provider.ts';
 
 export function readWebProfile(paths: { home: string }) {
   const yaml = readFileSync(join(paths.home, 'profiles', 'web', 'cordis.patch.yml'), 'utf8');

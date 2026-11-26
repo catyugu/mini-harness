@@ -11,7 +11,7 @@ import { promisify } from 'node:util';
 import { readServerInfo } from '@mini-harness/host/process';
 import { parseNpmPackResult } from './npm-pack.ts';
 import { waitUntil } from '../test/support/api-fixture.ts';
-import { createFixturePaths, createMockProvider } from '../test/helpers/mock-provider.ts';
+import { createFixturePaths, createMockProvider } from '../test/support/mock-provider.ts';
 
 const execFile = promisify(exec);
 const npmPath =
@@ -114,7 +114,6 @@ async function checkPackage() {
     for (const section of ['dependencies', 'optionalDependencies', 'peerDependencies'])
       assert.doesNotMatch(JSON.stringify(manifest[section] ?? {}), /@mini-harness\/|workspace:\*/);
     const publicExports = manifest.exports as Record<string, { types: string; default: string }>;
-    assert.ok(!Object.hasOwn(publicExports, './plugin') && !Object.hasOwn(publicExports, './browser-plugin'));
     for (const target of Object.values(publicExports)) {
       for (const path of [target.types, target.default])
         assert.ok(

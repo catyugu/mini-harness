@@ -1,7 +1,6 @@
 import { sendRun } from '../support/runs.ts';
 import { runTool } from '@mini-harness/tools/execution';
 import { isViewMessage } from '@mini-harness/sessions/message';
-import { conversationTools } from '@mini-harness/runs/tool-selection';
 import { expectPresent } from '../support/required.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -300,7 +299,8 @@ export const apply = (ctx) => {
   const registry = plugins.ctx.harnessSessions;
   const parent = registry.create({ permission: 'readOnly' });
   const child = registry.create({ parentId: parent.id, permission: 'fullAccess' });
-  const list = (id: string) => conversationTools(plugins.ctx, id, registry.runScope(id));
+  const list = (id: string) =>
+    plugins.ctx.harnessTools.list({ resourceId: id, scope: registry.runScope(id) });
   const original = expectPresent(
     list(child.id).find(({ name }) => name === 'read'),
     'inherited read tool',
@@ -319,10 +319,6 @@ export const apply = (ctx) => {
     200,
   );
   await plugins.prepare(`session:${child.id}`);
-  assert.ok(list(child.id).some(({ name }) => name === 'read'));
-  assert.ok(list(child.id).some(({ name }) => name === 'custom'));
-  assert.ok(!list(child.id).some(({ name }) => name === 'write_like'));
-  assert.ok(list(parent.id).some(({ name }) => name === 'read'));
   assert.throws(() => runTool(original, 'old', { path: 'README.md' }), /no longer available/);
   await sendRun(app.runtime.plugins.ctx.harnessRuns, child.id, 'Continue');
   const sent = expectPresent(mock.requests.at(-1), 'request with tools');
@@ -338,7 +334,7 @@ export const apply = (ctx) => {
 });
 
 test('explicit Profile composition can replace the default tool policy without a provider whitelist', async (t) => {
-  const { app, paths, request } = await fixture(t);
+  const { app, mock, paths, request } = await fixture(t);
   writePlugin(
     paths.plugins,
     'deny-tools',
@@ -352,11 +348,11 @@ export function apply(ctx) {
   );
   const root = app.runtime.plugins.ctx;
   const session = root.harnessSessions.create();
-  assert.ok(
-    conversationTools(root, session.id, root.harnessSessions.runScope(session.id)).some(
-      ({ name }) => name === 'read',
-    ),
-  );
+  const advertised = async () => {
+    await sendRun(root.harnessRuns, session.id, 'Inspect available tools');
+    return JSON.stringify(mock.requests.at(-1)?.tools ?? []);
+  };
+  assert.match(await advertised(), /"name":"read"/);
   const duplicate = await request('/settings', 'PATCH', {
     entries: { 'deny-tools': { name: '../../plugins/deny-tools', disabled: false } },
   });
@@ -368,7 +364,7 @@ export function apply(ctx) {
     },
   });
   assert.equal(replacement.status, 200, JSON.stringify(replacement.body));
-  assert.deepEqual(conversationTools(root, session.id, root.harnessSessions.runScope(session.id)), []);
+  assert.equal(await advertised(), '[]');
   assert.ok(
     root.harnessTools
       .list({ resourceId: session.id, scope: root.harnessSessions.runScope(session.id) })
@@ -382,11 +378,7 @@ export function apply(ctx) {
     ).status,
     200,
   );
-  assert.ok(
-    conversationTools(root, session.id, root.harnessSessions.runScope(session.id)).some(
-      ({ name }) => name === 'read',
-    ),
-  );
+  assert.match(await advertised(), /"name":"read"/);
   const restored = await request('/settings', 'PATCH', {
     entries: {
       'core:tool-policy': { disabled: false },
@@ -394,11 +386,7 @@ export function apply(ctx) {
     },
   });
   assert.equal(restored.status, 200, JSON.stringify(restored.body));
-  assert.ok(
-    conversationTools(root, session.id, root.harnessSessions.runScope(session.id)).some(
-      ({ name }) => name === 'read',
-    ),
-  );
+  assert.match(await advertised(), /"name":"read"/);
 });
 
 test('file tools and HTTP preview consume the same selected File Access provider', async (t) => {

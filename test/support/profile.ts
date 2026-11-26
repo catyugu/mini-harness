@@ -1,8 +1,20 @@
 import { bootProfile } from '@mini-harness/host/application';
-import { loadProfile } from '@mini-harness/host/profile';
+import { initializeProfile, loadProfile } from '@mini-harness/host/profile';
+import { writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import type { PluginHost } from '@mini-harness/plugins/manager';
 import type { Paths } from '@mini-harness/platform/runtime-paths';
 import { Context } from 'mini-harness/cordis';
+
+export async function startTestProfile(
+  paths: Paths,
+  name: string,
+  plugins: { name: string; config?: Record<string, unknown> }[],
+) {
+  const directory = initializeProfile(name, paths);
+  writeFileSync(join(directory, 'cordis.patch.yml'), JSON.stringify({ plugins }));
+  return bootProfile(name, paths, { interactive: false, shutdown() {} });
+}
 
 export async function storedProfile(paths: Paths, name = 'web') {
   const profile = await loadProfile(name, paths, new Context());

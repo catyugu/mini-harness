@@ -36,4 +36,4 @@ Preparation preserves the submitted user text for display independently from aug
 
 Input depends only on generic platform errors and Node's byte/hash operations. It has no plugin entry, mutable shared service or Config schema.
 
-[Agent execution tests](../agent/tests/execution.test.ts) cover canonical encoding, image signatures, byte limits and model-capability handling. [API feature tests](../../test/system/api-features.test.ts) cover original upload storage and retrieval, including conversations without a workspace. [Session log tests](../sessions/tests/log.test.ts) cover the separation of model input and original presentation.
+[Input tests](tests/prepare.test.ts) cover encoding, image signatures and attachment limits. [Run execution tests](../runs/tests/agent-execution.test.ts) cover model-capability handling. [API feature tests](../../test/system/api-features.test.ts) cover original upload storage and retrieval, including conversations without a workspace. [Session log tests](../sessions/tests/log.test.ts) cover the separation of model input and original presentation.

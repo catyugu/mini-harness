@@ -6,9 +6,7 @@
   "exports": {
     "./api": "./src/api.ts",
     "./execution": "./src/execution.ts",
-    "./invocation": "./src/invocation.ts",
-    "./manifest": "./src/manifest.ts",
-    "./registry": "./src/registry.ts"
+    "./invocation": "./src/invocation.ts"
   },
   "miniHarness": {
     "api": [

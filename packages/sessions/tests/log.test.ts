@@ -1,4 +1,4 @@
-import { isViewMessage } from '@mini-harness/sessions/message';
+import { isViewMessage } from '../src/shared/message.ts';
 import { expectPresent } from '../../../test/support/required.ts';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';

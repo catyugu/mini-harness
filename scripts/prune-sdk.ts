@@ -19,7 +19,7 @@ function includeDeclaration(file: string) {
     literal: { text: specifier },
   } of moduleReferences(source)) {
     if (specifier.startsWith('.'))
-      includeDeclaration(resolve(dirname(file), specifier.replace(/\.(?:js|ts)$/, '.d.ts')));
+      includeDeclaration(resolve(dirname(file), specifier.replace(/\.js$/, '.d.ts')));
   }
 }
 for (const { types } of Object.values(manifest.exports)) includeDeclaration(resolve(types));

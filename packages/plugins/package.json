@@ -8,8 +8,8 @@
     "./catalog": "./src/server/catalog.ts",
     "./manager": "./src/server/manager.ts",
     "./module-resolution": "./src/server/module-resolution.ts",
-    "./manifest": "./src/manifest.ts",
-    "./registry-client": "./src/server/registry-client.ts"
+    "./registry-client": "./src/server/registry-client.ts",
+    "./browser-assets": "./src/server/browser-assets.ts"
   },
   "miniHarness": {
     "api": [

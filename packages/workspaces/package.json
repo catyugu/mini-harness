@@ -7,10 +7,6 @@
     "./api": "./src/server/api.ts",
     "./browser/api": "./src/browser/api.ts",
     "./browser/route": "./src/browser/route.ts",
-    "./catalog": "./src/server/catalog.ts",
-    "./identity": "./src/server/identity.ts",
-    "./manifests/data": "./src/manifests/data.ts",
-    "./manifests/workspaces": "./src/manifests/workspaces.ts",
     "./record": "./src/shared/record.ts",
     "./file-request": "./src/server/file-request.ts",
     "./browser/file-views": "./src/browser/file-views.ts"
