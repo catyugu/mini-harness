@@ -377,7 +377,7 @@ test('plugin catalog applies configuration and removes disabled browser capabili
     const configureModels = async (disabled: boolean) => {
       const response = await page.request.patch(service.url + '/api/settings', {
         headers: { Authorization: 'Bearer ' + service.token },
-        data: { entries: { 'core:models': { disabled } } },
+        data: { entries: { 'core:model-admin': { disabled } } },
       });
       expect(response.ok()).toBe(true);
       await page.reload();
