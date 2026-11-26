@@ -95,14 +95,21 @@ test('file inspection, responsive themes and reduced viewport height keep contro
         const summary = page.getByLabel('Latest run');
         await expect(summary).toHaveAttribute('data-state', 'completed');
         await expect(summary).toBeInViewport();
-        const history = expectPresent(
-          await page.locator('#conversationHistory').boundingBox(),
-          'history bounds',
-        );
-        const run = expectPresent(await summary.boundingBox(), 'run summary bounds');
-        const composer = expectPresent(await page.locator('.composer-wrap').boundingBox(), 'composer bounds');
-        expect(run.y).toBeGreaterThanOrEqual(history.y + history.height - 1);
-        expect(run.y + run.height).toBeLessThanOrEqual(composer.y + 1);
+        await expect(page.locator('#conversationHistory')).toBeVisible();
+        await expect
+          .poll(() =>
+            summary.evaluate((node) => {
+              const history = document.getElementById('conversationHistory');
+              const composer = document.querySelector('.composer-wrap');
+              if (!history || !composer) throw new Error('Missing conversation layout');
+              const run = node.getBoundingClientRect();
+              return {
+                afterHistory: run.top >= history.getBoundingClientRect().bottom - 1,
+                beforeComposer: run.bottom <= composer.getBoundingClientRect().top + 1,
+              };
+            }),
+          )
+          .toEqual({ afterHistory: true, beforeComposer: true });
         for (const theme of ['dark', 'light', 'system']) {
           if (theme === 'system') await page.emulateMedia({ colorScheme: 'dark' });
           if (width <= 860) await page.getByRole('button', { name: 'Toggle navigation' }).click();
