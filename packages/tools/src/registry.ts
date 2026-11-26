@@ -52,25 +52,34 @@ export class ToolRegistry {
       visible: (resourceId) =>
         !expired() && (!factory || (resourceId !== undefined && (factory.visible?.(resourceId) ?? true))),
       resolve(selection, caller) {
-        const tool = factory ? factory.resolve(selection.resourceId!, caller) : definition as ToolDefinition;
+        const tool = factory
+          ? factory.resolve(selection.resourceId!, caller)
+          : (definition as ToolDefinition);
         if (tool.name !== name) throw new Error('Tool binding changed its registered name: ' + name);
         const available = () => registry.selected(name, selection) === entry;
         const start: RegisteredTool['start'] = (callId, args, options = {}) => {
           if (!available()) throw unavailable();
-          const resolved = factory && options.context ? factory.resolve(selection.resourceId!, options.context) : tool;
+          const resolved =
+            factory && options.context ? factory.resolve(selection.resourceId!, options.context) : tool;
           if (resolved.name !== name) throw new Error('Tool binding changed its registered name: ' + name);
-          return invokeTool(registry.tasks, {
-            ...resolved,
-            execute(...args) {
-              if (!available()) throw unavailable();
-              return resolved.execute(...args);
+          return invokeTool(
+            registry.tasks,
+            {
+              ...resolved,
+              execute(...args) {
+                if (!available()) throw unavailable();
+                return resolved.execute(...args);
+              },
             },
-          }, callId, args, {
-            ...options,
-            resourceId: selection.resourceId ?? options.resourceId,
-            provider: owner,
-            registration,
-          });
+            callId,
+            args,
+            {
+              ...options,
+              resourceId: selection.resourceId ?? options.resourceId,
+              provider: owner,
+              registration,
+            },
+          );
         };
         return {
           ...tool,
@@ -86,9 +95,9 @@ export class ToolRegistry {
     return async () => {
       removed = true;
       remove();
-      const active = registry.tasks.list().filter(
-        (task) => task.metadata?.registration === registration && !terminal(task.state),
-      );
+      const active = registry.tasks
+        .list()
+        .filter((task) => task.metadata?.registration === registration && !terminal(task.state));
       const settled = active.map((task) => registry.tasks.wait(task.id));
       for (const task of active) registry.tasks.cancel(task.id, unavailable());
       await Promise.allSettled(settled);

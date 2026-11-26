@@ -57,7 +57,10 @@ export interface ToolContext {
   owner?: TaskContext;
 }
 
-export interface ToolInvocation extends Partial<Pick<TaskOptions<ToolResult>, 'owner' | 'creator' | 'signal' | 'retain' | 'projectResult'>> {
+export interface ToolInvocation
+  extends Partial<
+    Pick<TaskOptions<ToolResult>, 'owner' | 'creator' | 'signal' | 'retain' | 'projectResult'>
+  > {
   resourceId?: string;
   ownerTask?: TaskContext;
   /** Resolve a factory against a long-lived composition when starting independent work. */
