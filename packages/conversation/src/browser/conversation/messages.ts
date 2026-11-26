@@ -1,5 +1,5 @@
 import type { Context } from 'mini-harness/cordis';
-import type { SessionDisplayRecord } from '@mini-harness/sessions/display-record';
+import type { LiveRecord } from '@mini-harness/runs/stream';
 import type { HistoryEntry, MessageContent, ViewMessage } from '@mini-harness/sessions/message';
 import type { RunInfo, RunTermination } from '@mini-harness/sessions/run-state';
 import type {
@@ -40,7 +40,7 @@ export function createMessageView(
   const actionContext = new WeakMap<HTMLElement, Omit<MessageActionContext, 'signal'>>();
   const actionOwners = new WeakMap<HTMLButtonElement, MessageAction>();
   const nodes = new Map<string, { node: HTMLElement; source: unknown }>();
-  const recordUpdates = new WeakMap<HTMLElement, (record: SessionDisplayRecord) => void>();
+  const recordUpdates = new WeakMap<HTMLElement, (record: LiveRecord) => void>();
   const preview = document.createElement('div');
   preview.className = 'message assistant';
   let following = true;
@@ -395,7 +395,7 @@ export function createMessageView(
     run: RunInfo | undefined,
     partial: string,
     tools: Parameters<typeof groupHistory>[3],
-    records: readonly SessionDisplayRecord[],
+    records: readonly LiveRecord[],
   ) {
     const pending = new Set(nodes.keys());
     const progressKey = (runId: string | undefined, callId: string) =>
@@ -409,7 +409,7 @@ export function createMessageView(
       return node;
     }
 
-    function record(entry: SessionDisplayRecord) {
+    function record(entry: LiveRecord) {
       const render = extensions.recordRenderer(entry.plugin, entry.kind);
       const node = retain('record:' + entry.id, render, (previous) => {
         if (previous) remove(previous);

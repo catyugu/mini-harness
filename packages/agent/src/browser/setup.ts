@@ -1,5 +1,4 @@
 import type { Context } from 'mini-harness/cordis';
-import type { SessionDisplayRecord } from '@mini-harness/sessions/display-record';
 
 function setup(ctx: Context) {
   ctx.effect(() =>
@@ -7,7 +6,7 @@ function setup(ctx: Context) {
       const body = document.createElement('p');
       const row = ctx.miniPrimitives.recordRow(record.title, body);
       row.classList.add('assistant-reasoning');
-      const render = (entry: SessionDisplayRecord) => {
+      const render = (entry: typeof record) => {
         body.textContent = Array.isArray(entry.content)
           ? entry.content
               .flatMap((part) => (part.type === 'thinking' && !part.redacted ? [part.thinking] : []))

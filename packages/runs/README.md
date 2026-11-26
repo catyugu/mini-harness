@@ -26,6 +26,10 @@ const receipt = ctx.harnessRuns.send(sessionId, {
 
 `info`, `activity` and `watch` expose current state and replay. `retryInput` reads the failed Run's input. `runTask` admits independent plugin work in the same exclusive lane and agent scope, so incoming messages remain durable until it settles. A stopped process cannot resume an old executor. Startup can start new work for pending Inbox messages in unpaused sessions.
 
+## Record publication
+
+Runs owns volatile record updates and their ordered replay. Plugins publish through `publishRecord(sessionId, runId, update)`, using a stable record ID for `set`, channel `append` and `remove` operations. A committed Session display record with the same ID replaces its live counterpart. The producer defines the record's meaning and renderer; Runs does not interpret its channels. The `agent/records` hook supplies the same publication mechanism to observers of raw Agent events.
+
 ## Independent tools
 
 The optional `task-control` Profile entry registers `start_background` and `task_control`. An eligible tool declares `background: true`; the shared tool invocation path validates and executes it. The accepted receipt identifies its independent Task. `task_control` lists, inspects, waits for, cancels and reads cursor-based output for owned background tools and direct child Runs.

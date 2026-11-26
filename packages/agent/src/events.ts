@@ -1,3 +1,5 @@
+import type { AgentEvent } from './api.ts';
+import type { RecordPresentation, SessionDisplayRecord } from '@mini-harness/sessions/display-record';
 import type { ModelChoice } from '@mini-harness/llm/vocabulary';
 import type { InputSource, PreparedMessage } from '@mini-harness/input/message';
 import type {
@@ -58,10 +60,21 @@ export interface ToolResultContext extends StepContext {
 
 export type ToolResultTransform = Transform<ToolResult['content'], ToolResultContext>;
 
+/** A conversation-bound contribution; the execution engine does not know about records. */
+export interface AgentRecordSink {
+  set(record: SessionDisplayRecord): void;
+  append(id: string, channel: string, text: string): void;
+  remove(id: string): void;
+}
+
+/** A fresh observer is created for every execution. Presentation refers to the committed assistant message. */
+export type AgentRecordObserver = (event: AgentEvent) => RecordPresentation | void;
+
 declare module 'mini-harness/cordis' {
   interface Events {
     /** Configure capabilities owned by a single Agent run before its first step. */
     'agent/setup'(ctx: Context, sessionId: string, signal: AbortSignal): void | Promise<void>;
+    'agent/records'(sink: AgentRecordSink): AgentRecordObserver;
     'agent/tool-result': ToolResultTransform;
     'agent/prepare-input': InputPreparation;
     'agent/model-request': ModelRequestTransform;

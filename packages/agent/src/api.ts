@@ -6,7 +6,6 @@ import type {
   NativeToolMessage,
 } from '@mini-harness/llm/api';
 import type { ModelFailure, ModelRetry } from './events.ts';
-import type { RecordPresentation, RecordUpdate } from '@mini-harness/sessions/display-record';
 import type { ToolCallPart } from '@mini-harness/llm/api';
 import type { ToolDefinition } from '@mini-harness/tools/api';
 import type { ToolExecution, ToolExecutorPort } from '@mini-harness/tools/execution';
@@ -22,16 +21,15 @@ export interface AgentTurn {
 }
 
 export type AgentEvent =
-  | RecordUpdate
   | { type: 'phase'; phase: 'model' | 'tools'; turn: number }
   | { type: 'request'; request: Request }
   | { type: 'model-attempt'; metrics: ModelAttemptMetrics }
   | { type: 'assistant-start' }
   | { type: 'delta'; text: string }
+  | { type: 'thinking'; text: string }
   | {
       type: 'assistant';
       message: NativeAssistantMessage;
-      display?: RecordPresentation;
       diagnostic?: {
         code: 'executor-response' | 'invalid-tool-calls';
         message: NativeAssistantMessage;
@@ -42,16 +40,12 @@ export type AgentRun = {
   signal: AbortSignal;
   onEvent?(event: AgentEvent): void;
   retry?(failure: ModelFailure): ModelRetry | undefined | Promise<ModelRetry | undefined>;
-} & (
-  | { request: Request; tools?: readonly ToolDefinition[] }
-  | {
-      /** Rebuild the step after a failed request; decline errors the caller cannot repair. */
-      prepare(turn: number, failure?: ModelFailure): AgentTurn | undefined | Promise<AgentTurn | undefined>;
-      afterTurn?(
-        calls: readonly ToolCallPart[],
-      ): 'continue' | 'restart' | void | Promise<'continue' | 'restart' | void>;
-    }
-);
+  /** The caller owns the context. Return undefined only to decline recovery after a failure. */
+  prepare(turn: number, failure?: ModelFailure): AgentTurn | undefined | Promise<AgentTurn | undefined>;
+  afterTurn?(
+    calls: readonly ToolCallPart[],
+  ): 'continue' | 'restart' | void | Promise<'continue' | 'restart' | void>;
+};
 
 export interface AgentPort {
   run(ctx: Context, input: AgentRun): Promise<NativeAssistantMessage>;

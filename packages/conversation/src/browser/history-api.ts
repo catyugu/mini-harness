@@ -1,5 +1,5 @@
 import type { PluginIcon } from '@mini-harness/plugin-api/descriptor';
-import type { SessionDisplayRecord } from '@mini-harness/sessions/display-record';
+import type { LiveRecord } from '@mini-harness/runs/stream';
 import type { MessageContent, ViewMessage } from '@mini-harness/sessions/message';
 
 export type ToolRenderer = (tool: ToolView, signal: AbortSignal) => HTMLElement | undefined;
@@ -46,11 +46,11 @@ export type TurnFooterRenderer = (context: {
 }) => HTMLElement;
 
 export type RecordRenderer = (
-  record: SessionDisplayRecord,
+  record: LiveRecord,
   context: {
     sessionId: string;
     signal: AbortSignal;
-    subscribe(listener: (record: SessionDisplayRecord) => void): void;
+    subscribe(listener: (record: LiveRecord) => void): void;
   },
 ) => HTMLElement | undefined;
 

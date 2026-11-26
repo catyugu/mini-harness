@@ -1,5 +1,5 @@
 import { KeyedRegistry } from '@mini-harness/ui-runtime/keyed-registry';
-import type { SessionDisplayRecord } from '@mini-harness/sessions/display-record';
+import type { LiveRecord } from '@mini-harness/runs/stream';
 import type {
   MessageAction,
   RecordRenderer,
@@ -60,11 +60,11 @@ export class MessageExtensions {
 
   renderRecord(
     render: RecordRenderer | undefined,
-    record: SessionDisplayRecord,
+    record: LiveRecord,
     context: { sessionId: string; signal: AbortSignal },
   ) {
     if (!render) return;
-    const listeners = new Set<(record: SessionDisplayRecord) => void>();
+    const listeners = new Set<(record: LiveRecord) => void>();
     const node = this.renderWithLifetime(context.signal, (signal) => {
       signal.addEventListener('abort', () => listeners.clear(), { once: true });
       return render(structuredClone(record), {
@@ -79,7 +79,7 @@ export class MessageExtensions {
     let current = record;
     return {
       node,
-      update: (next: SessionDisplayRecord) => {
+      update: (next: LiveRecord) => {
         if (current === next) return;
         current = next;
         for (const listener of listeners) {

@@ -19,7 +19,8 @@ import {
   type NativeUserMessage,
   type ToolCallPart,
 } from '@mini-harness/llm/api';
-import type { AgentEvent } from './stream.ts';
+import type { RunStreamEvent } from './shared/stream.ts';
+import type { RecordPresentation } from '@mini-harness/sessions/display-record';
 import type { MessageOrigin, MessageMode } from '@mini-harness/sessions/queue';
 import type { SessionLogPort, InboxItem, SessionProjection } from '@mini-harness/sessions/log-api';
 import { Inbox } from './inbox.ts';
@@ -117,7 +118,7 @@ export class SessionRun {
   async prompt(
     ctx: Context,
     record: SessionRecord,
-    emit: (event: AgentEvent) => void | Promise<void>,
+    emit: (event: RunStreamEvent) => void | Promise<void>,
     options: SessionPrompt,
   ): Promise<string> {
     const { id } = record;
@@ -240,11 +241,27 @@ export class SessionRun {
     let requestId: string | undefined;
     let attemptsRecorded = false;
     let modelStep = 0;
+    const observers = ctx.events.listeners('agent/records', scopeTarget(ctx)).map(({ callback }) =>
+      callback({
+        set: (record) => emit({ type: 'record-update', operation: 'set', record }),
+        append: (id, channel, text) => emit({ type: 'record-update', operation: 'append', id, channel, text }),
+        remove: (id) => emit({ type: 'record-update', operation: 'remove', id }),
+      }),
+    );
     const answer = await requireService(ctx, 'harnessAgent')
       .run(ctx, {
         signal,
         retry: modelRetry(ctx, id),
         onEvent: (event) => {
+          let display: RecordPresentation | undefined;
+          for (const observe of observers) {
+            const contribution = observe(event);
+            if (!contribution) continue;
+            if (event.type !== 'assistant' || display)
+              throw new Error('An assistant message may have one record presentation');
+            display = contribution;
+          }
+          if (event.type === 'thinking') return;
           if (event.type === 'phase') {
             if (event.phase === 'model') modelStep = event.turn;
             task.update({ phase: event.phase, turn: event.turn });
@@ -271,7 +288,7 @@ export class SessionRun {
             emit(event);
             return;
           }
-          const { diagnostic, message: result, display } = event;
+          const { diagnostic, message: result } = event;
           if (diagnostic) log.append({ type: 'diagnostic', code: diagnostic.code, data: diagnostic.message });
           const assistant = log.append({
             type: 'message',

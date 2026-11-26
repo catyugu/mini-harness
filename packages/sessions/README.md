@@ -21,7 +21,7 @@ export async function saveNote(ctx: Context, sessionId: string, text: string) {
 }
 ```
 
-The owner pair identifies the contributor. `records().list()` returns that owner's records on the selected branch; it does not scan unrelated branches or owners. The [Task notes example](../../docs/examples/task-notes/README.md) shows a complete tool, saved record and browser renderer.
+The display-record contract describes committed records and their projection. Volatile channels and record updates are owned by Runs and never persisted as a second copy of a transcript. The owner pair identifies the contributor. `records().list()` returns that owner's records on the selected branch; it does not scan unrelated branches or owners. The [Task notes example](../../docs/examples/task-notes/README.md) shows a complete tool, saved record and browser renderer.
 
 ## Responsibilities and contracts
 

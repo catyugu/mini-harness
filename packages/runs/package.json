@@ -5,7 +5,7 @@
   "type": "module",
   "exports": {
     "./api": "./src/api.ts",
-    "./stream": "./src/stream.ts"
+    "./stream": "./src/shared/stream.ts"
   },
   "miniHarness": {
     "api": [

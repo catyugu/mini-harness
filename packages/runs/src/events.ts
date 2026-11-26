@@ -1,6 +1,5 @@
 import { isRunning, type RunInfo } from '@mini-harness/sessions/run-state';
-import type { RunEvent, StreamEvent, ToolProgress } from './stream.ts';
-import { updateRecords, type SessionDisplayRecord } from '@mini-harness/sessions/display-record';
+import { updateRecords, type LiveRecord, type RunEvent, type StreamEvent, type ToolProgress } from './shared/stream.ts';
 
 export class RunEvents {
   private events: RunEvent[] = [];
@@ -8,7 +7,7 @@ export class RunEvents {
   private listeners = new Map<(event: RunEvent) => void, () => void>();
   private tools = new Map<string, ToolProgress>();
   partial = '';
-  private records: SessionDisplayRecord[] = [];
+  private records: LiveRecord[] = [];
 
   get activeRecords() {
     return this.records;

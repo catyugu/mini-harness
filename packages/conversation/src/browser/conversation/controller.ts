@@ -8,12 +8,11 @@ import type {
   ConversationSubmission,
   RetryInput,
 } from '../conversation-api.ts';
-import type { RunEvent } from '@mini-harness/runs/stream';
+import { updateRecords, type RunEvent } from '@mini-harness/runs/stream';
 import type { SendReceipt } from '@mini-harness/runs/api';
 import { defaultMessageMode, type MessageMode } from '@mini-harness/sessions/queue';
 import type { RunInfo } from '@mini-harness/sessions/run-state';
 import type { HistoryEntry } from '@mini-harness/sessions/message';
-import { updateRecords } from '@mini-harness/sessions/display-record';
 import { isRunning } from '@mini-harness/sessions/run-state';
 import { payload } from '@mini-harness/ui-runtime/http';
 import { workspaceRoute } from '@mini-harness/workspaces/browser/route';

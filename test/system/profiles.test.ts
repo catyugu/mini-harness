@@ -1,5 +1,6 @@
 import { sendRun } from '../support/runs.ts';
 import { runTool } from '@mini-harness/tools/execution';
+import type { NativeMessage } from '@mini-harness/llm/api';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
@@ -311,14 +312,33 @@ test('a third-party plugin uses tools, models and subprocesses from a Profile wi
       const model = { provider, id: 'fixture' };
       assert.deepEqual(app.ctx.harnessModels.resolve(model), model);
       const signal = AbortSignal.timeout(10000);
+      const messages: NativeMessage[] = [{ role: 'user', content: 'Use the tool', timestamp: Date.now() }];
+      const tools = new Map(app.ctx.harnessTools.list().map((tool) => [tool.name, tool]));
+      const executor = app.ctx.harnessToolExecutor;
+      const schemas = [...tools.values()].map(({ name, description, parameters }) => ({
+        name,
+        description,
+        parameters,
+      }));
       const result = await app.ctx.harnessAgent.run(app.ctx, {
         signal,
-        request: {
-          model,
-          systemPrompt: '',
-          messages: [{ role: 'user', content: 'Use the tool', timestamp: Date.now() }],
+        prepare(turn, failure) {
+          if (failure) return;
+          return {
+            request: {
+              model,
+              ...executor.present({ systemPrompt: '', messages }, schemas, { model, signal, turn }),
+            },
+            executor,
+            tools,
+            async deliver(result) {
+              messages.push(result);
+            },
+          };
         },
-        tools: app.ctx.harnessTools.list(),
+        onEvent(event) {
+          if (event.type === 'assistant') messages.push(event.message);
+        },
       });
       assert.deepEqual(result.content, [{ type: 'text', text: provider + ': standalone' }]);
     }
