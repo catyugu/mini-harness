@@ -8,7 +8,7 @@ import { DomainError } from '@mini-harness/platform/errors';
 import { terminal, type TaskEvent, type TaskPort, type TaskHistoryRecord } from '@mini-harness/tasks/api';
 import { imageMimeType } from '@mini-harness/input/prepare';
 import { validateModelOptions } from '@mini-harness/llm/options';
-import type { Attachment, InputSource } from '@mini-harness/input/message';
+import type { Attachment } from '@mini-harness/input/message';
 import type { CapabilityObservation } from '@mini-harness/plugin-api/observations';
 import { Inbox } from './inbox.ts';
 import { SessionRun } from './session-run.ts';
@@ -19,11 +19,7 @@ import { RunEvents } from './events.ts';
 import type { RunInput, RunPort, RunSubmission } from './api.ts';
 import type { SessionStore } from '@mini-harness/sessions/records';
 
-interface RunOptions extends RunSubmission {
-  source?: InputSource;
-  model?: ModelChoice;
-  attachments?: Attachment[];
-  thinkingLevel?: ThinkingLevel | null;
+interface RunOptions extends RunSubmission, Omit<RunInput, 'message'> {
   revision?: { parentId: string | null; expectedLeafId: string | null };
 }
 
@@ -50,13 +46,8 @@ export class Runs implements RunPort {
     this.events.dispatchEvent(new CustomEvent('change', { detail: { id } }));
   }
 
-  get size() {
-    return this.tasks.list().filter((task) => task.lane?.startsWith('conversation:') && !terminal(task.state))
-      .length;
-  }
-
-  active(id: string) {
-    return Boolean(this.tasks.active(this.lane(id)));
+  current(id: string) {
+    return this.tasks.active(this.lane(id));
   }
 
   private lane(id: string) {
@@ -66,18 +57,10 @@ export class Runs implements RunPort {
   private assertOpen() {
     if (this.tasks.sealed) throw new DomainError('unavailable', 'Runs are closing');
   }
-  completion(id: string) {
-    return this.tasks.active(this.lane(id))?.result;
-  }
 
   activity(id: string) {
     const events = this.streams.get(id)?.events;
     return { partial: events?.partial, tools: events?.activeTools ?? [] };
-  }
-
-  signal(id: string, signal?: AbortSignal) {
-    const owner = this.tasks.active(this.lane(id))?.signal;
-    return owner && signal ? AbortSignal.any([owner, signal]) : (owner ?? signal);
   }
 
   branchChanged(id: string, record: RecordAppend) {
@@ -89,7 +72,7 @@ export class Runs implements RunPort {
   private assertIdle(id: string) {
     this.registry.assertAvailable(id);
     this.assertOpen();
-    if (this.active(id)) throw new DomainError('conflict', 'Conversation is already running');
+    if (this.current(id)) throw new DomainError('conflict', 'Conversation is already running');
   }
 
   private publish(activity: Activity, event: StreamEvent) {
@@ -149,7 +132,7 @@ export class Runs implements RunPort {
       if (firstAdmission)
         this.observe(
           { type: 'run-started', sessionId: id, run: next },
-          this.tasks.active(this.lane(id))?.signal,
+          this.current(id)?.signal,
         );
       if (ended) this.observe({ type: 'run-ended', sessionId: id, run: next });
     } finally {
@@ -164,8 +147,7 @@ export class Runs implements RunPort {
   private launch(
     id: string,
     prompt: string,
-    emit: ((event: StreamEvent) => void) | undefined,
-    { signal, source, model, attachments, thinkingLevel, revision, pool, metadata, provider }: RunOptions,
+    { signal, source, emit, model, attachments, thinkingLevel, revision, pool, metadata, provider }: RunOptions,
   ) {
     this.assertIdle(id);
     const activity: Activity = { emit };
@@ -243,20 +225,8 @@ export class Runs implements RunPort {
     }
   }
 
-  submit(id: string, { message, ...input }: RunInput, options: RunSubmission = {}) {
-    return this.launch(id, message, undefined, { ...input, ...options, source: 'plugin' }).task;
-  }
-
-  async send(id: string, prompt: string, emit?: (event: StreamEvent) => void, options: RunOptions = {}) {
-    return this.launch(id, prompt, emit, options).task.result;
-  }
-
-  startRun(
-    id: string,
-    prompt: string,
-    { model, attachments, thinkingLevel }: Pick<RunOptions, 'model' | 'attachments' | 'thinkingLevel'> = {},
-  ) {
-    return { ...this.launch(id, prompt, undefined, { model, attachments, thinkingLevel }).info };
+  submit(id: string, { message, model, attachments, thinkingLevel }: RunInput, options: RunSubmission = {}) {
+    return this.launch(id, message, { source: 'plugin', ...options, model, attachments, thinkingLevel }).task;
   }
 
   /** Revision preparation and task admission happen in one synchronous turn. */
@@ -293,7 +263,7 @@ export class Runs implements RunPort {
       throw new DomainError('invalid_input', 'Reattach the original text files: ' + missing.join(', '));
     const attachments = [...target.images.filter((_, index) => !removed.includes(index)), ...attached];
     return {
-      ...this.launch(id, input.message, undefined, {
+      ...this.launch(id, input.message, {
         attachments,
         model: input.model,
         thinkingLevel: input.thinkingLevel,
@@ -390,7 +360,7 @@ export class Runs implements RunPort {
   ) {
     this.assertOpen();
     const activity = this.streams.get(id);
-    const signal = this.tasks.active(this.lane(id))?.signal;
+    const signal = this.current(id)?.signal;
     if (!activity?.context || !signal || signal.aborted || activity.context.fiber.signal.aborted)
       throw new DomainError('conflict', 'The agent is not streaming; send a new message');
     this.registry.assertAvailable(id);
@@ -409,15 +379,6 @@ export class Runs implements RunPort {
     this.assertOpen();
     this.registry.assertAvailable(id);
     return new Inbox(this.registry.log(id)).cancel('User cancelled', itemId);
-  }
-
-  cancel(id: string) {
-    const activity = this.streams.get(id);
-    return (
-      this.tasks
-        .active(this.lane(id))
-        ?.cancel(new Error(activity?.events ? 'Agent run cancelled' : 'Compaction cancelled')) ?? false
-    );
   }
 
   async compact(id: string) {

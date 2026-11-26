@@ -1,3 +1,4 @@
+import { sendRun, activeRunCount } from '../../../test/support/runs.ts';
 import { startTool } from '@mini-harness/tools/execution';
 import { isViewMessage } from '@mini-harness/sessions/message';
 import test from 'node:test';
@@ -50,7 +51,7 @@ test(
     });
     const parent = app.runtime.plugins.ctx.harnessSessions.create();
     const toolEvents: Extract<import('@mini-harness/runs/stream').StreamEvent, { type: 'tool-end' }>[] = [];
-    await app.runtime.plugins.ctx.harnessRuns.send(parent.id, 'root task', (event) => {
+    await sendRun(app.runtime.plugins.ctx.harnessRuns, parent.id, 'root task', (event) => {
       if (event.type === 'tool-end') toolEvents.push(event);
     });
     await waitUntil(
@@ -70,8 +71,8 @@ test(
     const childRecord = records[1],
       leafRecord = records[2];
     assert.ok(childRecord && leafRecord);
-    await app.runtime.plugins.ctx.harnessRuns.completion(childRecord.id);
-    await app.runtime.plugins.ctx.harnessRuns.completion(leafRecord.id);
+    await app.runtime.plugins.ctx.harnessRuns.current(childRecord.id)?.result;
+    await app.runtime.plugins.ctx.harnessRuns.current(leafRecord.id)?.result;
     assert.deepEqual(app.runtime.plugins.ctx.harnessSessions.log(leafRecord.id).projection().model, {
       provider: 'local-mock',
       id: 'mock-model',
@@ -92,7 +93,7 @@ test(
       ),
     );
     const check = app.runtime.plugins.ctx.harnessSessions.create();
-    await app.runtime.plugins.ctx.harnessRuns.send(check.id, 'read policy');
+    await sendRun(app.runtime.plugins.ctx.harnessRuns, check.id, 'read policy');
     const failure = app.runtime.plugins.ctx.harnessSessions
       .log(check.id)
       .projection()
@@ -135,19 +136,19 @@ test('stopping a root leaves its delegated child running', { timeout: 15000 }, a
   });
   const ctx = app.runtime.plugins.ctx;
   const parent = ctx.harnessSessions.create();
-  const pending = ctx.harnessRuns.send(parent.id, 'start child');
+  const pending = sendRun(ctx.harnessRuns, parent.id, 'start child');
   const aborted = assert.rejects(pending, /cancelled/);
   await Promise.all([parentEntered.promise, childEntered.promise]);
   const child = ctx.harnessSessions.list().find(({ parentId }) => parentId === parent.id);
   assert.ok(child);
   const childRun = expectPresent(ctx.harnessRuns.info(child.id), 'child run');
-  assert.equal(ctx.harnessRuns.cancel(parent.id), true);
+  assert.equal(ctx.harnessRuns.current(parent.id)?.cancel(), true);
   await aborted;
   assert.equal(ctx.harnessTasks.get(childRun.id)?.state, 'running');
   held.release();
-  await ctx.harnessRuns.completion(child.id);
+  await ctx.harnessRuns.current(child.id)?.result;
   assert.equal(ctx.harnessTasks.get(childRun.id)?.state, 'completed');
-  assert.equal(ctx.harnessRuns.size, 0);
+  assert.equal(activeRunCount(ctx), 0);
   assert.equal(ctx.harnessSessions.export([parent.id]).length, 2);
 });
 
@@ -208,15 +209,15 @@ test(
     );
     assert.ok(queued);
     assert.equal(app.runtime.plugins.ctx.harnessRuns.info(queued.id)?.state, 'queued');
-    app.runtime.plugins.ctx.harnessRuns.cancel(queued.id);
-    await app.runtime.plugins.ctx.harnessRuns.completion(queued.id)?.catch(() => {});
+    app.runtime.plugins.ctx.harnessRuns.current(queued.id)?.cancel();
+    await app.runtime.plugins.ctx.harnessRuns.current(queued.id)?.result?.catch(() => {});
     assert.equal(app.runtime.plugins.ctx.harnessRuns.info(queued.id)?.state, 'cancelled');
     assert.equal(requests, 1);
     await app.runtime.configuration.update({ entries: { subagents: { config: { maxParallel: 2 } } } });
     await entered[1].promise;
     await app.runtime.configuration.update({ entries: { subagents: { config: { maxParallel: 1 } } } });
     assert.equal(
-      app.runtime.plugins.ctx.harnessRuns.size,
+      activeRunCount(app.runtime.plugins.ctx),
       2,
       'Lowering the limit preserves existing executions',
     );
@@ -233,10 +234,10 @@ test(
     held[1].release();
     await Promise.all(
       [first, second].map((result) =>
-        app.runtime.plugins.ctx.harnessRuns.completion(String(result.details?.sessionId)),
+        app.runtime.plugins.ctx.harnessRuns.current(String(result.details?.sessionId))?.result,
       ),
     );
-    assert.equal(app.runtime.plugins.ctx.harnessRuns.size, 0);
+    assert.equal(activeRunCount(app.runtime.plugins.ctx), 0);
     assert.equal(requests, 2, 'Cancelled queued children never reach the provider');
   },
 );

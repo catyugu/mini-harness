@@ -157,7 +157,7 @@ test('a registered tool uses one task for inline and independent background call
   assert.equal(tasks.list().length, 0);
   const background = startTool(tasks, tool, 'background', { hold: true }, { retain: true });
   await entered;
-  assert.equal(tasks.list('session:session').length, 1);
+  assert.equal(tasks.list('session').length, 1);
   assert.equal(tasks.get(background.id)?.state, 'running');
   release();
   await background.result;

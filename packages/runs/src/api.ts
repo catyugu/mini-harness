@@ -12,37 +12,16 @@ export interface RunInput {
   attachments?: Attachment[];
 }
 
-export type RunSubmission = Pick<TaskOptions, 'signal' | 'pool' | 'metadata' | 'provider'>;
+export interface RunSubmission extends Pick<TaskOptions, 'signal' | 'pool' | 'metadata' | 'provider'> {
+  source?: InputSource;
+  emit?(event: StreamEvent): void;
+}
 
 export interface RunPort {
-  readonly size: number;
   readonly events: EventTarget;
-  active(id: string): boolean;
-  completion(id: string): Promise<unknown> | undefined;
+  current(id: string): TaskHandle | undefined;
   activity(id: string): { partial?: string; tools: ToolProgress[] };
-  signal(id: string, signal?: AbortSignal): AbortSignal | undefined;
-  send(
-    id: string,
-    prompt: string,
-    emit?: (event: StreamEvent) => void,
-    options?: {
-      signal?: AbortSignal;
-      source?: InputSource;
-      model?: ModelChoice;
-      attachments?: Attachment[];
-      thinkingLevel?: ThinkingLevel | null;
-    },
-  ): Promise<string>;
   submit(id: string, input: RunInput, options?: RunSubmission): TaskHandle<string>;
-  startRun(
-    id: string,
-    prompt: string,
-    options?: {
-      model?: ModelChoice;
-      attachments?: Attachment[];
-      thinkingLevel?: ThinkingLevel | null;
-    },
-  ): RunInfo;
   reviseAndStart(
     id: string,
     input: {
@@ -86,7 +65,6 @@ export interface RunPort {
     },
   ): QueueEntry[];
   cancelQueue(id: string, itemId?: string, signal?: AbortSignal): Promise<QueueEntry[]>;
-  cancel(id: string): boolean;
   compact(id: string): Promise<void>;
 }
 

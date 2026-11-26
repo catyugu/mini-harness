@@ -1,3 +1,4 @@
+import { sendRun } from '../support/runs.ts';
 import { startTool } from '@mini-harness/tools/execution';
 import { request as httpRequest } from 'node:http';
 import { randomUUID } from 'node:crypto';
@@ -601,7 +602,7 @@ test('disabled optional builtins cannot block boot or reload because their confi
   await restored.configuration.update({ entries: { 'core:theme': { config: { appearance: 'dark' } } } });
   const conversation = restored.plugins.ctx.harnessSessions.create();
   assert.equal(
-    await restored.plugins.ctx.harnessRuns.send(conversation.id, 'Main agent still works'),
+    await sendRun(restored.plugins.ctx.harnessRuns, conversation.id, 'Main agent still works'),
     'Mock response',
   );
   await restored.configuration.update({

@@ -54,14 +54,12 @@ export interface ToolContext {
   update(update: ToolUpdate): void;
   /** For a serial tool, wait on behalf of the enclosing scheduling task. */
   waitFor(id: string): Promise<TaskSnapshot>;
-  /** Present for inline calls made by another task. */
-  owner?: TaskContext;
 }
 
 export interface ToolInvocation
   extends Partial<Pick<TaskOptions, 'owner' | 'signal' | 'retain' | 'metadata' | 'commit'>> {
   resourceId?: string;
-  ownerTask?: TaskContext;
+  parentTask?: TaskContext;
   /** Resolve a factory against a long-lived composition when starting independent work. */
   context?: Context;
   onUpdate?(update: ToolUpdate): void;

@@ -1,3 +1,4 @@
+import { sendRun } from '../support/runs.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdirSync, rmSync, writeFileSync, existsSync } from 'node:fs';
@@ -110,7 +111,7 @@ test(
       '---\nname: verification\ndescription: New description\n---\nChanged skill body',
     );
     const { harnessRuns: runs } = app.runtime.plugins.ctx;
-    await runs.send(session.id, '', undefined, {
+    await sendRun(runs, session.id, '', undefined, {
       attachments: [
         {
           name: 'instruction.txt',
@@ -124,8 +125,8 @@ test(
     assert.match(sentAfterChange, /\/skill:unavailable/);
     assert.doesNotMatch(sentAfterChange, /Changed skill body/);
     const child = app.runtime.plugins.ctx.harnessSessions.create({ parentId: session.id });
-    await runs.send(child.id, '/skill:unavailable', undefined, { source: 'agent' });
-    await assert.rejects(runs.send(child.id, '/skill:unavailable'), /Unknown skill: unavailable/);
+    await sendRun(runs, child.id, '/skill:unavailable', undefined, { source: 'agent' });
+    await assert.rejects(sendRun(runs, child.id, '/skill:unavailable'), /Unknown skill: unavailable/);
     await app.runtime.plugins.ctx.harnessSessions.delete([child.id]);
 
     // Use the new server's token after restart.

@@ -1,3 +1,4 @@
+import { sendRun } from '../support/runs.ts';
 import { startTool } from '@mini-harness/tools/execution';
 import { isViewMessage } from '@mini-harness/sessions/message';
 import { conversationTools } from '@mini-harness/runs/tool-selection';
@@ -246,7 +247,7 @@ export const apply = (ctx, config) => {
     new RegExp(parent.id),
   );
   assert.equal(
-    await app.runtime.plugins.ctx.harnessRuns.send(parent.id, 'Run scoped greeting'),
+    await sendRun(app.runtime.plugins.ctx.harnessRuns, parent.id, 'Run scoped greeting'),
     'Finished greeting',
   );
   const saved = (await request('/sessions/' + parent.id)).body;
@@ -336,7 +337,7 @@ export const apply = (ctx) => {
     () => startTool(app.runtime.plugins.ctx.harnessTasks, original, 'old', { path: 'README.md' }),
     /no longer available/,
   );
-  await app.runtime.plugins.ctx.harnessRuns.send(child.id, 'Continue');
+  await sendRun(app.runtime.plugins.ctx.harnessRuns, child.id, 'Continue');
   const sent = expectPresent(mock.requests.at(-1), 'request with tools');
   assert.equal(JSON.stringify(sent.tools).includes('"name":"read"'), true);
   assert.equal(JSON.stringify(sent.tools).includes('"name":"custom"'), true);
@@ -491,9 +492,9 @@ export const apply = (ctx, config) => { ctx.effect(() => ctx.harnessLlm.register
   };
   const configured = await request('/settings', 'PATCH', { scopes });
   assert.equal(configured.status, 200, JSON.stringify(configured.body));
-  assert.equal(await app.runtime.plugins.ctx.harnessRuns.send(parent.id, 'Parent task'), 'Parent adapter');
-  assert.equal(await app.runtime.plugins.ctx.harnessRuns.send(child.id, 'Child task'), 'Child adapter');
-  assert.equal(await app.runtime.plugins.ctx.harnessRuns.send(sibling.id, 'Sibling task'), 'Mock response');
+  assert.equal(await sendRun(app.runtime.plugins.ctx.harnessRuns, parent.id, 'Parent task'), 'Parent adapter');
+  assert.equal(await sendRun(app.runtime.plugins.ctx.harnessRuns, child.id, 'Child task'), 'Child adapter');
+  assert.equal(await sendRun(app.runtime.plugins.ctx.harnessRuns, sibling.id, 'Sibling task'), 'Mock response');
   assert.equal(mock.requests.length, 1);
   assert.deepEqual(
     app.runtime.plugins.context(`session:${child.id}`).harnessModels.list(),
@@ -511,7 +512,7 @@ export const apply = (ctx, config) => { ctx.effect(() => ctx.harnessLlm.register
     200,
   );
   assert.equal(
-    await app.runtime.plugins.ctx.harnessRuns.send(child.id, 'Use inherited adapter'),
+    await sendRun(app.runtime.plugins.ctx.harnessRuns, child.id, 'Use inherited adapter'),
     'Parent adapter',
   );
   assert.equal(mock.requests.length, 1);
@@ -616,16 +617,16 @@ export const apply = (ctx) => { ctx.provide('harnessProcess', {
         .at(-1),
       'tool result',
     );
-  await app.runtime.plugins.ctx.harnessRuns.send(child.id, 'read in inherited scope');
+  await sendRun(app.runtime.plugins.ctx.harnessRuns, child.id, 'read in inherited scope');
   assert.match(JSON.stringify(lastTool(child.id).content), /scoped file/);
-  await app.runtime.plugins.ctx.harnessRuns.send(sibling.id, 'read in sibling');
+  await sendRun(app.runtime.plugins.ctx.harnessRuns, sibling.id, 'read in sibling');
   assert.match(JSON.stringify(lastTool(sibling.id).content), /application file/);
   for (const [id, expected] of [
     [parent.id, 'scoped sandbox'],
     [child.id, 'scoped process'],
     [sibling.id, 'application sandbox'],
   ]) {
-    const running = app.runtime.plugins.ctx.harnessRuns.send(id, 'shell execution');
+    const running = sendRun(app.runtime.plugins.ctx.harnessRuns, id, 'shell execution');
     const pending = await waitUntil(
       () => request('/approvals'),
       ({ body }) => body.some((item: { sessionId: string }) => item.sessionId === id),
@@ -704,26 +705,26 @@ export const apply = (ctx) => {
   assert.equal(configured.status, 200, JSON.stringify(configured.body));
 
   assert.equal(
-    await app.runtime.plugins.ctx.harnessRuns.send(parent.id, 'Delegate inherited', undefined, {
+    await sendRun(app.runtime.plugins.ctx.harnessRuns, parent.id, 'Delegate inherited', undefined, {
       model: scopedChoice,
     }),
     'Scoped parent-model',
   );
   assert.deepEqual(app.runtime.plugins.ctx.harnessModelPreference.recent(), applicationChoice);
   assert.equal(
-    await app.runtime.plugins.ctx.harnessRuns.send(parent.id, 'Delegate explicit', undefined, {
+    await sendRun(app.runtime.plugins.ctx.harnessRuns, parent.id, 'Delegate explicit', undefined, {
       model: scopedChoice,
     }),
     'Scoped parent-model',
   );
   assert.equal(
-    await app.runtime.plugins.ctx.harnessRuns.send(parent.id, 'Continue without an explicit model'),
+    await sendRun(app.runtime.plugins.ctx.harnessRuns, parent.id, 'Continue without an explicit model'),
     'Scoped parent-model',
   );
   const children = app.runtime.plugins.ctx.harnessSessions
     .list()
     .filter(({ parentId }) => parentId === parent.id);
-  await Promise.all(children.map(({ id }) => app.runtime.plugins.ctx.harnessRuns.completion(id)));
+  await Promise.all(children.map(({ id }) => app.runtime.plugins.ctx.harnessRuns.current(id)?.result));
   assert.equal(children.length, 2);
   const inherited = children.find(({ title }) => title === 'Inherited child task');
   const explicit = children.find(({ title }) => title === 'Explicit child task');
@@ -749,7 +750,7 @@ export const apply = (ctx) => {
   );
   assert.deepEqual(app.runtime.plugins.ctx.harnessModelPreference.recent(), applicationChoice);
   assert.equal(
-    await app.runtime.plugins.ctx.harnessRuns.send(sibling.id, 'Use the application model'),
+    await sendRun(app.runtime.plugins.ctx.harnessRuns, sibling.id, 'Use the application model'),
     'Mock response',
   );
   assert.deepEqual(
@@ -798,11 +799,11 @@ export function apply(ctx) {
     },
   });
   assert.equal(configured.status, 200, JSON.stringify(configured.body));
-  assert.equal(await root.harnessRuns.send(session.id, 'success'), 'Custom answer');
+  assert.equal(await sendRun(root.harnessRuns, session.id, 'success'), 'Custom answer');
   assert.equal(readFileSync(file, 'utf8'), 'success\n');
-  await assert.rejects(root.harnessRuns.send(session.id, 'fail'), /Expected custom agent failure/);
+  await assert.rejects(sendRun(root.harnessRuns, session.id, 'fail'), /Expected custom agent failure/);
   assert.equal(readFileSync(file, 'utf8'), 'success\nfail\n');
-  assert.notEqual(await root.harnessRuns.send(sibling.id, 'Default loop'), 'Custom answer');
+  assert.notEqual(await sendRun(root.harnessRuns, sibling.id, 'Default loop'), 'Custom answer');
 });
 
 test('Agent setup owns temporary tools and prompt sections and isolates sibling runs', async (t) => {
@@ -835,13 +836,13 @@ export function apply(ctx) {
   const root = app.runtime.plugins.ctx;
   const first = root.harnessSessions.create();
   const second = root.harnessSessions.create();
-  await root.harnessRuns.send(first.id, 'First run');
+  await sendRun(root.harnessRuns, first.id, 'First run');
   assert.ok(
     !root.harnessTools
       .list({ resourceId: first.id, scope: root.harnessSessions.runScope(first.id) })
       .some(({ name }) => name === 'run_marker'),
   );
-  await root.harnessRuns.send(second.id, 'Second run');
+  await sendRun(root.harnessRuns, second.id, 'Second run');
   assert.match(JSON.stringify(mock.requests[0]), new RegExp('Run marker ' + first.id));
   assert.match(JSON.stringify(mock.requests[1]), new RegExp('Run marker ' + second.id));
   assert.doesNotMatch(JSON.stringify(mock.requests[1]), new RegExp('Run marker ' + first.id));
@@ -892,6 +893,6 @@ export function apply(ctx) {
   assert.equal(ctx.harnessWorkspaces.scope(parent.workspaceId!), workspaceKey);
   assert.equal(ctx.harnessSessions.runScope(child.id), childKey);
   assert.ok(tools().some(({ name }) => name === 'workspace_contribution'));
-  await ctx.harnessRuns.send(child.id, 'Continue after reactivation');
+  await sendRun(ctx.harnessRuns, child.id, 'Continue after reactivation');
   assert.match(JSON.stringify(mock.requests.at(-1)?.messages), /Workspace contribution/);
 });

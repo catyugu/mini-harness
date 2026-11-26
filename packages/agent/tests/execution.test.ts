@@ -1,3 +1,4 @@
+import { sendRun } from '../../../test/support/runs.ts';
 import { isViewMessage } from '@mini-harness/sessions/message';
 import { Context } from 'mini-harness/cordis';
 import { fixture as httpFixture } from '../../../test/support/api-fixture.ts';
@@ -856,7 +857,7 @@ test('native compaction reduces context and preserves message identities and his
   const image = { type: 'image' as const, mimeType: 'image/png', data: 'iVBORw0KGgo=' };
   log.append({ type: 'message', message: { role: 'user', content: [image], timestamp: 1 } });
   for (let turn = 0; turn < 6; turn++)
-    await app.runtime.plugins.ctx.harnessRuns.send(
+    await sendRun(app.runtime.plugins.ctx.harnessRuns, 
       session.id,
       'Turn ' + turn + ' ' + 'more context '.repeat(100),
     );

@@ -1,3 +1,4 @@
+import { sendRun } from '../support/runs.ts';
 import { startTool } from '@mini-harness/tools/execution';
 import assert from 'node:assert/strict';
 import test from 'node:test';
@@ -50,7 +51,7 @@ test('YAML Profile composes through Cordis and persists Web entry changes', asyn
     assert.equal(reopened.ctx.harnessProfile.entries.get('file-preview'), undefined);
     assert.ok(reopened.ctx.harnessProfile.entries.get('files')?.active);
     const session = reopened.ctx.harnessSessions.create();
-    assert.equal(await reopened.ctx.harnessRuns.send(session.id, 'Profile after restart'), 'Mock response');
+    assert.equal(await sendRun(reopened.ctx.harnessRuns, session.id, 'Profile after restart'), 'Mock response');
   } finally {
     await reopened.close();
   }

@@ -93,7 +93,7 @@ export class AgentLoop implements AgentPort {
           ...execution,
           signal,
           tasks: ctx.harnessTasks,
-          ownerTask: task,
+          parentTask: task,
           async deliver(result, workSignal) {
             const call = pending.get(result.toolCallId);
             if (!call || call.name !== result.toolName)

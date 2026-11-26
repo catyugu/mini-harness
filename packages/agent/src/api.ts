@@ -18,7 +18,7 @@ export interface AgentTurn {
   request: Request;
   executor: ToolExecutorPort;
   tools: ReadonlyMap<string, ToolDefinition>;
-  execution?: Partial<Omit<ToolExecution, 'signal' | 'deliver' | 'tasks' | 'ownerTask'>>;
+  execution?: Partial<Omit<ToolExecution, 'signal' | 'deliver' | 'tasks' | 'parentTask'>>;
   deliver?(result: NativeToolMessage, signal: AbortSignal, call: ToolCallPart): Promise<void>;
 }
 

@@ -1,3 +1,4 @@
+import { sendRun, activeRunCount } from '../../../test/support/runs.ts';
 import { isViewMessage } from '@mini-harness/sessions/message';
 import { expectPresent } from '../../../test/support/required.ts';
 import test from 'node:test';
@@ -68,11 +69,11 @@ test(
     const cursor = firstEvent.sequence;
     controller.abort();
     await reader.cancel().catch(() => {});
-    assert.equal(app.runtime.plugins.ctx.harnessRuns.active(item.id), true);
+    assert.equal(Boolean(app.runtime.plugins.ctx.harnessRuns.current(item.id)), true);
     const status = await (await fetch(base + '/api/sessions/' + item.id + '/runs', { headers })).json();
     assert.equal(status.run.state, 'running');
     const runs = app.runtime.plugins.ctx.harnessRuns;
-    const pending = runs.completion(item.id);
+    const pending = runs.current(item.id)?.result;
     const observed: RunEvent[] = [];
     const detach = runs.watch(item.id, runId, status.run.sequence, (event) => observed.push(event));
     const record = app.runtime.plugins.ctx.harnessSessions.log(item.id).append({
@@ -133,24 +134,24 @@ test(
     });
     const parent = app.runtime.plugins.ctx.harnessSessions.create(),
       other = app.runtime.plugins.ctx.harnessSessions.create();
-    const first = app.runtime.plugins.ctx.harnessRuns.send(parent.id, 'Root one');
+    const first = sendRun(app.runtime.plugins.ctx.harnessRuns, parent.id, 'Root one');
     const cancelled = assert.rejects(first, /cancelled/);
-    const second = app.runtime.plugins.ctx.harnessRuns.send(other.id, 'Root two');
+    const second = sendRun(app.runtime.plugins.ctx.harnessRuns, other.id, 'Root two');
     await entered.promise;
-    assert.equal(app.runtime.plugins.ctx.harnessRuns.size, 2);
-    await assert.rejects(app.runtime.plugins.ctx.harnessRuns.send(parent.id, 'Duplicate'), /already running/);
+    assert.equal(activeRunCount(app.runtime.plugins.ctx), 2);
+    await assert.rejects(sendRun(app.runtime.plugins.ctx.harnessRuns, parent.id, 'Duplicate'), /already running/);
     const child = app.runtime.plugins.ctx.harnessSessions.create({ parentId: parent.id });
-    const childWork = app.runtime.plugins.ctx.harnessRuns.send(child.id, 'Child');
+    const childWork = sendRun(app.runtime.plugins.ctx.harnessRuns, child.id, 'Child');
     const childCancelled = assert.rejects(childWork, /cancelled/);
     const deleted = await app.runtime.plugins.ctx.harnessSessions.delete([parent.id]);
     await Promise.all([cancelled, childCancelled]);
     assert.deepEqual(new Set(deleted), new Set([parent.id, child.id]));
     assert.equal(app.runtime.plugins.ctx.harnessSessions.get(parent.id), undefined);
-    assert.equal(app.runtime.plugins.ctx.harnessRuns.active(other.id), true);
+    assert.equal(Boolean(app.runtime.plugins.ctx.harnessRuns.current(other.id)), true);
     held.release();
     assert.equal(await second, 'Done');
-    assert.equal(app.runtime.plugins.ctx.harnessRuns.size, 0);
-    assert.equal(app.runtime.plugins.ctx.harnessRuns.size, 0);
+    assert.equal(activeRunCount(app.runtime.plugins.ctx), 0);
+    assert.equal(activeRunCount(app.runtime.plugins.ctx), 0);
   },
 );
 
@@ -231,7 +232,7 @@ test('startup durably interrupts runs, fails stale steering, and recovers idempo
   try {
     assert.deepEqual(readFileSync(file), bytes);
     assert.equal(
-      await restarted.runtime.plugins.ctx.harnessRuns.send(child.id, 'New manual input'),
+      await sendRun(restarted.runtime.plugins.ctx.harnessRuns, child.id, 'New manual input'),
       'Mock response',
     );
     const prompts = mock.requests.map(({ messages }) => {
@@ -268,7 +269,7 @@ test('late observers receive a saved snapshot and stale cursors cannot attach to
     rmSync(root, { recursive: true, force: true });
   });
   const item = app.runtime.plugins.ctx.harnessSessions.create();
-  await app.runtime.plugins.ctx.harnessRuns.send(item.id, 'First');
+  await sendRun(app.runtime.plugins.ctx.harnessRuns, item.id, 'First');
   const first = app.runtime.plugins.ctx.harnessRuns.info(item.id);
   const events: RunEvent[] = [];
   assert.ok(first);
@@ -280,7 +281,7 @@ test('late observers receive a saved snapshot and stale cursors cannot attach to
     events[0].type === 'snapshot' &&
       events[0].timeline.filter(isViewMessage).some(({ role }) => role === 'assistant'),
   );
-  await app.runtime.plugins.ctx.harnessRuns.send(item.id, 'Second');
+  await sendRun(app.runtime.plugins.ctx.harnessRuns, item.id, 'Second');
   assert.throws(
     () => app.runtime.plugins.ctx.harnessRuns.watch(item.id, first.id, 0, () => {}),
     /Run not found/,
@@ -348,7 +349,7 @@ test('append, torn write and fsync failures evict the writer without acknowledgi
     syncBuiltinESMExports();
     try {
       assert.throws(
-        () => app.runtime.plugins.ctx.harnessRuns.startRun(session.id, 'Unacknowledged'),
+        () => app.runtime.plugins.ctx.harnessRuns.submit(session.id, { message: 'Unacknowledged' }, { source: 'user' }),
         /Could not write/,
       );
     } finally {
@@ -356,7 +357,7 @@ test('append, torn write and fsync failures evict the writer without acknowledgi
       syncBuiltinESMExports();
     }
     assert.throws(() => log.append({ type: 'branch' }), /closed/);
-    assert.equal(app.runtime.plugins.ctx.harnessRuns.active(session.id), false);
+    assert.equal(Boolean(app.runtime.plugins.ctx.harnessRuns.current(session.id)), false);
     const damaged = readFileSync(file);
     if (fault === 'append') assert.deepEqual(damaged, original);
     if (fault === 'torn') {
@@ -371,7 +372,7 @@ test('append, torn write and fsync failures evict the writer without acknowledgi
     assert.ok(status.sessionDiagnostics.some(({ id }: { id: string }) => id === session.id));
     assert.deepEqual(readFileSync(file), damaged, 'GET must leave even a torn tail intact');
     assert.equal(
-      await app.runtime.plugins.ctx.harnessRuns.send(healthy.id, 'Healthy session'),
+      await sendRun(app.runtime.plugins.ctx.harnessRuns, healthy.id, 'Healthy session'),
       'Mock response',
     );
     const reopened = app.runtime.plugins.ctx.harnessSessions.log(session.id);
@@ -382,7 +383,7 @@ test('append, torn write and fsync failures evict the writer without acknowledgi
     );
     if (fault === 'torn') assert.deepEqual(readFileSync(file), original);
     assert.equal(
-      await app.runtime.plugins.ctx.harnessRuns.send(session.id, 'Accepted retry'),
+      await sendRun(app.runtime.plugins.ctx.harnessRuns, session.id, 'Accepted retry'),
       'Mock response',
     );
     assert.deepEqual(
@@ -429,7 +430,7 @@ test(
     const cancelled = assert.rejects(later.result, /cancelled/);
     await entered.promise;
     assert.equal(first.cancel(), false);
-    assert.equal(runs.active(session.id), true);
+    assert.equal(Boolean(runs.current(session.id)), true);
     assert.equal(later.cancel(), true);
     assert.equal(later.cancel(), false);
     held.release();
@@ -452,15 +453,15 @@ test('retry looks up the failed delivery by its native entry identity', async (t
   });
   const { harnessSessions: registry, harnessRuns: runs } = app.runtime.plugins.ctx;
   const session = registry.create();
-  await runs.send(session.id, 'Earlier user message');
+  await sendRun(runs, session.id, 'Earlier user message');
   const log = registry.log(session.id);
   log.append({
     type: 'inbox-enqueued',
     item: { id: 'recover-this', mode: 'followUp', text: 'fail this queued input', images: [] },
   });
-  const failed = runs.startRun(session.id, 'Manual input waiting for delivery');
+  const failed = runs.submit(session.id, { message: 'Manual input waiting for delivery' }, { source: 'user' });
   assert.equal(failed.state, 'queued');
-  await assert.rejects(expectPresent(runs.completion(session.id), 'active run'));
+  await assert.rejects(expectPresent(runs.current(session.id)?.result, 'active run'));
   assert.equal(runs.info(session.id)?.state, 'failed');
   assert.ok(runs.info(session.id)?.inputEntryId);
   const delivered = log
@@ -480,9 +481,9 @@ test('retry looks up the failed delivery by its native entry identity', async (t
     mimeType: 'text/plain',
     data: Buffer.from('private text').toString('base64'),
   };
-  const accepted = runs.startRun(session.id, 'fail this user input', { attachments: [attachment] });
+  const accepted = runs.submit(session.id, { message: 'fail this user input', attachments: [attachment] }, { source: 'user' });
   assert.equal(accepted.state, 'queued');
-  await assert.rejects(expectPresent(runs.completion(session.id), 'active run'));
+  await assert.rejects(expectPresent(runs.current(session.id)?.result, 'active run'));
   assert.equal(
     log
       .projection()

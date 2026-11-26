@@ -27,7 +27,7 @@ export function registerRoutes(ctx: Context) {
     return { ok: true };
   });
   add('POST', '/api/sessions/:id/cancel', ({ params }) => ({
-    cancelled: ctx.harnessRuns.cancel(session(params.id)),
+    cancelled: ctx.harnessRuns.current(session(params.id))?.cancel() ?? false,
   }));
   add(
     'GET',
@@ -42,6 +42,7 @@ export function registerRoutes(ctx: Context) {
     const input = await body(20 * 1024 * 1024);
     if (!input || typeof input !== 'object' || Array.isArray(input))
       throw new HttpError('invalid_input', 'Invalid run request');
-    return new HttpReply(202, ctx.harnessRuns.startRun(id, input.message, input));
+    ctx.harnessRuns.submit(id, input, { source: 'user' });
+    return new HttpReply(202, ctx.harnessRuns.info(id));
   });
 }

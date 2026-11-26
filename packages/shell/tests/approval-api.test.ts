@@ -1,3 +1,4 @@
+import { sendRun } from '../../../test/support/runs.ts';
 import { startTool } from '@mini-harness/tools/execution';
 import { isViewMessage } from '@mini-harness/sessions/message';
 import { conversationTools } from '@mini-harness/runs/tool-selection';
@@ -217,7 +218,7 @@ test(
     });
     const shell = app.runtime.plugins.ctx.harnessSessions.create();
     const other = app.runtime.plugins.ctx.harnessSessions.create();
-    const pending = app.runtime.plugins.ctx.harnessRuns.send(other.id, 'Unrelated task');
+    const pending = sendRun(app.runtime.plugins.ctx.harnessRuns, other.id, 'Unrelated task');
     try {
       await running;
       await request('/sessions/' + shell.id + '/runs', 'POST', { message: 'Run Shell' });
@@ -230,7 +231,7 @@ test(
         200,
       );
       assert.deepEqual((await request('/approvals')).body, []);
-      assert.ok(app.runtime.plugins.ctx.harnessRuns.active(other.id));
+      assert.ok(app.runtime.plugins.ctx.harnessRuns.current(other.id));
       assert.equal((await finish(shell.id)).body.run.state, 'completed');
       const tool = expectPresent(
         app.runtime.plugins.ctx.harnessSessions

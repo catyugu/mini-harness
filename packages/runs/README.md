@@ -3,7 +3,7 @@
 Admits session runs and projects Task Runtime lifecycle into bounded replay. Sessions persists the
 same Task snapshot plus conversation-specific run details; the runtime owns the lifecycle.
 
-`harnessRuns.submit(id, input, options)` returns the original Task Handle. The Task ID is the Run ID.
+`harnessRuns.submit(id, input, options)` is the only ordinary run submission API. It returns the original Task Handle; the Task ID is the Run ID. `current(id)` returns the current run or compaction handle. Await, inspect and cancel through that handle, rather than a separate run lifecycle API.
 Runs selects an exclusive conversation lane for both runs and compaction. Task Runtime owns its
 admission, execution, cancellation and settlement. Runs owns model selection, input preparation,
 inbox delivery, compaction and replay.

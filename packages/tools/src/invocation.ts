@@ -43,19 +43,19 @@ export function invokeTool(
     if (binding && !binding.available()) throw new Error('Tool is no longer available: ' + tool.name);
   };
   assertAvailable();
-  const { owner, signal, retain = false, ownerTask, onUpdate, context, metadata, commit } = options;
+  const { owner, signal, retain = false, parentTask, onUpdate, context, metadata, commit } = options;
   const resourceId = binding?.resourceId ?? options.resourceId;
   return tasks.start<ToolResult>(
     {
-      owner: owner ?? ownerTask?.owner ?? (resourceId ? 'session:' + resourceId : 'tool:' + tool.name),
-      parentId: ownerTask?.id,
+      owner: owner ?? parentTask?.owner ?? resourceId ?? 'tool:' + tool.name,
+      parentId: parentTask?.id,
       name: tool.label ?? tool.name,
       type: 'tool-call',
       metadata: {
         ...metadata,
         callId,
         tool: tool.name,
-        ...(ownerTask && { creator: ownerTask.id }),
+        ...(parentTask && { creator: parentTask.id }),
         ...(binding && { registration: binding.registration }),
         ...(resourceId && { resourceId }),
       },
@@ -71,10 +71,9 @@ export function invokeTool(
         callId,
         task,
         signal: task.signal,
-        owner: ownerTask,
         waitFor: (id) => {
           if (id === task.id) throw new Error('A task cannot wait for itself');
-          return (ownerTask ?? task).waitFor(id, task.signal);
+          return (parentTask ?? task).waitFor(id, task.signal);
         },
         update(update) {
           task.update(update as unknown as TaskData);

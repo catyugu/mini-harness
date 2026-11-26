@@ -21,7 +21,7 @@ export interface ToolTurn {
 export interface ToolExecution {
   readonly signal: AbortSignal;
   readonly tasks: TaskPort;
-  readonly ownerTask?: TaskContext;
+  readonly parentTask?: TaskContext;
   readonly resourceId?: string;
   /** Optional consumer policy: accept the call now and retain its independent task for later. */
   background?(call: ToolCallPart): (ToolInvocation & { owner: string }) | undefined;
@@ -126,17 +126,17 @@ async function executeTool(
       background
         ? {
             ...background,
-            ownerTask: undefined,
+            parentTask: undefined,
             metadata: {
               ...background.metadata,
-              ...(execution.ownerTask && { creator: execution.ownerTask.id }),
+              ...(execution.parentTask && { creator: execution.parentTask.id }),
             },
             resourceId: background.resourceId ?? execution.resourceId,
             retain: true,
           }
         : {
             signal,
-            ownerTask: execution.ownerTask,
+            parentTask: execution.parentTask,
             resourceId: execution.resourceId,
             onUpdate: (update) => execution.update?.(call, update),
           },
