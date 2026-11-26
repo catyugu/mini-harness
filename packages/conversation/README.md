@@ -32,6 +32,8 @@ Inject only the services a browser plugin uses. Registration methods returning d
 
 `miniConversation.get()` exposes the current read-only view, partitioned into session, history, run, partial output, tools, queue and interaction fields. Subscribe to the fields a view actually renders. Treat returned state and composer drafts as read-only, and use the service methods to make changes.
 
+The browser `conversation/initialize` event allows plugins to initialize a newly created session from workspace draft state. The controller awaits listeners before admitting the first Run.
+
 ## Renderer replacement and ownership
 
 The native composer occupies key `composer` in `conversation.composer-view`; history occupies key `history` in `conversation.history`. A higher-priority contribution with the same key replaces that renderer through [UI Slots](../ui-slots/README.md). It leaves the existing controller and composer model in their owning Entries, so a renderer can unmount and return without duplicating selection, draft or execution state. Unloading those owning Entries also releases their state.
