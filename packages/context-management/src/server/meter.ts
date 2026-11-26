@@ -83,8 +83,7 @@ export class TokenMeter {
         system: Math.ceil(textTokens(request.systemPrompt) * scale),
         tools: request.tools?.length ? Math.ceil(textTokens(JSON.stringify(request.tools)) * scale) : 0,
         messages: Math.ceil(
-          request.messages.reduce((sum, message) => sum + this.message(message), 0) *
-            scale,
+          request.messages.reduce((sum, message) => sum + this.message(message), 0) * scale,
         ),
       };
     }

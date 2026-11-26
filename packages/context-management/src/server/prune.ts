@@ -39,7 +39,12 @@ export function prune(
   );
   const originals = new Map<string, string>();
   let latestUser = contextMessages.length - 1;
-  while (latestUser >= 0 && (contextMessages[latestUser].role !== 'user' || log.entry(contextEntryIds[latestUser])?.type !== 'message')) latestUser--;
+  while (
+    latestUser >= 0 &&
+    (contextMessages[latestUser].role !== 'user' ||
+      log.entry(contextEntryIds[latestUser])?.type !== 'message')
+  )
+    latestUser--;
   let latestExchange = contextMessages.length - 1;
   while (latestExchange >= 0) {
     const message = contextMessages[latestExchange];
@@ -66,19 +71,26 @@ export function prune(
           options.forceImages
             ? current < Math.max(1, Math.ceil(imageCount / 2))
             : options.offload && index < (message.role === 'user' ? latestUser : latestExchange)
-        )
-          {
-            const entry = { type: 'text' as const, text: reference(id, 'Image ' + (position + 1) + ' offloaded') };
-            imageReferences.push(entry);
-            return [entry];
-          }
+        ) {
+          const entry = {
+            type: 'text' as const,
+            text: reference(id, 'Image ' + (position + 1) + ' offloaded'),
+          };
+          imageReferences.push(entry);
+          return [entry];
+        }
       }
       if (part.type === 'text' && message.role === 'user' && index < latestUser && options.offload && fresh) {
         const entry = log.entry(id);
-        if (entry?.type === 'message' && entry.presentation?.attachments.some((file) => !file.mimeType.startsWith('image/'))) {
+        if (
+          entry?.type === 'message' &&
+          entry.presentation?.attachments.some((file) => !file.mimeType.startsWith('image/'))
+        ) {
           const text = entry.presentation.userText;
           if (part.text.startsWith(text) && part.text.length > text.length)
-            return [{ type: 'text' as const, text: text + '\n' + reference(id, 'Inlined attachments offloaded') }];
+            return [
+              { type: 'text' as const, text: text + '\n' + reference(id, 'Inlined attachments offloaded') },
+            ];
         }
       }
       return [part];

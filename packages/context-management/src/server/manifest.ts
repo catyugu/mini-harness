@@ -70,7 +70,8 @@ function setup(ctx: Context) {
               });
               const latest = log
                 .entries()
-                .reverse().find((entry) => entry.type === 'model-request' && !entry.request.purpose);
+                .reverse()
+                .find((entry) => entry.type === 'model-request' && !entry.request.purpose);
               const previous = latest && log.requestDefinition(latest.id);
               const rebuild = async (messages: LlmRequest['messages']): Promise<LlmRequest> => ({
                 ...previous,

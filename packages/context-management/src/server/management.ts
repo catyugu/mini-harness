@@ -43,12 +43,22 @@ export class ContextManagement {
   }
 
   measure(ctx: Context, request: LlmRequest, count = true) {
-    return this.meter.measure(request, ctx.harnessModels.capabilities(request.model), ctx.harnessLlm.select(request.model), count);
+    return this.meter.measure(
+      request,
+      ctx.harnessModels.capabilities(request.model),
+      ctx.harnessLlm.select(request.model),
+      count,
+    );
   }
 
   occupancy(ctx: Context, log: SessionLogReader, request: LlmRequest, leafId: string | null) {
     const measured = this.prepared.get(log);
-    if (measured?.leafId === leafId && measured.occupancy.model.provider === request.model.provider && measured.occupancy.model.id === request.model.id) return measured.occupancy;
+    if (
+      measured?.leafId === leafId &&
+      measured.occupancy.model.provider === request.model.provider &&
+      measured.occupancy.model.id === request.model.id
+    )
+      return measured.occupancy;
     return this.measure(ctx, request, false);
   }
 
@@ -128,7 +138,11 @@ export class ContextManagement {
       return finish();
     }
 
-    const target = Math.floor((repair || manual ? Math.min(budget ?? occupancy.total, occupancy.total) : budget ?? occupancy.total) * config.targetRatio);
+    const target = Math.floor(
+      (repair || manual
+        ? Math.min(budget ?? occupancy.total, occupancy.total)
+        : (budget ?? occupancy.total)) * config.targetRatio,
+    );
     const needsSummary =
       manual ||
       (config.autoCompact &&
@@ -147,10 +161,18 @@ export class ContextManagement {
         const minimum = Math.floor((budget ?? occupancy.messages) * config.retainRatio);
         const retain = Math.max(1, Math.min(minimum, Math.floor(occupancy.messages * config.retainRatio)));
         const { contextMessages, contextEntryIds } = projection;
-        const latestUser = contextMessages.reduce((latest, message, index) =>
-          message.role === 'user' && log.entry(contextEntryIds[index])?.type === 'message' ? index : latest, -1);
+        const latestUser = contextMessages.reduce(
+          (latest, message, index) =>
+            message.role === 'user' && log.entry(contextEntryIds[index])?.type === 'message' ? index : latest,
+          -1,
+        );
         const force = repair || (budget !== undefined && occupancy.total > budget);
-        let cut = splitPoint(projection, this.meter, retain, force ? Math.max(0, target - occupancy.system - occupancy.tools) : undefined);
+        let cut = splitPoint(
+          projection,
+          this.meter,
+          retain,
+          force ? Math.max(0, target - occupancy.system - occupancy.tools) : undefined,
+        );
         if (cut === latestUser + 1) cut = latestUser;
         const selected = contextMessages.slice(0, cut).filter((_, index) => index !== latestUser);
         const source = log.entry(contextEntryIds[0]);
@@ -158,9 +180,12 @@ export class ContextManagement {
           if (reduced || (pruned && (manual || repair))) break;
           fail('Nothing to compact within the recent-context budget');
         }
-        const retained = contextMessages.slice(cut).reduce((sum, message) => sum + this.meter.message(message), 0)
-          + (latestUser >= 0 && latestUser < cut ? this.meter.message(contextMessages[latestUser]) : 0);
-        const summaryBudget = Math.floor(Math.min(occupancy.messages, target - occupancy.system - occupancy.tools - retained));
+        const retained =
+          contextMessages.slice(cut).reduce((sum, message) => sum + this.meter.message(message), 0) +
+          (latestUser >= 0 && latestUser < cut ? this.meter.message(contextMessages[latestUser]) : 0);
+        const summaryBudget = Math.floor(
+          Math.min(occupancy.messages, target - occupancy.system - occupancy.tools - retained),
+        );
         if (summaryBudget <= 0) {
           if (reduced || (pruned && manual)) break;
           fail('There is no output budget for a continuation checkpoint');
@@ -176,12 +201,13 @@ export class ContextManagement {
           runId,
         );
         // Preserve the latest submitted message and its source identity even in a long single turn.
-        const replacements: ContextReplacement[] = latestUser >= 0 && latestUser < cut
-          ? [
-            { start: latestUser + 1, deleteCount: cut - latestUser - 1, insert: [summary] },
-            ...(latestUser ? [{ start: 0, deleteCount: latestUser, insert: [] }] : []),
-          ]
-          : [{ start: 0, deleteCount: cut, insert: [summary] }];
+        const replacements: ContextReplacement[] =
+          latestUser >= 0 && latestUser < cut
+            ? [
+                { start: latestUser + 1, deleteCount: cut - latestUser - 1, insert: [summary] },
+                ...(latestUser ? [{ start: 0, deleteCount: latestUser, insert: [] }] : []),
+              ]
+            : [{ start: 0, deleteCount: cut, insert: [summary] }];
         const candidate = structuredClone(projection);
         applyReplacements(candidate, replacements, '');
         const next = await rebuild(candidate.contextMessages);
