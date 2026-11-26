@@ -2,9 +2,9 @@ import { refreshOnFileChange, type WorkspaceView } from '@mini-harness/workspace
 import { renderMarkdown } from '@mini-harness/ui-primitives/markdown';
 import { button, iconButton } from '@mini-harness/ui-primitives/primitives';
 import type { Context } from 'mini-harness/cordis';
-import { codeExtensions, extension, imageMime, mediaType } from '../shared/content.ts';
+import { codeExtensions, extension } from '../shared/content.ts';
 import type { PreviewPlacement, PreviewResource } from './api.ts';
-import { blobUrl, download, fetchContent, nameOf } from './content.ts';
+import { download, fetchContent, nameOf } from './content.ts';
 import { mediaDialog, mediaElement } from './media.ts';
 import { source } from './source.ts';
 
@@ -60,12 +60,13 @@ function sidebar(ctx: Context, resource: PreviewResource, scope: WorkspaceView, 
     request = new AbortController();
     const lifetime = AbortSignal.any([signal, request.signal]);
     status.textContent = 'Loading file…';
-    raw.hidden = save.hidden = true;
-    content.replaceChildren();
+    if (!content.childElementCount) raw.hidden = save.hidden = true;
     try {
       const preview = await fetchContent(ctx, resource, scope, lifetime);
       if (lifetime.aborted) return;
       status.textContent = '';
+      content.replaceChildren();
+      raw.hidden = true;
       save.hidden = preview.kind === 'directory';
       if (preview.kind === 'directory') {
         const files = ctx.get('miniFileTree');
@@ -92,7 +93,6 @@ function sidebar(ctx: Context, resource: PreviewResource, scope: WorkspaceView, 
         content.append(code);
         if (ext === 'md' || ext === 'markdown') {
           const markdown = document.createElement('div');
-          markdown.className = 'markdown file-markdown';
           renderMarkdown(markdown, preview.text);
           content.append(markdown);
           raw.hidden = false;
@@ -110,11 +110,16 @@ function sidebar(ctx: Context, resource: PreviewResource, scope: WorkspaceView, 
         if (preview.truncated) status.textContent = 'Preview shows the first 512 KiB.';
       }
     } catch (error) {
-      if (!lifetime.aborted) status.textContent = errorText(error);
+      if (!lifetime.aborted) {
+        content.replaceChildren();
+        raw.hidden = save.hidden = true;
+        status.textContent = errorText(error);
+      }
     }
   }
   refresh.onclick = () => void load();
   if (resource.kind === 'workspace') refreshOnFileChange(ctx, scope, root, signal, load);
+  else if (resource.kind === 'attachment') root.addEventListener('tab-activate', load, { signal });
   void load();
   return root;
 }
@@ -139,17 +144,17 @@ function setup(ctx: Context) {
       const workspaceId = resource.workspaceId;
       const sessionId = resource.kind === 'workspace' ? undefined : resource.sessionId;
       const scope = { workspaceId, sessionId };
-      const signal = resource.kind === 'memory' ? AbortSignal.any([resource.signal, lifetime]) : lifetime;
+      const signal = resource.kind === 'memory' ? AbortSignal.any([lifetime, resource.signal]) : lifetime;
       if (signal.aborted) return;
       if (placement === 'sidebar') {
         const key =
           resource.kind === 'workspace'
             ? resource.path
             : resource.kind === 'attachment'
-              ? resource.id + ':' + resource.name
+              ? resource.sessionId + ':' + resource.id
               : resource.key;
         tab.open({
-          owner: sessionId ? { workspaceId, sessionId } : { workspaceId },
+          owner: { workspaceId },
           key: resource.kind + ':' + key,
           data: resource,
           signal,
@@ -166,9 +171,7 @@ function setup(ctx: Context) {
         },
         { once: true },
       );
-      // Layout owns the selected scope, including sessions with identical workspace IDs.
-      const stop = ctx.miniTabs.onScopeChange(() => dialog.close(), dialog.signal);
-      dialog.signal.addEventListener('abort', stop, { once: true });
+      ctx.miniTabs.onWorkspaceChange(() => dialog.close(), dialog.signal);
       const status = document.createElement('p');
       status.setAttribute('role', 'status');
       const failure = (message: string) => {
@@ -192,26 +195,6 @@ function setup(ctx: Context) {
         })
         .catch((error) => {
           if (!dialog.signal.aborted) failure(errorText(error));
-        });
-    },
-    thumbnail(
-      resource: Exclude<PreviewResource, { kind: 'workspace' }>,
-      image: HTMLImageElement,
-      caller: AbortSignal,
-    ) {
-      const mimeType = mediaType(resource.name, resource.mimeType);
-      if (!mimeType || !imageMime.test(mimeType)) return;
-      const signal = AbortSignal.any(
-        resource.kind === 'memory' ? [caller, lifetime, resource.signal] : [caller, lifetime],
-      );
-      const scope = { workspaceId: resource.workspaceId, sessionId: resource.sessionId };
-      void fetchContent(ctx, resource, scope, signal)
-        .then((preview) => {
-          if (!signal.aborted && preview.kind === 'bytes')
-            image.src = blobUrl(preview.data, mimeType, signal);
-        })
-        .catch(() => {
-          if (!signal.aborted) image.classList.add('thumbnail-unavailable');
         });
     },
   });

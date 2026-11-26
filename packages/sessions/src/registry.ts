@@ -1,3 +1,6 @@
+import { displayRecord } from './projection.ts';
+import type { RecordAppend } from './shared/display-record.ts';
+import { userContent } from './user-content.ts';
 import type { RunInfo } from './shared/run-state.ts';
 import type { SessionEntry, SessionLogPort } from './log-api.ts';
 import { DomainError } from '@mini-harness/platform/errors';
@@ -73,8 +76,8 @@ export class SessionRegistry implements SessionStore {
     this.state = state;
   }
 
-  private notify(id: string, deleted = false, queue = false, records = false) {
-    this.events.dispatchEvent(new CustomEvent('change', { detail: { id, deleted, queue, records } }));
+  private notify(id: string, deleted = false, queue = false, record?: RecordAppend) {
+    this.events.dispatchEvent(new CustomEvent('change', { detail: { id, deleted, queue, record } }));
   }
 
   list(workspaceId?: string | null) {
@@ -270,7 +273,14 @@ export class SessionRegistry implements SessionStore {
       const inbox = entry.type.startsWith('inbox-');
       if (inbox || (entry.type === 'message' && entry.inboxId)) this.notify(id, false, true);
       if (!inbox && entry.type !== 'model-request' && entry.type !== 'tool-schema')
-        this.notify(id, false, false, entry.type === 'plugin-record');
+        this.notify(
+          id,
+          false,
+          false,
+          entry.type === 'plugin-record'
+            ? { leafId: entry.id, display: structuredClone(displayRecord(entry)) }
+            : undefined,
+        );
     };
     let log: SessionLog | undefined;
     try {
@@ -352,21 +362,11 @@ export class SessionRegistry implements SessionStore {
           throw new DomainError('conflict', 'Conversation changed; refresh before editing');
         const source = log.branch().find((entry) => entry.id === sourceEntryId);
         if (source?.type !== 'message' || source.message.role !== 'user') return;
-        const files = source.presentation?.attachments ?? [];
-        const imageNames = files.filter((file) => imageMimeType.test(file.mimeType));
-        const content = source.message.content;
-        const images = (
-          source.presentation?.images ??
-          (typeof content === 'string' ? [] : content.filter((part) => part.type === 'image'))
-        ).map(({ data, mimeType }, index) => ({
-          data,
-          mimeType,
-          name: imageNames[index]?.name ?? 'Image ' + (index + 1),
-        }));
+        const { attachments } = userContent(source.message.content, source.presentation);
         return {
           parentId: source.parentId,
-          images,
-          textFiles: files
+          images: attachments.flatMap(({ name, mimeType, data }) => (data ? [{ name, mimeType, data }] : [])),
+          textFiles: attachments
             .filter((file) => !file.id && !imageMimeType.test(file.mimeType))
             .map(({ name }) => name),
         };
@@ -400,18 +400,18 @@ export class SessionRegistry implements SessionStore {
     }
   }
 
-  history(id: string) {
+  history(id: string): ReturnType<SessionStore['history']> {
     this.assertAvailable(id);
     if (!this.get(id)) throw new DomainError('not_found', 'Conversation not found');
     return (
       this.inspectLog(
         id,
         (log) => {
-          const { messages, leafId, model } = log.projection();
-          return structuredClone({ messages, leafId, model });
+          const { timeline, leafId, model } = log.projection();
+          return { timeline, leafId, model };
         },
         true,
-      ) ?? { messages: [], leafId: null }
+      ) ?? { timeline: [], leafId: null }
     );
   }
 

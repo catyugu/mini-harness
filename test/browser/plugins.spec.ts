@@ -154,6 +154,17 @@ export function apply(ctx) {
     await expect(settingsSection(page, 'Plugins')).toHaveCount(0);
     await page.getByRole('button', { name: 'Close settings', exact: true }).click();
     await page.getByRole('button', { name: 'Browse plugins', exact: true }).click();
+    for (const [id, title] of [
+      ['core:transport', 'Transport'],
+      ['core:plugins-runtime', 'Plugin Runtime'],
+      ['core:tool-executor', 'Tool Executor'],
+      ['core:compaction', 'Context Compaction'],
+      ['ui-example', 'UI example'],
+    ]) {
+      const row = page.locator('[data-plugin-row="' + id + '"]');
+      await expect(row.locator('strong')).toHaveText(title);
+      await expect(row.locator('small')).toHaveText('Ready');
+    }
     await expect(page.locator('[data-plugin-row="ui-example"] .plugin-symbol svg path')).toHaveAttribute(
       'd',
       'M2 2h20v20H2z',

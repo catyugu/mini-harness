@@ -1,3 +1,4 @@
+import { isViewMessage } from '@mini-harness/sessions/message';
 import { conversationTools } from '@mini-harness/runs/tool-selection';
 import { expectPresent } from '../support/required.ts';
 import test from 'node:test';
@@ -245,7 +246,7 @@ export const apply = (ctx, config) => {
   const saved = (await request('/sessions/' + parent.id)).body;
   assert.equal(
     expectPresent(
-      saved.messages.find(
+      saved.timeline.find(
         (message: { role: string; content: { text?: string }[] }) => message.role === 'toolResult',
       ),
       'persisted tool result',
@@ -595,7 +596,8 @@ export const apply = (ctx) => { ctx.provide('harnessProcess', {
       app.runtime.plugins.ctx.harnessSessions
         .log(id)
         .projection()
-        .messages.filter(({ role }) => role === 'toolResult')
+        .timeline.filter(isViewMessage)
+        .filter(({ role }) => role === 'toolResult')
         .at(-1),
       'tool result',
     );
@@ -725,7 +727,8 @@ export const apply = (ctx) => {
     app.runtime.plugins.ctx.harnessSessions
       .log(parent.id)
       .projection()
-      .messages.filter(({ role }) => role === 'toolResult')
+      .timeline.filter(isViewMessage)
+      .filter(({ role }) => role === 'toolResult')
       .every(({ isError }) => !isError),
   );
   assert.deepEqual(app.runtime.plugins.ctx.harnessModelPreference.recent(), applicationChoice);

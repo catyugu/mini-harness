@@ -1,3 +1,4 @@
+import { isViewMessage } from '@mini-harness/sessions/message';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
@@ -61,12 +62,18 @@ test('appearance, parallelism and child defaults update without interrupting a r
   assert.equal(runtime.plugins.ctx.harnessRuns.active(item.id), true);
   release();
   assert.equal(await pending, 'Done');
-  const firstMessage = runtime.plugins.ctx.harnessSessions.log(item.id).projection().messages[0].id;
+  const firstMessage = runtime.plugins.ctx.harnessSessions
+    .log(item.id)
+    .projection()
+    .timeline.filter(isViewMessage)[0].id;
   await runtime.configuration.update({
     entries: { files: { disabled: true }, 'session-helper': { disabled: true } },
   });
   await runtime.plugins.ctx.harnessRuns.send(item.id, 'After the policy changes');
-  assert.equal(runtime.plugins.ctx.harnessSessions.log(item.id).projection().messages[0].id, firstMessage);
+  assert.equal(
+    runtime.plugins.ctx.harnessSessions.log(item.id).projection().timeline.filter(isViewMessage)[0].id,
+    firstMessage,
+  );
   assert.strictEqual(runtime.plugins.ctx.harnessSessions.log(item.id), original);
   const advertised = mock.requests.at(-1)?.tools as { function: { name: string } }[];
   assert.equal(

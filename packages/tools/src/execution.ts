@@ -18,8 +18,10 @@ export interface ToolTurn {
 
 export interface ToolExecution {
   readonly signal: AbortSignal;
-  /** Reports a started call and returns the reason to skip it, if any. */
-  start?(call: ToolCallPart): string | undefined;
+  /** Decides whether to start the call. A rejection still produces a model-visible result. */
+  start?(
+    call: ToolCallPart,
+  ): { outcome: NonNullable<NativeToolMessage['outcome']>; reason: string } | undefined;
   update?(call: ToolCallPart, result: ToolUpdate): void;
   deliver(result: NativeToolMessage, signal: AbortSignal): Promise<void>;
 }
@@ -75,8 +77,8 @@ export const executeTools: ToolExecutorPort['execute'] = async (calls, tools, ex
       }
     }
     const run = async () => {
-      const skip = execution.start?.(call);
-      if (skip) return failedTool(call, skip);
+      const rejection = execution.start?.(call);
+      if (rejection) return toolFailure(call, rejection.reason, rejection.outcome);
       return executeTool(call, tool, execution, batchSignal, invalid);
     };
     if (parallel) {
@@ -92,12 +94,17 @@ export const executeTools: ToolExecutorPort['execute'] = async (calls, tools, ex
   if (failure) throw failure.error;
 };
 
-export const failedTool = (call: ToolCallPart, reason: string): NativeToolMessage => ({
+export const toolFailure = (
+  call: ToolCallPart,
+  reason: string,
+  outcome?: NativeToolMessage['outcome'],
+): NativeToolMessage => ({
   role: 'toolResult',
   toolCallId: call.id,
   toolName: call.name,
   content: [{ type: 'text', text: reason }],
   isError: true,
+  outcome,
   timestamp: Date.now(),
 });
 
@@ -122,13 +129,13 @@ async function executeTool(
       role: 'toolResult',
       toolCallId: call.id,
       toolName: call.name,
-      isError: result.isError ?? false,
+      isError: result.outcome ? true : (result.isError ?? false),
       timestamp: Date.now(),
       elapsedMs: result.elapsedMs ?? performance.now() - start,
     };
   } catch (error) {
     return {
-      ...failedTool(call, error instanceof Error ? error.message : String(error)),
+      ...toolFailure(call, error instanceof Error ? error.message : String(error)),
       elapsedMs: performance.now() - start,
     };
   }
@@ -145,6 +152,8 @@ export const nativeExecutor: ToolExecutorPort = {
   interpret: (message) => message,
   execute: executeTools,
 };
+
+export const executorMetadata = { title: 'Tool Executor' };
 
 export const executor = {
   provide: ['harnessToolExecutor'],

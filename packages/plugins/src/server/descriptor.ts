@@ -117,7 +117,7 @@ export async function describePlugin(
     (isRegularFile(join(folder, 'web.js')) ? 'web.js' : undefined);
   if (browser !== undefined && typeof browser !== 'string') throw new Error('Invalid browser entry');
   if (!source && !browser) throw new Error('Provide a server or browser module');
-  const title = typeof info.title === 'string' ? info.title.slice(0, 100) : id;
+  const title = (typeof info.title === 'string' && info.title.trim().slice(0, 100)) || packageInfo.name || id;
   const description = typeof info.description === 'string' ? info.description.slice(0, 300) : '';
   if (!browser && (info.browserDirectory !== undefined || info.browserStyles?.length))
     throw new Error('Browser assets require a browser entry');

@@ -40,7 +40,14 @@ test('workspace tools share one policy for reads, searches and writes', async (t
     /src\/note.txt/,
   );
   const found = await execute('find', { path: '.', pattern: '*.txt' });
-  assert.deepEqual(found.content, [{ type: 'text', text: join(cwd, 'src', 'note.txt') }]);
+  assert.deepEqual(found.content, [{ type: 'text', text: 'src/note.txt' }]);
+  assert.deepEqual((await execute('find', { pattern: 'src' })).content, [{ type: 'text', text: 'src/' }]);
+  for (const path of ['.', 'src', 'src/']) {
+    await assert.rejects(execute('read', { path }), { code: 'invalid_input', message: /Use ls/ });
+  }
+  await assert.rejects(execute('read', { path: 'missing.txt' }), { code: 'ENOENT' });
+  await assert.rejects(execute('read', { path: 'src/note.txt/child' }), { code: 'invalid_input' });
+  await assert.rejects(execute('read', { path: 'linked/secret.txt' }), { code: 'forbidden' });
   assert.deepEqual((await execute('find', { path: '.', pattern: 'src/**/*.txt' })).content, found.content);
   const cancel = new AbortController();
   cancel.abort();

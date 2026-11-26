@@ -71,6 +71,7 @@ export function schemaFields(
       input.value = current === undefined ? '' : JSON.stringify(current, null, 2);
       input.dataset.kind = 'json';
     }
+    input.name = fieldPath.join('.');
     input.dataset.plugin = plugin;
     input.dataset.path = JSON.stringify(fieldPath);
     input.setAttribute('aria-label', (property.title ?? key) + ' · ' + plugin);

@@ -1,6 +1,6 @@
 import { scopeTarget } from '@mini-harness/plugin-api/scopes';
 import type { Context } from 'mini-harness/cordis';
-import type { MessageContent, ViewMessage } from '@mini-harness/sessions/message';
+import type { HistoryEntry, MessageContent, ViewMessage } from '@mini-harness/sessions/message';
 
 export interface ToolProjection {
   sessionId: string;
@@ -38,15 +38,23 @@ export function projectTool(ctx: Context, projection: ToolProjection) {
   return content;
 }
 
-export function projectHistory(ctx: Context, sessionId: string, messages: ViewMessage[]) {
-  return messages.map((message) =>
-    message.role === 'toolResult' && message.toolName
-      ? {
-          ...message,
-          content: projectTool(ctx, { sessionId, tool: message.toolName, content: message.content }),
-        }
-      : message,
+export function projectHistory(ctx: Context, sessionId: string, timeline: HistoryEntry[]): HistoryEntry[] {
+  return timeline.map((entry) =>
+    entry.type === 'message' && entry.role === 'toolResult'
+      ? projectToolResult(ctx, sessionId, entry)
+      : entry,
   );
+}
+
+export function projectToolResult(
+  ctx: Context,
+  sessionId: string,
+  message: Extract<ViewMessage, { role: 'toolResult' }>,
+): Extract<ViewMessage, { role: 'toolResult' }> {
+  return {
+    ...message,
+    content: projectTool(ctx, { sessionId, tool: message.toolName, content: message.content }),
+  };
 }
 
 export function projectToolEvent<T extends { name: string; content?: MessageContent }>(

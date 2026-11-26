@@ -1,13 +1,9 @@
 export interface TabScope {
   workspaceId: string;
-  sessionId?: string;
 }
-export type TabOwner =
-  | { workspaceId: string; sessionId?: never }
-  | { workspaceId: string; sessionId: string };
 
 export interface RightTab<T> {
-  owner: TabOwner;
+  owner: TabScope;
   key: string;
   data: T;
   signal?: AbortSignal;
@@ -30,7 +26,7 @@ export interface RightPanelEntry {
 export interface RightTabsPort {
   register<T>(type: string, definition: RightTabType<T>): { open(tab: RightTab<T>): void };
   contribute(id: string, entry: RightPanelEntry): void;
-  onScopeChange(listener: () => void, signal: AbortSignal): () => void;
+  onWorkspaceChange(listener: () => void, signal: AbortSignal): () => void;
   inspect(title: string, node: HTMLElement, signal: AbortSignal): void;
 }
 
@@ -50,8 +46,8 @@ declare module 'mini-harness/cordis' {
       contribute(id: string, entry: PageContribution, signal: AbortSignal): () => void;
     };
     miniTabs: RightTabsPort & {
-      selectScope(scope?: TabScope): void;
-      prune(sessions: ReadonlySet<string>, workspaces: ReadonlySet<string>): void;
+      selectWorkspace(workspaceId?: string): void;
+      prune(workspaces: ReadonlySet<string>): void;
     };
     miniDialogs: {
       create(title: string, content: HTMLElement): { node: HTMLDialogElement; dispose(): void };

@@ -1,11 +1,11 @@
 import { isRunning, type RunInfo } from '@mini-harness/sessions/run-state';
-import type { RunEvent, StreamEvent } from './stream.ts';
+import type { RunEvent, StreamEvent, ToolProgress } from './stream.ts';
 
 export class RunEvents {
   private events: RunEvent[] = [];
   private bytes = 0;
   private listeners = new Map<(event: RunEvent) => void, () => void>();
-  private tools = new Map<string, Extract<StreamEvent, { type: 'tool' }>>();
+  private tools = new Map<string, ToolProgress>();
   partial = '';
 
   constructor(readonly info: RunInfo) {}
@@ -17,10 +17,8 @@ export class RunEvents {
   publish(event: StreamEvent) {
     if (event.type === 'assistant-start' || event.type === 'assistant-end') this.partial = '';
     if (event.type === 'delta') this.partial += event.text;
-    if (event.type === 'tool') {
-      if (event.state === 'running' || event.state === 'approval') this.tools.set(event.id, event);
-      else this.tools.delete(event.id);
-    }
+    if (event.type === 'tool') this.tools.set(event.id, event);
+    if (event.type === 'tool-end') this.tools.delete(event.message.toolCallId);
     const item: RunEvent = {
       ...event,
       runId: this.info.id,
@@ -46,7 +44,7 @@ export class RunEvents {
     emit: (event: RunEvent) => void,
     history: () => Pick<
       Extract<StreamEvent, { type: 'snapshot' }>,
-      'messages' | 'records' | 'model' | 'thinkingLevel' | 'leafId'
+      'timeline' | 'model' | 'thinkingLevel' | 'leafId'
     >,
     end = () => {},
   ) {

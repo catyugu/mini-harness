@@ -17,8 +17,14 @@
   max-height: 75vh;
   margin-inline: auto;
 }
-.file-markdown {
-  overflow-wrap: anywhere;
+.file-preview {
+  font:
+    12px/1.6 ui-monospace,
+    monospace;
+  overflow: auto;
+  padding: 10px;
+  background: var(--surface);
+  border-radius: var(--radius);
 }
 .source-line::before {
   content: attr(data-line);

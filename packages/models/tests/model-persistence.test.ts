@@ -31,7 +31,7 @@ test('recent main model survives child overrides and a restart through the nativ
     entries: { 'core:models': { config: { model: { provider: 'local-mock', id: 'second-model' } } } },
   });
   assert.equal(runtime.plugins.ctx.harnessModelPreference.recent().id, 'second-model');
-  assert.deepEqual(runtime.plugins.ctx.harnessSessions.log(old.id).projection().messages, original.messages);
+  assert.deepEqual(runtime.plugins.ctx.harnessSessions.log(old.id).projection().timeline, original.timeline);
   assert.deepEqual(runtime.plugins.ctx.harnessSessions.log(old.id).projection().model, original.model);
   await runtime.plugins.ctx.harnessRuns.send(old.id, 'Switch the recent model');
   assert.equal(mock.requests.at(-1)?.model, 'second-model');

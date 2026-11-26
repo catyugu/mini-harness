@@ -11,7 +11,10 @@ export interface MockProvider {
   close(): Promise<void>;
 }
 
-type MockAnswer = string | AsyncIterable<string> | { tool: string; args: Record<string, unknown> };
+type MockAnswer =
+  | string
+  | AsyncIterable<string>
+  | { tool: string; args: Record<string, unknown>; text?: string; callId?: string };
 
 export async function createMockProvider(
   reply?: (request: { messages: { role: string; content: string }[] }) => MockAnswer | Promise<MockAnswer>,
@@ -59,6 +62,8 @@ export async function createMockProvider(
         for await (const content of answer) res.write('data: ' + item({ content }, null) + '\n\n');
         res.write('data: ' + item({}, 'stop') + '\n\n');
       } else {
+        if (answer.text)
+          res.write('data: ' + item({ role: 'assistant', content: answer.text }, null) + '\n\n');
         res.write(
           'data: ' +
             item(
@@ -67,7 +72,7 @@ export async function createMockProvider(
                 tool_calls: [
                   {
                     index: 0,
-                    id: 'call_' + id,
+                    id: answer.callId ?? 'call_' + id,
                     type: 'function',
                     function: { name: answer.tool, arguments: JSON.stringify(answer.args) },
                   },

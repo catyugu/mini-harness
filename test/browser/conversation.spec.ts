@@ -132,7 +132,7 @@ test('drafts isolate attachments and discover workspace files and skills', async
     await expect(cards.locator('.file-card')).toHaveCount(2);
     await expect(cards.getByRole('button', { name: 'Preview task.txt' })).toContainText('TXT · 13 B');
     await expect(cards.getByRole('button', { name: 'Preview document.pdf' })).toContainText('PDF');
-    await expect(bubble.locator('.file-card, img')).toHaveCount(0);
+    await expect(bubble.locator('.file-card, img')).toHaveCount(4);
     await cards.getByRole('button', { name: 'Preview task.txt' }).click();
     await expect(panel.locator('.file-preview:visible')).toHaveText('ATTACHED TASK');
     const fileDownload = page.waitForEvent('download');
@@ -177,11 +177,20 @@ test('drafts isolate attachments and discover workspace files and skills', async
     await expect(page.locator('.message.user')).toHaveText('Different conversation notes.md');
     await historyReference.click();
     await expect(panel.getByRole('heading', { name: 'Notes' })).toBeVisible();
-    await expect(panel.getByRole('tab', { name: 'task.txt', exact: true })).toHaveCount(0);
+    const savedAttachment = panel.getByRole('tab', { name: 'task.txt', exact: true });
+    await savedAttachment.click();
+    await expect(panel.locator('.file-preview:visible')).toHaveText('ATTACHED TASK');
+    await panel.getByRole('tab', { name: 'notes.md', exact: true }).click();
     await panel.getByRole('button', { name: 'Close workspace panel' }).click();
     await page.getByRole('button', { name: title, exact: true }).click();
     await expect(draft).toHaveText('Keep this draft');
     await expect(page.getByRole('button', { name: 'Remove private.txt' })).toBeVisible();
+    await page.getByRole('button', { name: 'Open workspace panel', exact: true }).click();
+    await expect(panel.getByRole('tab', { name: 'notes.md', exact: true })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
+    await panel.getByRole('button', { name: 'Close workspace panel' }).click();
     await page.locator('.session-row').filter({ hasText: 'Different conversation' }).hover();
     await page
       .getByRole('button', { name: 'Delete Different conversation @"notes.md"', exact: true })
@@ -200,6 +209,16 @@ test('drafts isolate attachments and discover workspace files and skills', async
     await confirmation.getByRole('button', { name: 'Delete', exact: true }).click();
     await expect(page.locator('#sessions .session-row')).toHaveCount(0);
     await expect(page.getByRole('heading', { name: 'What are we working on?' })).toBeVisible();
+    await page.getByRole('button', { name: 'Open workspace panel', exact: true }).click();
+    await expect(panel.getByRole('tab', { name: 'notes.md', exact: true })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
+    await expect(panel.getByRole('heading', { name: 'Notes' })).toBeVisible();
+    await savedAttachment.click();
+    await expect(panel.getByRole('tabpanel', { name: 'task.txt' })).toContainText('Conversation not found');
+    await panel.getByRole('tab', { name: 'notes.md', exact: true }).click();
+    await expect(panel.getByRole('heading', { name: 'Notes' })).toBeVisible();
   } finally {
     await page.close();
     await service.stop();

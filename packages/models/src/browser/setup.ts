@@ -108,6 +108,7 @@ function providerManager(ctx: Context, providers: () => ProviderInfo[], refresh:
       .filter(({ configured, custom, canSetKey }) => canSetKey && !configured && !custom)
       .sort((a, b) => a.name.localeCompare(b.name));
     const picker = document.createElement('select');
+    picker.name = 'model-provider';
     picker.required = true;
     picker.add(new Option('Choose a provider', ''));
     for (const item of available) picker.add(new Option(item.name, item.id));

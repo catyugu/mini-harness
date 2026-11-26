@@ -11,4 +11,13 @@ export interface RunInfo {
   changedFiles?: string[];
 }
 
+export interface RunTermination {
+  type: 'termination';
+  id: string;
+  state: 'failed' | 'cancelled' | 'interrupted';
+  startedAt: string;
+  finishedAt?: string;
+  error?: string;
+}
+
 export const isRunning = (run?: RunInfo) => run?.state === 'queued' || run?.state === 'running';

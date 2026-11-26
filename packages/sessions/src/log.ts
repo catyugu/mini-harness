@@ -1,6 +1,6 @@
 import { isThinkingLevel, type ToolSchema } from '@mini-harness/llm/vocabulary';
 import { pluginIdPattern, isScopeAddress } from '@mini-harness/plugin-api/selection';
-import { isRunning, type RunInfo } from './shared/run-state.ts';
+import { isRunning } from './shared/run-state.ts';
 import { isDeepStrictEqual } from 'node:util';
 import {
   RequestMessages,
@@ -57,7 +57,7 @@ export class SessionLog extends RecordLog<SessionEvent> implements SessionLogPor
   private readonly inboxIds = new Set<string>();
   private readonly pendingInbox = new Map<string, InboxItem>();
   private readonly inboxFailures: QueueEntry[] = [];
-  private run?: RunInfo;
+  private readonly runEvents: Extract<SessionEntry, { type: 'run' }>[] = [];
   private cachedProjection?: SessionProjection;
   private recovery = { leaf: null as string | null, checker: new RequestMessages() };
 
@@ -89,7 +89,17 @@ export class SessionLog extends RecordLog<SessionEvent> implements SessionLogPor
   }
 
   protected decodeRecord(record: Record<string, unknown>): SessionEntry {
-    return storedEntry(record as StoredEntry);
+    const entry = storedEntry(record as StoredEntry);
+    if (
+      entry.type === 'message' &&
+      entry.message.role === 'toolResult' &&
+      entry.message.details?.approvalDenied === true &&
+      !entry.message.outcome
+    ) {
+      const { approvalDenied: _, ...details } = entry.message.details;
+      entry.message = { ...entry.message, outcome: 'denied', details };
+    }
+    return entry;
   }
 
   protected advancesBranch(entry: SessionEntry) {
@@ -153,7 +163,7 @@ export class SessionLog extends RecordLog<SessionEvent> implements SessionLogPor
 
   protected recordAdded(entry: SessionEntry) {
     if (!operational(entry) || entry.type === 'run') this.cachedProjection = undefined;
-    if (entry.type === 'run') this.run = entry.run;
+    if (entry.type === 'run') this.runEvents.push(entry);
     if (entry.type === 'tool-schema') this.schemas.set(entry.hash, entry.tools);
     if (entry.type === 'inbox-enqueued') {
       this.inboxIds.add(entry.item.id);
@@ -187,7 +197,7 @@ export class SessionLog extends RecordLog<SessionEvent> implements SessionLogPor
         const raw = this.byId.get(id);
         return raw?.type === 'tool-execution' ? raw.result : undefined;
       },
-      this.run,
+      this.runEvents,
     );
   }
 
@@ -300,12 +310,14 @@ export class SessionLog extends RecordLog<SessionEvent> implements SessionLogPor
   }
 
   get latestRun() {
-    return this.run && structuredClone(this.run);
+    const run = this.runEvents.at(-1)?.run;
+    return run && structuredClone(run);
   }
 
   /** Opening an existing log resolves interrupted work before it becomes writable. */
   recover() {
-    if (this.run && isRunning(this.run)) {
+    const run = this.latestRun;
+    if (run && isRunning(run)) {
       for (const item of this.pendingInbox.values()) {
         if (item.mode === 'steer')
           this.append({
@@ -317,7 +329,7 @@ export class SessionLog extends RecordLog<SessionEvent> implements SessionLogPor
       this.append({
         type: 'run',
         run: {
-          ...this.run,
+          ...run,
           state: 'interrupted',
           finishedAt: new Date().toISOString(),
           error: 'The run stopped before a terminal state was recorded',

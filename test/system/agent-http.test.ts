@@ -68,7 +68,7 @@ test(
       .split('\n')
       .map((line) => JSON.parse(line));
     const user = events.find((event) => event.type === 'user');
-    assert.deepEqual(user.content, [{ type: 'text', text: 'Test native integration' }]);
+    assert.equal(user.message.content, 'Test native integration');
     assert.equal(Object.hasOwn(user, 'text'), false);
     assert.ok(
       events.some((event) => event.type === 'delta'),
@@ -86,7 +86,7 @@ test(
     assert.equal(stored.title, 'Test native integration');
     const file = nativeFile(paths, session);
     assert.ok(file && existsSync(file));
-    assert.ok(stored.messages.some((m: { role: string }) => m.role === 'assistant'));
+    assert.ok(stored.timeline.some((m: { role: string }) => m.role === 'assistant'));
 
     // Native skill command is resolved by the skills plugin, using the configured .mini-harness skill directory.
     const skillRun = await post('/api/sessions/' + session.id + '/runs', { message: '/skill:verification' });
@@ -136,7 +136,7 @@ test(
       await fetch(newBase + '/api/sessions/' + session.id, { headers: nextHeaders })
     ).json();
     assert.equal(restored.title, 'Test native integration');
-    assert.ok(restored.messages.some((message: { role: string }) => message.role === 'assistant'));
+    assert.ok(restored.timeline.some((message: { role: string }) => message.role === 'assistant'));
     const exported = await fetch(newBase + '/api/sessions/export', {
       method: 'POST',
       headers: nextHeaders,

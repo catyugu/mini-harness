@@ -1,6 +1,6 @@
 import { DomainError } from '@mini-harness/platform/errors';
 import { randomUUID } from 'node:crypto';
-import { constants } from 'node:fs';
+import { constants, type BigIntStats, type Stats } from 'node:fs';
 import {
   link,
   lstat,
@@ -14,7 +14,7 @@ import {
   type FileHandle,
 } from 'node:fs/promises';
 import { basename, dirname, parse, relative, resolve, sep } from 'node:path';
-import type { RootedFileAccess } from './api.ts';
+import { FileTypeError, type RootedFileAccess } from './api.ts';
 
 const linux = process.platform === 'linux';
 const windows = process.platform === 'win32';
@@ -40,6 +40,16 @@ function samePath(a: string, b: string) {
 }
 const denied = () => new DomainError('forbidden', 'Path is outside the permitted root or is a link');
 const missing = (error: unknown) => (error as NodeJS.ErrnoException).code === 'ENOENT';
+
+function checkType(info: Stats | BigIntStats, allowDirectory = false) {
+  if (info.isSymbolicLink()) throw denied();
+  if (info.isDirectory()) {
+    if (allowDirectory) return;
+    throw new FileTypeError('directory');
+  }
+  if (!info.isFile()) throw new FileTypeError('unsupported');
+  if (info.nlink !== 1 && info.nlink !== 1n) throw denied();
+}
 
 export class RootedFiles implements RootedFileAccess {
   constructor(
@@ -88,15 +98,22 @@ export class RootedFiles implements RootedFileAccess {
           }
         }
         if (linux) {
-          const nextHandle = await open(next, directories);
+          const nextHandle = await open(next, directories).catch(async (error: NodeJS.ErrnoException) => {
+            if (error.code === 'ENOTDIR') {
+              // O_NOFOLLOW with O_DIRECTORY reports ENOTDIR for both links and ordinary files.
+              if ((await lstat(next)).isSymbolicLink()) throw denied();
+              throw new FileTypeError('not-directory');
+            }
+            throw error;
+          });
           const previous = handle;
           handle = nextHandle;
           dir = descriptor(handle);
           await previous?.close();
         } else {
           const stat = await lstat(next);
-          if (stat.isSymbolicLink() || !stat.isDirectory() || !samePath(await realpath(next), next))
-            throw denied();
+          if (stat.isSymbolicLink() || !samePath(await realpath(next), next)) throw denied();
+          if (!stat.isDirectory()) throw new FileTypeError('not-directory');
           dir = next;
         }
       }
@@ -110,14 +127,14 @@ export class RootedFiles implements RootedFileAccess {
   private async openFile(path: string) {
     path = resolve(this.cwd, path);
     const name = basename(path);
-    await this.location(path);
-    if (!name || name === '.' || name === '..') throw denied();
+    const { parts } = await this.location(path);
+    if (!parts.length) throw new FileTypeError('directory');
     return await this.directory(dirname(path), false, async (dir) => {
       const target = resolve(dir, name);
       // Check before opening so devices and FIFOs never act as regular files.
       const before = await lstat(target, { bigint: true });
-      if (!before.isFile() || before.nlink !== 1n || (!linux && !samePath(await realpath(target), target)))
-        throw denied();
+      checkType(before);
+      if (!linux && !samePath(await realpath(target), target)) throw denied();
       const handle = await open(target, constants.O_RDONLY | noFollow);
       try {
         const actual = await handle.stat({ bigint: true });
@@ -187,7 +204,8 @@ export class RootedFiles implements RootedFileAccess {
       const target = resolve(dir, basename(path));
       const identify = async () => {
         const info = await lstat(target, { bigint: true });
-        if (!info.isFile() || info.nlink !== 1n || !samePath(await realpath(target), path)) throw denied();
+        checkType(info);
+        if (!samePath(await realpath(target), path)) throw denied();
         return info;
       };
       const before = await identify().catch((error: unknown) => {
@@ -253,12 +271,8 @@ export class RootedFiles implements RootedFileAccess {
     return this.directory(dirname(path), false, async (dir) => {
       const target = resolve(dir, basename(path));
       const info = await lstat(target);
-      if (
-        info.isSymbolicLink() ||
-        (!info.isDirectory() && (!info.isFile() || info.nlink !== 1)) ||
-        (!linux && !samePath(await realpath(target), target))
-      )
-        throw denied();
+      checkType(info, true);
+      if (!linux && !samePath(await realpath(target), target)) throw denied();
       return info;
     });
   }

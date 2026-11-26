@@ -318,3 +318,71 @@ button {
     min-height: 44px;
   }
 }
+
+input::placeholder,
+textarea::placeholder {
+  color: var(--muted);
+  opacity: 1;
+}
+
+.markdown {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.markdown :not(pre) > code {
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: var(--bubble);
+}
+.markdown blockquote {
+  margin-inline: 0;
+  padding-inline-start: 12px;
+  border-inline-start: 3px solid var(--border);
+}
+.markdown-table {
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-wrap: normal;
+}
+.markdown-table table {
+  border-collapse: collapse;
+}
+.markdown-table :is(th, td) {
+  border: 1px solid var(--border);
+  padding: 3px 10px;
+}
+.markdown-table code {
+  white-space: nowrap;
+}
+.markdown :where(.code-block, pre) {
+  border-radius: var(--radius);
+  color: var(--code-text);
+  background: var(--code);
+}
+.markdown .code-block {
+  overflow: hidden;
+}
+.markdown pre {
+  margin: 0;
+  padding: 12px;
+  overflow: auto;
+  font:
+    13px/1.5 ui-monospace,
+    monospace;
+}
+.markdown .code-block pre {
+  background: transparent;
+}
+.markdown .code-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid #ffffff2b;
+  padding: 4px 12px;
+  font-size: 12px;
+}
+.markdown .code-header button {
+  font-size: inherit;
+  border: 0;
+  background: transparent;
+}

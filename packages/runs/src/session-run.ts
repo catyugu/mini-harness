@@ -1,3 +1,4 @@
+import { displayMessage } from '@mini-harness/sessions/projection';
 import { conversationTools } from './tool-selection.ts';
 import type { Context } from 'mini-harness/cordis';
 import { scopeTarget } from '@mini-harness/plugin-api/scopes';
@@ -19,9 +20,9 @@ import type { AgentEvent } from './stream.ts';
 import type { ImageInput, InputSource, PreparedMessage } from '@mini-harness/input/message';
 import type { SessionLogPort, InboxItem } from '@mini-harness/sessions/log-api';
 import { Inbox } from './inbox.ts';
-import { isToolContent } from '@mini-harness/tools/api';
+import { isToolContent, toolResultState } from '@mini-harness/tools/api';
 import { applyTransforms } from './transforms.ts';
-import { failedTool } from '@mini-harness/tools/execution';
+import { toolFailure } from '@mini-harness/tools/execution';
 import {
   prepareModelMessages,
   resolveThinking,
@@ -94,7 +95,7 @@ export class SessionRun {
     for (const call of pending.values())
       log.append({
         type: 'message',
-        message: failedTool(
+        message: toolFailure(
           call,
           executed.has(call.id)
             ? 'The tool completed without a recorded model-visible result. The tool was not retried.'
@@ -188,7 +189,7 @@ export class SessionRun {
       };
     };
 
-    const commit = async (item: Input, prepared: Awaited<ReturnType<typeof prepare>>, inboxId?: string) => {
+    const commit = async (prepared: Awaited<ReturnType<typeof prepare>>, inboxId?: string) => {
       signal.throwIfAborted();
       this.sessions.assertAvailable(id);
       const edit = inboxId ? undefined : revision;
@@ -201,19 +202,12 @@ export class SessionRun {
         inboxId,
       } as const;
       const entry = edit ? log.revise(event, edit.parentId, edit.expectedLeafId) : log.append(event);
-      const { userText, attachments } = prepared.presentation;
       await emit({
         type: 'user',
         source: inboxId ? 'user' : source,
         ...prepared.selection,
-        id: entry.id,
-        parentId: entry.parentId,
         revised: Boolean(edit),
-        submissionId,
-        inboxId,
-        timestamp: event.message.timestamp,
-        content: userText ? [{ type: 'text', text: userText }, ...item.images] : item.images,
-        attachments,
+        message: displayMessage(entry, event.message, submissionId),
       });
     };
     const deliver = (mode: InboxItem['mode']) =>
@@ -221,7 +215,7 @@ export class SessionRun {
         mode,
         signal,
         (item) => prepare(item, queuedSelection(item), 'user'),
-        (item, prepared) => commit(item, prepared, item.id),
+        (item, prepared) => commit(prepared, item.id),
       );
     // Drain recovered follow-ups as turns before committing the new manual input.
     let submitted = false;
@@ -229,8 +223,11 @@ export class SessionRun {
       signal.throwIfAborted();
       beginSubmission?.();
       const previous = log.projection(revision?.parentId);
-      await commit(manual, await prepare(manual, selection(manual, previous), source));
-      if (record.titleSource === 'auto' && !previous.messages.some((item) => item.role === 'user'))
+      await commit(await prepare(manual, selection(manual, previous), source));
+      if (
+        record.titleSource === 'auto' &&
+        !previous.timeline.some((item) => item.type === 'message' && item.role === 'user')
+      )
         this.sessions.rename(
           id,
           (input.userText || input.attachments[0]?.name || prompt).slice(0, 72),
@@ -257,14 +254,7 @@ export class SessionRun {
         const assistant = log.append({ type: 'message', message: result });
         emit({
           type: 'assistant-end',
-          message: {
-            id: assistant.id,
-            parentId: assistant.parentId,
-            role: 'assistant',
-            content: result.content,
-            timestamp: result.timestamp,
-            error: result.stopReason === 'aborted' ? undefined : result.errorMessage,
-          },
+          message: displayMessage(assistant, result, submissionId),
         });
       },
       afterTurn: async (calls) => {
@@ -322,6 +312,12 @@ export class SessionRun {
           tools: advertisedTools,
           execution: {
             start(call) {
+              if (signal.aborted) return { outcome: 'skipped', reason: 'Agent run cancelled' };
+              if (inbox.hasValid('steer', queuedSelection))
+                return { outcome: 'skipped', reason: 'Skipped because a steering message arrived.' };
+              const tool = advertisedTools.get(call.name);
+              if (tool && ctx.get('harnessToolPolicy')?.(id, tool) === false)
+                return { outcome: 'denied', reason: 'Tool denied by conversation policy: ' + call.name };
               emit({
                 type: 'tool',
                 id: call.id,
@@ -329,12 +325,7 @@ export class SessionRun {
                 state: 'running',
                 arguments: call.arguments,
               });
-              if (signal.aborted) return 'Agent run cancelled';
-              if (inbox.hasValid('steer', queuedSelection))
-                return 'Skipped because a steering message arrived.';
-              const tool = advertisedTools.get(call.name);
-              if (tool && ctx.get('harnessToolPolicy')?.(id, tool) === false)
-                return 'Tool denied by conversation policy: ' + call.name;
+              return undefined;
             },
             update(call, value) {
               const pending = value.details?.approvalPending;
@@ -352,7 +343,7 @@ export class SessionRun {
           async deliver(output, toolSignal, call) {
             let executionId: string | undefined;
             let transformError: Error | undefined;
-            if (!output.isError && hooks.length) {
+            if (toolResultState(output) === 'finished' && hooks.length) {
               executionId = log.append({ type: 'tool-execution', result: output }).id;
               try {
                 const resultContext = { ...step, signal: toolSignal, tool: call.name, callId: call.id };
@@ -361,7 +352,7 @@ export class SessionRun {
                 output = { ...output, content };
               } catch (error) {
                 output = {
-                  ...failedTool(
+                  ...toolFailure(
                     call,
                     'Tool execution completed, but the model-visible result transformation failed.',
                   ),
@@ -377,19 +368,12 @@ export class SessionRun {
                 ? log.acceptToolResult(executionId, output.content)
                 : log.append({ type: 'message', message: output, elapsedMs: output.elapsedMs });
             const details = output.details;
-            if (!output.isError && typeof details?.changedPath === 'string') changed?.(details.changedPath);
+            const state = toolResultState(output);
+            if (state === 'finished' && typeof details?.changedPath === 'string')
+              changed?.(details.changedPath);
             emit({
-              type: 'tool',
-              id: call.id,
-              name: call.name,
-              state: details?.approvalDenied === true ? 'denied' : output.isError ? 'error' : 'finished',
-              arguments: call.arguments,
-              content: output.content,
-              entry: { id: entry.id, parentId: entry.parentId, timestamp: output.timestamp },
-              elapsedMs: output.elapsedMs,
-              approvalMs: typeof details?.approvalMs === 'number' ? details.approvalMs : undefined,
-              sessionId: typeof details?.sessionId === 'string' ? details.sessionId : undefined,
-              exitCode: typeof details?.exitCode === 'number' ? details.exitCode : undefined,
+              type: 'tool-end',
+              message: displayMessage(entry, output, submissionId, call.arguments),
             });
             if (transformError) throw transformError;
           },

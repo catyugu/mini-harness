@@ -1,8 +1,9 @@
+import { isViewMessage } from '@mini-harness/sessions/message';
 import { waitFor } from '@mini-harness/platform/wait';
 import type { ConversationView } from '../shared/api.ts';
 import { isRunning } from '@mini-harness/sessions/run-state';
 import { eventStream } from '@mini-harness/transport/http';
-import { projectHistory, projectToolEvent } from './display-events.ts';
+import { projectHistory, projectToolEvent, projectToolResult } from './display-events.ts';
 import { scheduler } from 'node:timers/promises';
 import type { ConversationPermission } from '@mini-harness/sessions/identity';
 import type { SessionSearchResult } from '../shared/api.ts';
@@ -79,7 +80,9 @@ export function registerSessionRoutes(ctx: Context, read: (id: string) => Conver
       let hit = find(id, 'title', title);
       if (!hit) {
         const messages =
-          ctx.harnessSessions.inspectLog(id, (log) => log.projection().messages.slice(-500)) ?? [];
+          ctx.harnessSessions.inspectLog(id, (log) =>
+            log.projection().timeline.filter(isViewMessage).slice(-500),
+          ) ?? [];
         for (const message of messages.reverse()) {
           if (message.role === 'toolResult') continue;
           const content =
@@ -152,15 +155,14 @@ export function registerSessionRoutes(ctx: Context, read: (id: string) => Conver
         if (event.type === 'snapshot') {
           stream.send({
             ...event,
-            messages: projectHistory(ctx, id, event.messages),
+            timeline: projectHistory(ctx, id, event.timeline),
             tools: event.tools?.map((tool) => projectToolEvent(ctx, id, tool)),
           });
         } else if (event.type === 'user' && event.revised) {
-          const { messages, records, leafId, model, thinkingLevel, partial, tools, run } = read(id);
+          const { timeline, leafId, model, thinkingLevel, partial, tools, run } = read(id);
           stream.send({
             type: 'snapshot',
-            messages,
-            records,
+            timeline,
             leafId,
             model,
             thinkingLevel,
@@ -171,6 +173,8 @@ export function registerSessionRoutes(ctx: Context, read: (id: string) => Conver
             runSessionId: id,
             sequence: run?.sequence ?? event.sequence,
           });
+        } else if (event.type === 'tool-end') {
+          stream.send({ ...event, message: projectToolResult(ctx, id, event.message) });
         } else stream.send(event.type === 'tool' ? projectToolEvent(ctx, id, event) : event);
         if ((event.type === 'run' || event.type === 'snapshot') && !isRunning(event.run)) response.end();
       },

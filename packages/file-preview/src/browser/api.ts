@@ -24,11 +24,6 @@ declare module 'mini-harness/cordis' {
   interface Context {
     miniFilePreview: {
       open(resource: PreviewResource, placement: PreviewPlacement): void;
-      thumbnail(
-        resource: Exclude<PreviewResource, { kind: 'workspace' }>,
-        image: HTMLImageElement,
-        signal: AbortSignal,
-      ): void;
     };
   }
 }

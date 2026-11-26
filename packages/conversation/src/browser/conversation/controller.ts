@@ -10,20 +10,18 @@ import type {
 } from '../conversation-api.ts';
 import type { RunEvent } from '@mini-harness/runs/stream';
 import type { RunInfo } from '@mini-harness/sessions/run-state';
-import type { ViewMessage } from '@mini-harness/sessions/message';
+import type { HistoryEntry } from '@mini-harness/sessions/message';
 import { isRunning } from '@mini-harness/sessions/run-state';
 import { payload } from '@mini-harness/ui-runtime/http';
 import { workspaceRoute } from '@mini-harness/workspaces/browser/route';
 import { readConversation, observeRun } from '../session-client.ts';
 
-const emptyHistory = { messages: [], records: [], leafId: null };
 const path = (id: string, suffix = '') => '/sessions/' + id + suffix;
 
 export function createConversationController(ctx: Context): ConversationController {
   const { miniSelection: selection, miniSessions: sessions } = ctx;
   const subscriptions = new Set<{ parts: readonly (keyof ConversationState)[]; listener: () => void }>();
   let state: ConversationState = {
-    history: emptyHistory,
     partial: '',
     tools: [],
     queue: [],
@@ -63,7 +61,7 @@ export function createConversationController(ctx: Context): ConversationControll
     update({
       session: 'id' in session ? session : undefined,
       run,
-      history: emptyHistory,
+      history: undefined,
       partial: '',
       tools: [],
       queue: [],
@@ -72,20 +70,21 @@ export function createConversationController(ctx: Context): ConversationControll
   }
 
   function display(item: ConversationView, signal: AbortSignal, revealWorkspace: boolean) {
-    const { run, messages, records, leafId, partial = '', tools, queue, ...session } = item;
+    const { run, timeline, leafId, partial = '', tools, queue, ...session } = item;
     queueRevision++;
-    update({ session, run, history: { messages, records, leafId }, partial, tools, queue });
+    update({ session, run, history: { timeline, leafId }, partial, tools, queue });
     selection.selectConversation(item, revealWorkspace);
     status(item.logError ?? '', Boolean(item.logError));
     if (!signal.aborted && isRunning(run)) void observe(item, signal);
   }
 
-  function append(message: ViewMessage, patch: Partial<ConversationState> = {}) {
-    const history = state.history;
-    update({
-      ...patch,
-      history: { ...history, leafId: message.id ?? history.leafId, messages: [...history.messages, message] },
-    });
+  function append(entry: HistoryEntry, patch: Partial<ConversationState> = {}) {
+    const timeline = state.history?.timeline ?? [];
+    if (timeline.some(({ id }) => id === entry.id)) {
+      update(patch);
+      return;
+    }
+    update({ ...patch, history: { leafId: entry.id, timeline: [...timeline, entry] } });
   }
 
   async function refreshBranch() {
@@ -114,25 +113,15 @@ export function createConversationController(ctx: Context): ConversationControll
     function accept(event: RunEvent) {
       if (signal.aborted) return;
       switch (event.type) {
-        case 'user': {
-          if (state.history.messages.some(({ id }) => id === event.id)) break;
-          const {
-            id,
-            parentId,
-            submissionId,
-            inboxId,
-            timestamp,
-            content,
-            attachments,
-            model,
-            thinkingLevel,
-          } = event;
-          append(
-            { id, parentId, submissionId, inboxId, timestamp, content, attachments, role: 'user' },
-            { session: state.session && { ...state.session, model, thinkingLevel } },
-          );
+        case 'user':
+          append(event.message, {
+            session: state.session && {
+              ...state.session,
+              model: event.model,
+              thinkingLevel: event.thinkingLevel,
+            },
+          });
           break;
-        }
         case 'assistant-start':
           update({ partial: '' });
           break;
@@ -142,45 +131,22 @@ export function createConversationController(ctx: Context): ConversationControll
         case 'assistant-end':
           append(event.message, { partial: '' });
           break;
+        case 'tool-end':
+          append(event.message, { tools: state.tools.filter(({ id }) => id !== event.message.toolCallId) });
+          status('Thinking…');
+          break;
         case 'tool': {
-          const tools = state.tools.filter(({ id }) => id !== event.id);
-          if (event.entry) {
-            append(
-              {
-                id: event.entry.id,
-                parentId: event.entry.parentId,
-                role: 'toolResult',
-                toolCallId: event.id,
-                toolName: event.name,
-                content: event.content ?? '',
-                arguments: event.arguments,
-                timestamp: event.entry.timestamp,
-                sessionId: event.sessionId,
-                elapsedMs: event.elapsedMs,
-                approvalMs: event.approvalMs,
-                exitCode: event.exitCode,
-                approvalDenied: event.state === 'denied',
-                isError: event.state === 'error',
-              },
-              { tools },
-            );
-          } else {
-            const index = state.tools.findIndex(({ id }) => id === event.id);
-            const { runId: _runId, runSessionId: _sessionId, sequence: _sequence, ...tool } = event;
-            tools.splice(index === -1 ? tools.length : index, 0, tool);
-            update({ tools });
-          }
-          status(
-            event.state === 'approval'
-              ? 'Waiting for approval…'
-              : event.state === 'running'
-                ? 'Running ' + event.name + '…'
-                : 'Thinking…',
-          );
+          const { runId: _runId, runSessionId: _sessionId, sequence: _sequence, ...tool } = event;
+          const tools = [...state.tools];
+          const index = tools.findIndex(({ id }) => id === tool.id);
+          tools.splice(index === -1 ? tools.length : index, 1, tool);
+          update({ tools });
+          status(tool.state === 'approval' ? 'Waiting for approval…' : 'Running ' + tool.name + '…');
           break;
         }
         case 'branch':
-          update({ history: { ...state.history, records: event.records, leafId: event.leafId } });
+          if (event.display) append(event.display);
+          else update({ history: { timeline: state.history?.timeline ?? [], leafId: event.leafId } });
           break;
         case 'snapshot':
           if (!isRunning(event.run)) {
@@ -189,12 +155,7 @@ export function createConversationController(ctx: Context): ConversationControll
           }
           update({
             run: terminal ? state.run : event.run,
-            history: {
-              ...state.history,
-              messages: event.messages,
-              records: event.records,
-              leafId: event.leafId,
-            },
+            history: { timeline: event.timeline, leafId: event.leafId },
             partial: event.partial ?? '',
             tools: event.tools ?? [],
             session: state.session && {

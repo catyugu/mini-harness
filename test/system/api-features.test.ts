@@ -103,10 +103,10 @@ test('GUI APIs configure providers, persist keys privately, discover Skills and 
   assert.match(JSON.stringify(mock.requests.at(-1)), /ATTACHED CONTENT/);
   assert.match(JSON.stringify(mock.requests.at(-1)), /image_url/);
   const history = (await request('/sessions/' + session.id)).body;
-  const user = history.messages.find(
+  const user = history.timeline.find(
     (message: { role: string; content: unknown }) => message.role === 'user',
   );
-  assert.ok(user.content.some((block: { type: string }) => block.type === 'image'));
+  assert.equal(user.attachments[0].data, png);
   assert.deepEqual(
     user.attachments.map(({ name, mimeType }: { name: string; mimeType: string }) => ({ name, mimeType })),
     [
@@ -127,10 +127,7 @@ test('GUI APIs configure providers, persist keys privately, discover Skills and 
     (await request('/sessions/' + sibling.id + '/attachments/' + user.attachments[0].id)).status,
     404,
   );
-  assert.deepEqual(
-    user.content.filter((block: { type: string }) => block.type === 'text'),
-    [{ type: 'text', text: 'Read the image and text' }],
-  );
+  assert.equal(user.content, 'Read the image and text');
   assert.doesNotMatch(JSON.stringify(user), /ATTACHED CONTENT/);
   assert.equal(history.title, 'Read the image and text');
   assert.equal(
@@ -153,7 +150,7 @@ test('GUI APIs configure providers, persist keys privately, discover Skills and 
   assert.equal(readFileSync(join(paths.home, 'auth.json'), 'utf8').includes('gui-private-key'), false);
   const afterHistory = await request('/sessions/' + session.id);
   assert.equal(afterHistory.status, 200);
-  assert.deepEqual(afterHistory.body.messages, history.messages);
+  assert.deepEqual(afterHistory.body.timeline, history.timeline);
   assert.equal((await request('/sessions/delete', 'POST', { ids: [session.id] })).status, 200);
   assert.equal(existsSync(dirname(directory)), false);
   assert.equal(
@@ -216,7 +213,7 @@ test('unbound conversations can run, persist attachments and be deleted without 
   assert.equal(started.status, 202, JSON.stringify(started.body));
   assert.equal((await finish(session.id)).body.run.state, 'completed');
   const { body: history } = await request('/sessions/' + session.id);
-  const id = history.messages.find((message: { role: string }) => message.role === 'user').attachments[0].id;
+  const id = history.timeline.find((message: { role: string }) => message.role === 'user').attachments[0].id;
   assert.deepEqual((await request('/sessions/' + session.id + '/attachments/' + id)).body, { data });
   assert.equal((await request('/sessions/delete', 'POST', { ids: [session.id] })).status, 200);
 });

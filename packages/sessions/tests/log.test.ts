@@ -1,3 +1,4 @@
+import { isViewMessage } from '@mini-harness/sessions/message';
 import { expectPresent } from '../../../test/support/required.ts';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
@@ -93,17 +94,23 @@ test('operational entries keep the transcript leaf stable and revision uses comp
   assert.equal(log.entries().length, 3);
   const second = log.revise(user('revised'), null, first.id);
   assert.deepEqual(
-    log.projection().messages.map(({ content }) => content),
+    log
+      .projection()
+      .timeline.filter(isViewMessage)
+      .map(({ content }) => content),
     ['revised'],
   );
   assert.throws(() => log.revise(user('stale revision'), null, first.id), /Conversation changed/);
   assert.equal(log.projection().leafId, second.id);
   assert.equal(log.branch(first.id)[0].id, first.id);
   assert.deepEqual(
-    log.projection(first.id).messages.map(({ content }) => content),
+    log
+      .projection(first.id)
+      .timeline.filter(isViewMessage)
+      .map(({ content }) => content),
     ['original'],
   );
-  assert.deepEqual(log.projection(null).messages, []);
+  assert.deepEqual(log.projection(null).timeline.filter(isViewMessage), []);
   assert.equal(log.projection().leafId, second.id);
 });
 
@@ -153,7 +160,8 @@ test('recovery discards only a torn final record and preserves every acknowledge
   assert.deepEqual(
     open()
       .projection()
-      .messages.map(({ content }) => content),
+      .timeline.filter(isViewMessage)
+      .map(({ content }) => content),
     ['durable', 'after recovery'],
   );
 });
@@ -215,7 +223,10 @@ test('compaction and context edits change model context without deleting convers
   log.append({ type: 'context-edit', targetId: keep.id, replacement: 'redacted recent context' });
   log.append(user('new question'));
   assert.deepEqual(
-    log.projection().messages.map(({ content }) => content),
+    log
+      .projection()
+      .timeline.filter(isViewMessage)
+      .map(({ content }) => content),
     ['old context', 'recent context', 'new question'],
   );
   assert.deepEqual(
@@ -234,8 +245,11 @@ test('attachments retain full model input while display keeps the submitted text
     presentation: { userText: 'read this', attachments: [{ name: 'secret.txt', mimeType: 'text/plain' }] },
   });
   const state = log.projection();
-  assert.equal(state.messages[0].content, 'read this');
-  assert.equal(expectPresent(state.messages[0]?.attachments?.[0], 'session attachment').name, 'secret.txt');
+  assert.equal(state.timeline.filter(isViewMessage)[0].content, 'read this');
+  assert.equal(
+    expectPresent(state.timeline.filter(isViewMessage)[0]?.attachments?.[0], 'session attachment').name,
+    'secret.txt',
+  );
   assert.match(String(state.contextMessages[0].content), /contents/);
 });
 
@@ -325,16 +339,19 @@ test('historical plugin records normalize to one owner without changing identity
       },
     ],
   );
-  assert.deepEqual(restored.projection().records, [
-    {
-      id: scoped.id,
-      plugin: 'notes',
-      instanceId,
-      afterMessageId: first.id,
-      title: 'Progress',
-      content: 'Done',
-    },
-  ]);
+  assert.deepEqual(
+    restored.projection().timeline.filter((entry) => entry.type === 'record'),
+    [
+      {
+        id: scoped.id,
+        plugin: 'notes',
+        instanceId,
+        type: 'record',
+        title: 'Progress',
+        content: 'Done',
+      },
+    ],
+  );
   assert.equal(restored.projection().leafId, last.id);
   assert.deepEqual(
     restored.projection().contextMessages.map(({ content }) => content),

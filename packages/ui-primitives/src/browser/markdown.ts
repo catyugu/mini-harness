@@ -4,6 +4,7 @@ import purify from './vendor/purify.ts';
 export const markdownSource = new WeakMap<HTMLElement, string>();
 
 export function renderMarkdown(target: HTMLElement, text: string, interactive = true) {
+  target.classList.add('markdown');
   markdownSource.set(target, text);
   const fragment = purify.sanitize(marked.parse(text, { async: false, gfm: true }), {
     RETURN_DOM_FRAGMENT: true,
@@ -47,6 +48,15 @@ export function renderMarkdown(target: HTMLElement, text: string, interactive = 
   for (const link of fragment.querySelectorAll('a')) {
     link.target = '_blank';
     link.rel = 'noopener noreferrer';
+  }
+  for (const table of fragment.querySelectorAll('table')) {
+    const wrapper = document.createElement('div');
+    wrapper.className = 'markdown-table';
+    wrapper.tabIndex = 0;
+    wrapper.setAttribute('role', 'region');
+    wrapper.setAttribute('aria-label', 'Markdown table');
+    table.replaceWith(wrapper);
+    wrapper.append(table);
   }
   if (interactive) {
     for (const code of fragment.querySelectorAll('pre > code')) {

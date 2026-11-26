@@ -1,3 +1,4 @@
+import { isViewMessage } from '@mini-harness/sessions/message';
 import { expectPresent } from '../../../test/support/required.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -81,7 +82,7 @@ test(
     });
     const branch = observed.find((event) => event.type === 'branch');
     assert.equal(branch?.leafId, record.id);
-    assert.deepEqual(branch?.records, []);
+    assert.equal(branch?.display, undefined);
     detach();
     const replay = fetch(
       base + '/api/sessions/' + item.id + '/events?run=' + status.run.id + '&after=' + cursor,
@@ -198,6 +199,14 @@ test('startup durably interrupts runs, fails stale steering, and recovers idempo
   const interrupted = restored.runSummary(child.id);
   assert.ok(interrupted);
   assert.equal(interrupted.state, 'interrupted');
+  assert.deepEqual(
+    restored.inspectLog(child.id, (log) =>
+      log
+        .projection()
+        .timeline.flatMap((entry) => (entry.type === 'termination' ? [[entry.id, entry.state]] : [])),
+    ),
+    [['fixture-run', 'interrupted']],
+  );
   assert.deepEqual(restored.descendants([parent.id]), [parent.id, child.id]);
   const bytes = readFileSync(file);
   assert.match(bytes.toString(), /"state":"interrupted"/);
@@ -223,6 +232,13 @@ test('startup durably interrupts runs, fails stale steering, and recovers idempo
       return Array.isArray(content) ? content.map(({ text }) => text).join('') : content;
     });
     assert.deepEqual(prompts, ['Recovered follow-up', 'New manual input']);
+    assert.equal(
+      restarted.runtime.plugins.ctx.harnessSessions
+        .log(child.id)
+        .projection()
+        .timeline.find((entry) => entry.type === 'termination')?.state,
+      'interrupted',
+    );
     assert.deepEqual(
       restarted.runtime.plugins.ctx.harnessSessions
         .log(child.id)
@@ -253,7 +269,10 @@ test('late observers receive a saved snapshot and stale cursors cannot attach to
   assert.equal(events.length, 1);
   assert.ok(events[0]);
   assert.equal(events[0].type, 'snapshot');
-  assert.ok(events[0].type === 'snapshot' && events[0].messages.some(({ role }) => role === 'assistant'));
+  assert.ok(
+    events[0].type === 'snapshot' &&
+      events[0].timeline.filter(isViewMessage).some(({ role }) => role === 'assistant'),
+  );
   await app.runtime.plugins.ctx.harnessRuns.send(item.id, 'Second');
   assert.throws(
     () => app.runtime.plugins.ctx.harnessRuns.watch(item.id, first.id, 0, () => {}),
@@ -363,7 +382,8 @@ test('append, torn write and fsync failures evict the writer without acknowledgi
       app.runtime.plugins.ctx.harnessSessions
         .log(session.id)
         .projection()
-        .messages.filter(({ role }) => role === 'user')
+        .timeline.filter(isViewMessage)
+        .filter(({ role }) => role === 'user')
         .map(({ content }) => (Array.isArray(content) ? content[0]?.text : content)),
       ['Accepted retry'],
     );
@@ -436,7 +456,10 @@ test('retry looks up the failed delivery by its native entry identity', async (t
   await assert.rejects(expectPresent(runs.completion(session.id), 'active run'));
   assert.equal(runs.info(session.id)?.state, 'failed');
   assert.ok(runs.info(session.id)?.inputEntryId);
-  const delivered = log.projection().messages.find(({ submissionId }) => submissionId === failed.id);
+  const delivered = log
+    .projection()
+    .timeline.filter(isViewMessage)
+    .find(({ submissionId }) => submissionId === failed.id);
   assert.equal(delivered?.inboxId, 'recover-this');
   assert.deepEqual(runs.retryInput(session.id, failed.id), {
     message: 'fail this queued input',
@@ -454,7 +477,10 @@ test('retry looks up the failed delivery by its native entry identity', async (t
   assert.equal(accepted.state, 'queued');
   await assert.rejects(expectPresent(runs.completion(session.id), 'active run'));
   assert.equal(
-    log.projection().messages.find(({ submissionId }) => submissionId === accepted.id)?.inboxId,
+    log
+      .projection()
+      .timeline.filter(isViewMessage)
+      .find(({ submissionId }) => submissionId === accepted.id)?.inboxId,
     undefined,
   );
   assert.deepEqual(runs.retryInput(session.id, accepted.id)?.missing, []);

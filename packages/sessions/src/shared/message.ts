@@ -1,8 +1,13 @@
+import type { SessionDisplayRecord } from './display-record.ts';
+import type { RunTermination } from './run-state.ts';
+import type { ToolResultState } from '@mini-harness/tools/api';
 import type { InputAttachment } from '@mini-harness/input/message';
 
 export interface ContentBlock {
   type: string;
   text?: string;
+  thinking?: string;
+  redacted?: boolean;
   name?: string;
   id?: string;
   data?: string;
@@ -11,15 +16,19 @@ export interface ContentBlock {
 
 export type MessageContent = string | ContentBlock[];
 
-export interface ViewMessage {
-  /** Stable Session Log entry identity (absent for stream previews). */
-  id?: string;
+export interface ViewAttachment extends InputAttachment {
+  data?: string;
+}
+
+interface MessageFields {
+  type: 'message';
+  id: string;
+  runId?: string;
   submissionId?: string;
   inboxId?: string;
   parentId?: string | null;
-  role: 'user' | 'assistant' | 'toolResult';
   content: MessageContent;
-  attachments?: InputAttachment[];
+  attachments?: ViewAttachment[];
   timestamp: number;
   error?: string;
   toolName?: string;
@@ -29,6 +38,18 @@ export interface ViewMessage {
   isError?: boolean;
   elapsedMs?: number;
   approvalMs?: number;
-  approvalDenied?: boolean;
   exitCode?: number;
+}
+
+export type ViewMessage = MessageFields &
+  (
+    | { role: 'user'; toolState?: never }
+    | { role: 'assistant'; toolState?: never }
+    | { role: 'toolResult'; toolState: ToolResultState; toolName: string; toolCallId: string }
+  );
+
+export type HistoryEntry = ViewMessage | SessionDisplayRecord | RunTermination;
+
+export function isViewMessage(entry: HistoryEntry): entry is ViewMessage {
+  return entry.type === 'message';
 }

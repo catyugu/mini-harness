@@ -14,7 +14,7 @@ export function setup(ctx: Context) {
       if (!(event instanceof CustomEvent)) return;
       const resourceId = event.detail.id;
       changes.invalidate(domain(event), resourceId);
-      if (event.detail.records) changes.invalidate('conversation-records', resourceId);
+      if (event.detail.record) changes.invalidate('conversation-records', resourceId);
     };
     ctx.effect(() => {
       source.addEventListener('change', listener);
@@ -33,9 +33,8 @@ export function setup(ctx: Context) {
     const { partial, tools } = harnessRuns.activity(id);
     return {
       ...projectSession(ctx, record),
-      messages: projectHistory(ctx, id, history?.messages ?? []),
+      timeline: projectHistory(ctx, id, history?.timeline ?? []),
       leafId: history?.leafId ?? null,
-      records: history?.records ?? [],
       model: history?.model,
       thinkingLevel: history?.thinkingLevel,
       queue: history?.queue ?? [],

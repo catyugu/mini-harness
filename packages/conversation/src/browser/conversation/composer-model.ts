@@ -77,8 +77,12 @@ export function createComposerModel(ctx: Context): ComposerModel {
     const owner = drafts.get(session.id),
       submission = owner?.submission;
     if (!owner || !submission?.runId) return;
-    const accepted = history.messages.some(
-      (message) => message.role === 'user' && message.submissionId === submission.runId && !message.inboxId,
+    const accepted = history?.timeline.some(
+      (message) =>
+        message.type === 'message' &&
+        message.role === 'user' &&
+        message.submissionId === submission.runId &&
+        !message.inboxId,
     );
     if (!accepted && run?.id === submission.runId && isRunning(run)) return;
     delete owner.submission;

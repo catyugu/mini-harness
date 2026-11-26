@@ -23,3 +23,5 @@ export default {
     });
   },
 };
+
+export const metadata = { title: 'Context Compaction' };

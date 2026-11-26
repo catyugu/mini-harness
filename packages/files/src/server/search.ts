@@ -113,7 +113,8 @@ export class WorkspaceSearch {
           pattern,
         )
       ) {
-        files.push(entry.path);
+        const path = relative(this.cwd, entry.path).split(sep).join('/');
+        files.push(path + (entry.directory ? '/' : ''));
         if (files.length >= limit) break;
       }
     }

@@ -29,3 +29,13 @@
 .diff :is(.diff-hunk, .diff-header) {
   color: var(--muted);
 }
+
+.diff {
+  overflow: auto;
+  padding: 10px;
+  border-radius: var(--radius);
+  background: var(--surface);
+  font:
+    12px/1.6 ui-monospace,
+    monospace;
+}

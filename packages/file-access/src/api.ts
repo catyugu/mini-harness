@@ -1,6 +1,21 @@
 import type * as fs from 'node:fs/promises';
 import type { createReadStream } from 'node:fs';
 
+import { DomainError } from '@mini-harness/platform/errors';
+
+export class FileTypeError extends DomainError {
+  constructor(readonly kind: 'directory' | 'not-directory' | 'unsupported') {
+    super(
+      'invalid_input',
+      {
+        directory: 'Path is a directory',
+        'not-directory': 'Path is not a directory',
+        unsupported: 'Unsupported file type',
+      }[kind],
+    );
+  }
+}
+
 export interface FileAccessPort {
   /** Node file operations, with the same access as the hosting process. */
   readonly native: typeof fs & { createReadStream: typeof createReadStream };

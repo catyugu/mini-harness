@@ -68,6 +68,8 @@ export interface NativeToolMessage {
   content: (TextPart | ImagePart)[];
   timestamp: number;
   isError: boolean;
+  /** Scheduling disposition when the tool did not execute. */
+  outcome?: 'skipped' | 'denied';
   details?: Record<string, unknown>;
   elapsedMs?: number;
 }
@@ -222,7 +224,9 @@ export function validateNativeMessage(message: NativeMessage) {
     message.role === 'toolResult' &&
     (typeof message.toolCallId !== 'string' ||
       typeof message.toolName !== 'string' ||
-      typeof message.isError !== 'boolean')
+      typeof message.isError !== 'boolean' ||
+      (message.outcome !== undefined &&
+        (!message.isError || (message.outcome !== 'skipped' && message.outcome !== 'denied'))))
   )
     throw new Error('Invalid tool result');
 }

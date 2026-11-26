@@ -1,3 +1,4 @@
+import { isViewMessage } from '@mini-harness/sessions/message';
 import { nativeFile } from '../src/storage.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -175,7 +176,7 @@ test('a corrupt log is isolated, remains deletable and never creates a log for a
     undefined,
   );
   assert.equal(existsSync(nativeFile(paths, unopened, false)), false);
-  assert.equal(restored.log(healthy.id).projection().messages[0].content, 'intact');
+  assert.equal(restored.log(healthy.id).projection().timeline.filter(isViewMessage)[0].content, 'intact');
   assert.throws(() => restored.log(damaged.id), /session diagnostics/);
   assert.deepEqual(restored.diagnostics(), [{ id: damaged.id, message: 'Corrupt session log checksum' }]);
   assert.deepEqual(await restored.delete([damaged.id]), [damaged.id]);
@@ -244,7 +245,7 @@ test('a conversation can own history and descendants without a workspace', async
   registry
     .log(root.id)
     .append({ type: 'message', message: { role: 'user', content: 'Unbound', timestamp: 1 } });
-  assert.equal(registry.history(root.id).messages.length, 1);
+  assert.equal(registry.history(root.id).timeline.filter(isViewMessage).length, 1);
   assert.deepEqual(new Set(await registry.delete([root.id])), new Set([root.id, child.id]));
 });
 
@@ -258,7 +259,7 @@ test('the session registry needs no workspace provider', async (t) => {
   registry
     .log(session.id)
     .append({ type: 'message', message: { role: 'user', content: 'Standalone', timestamp: 1 } });
-  assert.equal(registry.history(session.id).messages[0].content, 'Standalone');
+  assert.equal(registry.history(session.id).timeline.filter(isViewMessage)[0].content, 'Standalone');
   assert.deepEqual(await registry.delete([session.id]), [session.id]);
 });
 
@@ -273,5 +274,5 @@ test('public session logs expose record operations but not the writer lifecycle'
     assert.equal('file' in view, false);
   });
   log.append({ type: 'message', message: { role: 'user', content: 'Still writable', timestamp: 1 } });
-  assert.equal(registry.history(session.id).messages[0].content, 'Still writable');
+  assert.equal(registry.history(session.id).timeline.filter(isViewMessage)[0].content, 'Still writable');
 });

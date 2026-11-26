@@ -1,3 +1,4 @@
+import { hasContent } from './timeline.ts';
 import type { Context } from 'mini-harness/cordis';
 import { scopedElements, fromMarkup } from '@mini-harness/ui-primitives/primitives';
 import { createRunSummary } from './run-summary.ts';
@@ -40,21 +41,8 @@ export function mountConversationLayout(ctx: Context) {
         state.queue,
         (id) => void control.cancelQueue(id).catch(control.report),
       );
-    const welcome =
-      !isRunning(state.run) &&
-      state.interaction.operation !== 'submit' &&
-      !state.history.records.length &&
-      !state.history.messages.some(
-        (message) =>
-          message.role === 'toolResult' ||
-          (typeof message.content === 'string'
-            ? message.content
-            : message.content.some((part) => part.type === 'text' && part.text)) ||
-          message.attachments?.length ||
-          message.error ||
-          (Array.isArray(message.content) && message.content.some((part) => part.type === 'image')),
-      ) &&
-      !(state.run?.state === 'failed' && state.run.error);
+    const busy = state.interaction.operation === 'open' || state.interaction.operation === 'submit';
+    const welcome = !busy && !isRunning(state.run) && !state.history?.timeline.some(hasContent);
     element('welcome').hidden = !welcome;
     element('conversationHistory').hidden = welcome;
     ctx.miniHeader.showWorkspace(!welcome);

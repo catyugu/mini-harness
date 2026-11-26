@@ -1,3 +1,4 @@
+import { isViewMessage } from '@mini-harness/sessions/message';
 import { conversationTools } from '@mini-harness/runs/tool-selection';
 import { expectPresent } from '../../../test/support/required.ts';
 import test from 'node:test';
@@ -24,20 +25,20 @@ test('shell approval gates execution, handles rejection and cancellation', async
     assert.equal(pending.body[0].message, 'echo approved');
     assert.equal((await request('/approvals', 'POST', { id: pending.body[0].id, allow })).status, 200);
     await finish(session.id);
-    const history = (await request('/sessions/' + session.id)).body.messages;
+    const history = (await request('/sessions/' + session.id)).body.timeline;
     const tool = history.filter((m: { role: string }) => m.role === 'toolResult').at(-1);
     assert.equal(tool.isError, !allow);
     assert.deepEqual(tool.arguments, { command: 'echo approved' });
     assert.ok(Number.isFinite(tool.approvalMs) && tool.approvalMs >= 0);
     if (!allow) {
-      assert.equal(tool.approvalDenied, true);
+      assert.equal(tool.toolState, 'denied');
       assert.equal(tool.elapsedMs, 0);
     }
     if (allow) {
       assert.match(JSON.stringify(tool.content), /approved/);
       assert.equal(tool.exitCode, 0);
       assert.ok(Number.isFinite(tool.elapsedMs) && tool.elapsedMs >= 0);
-      const restored = (await request('/sessions/' + session.id)).body.messages
+      const restored = (await request('/sessions/' + session.id)).body.timeline
         .filter((m: { role: string }) => m.role === 'toolResult')
         .at(-1);
       assert.equal(restored.exitCode, 0);
@@ -92,7 +93,7 @@ test('shell approval gates execution, handles rejection and cancellation', async
     200,
   );
   await finish(session.id);
-  const denied = (await request('/sessions/' + session.id)).body.messages
+  const denied = (await request('/sessions/' + session.id)).body.timeline
     .filter((m: { role: string }) => m.role === 'toolResult')
     .at(-1);
   assert.equal(denied.isError, true);
@@ -127,7 +128,7 @@ test('full access bypasses Shell prompts only for its conversation and applies t
   assert.equal(standard.permission, 'standard');
   await request('/sessions/' + full.id + '/runs', 'POST', { message: 'Run without approval' });
   assert.equal((await finish(full.id)).body.run.state, 'completed');
-  const fullHistory = (await request('/sessions/' + full.id)).body.messages;
+  const fullHistory = (await request('/sessions/' + full.id)).body.timeline;
   assert.equal(
     fullHistory.filter((message: { role: string }) => message.role === 'toolResult').at(-1)?.isError,
     false,
@@ -147,7 +148,7 @@ test('full access bypasses Shell prompts only for its conversation and applies t
   );
   assert.deepEqual((await request('/approvals')).body, []);
   assert.equal((await finish(standard.id)).body.run.state, 'completed');
-  const switched = (await request('/sessions/' + standard.id)).body.messages;
+  const switched = (await request('/sessions/' + standard.id)).body.timeline;
   assert.equal(
     switched.filter((message: { role: string }) => message.role === 'toolResult').at(-1)?.isError,
     false,
@@ -229,7 +230,8 @@ test(
         app.runtime.plugins.ctx.harnessSessions
           .log(shell.id)
           .projection()
-          .messages.find(({ role }) => role === 'toolResult'),
+          .timeline.filter(isViewMessage)
+          .find(({ role }) => role === 'toolResult'),
         'shell tool result',
       );
       assert.equal(tool.isError, true);
@@ -268,11 +270,11 @@ test('repeating a denied command in the same run does not open a new approval', 
   await request('/approvals', 'POST', { id: pending.body[0].id, allow: false });
   assert.equal((await finish(session.id)).body.run.state, 'completed');
   assert.deepEqual((await request('/approvals')).body, []);
-  const history = (await request(url)).body.messages;
+  const history = (await request(url)).body.timeline;
   assert.deepEqual(
     history
       .filter((message: { role: string }) => message.role === 'toolResult')
-      .map((message: { approvalDenied: boolean }) => message.approvalDenied),
+      .map((message: { toolState: string }) => message.toolState === 'denied'),
     [true, true],
   );
 });

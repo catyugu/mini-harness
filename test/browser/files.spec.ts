@@ -9,17 +9,30 @@ import { startIsolatedHost, settingsSection, expectInViewport } from '../support
 test('file inspection, responsive themes and reduced viewport height keep controls reachable', async ({
   browser,
 }) => {
-  const mock = await createMockProvider(),
+  const markdown = [
+    '# Visible file',
+    '',
+    'Workspace content',
+    '',
+    '\`\`\`text',
+    'Readable code',
+    '\`\`\`',
+    '',
+    '| Path | Script | Package |',
+    '| --- | --- | --- |',
+    '| \`docs/examples/tsconfig.json\` | \`test:playwright\` | \`@mini-harness/plugin-api\` |',
+  ].join('\n');
+  const mock = await createMockProvider(() => markdown),
     { root, paths } = createFixturePaths(mock.url);
   const note = join(paths.cwd, 'notes.md');
   writeFileSync(note, '# Visible file\nBefore edits');
   const git = (...args: string[]) => execFileSync('git', args, { cwd: paths.cwd });
   git('init', '--quiet');
   git('add', 'notes.md');
-  writeFileSync(note, '# Visible file\nWorkspace content');
+  writeFileSync(note, markdown);
   const service = await startIsolatedHost(paths);
   try {
-    for (const width of [1366, 768, 390, 320]) {
+    for (const width of [1920, 900, 390, 320]) {
       const page = await browser.newPage({ viewport: { width, height: 700 } });
       try {
         await page.goto(service.url + '/#token=' + service.token);
@@ -56,11 +69,7 @@ test('file inspection, responsive themes and reduced viewport height keep contro
         await panel.getByRole('button', { name: 'Workspace panel home' }).click();
         await panel.getByRole('button', { name: /Git changes/ }).click();
         await panel.getByRole('button', { name: /^notes.md/ }).click();
-        await expect(panel.locator('.diff .added')).toHaveText([
-          '+# Visible file',
-          '+Before edits',
-          '+Workspace content',
-        ]);
+        await expect(panel.locator('.diff')).toContainText('+Readable code');
         await expect(panel.getByRole('tab', { name: 'Diff: notes.md', exact: true })).toBeVisible();
         await panel.getByRole('tab', { name: 'notes.md', exact: true }).click();
         await expect(panel.getByRole('tab', { name: 'notes.md', exact: true })).toHaveAttribute(
@@ -69,17 +78,52 @@ test('file inspection, responsive themes and reduced viewport height keep contro
         );
         await expect(panel.getByRole('heading', { name: 'Visible file' })).toBeVisible();
         await panel.getByRole('button', { name: 'Source', exact: true }).click();
-        await expect(panel.locator('.file-preview')).toHaveText('# Visible file\nWorkspace content');
+        await expect(panel.locator('.file-preview')).toContainText('Readable code');
+        await panel.getByRole('button', { name: 'Source', exact: true }).click();
         expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
         await expectInViewport(panel, { width, height: 700 });
         await panel.getByRole('button', { name: 'Close workspace panel' }).click();
-        for (const theme of ['dark', 'light']) {
+        const prompt = page.getByRole('textbox', { name: 'Message', exact: true });
+        await prompt.fill('Render this file');
+        await page.getByRole('button', { name: 'Send', exact: true }).click();
+        await expect(page.getByLabel('Latest run')).toHaveAttribute('data-state', 'completed');
+        for (const theme of ['dark', 'light', 'system']) {
+          if (theme === 'system') await page.emulateMedia({ colorScheme: 'dark' });
           if (width <= 860) await page.getByRole('button', { name: 'Toggle navigation' }).click();
           await page.getByRole('button', { name: 'Settings', exact: true }).click();
           await settingsSection(page, 'Appearance').click();
           await page.getByRole('combobox', { name: 'Theme', exact: true }).selectOption(theme);
           await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
           await page.getByRole('button', { name: 'Close settings' }).click();
+          await page.getByRole('button', { name: 'Open workspace panel', exact: true }).click();
+          for (const markdown of [page.locator('#messages .markdown').last(), panel.locator('.markdown')]) {
+            await expect(markdown.locator('.code-block')).toHaveCSS(
+              'background-color',
+              theme === 'light' ? 'rgb(32, 32, 35)' : 'rgb(17, 17, 19)',
+            );
+            await expect(markdown.locator('.code-block pre')).toHaveCSS(
+              'background-color',
+              'rgba(0, 0, 0, 0)',
+            );
+            await expect(markdown.locator('.code-block code')).toHaveCSS('color', 'rgb(243, 243, 245)');
+            await expect(markdown.locator('td code')).toHaveText([
+              'docs/examples/tsconfig.json',
+              'test:playwright',
+              '@mini-harness/plugin-api',
+            ]);
+            await expect(markdown.locator('td code').first()).toHaveCSS('white-space', 'nowrap');
+          }
+          if (width <= 900)
+            expect(
+              await panel
+                .locator('.markdown-table')
+                .evaluate(
+                  (node) =>
+                    node.scrollWidth > node.clientWidth && getComputedStyle(node).overflowX === 'auto',
+                ),
+            ).toBe(true);
+          expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+          await panel.getByRole('button', { name: 'Close workspace panel' }).click();
         }
         await page.setViewportSize({ width, height: 380 });
         await page.getByRole('textbox', { name: 'Message', exact: true }).fill('A long task '.repeat(100));
@@ -136,12 +180,19 @@ test('an open file preview and diff refresh after an agent write', async ({ page
     await expect(panel.locator('.file-preview')).toContainText('const updated = 1;');
     await expect(panel.locator('.file-preview')).toHaveAttribute('aria-hidden', 'true');
     await expect(panel.locator('.file-accessible-source')).toHaveText('const updated = 1;');
-    await page.getByRole('textbox', { name: 'Message', exact: true }).fill('Update the file');
+    await page.getByRole('textbox', { name: 'Message', exact: true }).fill('Update the file @"update.js"');
     await page.getByRole('button', { name: 'Send', exact: true }).click();
     await expect(panel.locator('.file-preview')).toContainText('const updated = 2;');
     await panel.getByRole('tab', { name: 'Diff: update.js', exact: true }).click();
     await expect(panel.locator('.diff .added')).toContainText(['+const updated = 1;', '+const updated = 2;']);
-    await expect(panel.getByRole('tab', { name: 'update.js', exact: true })).toHaveCount(1);
+    const preview = panel.getByRole('tab', { name: 'update.js', exact: true });
+    await preview.click();
+    await page.keyboard.press('Escape');
+    await expect(panel).toBeHidden();
+    writeFileSync(file, 'const updated = 3;\n');
+    await page.locator('.message.user').getByRole('button', { name: 'update.js', exact: true }).click();
+    await expect(preview).toHaveAttribute('aria-selected', 'true');
+    await expect(panel.locator('.file-preview:visible')).toContainText('const updated = 3;');
   } finally {
     await page.close();
     await service.stop();
