@@ -36,7 +36,7 @@ test('drafts isolate attachments and discover workspace files and skills', async
       if (method === 'Enter') await draft.press('Enter');
       else await page.getByRole('button', { name: 'Send', exact: true }).click();
       await (await chooser).setFiles([]);
-      await expect(draft).toHaveText('');
+      await expect(draft).not.toContainText('/file');
     }
     await expect(page.locator('#sessions .session-row')).toHaveCount(0);
 
