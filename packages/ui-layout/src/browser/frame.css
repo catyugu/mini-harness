@@ -68,12 +68,12 @@
     flex-direction: column;
   }
   .topbar {
-    flex: 0 0 calc(68px + env(safe-area-inset-top));
+    flex: 0 0 auto;
     display: grid;
     grid-template-columns: auto minmax(0, 1fr) auto;
     align-items: center;
     gap: var(--space);
-    padding: env(safe-area-inset-top) var(--space-4) 0;
+    padding: calc(20px + env(safe-area-inset-top)) var(--space-4) var(--space-3);
   }
   #inspectorOpen {
     grid-column: 3;

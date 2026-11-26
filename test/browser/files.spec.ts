@@ -38,7 +38,10 @@ test('file inspection, responsive themes and reduced viewport height keep contro
         await page.goto(service.url + '/#token=' + service.token);
         const title = page.locator('#conversationTitle');
         await expect(title).toBeVisible();
-        expect(await title.evaluate((node) => node.getBoundingClientRect().top)).toBeGreaterThanOrEqual(8);
+        await expect.poll(async () => (await title.boundingBox())?.y ?? 0).toBeGreaterThanOrEqual(20);
+        const header = expectPresent(await page.locator('.topbar').boundingBox(), 'header bounds');
+        const meta = expectPresent(await page.locator('#headerMeta').boundingBox(), 'header meta bounds');
+        expect(header.y + header.height - meta.y - meta.height).toBeGreaterThanOrEqual(12);
         if (width <= 860) {
           const navigation = page.getByRole('button', { name: 'Toggle navigation' });
           const close = page
@@ -89,7 +92,24 @@ test('file inspection, responsive themes and reduced viewport height keep contro
         const prompt = page.getByRole('textbox', { name: 'Message', exact: true });
         await prompt.fill('Render this file');
         await page.getByRole('button', { name: 'Send', exact: true }).click();
-        await expect(page.getByLabel('Latest run')).toHaveAttribute('data-state', 'completed');
+        const summary = page.getByLabel('Latest run');
+        await expect(summary).toHaveAttribute('data-state', 'completed');
+        await expect(summary).toBeInViewport();
+        await expect(page.locator('#conversationHistory')).toBeVisible();
+        await expect
+          .poll(() =>
+            summary.evaluate((node) => {
+              const history = document.getElementById('conversationHistory');
+              const composer = document.querySelector('.composer-wrap');
+              if (!history || !composer) throw new Error('Missing conversation layout');
+              const run = node.getBoundingClientRect();
+              return {
+                afterHistory: run.top >= history.getBoundingClientRect().bottom - 1,
+                beforeComposer: run.bottom <= composer.getBoundingClientRect().top + 1,
+              };
+            }),
+          )
+          .toEqual({ afterHistory: true, beforeComposer: true });
         for (const theme of ['dark', 'light', 'system']) {
           if (theme === 'system') await page.emulateMedia({ colorScheme: 'dark' });
           if (width <= 860) await page.getByRole('button', { name: 'Toggle navigation' }).click();

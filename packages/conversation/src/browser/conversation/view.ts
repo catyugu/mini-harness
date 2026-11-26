@@ -15,8 +15,8 @@ export function mountConversationLayout(ctx: Context) {
         <h1>What are we working on?</h1>
         <div id="workspaceWelcome"></div>
       </section>
-      <div id="runSummary" class="run-summary ui-content-width" aria-label="Latest run" hidden><span></span><time></time><details id="changedFiles" hidden><summary></summary><ul></ul></details></div>
       <div id="conversationHistory" hidden></div>
+      <div id="runSummary" class="run-summary ui-content-width" aria-label="Latest run" hidden><span></span><time></time><details id="changedFiles" hidden><summary></summary><ul></ul></details></div>
       <div class="composer-wrap ui-content-width">
         <div id="approvalRequests" class="approval-requests"></div>
         <div id="queuedMessages" class="queued-messages" hidden></div>
