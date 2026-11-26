@@ -6,9 +6,7 @@ import type {
   ModelErrorKind,
   NativeAssistantMessage,
 } from '@mini-harness/llm/api';
-import type { Context } from 'mini-harness/cordis';
-import { scopeTarget } from '@mini-harness/plugin-api/scopes';
-import type { ModelFailure, ModelRetry } from './events.ts';
+import type { ModelFailure, ModelRetry } from './api.ts';
 
 function failedMessage(
   { model, signal }: LlmRequest,
@@ -117,15 +115,4 @@ export async function requestModel(
       return failedMessage(request, error);
     }
   }
-}
-
-/** Dispatch the same scoped retry policy for every model execution. */
-export function modelRetry(ctx: Context, sessionId: string) {
-  return async (failure: ModelFailure) => {
-    const { signal, ...input } = failure;
-    for (const { context, callback } of ctx.events.listeners('agent/model-retry', scopeTarget(ctx))) {
-      const retry = await context.fiber.run((signal) => callback({ ...input, sessionId, signal }), signal);
-      if (retry !== undefined) return retry;
-    }
-  };
 }

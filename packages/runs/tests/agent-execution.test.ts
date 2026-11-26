@@ -16,7 +16,7 @@ import type { SessionStore } from '@mini-harness/sessions/records';
 import { startTestProfile } from '../../../test/support/profile.ts';
 import { defineTool } from '@mini-harness/tools/api';
 import type { LlmPort, NativeAssistantMessage, ToolCallPart } from '@mini-harness/llm/api';
-import type { ModelRetry } from '@mini-harness/agent/events';
+import type { ModelRetry } from '@mini-harness/agent/api';
 import { createFixturePaths } from '../../../test/support/mock-provider.ts';
 
 const model = { provider: 'fixture', id: 'native' };

@@ -44,7 +44,7 @@ The executor presents tool schemas, interprets the assistant response and delive
 | `agent/model-retry`     | Choose whether to retry a failed request before output has streamed. |
 | `agent/tool-result`     | Transform accepted tool content after raw execution is persisted.    |
 
-These hooks are dispatched by conversation orchestration in Runs; a direct `harnessAgent.run` call uses its supplied callbacks. Register run-local effects on the supplied run Context so disposal releases them. Return transformed values instead of mutating inputs. The [execution reference](../../docs/subsystems/execution.md) describes their position in the persistence flow.
+These hooks are dispatched by conversation orchestration in Runs; a direct `harnessAgent.run` call uses its supplied callbacks. The native execution API and model request loop do not import session contracts. The conversation integration in `events.ts` owns scoped policy dispatch and record contributions. Register run-local effects on the supplied run Context so disposal releases them. Return transformed values instead of mutating inputs. The [execution reference](../../docs/subsystems/execution.md) describes their position in the persistence flow.
 
 ## Configuration, lifetime and failures
 

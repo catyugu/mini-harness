@@ -2,15 +2,24 @@ import type { Context } from 'mini-harness/cordis';
 import type {
   LlmRequest,
   ModelAttemptMetrics,
+  ModelErrorKind,
+  ToolCallPart,
   NativeAssistantMessage,
   NativeToolMessage,
 } from '@mini-harness/llm/api';
-import type { ModelFailure, ModelRetry } from './events.ts';
-import type { ToolCallPart } from '@mini-harness/llm/api';
 import type { ToolDefinition } from '@mini-harness/tools/api';
 import type { ToolExecution, ToolExecutorPort } from '@mini-harness/tools/execution';
 
 type Request = Omit<LlmRequest, 'signal'>;
+
+export interface ModelFailure {
+  readonly model: Readonly<LlmRequest['model']>;
+  readonly attempt: number;
+  readonly error: string;
+  readonly kind?: ModelErrorKind;
+  readonly signal: AbortSignal;
+}
+export type ModelRetry = { delayMs?: number };
 
 export interface AgentTurn {
   request: Request;

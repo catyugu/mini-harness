@@ -4,7 +4,7 @@ import { conversationTools } from './tool-selection.ts';
 import type { Context } from 'mini-harness/cordis';
 import type { TaskContext } from '@mini-harness/tasks/api';
 import { scopeTarget } from '@mini-harness/plugin-api/scopes';
-import type { InputContext, StepContext } from '@mini-harness/agent/events';
+import { modelRetry, type InputContext, type StepContext } from '@mini-harness/agent/events';
 import { DomainError } from '@mini-harness/platform/errors';
 import { isDeepStrictEqual } from 'node:util';
 import type { SessionCatalog, SessionLifecycle, SessionStore } from '@mini-harness/sessions/records';
@@ -33,7 +33,6 @@ import {
   selectModel,
   assertImageInput,
 } from '@mini-harness/models/selection';
-import { modelRetry } from '@mini-harness/agent/model-request';
 
 function requireService<K extends keyof Context & string>(ctx: Context, name: K): NonNullable<Context[K]> {
   const value = ctx.get(name);

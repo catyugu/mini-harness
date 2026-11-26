@@ -1,8 +1,7 @@
 import type { Context, Plugin } from 'mini-harness/cordis';
 import type { PluginInfo } from '@mini-harness/plugin-api/descriptor';
-import { modelRetry } from '@mini-harness/agent/model-request';
+import { modelRetry } from '@mini-harness/agent/events';
 import type { LlmRequest } from '@mini-harness/llm/api';
-import type {} from '@mini-harness/agent/events';
 import type {} from '@mini-harness/runs/api';
 import { terminal } from '@mini-harness/tasks/api';
 import { prepareModelMessages, selectModel } from '@mini-harness/models/selection';
