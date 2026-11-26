@@ -53,6 +53,7 @@ function start(ctx: Context, id: string, name: string, args: Record<string, unkn
         ...service.task(id),
         type: backgroundTool,
         name: tool.label ?? tool.name,
+        metadata: { tool: name, arguments: prepared.args as TaskData },
         provider: owner ?? ctx,
         signal: lifetime,
         project: (result: ToolResult) =>

@@ -817,11 +817,50 @@ button.file-card:hover {
   margin: 0;
   max-width: 105px;
 }
-.message-row.async-message {
-  justify-content: flex-start;
+.async-message {
+  min-width: 0;
+  color: var(--muted);
+  font-size: 12px;
 }
-.async-message .message {
-  border: 1px solid var(--border);
+.async-message > summary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 28px;
+  padding: 4px;
+  border-radius: 6px;
+  cursor: pointer;
+  list-style: none;
+  overflow-wrap: anywhere;
+}
+.async-message > summary::-webkit-details-marker {
+  display: none;
+}
+.async-message > summary:hover {
+  background: var(--hover);
+}
+.async-message > summary svg {
+  flex: 0 0 13px;
+  height: 13px;
+}
+.async-message[open] > summary svg {
+  transform: rotate(90deg);
+}
+.async-message-body {
+  margin: 2px 0 4px 18px;
+  padding: 8px 12px;
+  border-left: 2px solid var(--border);
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+.async-message-body .markdown {
+  font-size: 13px;
+}
+.async-message-body .markdown > :first-child {
+  margin-top: 0;
+}
+.async-message-body .markdown > :last-child {
+  margin-bottom: 0;
 }
 @media (max-width: 560px) {
   .composer-footer {

@@ -1,41 +1,232 @@
 .background-tasks {
+  min-width: 0;
   white-space: nowrap;
 }
 .background-tasks > button {
-  cursor: pointer;
   display: flex;
   align-items: center;
   gap: 4px;
+  font-size: 12px;
+  color: var(--muted);
 }
 .background-tasks > button svg {
-  width: 16px;
-  height: 16px;
+  width: 12px;
+  height: 12px;
+  transform: rotate(90deg);
+}
+.background-tasks > button[aria-expanded='true'] svg {
+  transform: rotate(-90deg);
+}
+.background-tasks > button[data-running='true']::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #4d83df;
 }
 .background-task-list {
   position: fixed;
   inset: auto;
   margin: 0;
-  width: min(320px, calc(100vw - 32px));
-  max-height: min(60vh, 420px);
+  width: min(500px, calc(100vw - 16px));
+  max-height: min(65dvh, 520px);
+  box-sizing: border-box;
   overflow: auto;
+  overscroll-behavior: contain;
   background: var(--surface);
-  color: var(--text);
+  color: var(--ink);
   border: 1px solid var(--border);
-  border-radius: var(--control-radius);
-  padding: 8px;
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 6px;
   white-space: normal;
+  font-size: 12px;
 }
-.background-task-list summary {
-  cursor: pointer;
-  overflow-wrap: anywhere;
-  padding: 6px 0;
+.task-group + .task-group:not([hidden]) {
+  margin-top: 4px;
 }
-.background-task-list button {
-  margin: 0 6px 4px 0;
+.task-group h3,
+.task-group-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  min-height: 26px;
+  margin: 0;
+  padding-inline: 6px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 400;
 }
-.background-task-list pre {
-  max-height: 180px;
+.task-group-toggle,
+.task-clear {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 3px 0;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+}
+.task-group-toggle svg,
+.task-row > svg {
+  width: 13px;
+  height: 13px;
+  flex: none;
+  color: var(--muted);
+}
+.task-group-toggle[aria-expanded='true'] svg,
+.task-row > .task-chevron-open {
+  transform: rotate(90deg);
+}
+.task-line {
+  display: flex;
+  align-items: center;
+  border-radius: 6px;
+  min-width: 0;
+}
+.task-line:hover,
+.task-line:has(.task-row[aria-expanded='true']) {
+  background: var(--hover);
+}
+.task-row {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
+  gap: 7px;
+  min-height: 30px;
+  padding: 4px 6px;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  text-align: left;
+  font: inherit;
+}
+.task-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.task-kind,
+.task-state,
+.task-row time {
+  flex: none;
+  color: var(--muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.task-dot {
+  flex: 0 0 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--muted);
+}
+.task-item[data-tone='running'] .task-dot {
+  background: #4d83df;
+}
+.task-item[data-tone='completed'] .task-dot {
+  background: #239c6c;
+}
+.task-item:is([data-tone='failed'], [data-tone='interrupted']) .task-dot {
+  background: var(--danger);
+}
+.task-item:is([data-tone='waiting'], [data-tone='cancelled']) .task-dot {
+  background: var(--warning);
+}
+.task-line .task-cancel {
+  flex: none;
+  padding: 0;
+  min-height: 28px;
+  width: 28px;
+  color: var(--muted);
+}
+.task-cancel:hover {
+  color: var(--danger);
+}
+.task-cancel svg {
+  width: 14px;
+  height: 14px;
+}
+.task-detail {
+  margin: 3px 4px 7px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--panel);
+}
+.task-input,
+.task-output-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--border);
+}
+.task-input pre {
+  flex: 1;
+  min-width: 0;
+}
+.task-detail .ui-button {
+  min-height: 24px;
+  padding: 2px 5px;
+  font-size: 11px;
+  flex: none;
+}
+.task-detail pre {
+  margin: 0;
   white-space: pre-wrap;
-  overflow: auto;
   overflow-wrap: anywhere;
+  font: 12px/1.55 ui-monospace, monospace;
+}
+.task-output-heading {
+  align-items: center;
+  padding-block: 2px;
+  color: var(--muted);
+}
+.task-output {
+  min-height: 38px;
+  max-height: 288px;
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: 10px;
+}
+.task-notice {
+  margin: 4px 8px;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.task-notice:empty {
+  display: none;
+}
+.task-receipt {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 560px) {
+  .task-row {
+    min-height: 40px;
+    gap: 5px;
+  }
+  .task-line .task-cancel {
+    min-height: 40px;
+    width: 36px;
+  }
+  .task-kind {
+    display: none;
+  }
+  .task-detail .ui-button,
+  .task-group-toggle,
+  .task-clear {
+    min-height: 32px;
+  }
 }

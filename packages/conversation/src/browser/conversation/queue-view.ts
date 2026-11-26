@@ -1,5 +1,6 @@
 import type { MessageMode } from '@mini-harness/sessions/queue';
 import type { ConversationView } from '../../shared/api.ts';
+import { notificationLabel } from './notification.ts';
 
 export const modeLabel: Record<MessageMode, string> = {
   steer: 'Steer',
@@ -18,7 +19,8 @@ export function renderQueue(
     const row = document.createElement('div');
     row.className = 'queue-item';
     const label = document.createElement('span');
-    label.textContent = modeLabel[item.mode] + ' · ' + item.summary;
+    const summary = notificationLabel(item.origin, item.id) ?? item.summary;
+    label.textContent = modeLabel[item.mode] + ' · ' + summary;
     row.append(label);
     if (item.state === 'failed') {
       const reason = document.createElement('span');
@@ -31,7 +33,7 @@ export function renderQueue(
       button.type = 'button';
       button.className = 'small-button';
       button.textContent = 'Cancel';
-      button.setAttribute('aria-label', 'Cancel queued message: ' + item.summary);
+      button.setAttribute('aria-label', 'Cancel queued message: ' + summary);
       button.onclick = () => void cancel(item.id);
       row.append(button);
     }

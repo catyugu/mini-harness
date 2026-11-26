@@ -1,5 +1,5 @@
 import type { Context } from 'mini-harness/cordis';
-import type { TaskSnapshot } from '@mini-harness/tasks/api';
+import { terminal, type TaskSnapshot } from '@mini-harness/tasks/api';
 
 export const backgroundTool = 'background-tool';
 
@@ -31,10 +31,10 @@ export function relatedTasks(ctx: Context, id: string) {
     for (const task of ctx.harnessTasks.list(owner))
       if (related(task, id, children)) tasks.set(task.id, task);
   }
-  return [...tasks.values()]
-    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-    .slice(0, 50)
-    .map((task) => ctx.harnessTasks.get(task.id) ?? task);
+  const ordered = [...tasks.values()]
+    .map((task) => ctx.harnessTasks.get(task.id) ?? task)
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  return [...ordered.filter((task) => !terminal(task.state)), ...ordered.filter((task) => terminal(task.state)).slice(0, 50)];
 }
 
 export function relatedTask(ctx: Context, id: string, taskId: string) {
