@@ -24,8 +24,9 @@ export class RunEvents {
       this.records = updateRecords(this.records, event);
     }
     if (event.type === 'branch' && event.display) {
-      event = { ...event, display: { ...event.display, runId: this.info.id } };
-      this.records = this.records.filter((record) => record.id !== event.display!.id);
+      const display = { ...event.display, runId: this.info.id };
+      event = { ...event, display };
+      this.records = this.records.filter((record) => record.id !== display.id);
     }
     if (event.type === 'assistant-start' || event.type === 'assistant-end') this.partial = '';
     if (event.type === 'delta') this.partial += event.text;
