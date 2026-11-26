@@ -50,7 +50,7 @@ export function invokeTool(
       signal,
       retain,
       projectResult:
-        projectResult ?? (retain ? (result) => JSON.parse(JSON.stringify(result)) as TaskData : undefined),
+        projectResult ?? (retain ? tool.projectResult ?? ((result) => JSON.parse(JSON.stringify(result)) as TaskData) : undefined),
     },
     async (task) => {
       const result = await tool.execute(

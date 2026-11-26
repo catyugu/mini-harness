@@ -1,5 +1,5 @@
 import type { Context } from 'mini-harness/cordis';
-import type { TaskContext, TaskHandle, TaskOptions } from '@mini-harness/tasks/api';
+import type { TaskContext, TaskData, TaskHandle, TaskOptions } from '@mini-harness/tasks/api';
 import type { ScopeKey } from '@mini-harness/plugin-api/scopes';
 import type { Static, TSchema } from 'typebox';
 import type { TextPart, ImagePart, NativeToolMessage } from '@mini-harness/llm/api';
@@ -31,6 +31,8 @@ export interface ToolDefinition<Arguments = Record<string, any>> extends ToolSch
   metadata?: Record<string, unknown>;
   /** Calls are serial unless this returns true for the validated arguments. */
   isConcurrencySafe?(args: Arguments): boolean;
+  /** Optional compact serializable projection for retained calls. */
+  projectResult?(result: ToolResult): TaskData;
   execute(
     callId: string,
     args: Arguments,

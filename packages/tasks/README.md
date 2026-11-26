@@ -1,9 +1,25 @@
-# Tasks
+# @mini-harness/tasks
 
-The `harnessTasks` Cordis service starts arbitrary asynchronous work. Await the returned handle's
-`result` for inline execution, or retain its ID for independent work. The owner key determines
-which tasks are drained when their owner is deleted; the provider fiber also constrains their lifetime.
-Cancellation is cooperative: the task stays active until execution and resource cleanup settle.
-A caller-defined admission function can acquire a slot; `context.suspend` releases it while waiting
-and reacquires it before returning. Observe task snapshots with `subscribe` or await a condition with
-`wait`. Output is bounded and supports cursor-based incremental reads.
+`harnessTasks` starts asynchronous work through a single execution primitive. Await the returned
+handle's result for inline execution, or retain its ID for independent work. The owner key determines
+which work is drained when a resource is deleted; `task:<id>` binds a child to an active task.
+The creator is descriptive, and the provider Cordis fiber controls the lifetime of executing code.
+
+Cancellation is cooperative. A task remains active until its executor and owned work have settled.
+`suspend` is a whole-task waiting point: it releases the caller-defined admission slot and reacquires
+it before returning or propagating an ordinary wait error. A cancelled wait does not resume work.
+Waiters settle after durable lifecycle recording and before regular observer callbacks.
+
+`subscribe` observes creation, updates, output and removal from the recent runtime view. Subscriptions
+are scoped to the consumer fiber. Output uses absolute UTF-8 byte cursors and channel names.
+`retain: false` removes a task after settlement; otherwise the runtime retains at most 256 recent
+terminal snapshots (without their result promises or executor closures). `projectResult` selects the
+serializable observation result independently of the actual JavaScript value returned by the handle.
+
+Resource domains may handle the Cordis `tasks/admit`, `tasks/record` and `tasks/history` events.
+Sessions owns long-term history in SessionLog, including retained background task facts and existing
+Run records. `list` returns active and recent tasks; `get` and `readOutput` can also retrieve a durable
+record by ID. Recovery records interrupted work rather than restarting unknown side effects.
+
+`removeOwner` excludes new work until removal settles. The resource domain is responsible for
+rejecting work addressed to deleted resources. The runtime has no session or agent dependency.
