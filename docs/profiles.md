@@ -74,7 +74,7 @@ plugins:
 ```
 
 Install ordinary npm dependencies with `mini-harness plugin --profile rescue add <package>`, then add entries or bundles explicitly. The command forwards npm arguments in the Profile directory; use `remove`, `update`, local directories, tarballs or Git references as needed. npm lifecycle scripts are disabled by default; explicitly pass `--ignore-scripts=false` to authorize them.
-Installing a package does not activate it. A module may export a native Cordis
+Restart before updating or removing packages used by a running application. Installing a package does not activate it. A module may export a native Cordis
 function, class, or object with `apply(ctx, config)`; no plugin.json is needed
 for these entries. Disabled entries, shipped or installed, are not imported. Static metadata and configuration schemas use the same declaration contract; the native module's exports take precedence when enabled. Local paths resolve relative to the declaring layer. The Web Plugins page manages declared entries. Use the package's `/client` export as a separate Entry to mount its browser implementation independently, with its own configuration. The same convention works for shipped module names. The browser publisher uses the declared resources when present; set `client: false` on a server Entry when publishing its UI separately. YAML layers may include
 other fragments using `include`; they cannot use executable YAML tags or cyclic
@@ -82,6 +82,4 @@ references. The final entry ID determines the configuration override.
 
 All declared server modules use the same Cordis EntryTree and configuration path.
 The Web Plugins page edits the user patch, including ordinary module entries.
-Changing the live composition owner requires a Profile restart. Scoped overrides and the installed bundle
-format remain described in [scoped providers](scoped-providers.md) and
-[plugins](plugins.md). The Profile package must be initialized explicitly or by the first Web launch. YAML layers own plugin configuration and scoped composition. All changes are persisted to the active Profile's user layer; no global settings file or migration is used. Session data, credentials and plugin data remain in their existing locations.
+Changing the live composition owner requires a Profile restart. See [scoped providers](scoped-providers.md) for scoped overrides and [plugin packaging](plugins.md) for module metadata and assets. The Profile package must be initialized explicitly or by the first Web launch. YAML layers own plugin configuration and scoped composition. All changes are persisted to the active Profile's user layer; no global settings file or migration is used. Session data, credentials and plugin data remain in their existing locations.
