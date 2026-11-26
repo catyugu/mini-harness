@@ -139,7 +139,10 @@ test(
     const second = sendRun(app.runtime.plugins.ctx.harnessRuns, other.id, 'Root two');
     await entered.promise;
     assert.equal(activeRunCount(app.runtime.plugins.ctx), 2);
-    await assert.rejects(sendRun(app.runtime.plugins.ctx.harnessRuns, parent.id, 'Duplicate'), /already running/);
+    await assert.rejects(
+      sendRun(app.runtime.plugins.ctx.harnessRuns, parent.id, 'Duplicate'),
+      /already running/,
+    );
     const child = app.runtime.plugins.ctx.harnessSessions.create({ parentId: parent.id });
     const childWork = sendRun(app.runtime.plugins.ctx.harnessRuns, child.id, 'Child');
     const childCancelled = assert.rejects(childWork, /cancelled/);
@@ -349,7 +352,12 @@ test('append, torn write and fsync failures evict the writer without acknowledgi
     syncBuiltinESMExports();
     try {
       assert.throws(
-        () => app.runtime.plugins.ctx.harnessRuns.submit(session.id, { message: 'Unacknowledged' }, { source: 'user' }),
+        () =>
+          app.runtime.plugins.ctx.harnessRuns.submit(
+            session.id,
+            { message: 'Unacknowledged' },
+            { source: 'user' },
+          ),
         /Could not write/,
       );
     } finally {
@@ -459,7 +467,11 @@ test('retry looks up the failed delivery by its native entry identity', async (t
     type: 'inbox-enqueued',
     item: { id: 'recover-this', mode: 'followUp', text: 'fail this queued input', images: [] },
   });
-  const failed = runs.submit(session.id, { message: 'Manual input waiting for delivery' }, { source: 'user' });
+  const failed = runs.submit(
+    session.id,
+    { message: 'Manual input waiting for delivery' },
+    { source: 'user' },
+  );
   assert.equal(failed.state, 'queued');
   await assert.rejects(expectPresent(runs.current(session.id)?.result, 'active run'));
   assert.equal(runs.info(session.id)?.state, 'failed');
@@ -481,7 +493,11 @@ test('retry looks up the failed delivery by its native entry identity', async (t
     mimeType: 'text/plain',
     data: Buffer.from('private text').toString('base64'),
   };
-  const accepted = runs.submit(session.id, { message: 'fail this user input', attachments: [attachment] }, { source: 'user' });
+  const accepted = runs.submit(
+    session.id,
+    { message: 'fail this user input', attachments: [attachment] },
+    { source: 'user' },
+  );
   assert.equal(accepted.state, 'queued');
   await assert.rejects(expectPresent(runs.current(session.id)?.result, 'active run'));
   assert.equal(

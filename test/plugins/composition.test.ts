@@ -492,9 +492,15 @@ export const apply = (ctx, config) => { ctx.effect(() => ctx.harnessLlm.register
   };
   const configured = await request('/settings', 'PATCH', { scopes });
   assert.equal(configured.status, 200, JSON.stringify(configured.body));
-  assert.equal(await sendRun(app.runtime.plugins.ctx.harnessRuns, parent.id, 'Parent task'), 'Parent adapter');
+  assert.equal(
+    await sendRun(app.runtime.plugins.ctx.harnessRuns, parent.id, 'Parent task'),
+    'Parent adapter',
+  );
   assert.equal(await sendRun(app.runtime.plugins.ctx.harnessRuns, child.id, 'Child task'), 'Child adapter');
-  assert.equal(await sendRun(app.runtime.plugins.ctx.harnessRuns, sibling.id, 'Sibling task'), 'Mock response');
+  assert.equal(
+    await sendRun(app.runtime.plugins.ctx.harnessRuns, sibling.id, 'Sibling task'),
+    'Mock response',
+  );
   assert.equal(mock.requests.length, 1);
   assert.deepEqual(
     app.runtime.plugins.context(`session:${child.id}`).harnessModels.list(),

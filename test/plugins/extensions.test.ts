@@ -572,7 +572,10 @@ export function apply(ctx) {
   await toggle('model-high', false);
   assert.equal(list()[0]?.name, 'model-high');
   assert.deepEqual(ctx.harnessModels.capabilities(model)?.input, ['text', 'image']);
-  assert.equal(await sendRun(ctx.harnessRuns, session.id, 'High priority', undefined, { model }), 'model-high');
+  assert.equal(
+    await sendRun(ctx.harnessRuns, session.id, 'High priority', undefined, { model }),
+    'model-high',
+  );
   await toggle('model-tie', false);
   assert.deepEqual(list(), []);
   assert.equal(ctx.harnessModels.resolve(model), undefined);
@@ -592,5 +595,8 @@ export function apply(ctx) {
   await toggle('model-high', true);
   assert.equal(list()[0]?.name, 'model-low');
   await toggle('model-low', true);
-  assert.equal(await sendRun(ctx.harnessRuns, session.id, 'Restore Pi', undefined, { model }), 'Mock response');
+  assert.equal(
+    await sendRun(ctx.harnessRuns, session.id, 'Restore Pi', undefined, { model }),
+    'Mock response',
+  );
 });

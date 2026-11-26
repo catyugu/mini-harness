@@ -100,7 +100,10 @@ test('a failed recent-model write does not delay accepted input or terminate exe
   try {
     const run = runs.submit(
       session.id,
-      { message: 'Accept this despite the unwritable setting', model: { provider: 'local-mock', id: 'second-model' } },
+      {
+        message: 'Accept this despite the unwritable setting',
+        model: { provider: 'local-mock', id: 'second-model' },
+      },
       { source: 'user' },
     );
     assert.equal(run.state, 'queued');

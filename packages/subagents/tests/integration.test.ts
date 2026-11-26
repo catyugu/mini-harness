@@ -233,8 +233,8 @@ test(
     held[0].release();
     held[1].release();
     await Promise.all(
-      [first, second].map((result) =>
-        app.runtime.plugins.ctx.harnessRuns.current(String(result.details?.sessionId))?.result,
+      [first, second].map(
+        (result) => app.runtime.plugins.ctx.harnessRuns.current(String(result.details?.sessionId))?.result,
       ),
     );
     assert.equal(activeRunCount(app.runtime.plugins.ctx), 0);

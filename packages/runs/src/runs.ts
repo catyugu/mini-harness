@@ -130,10 +130,7 @@ export class Runs implements RunPort {
       Object.assign(info, next, { sequence: info.sequence });
       this.publish(activity, { type: 'run', run: next });
       if (firstAdmission)
-        this.observe(
-          { type: 'run-started', sessionId: id, run: next },
-          this.current(id)?.signal,
-        );
+        this.observe({ type: 'run-started', sessionId: id, run: next }, this.current(id)?.signal);
       if (ended) this.observe({ type: 'run-ended', sessionId: id, run: next });
     } finally {
       if (ended) {
@@ -147,7 +144,18 @@ export class Runs implements RunPort {
   private launch(
     id: string,
     prompt: string,
-    { signal, source, emit, model, attachments, thinkingLevel, revision, pool, metadata, provider }: RunOptions,
+    {
+      signal,
+      source,
+      emit,
+      model,
+      attachments,
+      thinkingLevel,
+      revision,
+      pool,
+      metadata,
+      provider,
+    }: RunOptions,
   ) {
     this.assertIdle(id);
     const activity: Activity = { emit };

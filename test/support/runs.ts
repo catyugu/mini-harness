@@ -11,8 +11,11 @@ export async function sendRun(
   options: Omit<RunInput, 'message'> & RunSubmission = {},
 ) {
   const { model, attachments, thinkingLevel, ...submission } = options;
-  return runs.submit(id, { message, model, attachments, thinkingLevel }, { source: 'user', ...submission, emit })
-    .result;
+  return runs.submit(
+    id,
+    { message, model, attachments, thinkingLevel },
+    { source: 'user', ...submission, emit },
+  ).result;
 }
 
 export function activeRunCount(ctx: Pick<Context, 'harnessRuns' | 'harnessSessions'>) {
