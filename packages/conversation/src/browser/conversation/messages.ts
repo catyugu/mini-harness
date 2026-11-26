@@ -36,13 +36,19 @@ export function createMessageView(
   const preview = document.createElement('div');
   preview.className = 'message assistant';
   let following = true;
+  let followedOffset: number | undefined;
 
   const scrollToEnd = () => {
-    if (following && viewport.clientHeight) viewport.scrollTop = viewport.scrollHeight;
+    if (following && viewport.clientHeight) {
+      viewport.scrollTop = viewport.scrollHeight;
+      followedOffset = viewport.scrollTop;
+    }
   };
   viewport.addEventListener(
     'scroll',
     () => {
+      // The scroll event for our own scroll can arrive after the content grows.
+      if (following && viewport.scrollTop === followedOffset) return;
       if (viewport.clientHeight)
         following = viewport.scrollHeight - viewport.clientHeight - viewport.scrollTop < 8;
     },
