@@ -34,11 +34,6 @@ import { RecordLog, digest, entryId } from './record-log.ts';
 
 type StoredEntry =
   | SessionEntry
-  | (Pick<SessionEntry, 'version' | 'seq' | 'id' | 'parentId' | 'timestamp'> &
-      (
-        | { type: 'compaction'; summary: string; keepFromId: string | null }
-        | { type: 'context-edit'; targetId: string; replacement: NativeMessage['content'] | null }
-      ))
   | (Omit<Extract<SessionEntry, { type: 'inbox-enqueued' }>, 'item'> & {
       item: Omit<InboxItem, 'mode'> & { mode: 'followUp' };
     })
@@ -84,7 +79,6 @@ export class SessionLog extends RecordLog<SessionEvent> implements SessionLogPor
   readonly port: SessionLogPort = {
     sessionId: this.sessionId,
     entries: (after) => this.entries(after),
-    entry: (id) => this.entry(id),
     originalMessage: (id, raw) => this.originalMessage(id, raw),
     setting: (owner) => this.setting(owner),
     inbox: () => this.inbox(),
@@ -115,10 +109,7 @@ export class SessionLog extends RecordLog<SessionEvent> implements SessionLogPor
   }
 
   protected decodeRecord(record: Record<string, unknown>): SessionEntry {
-    const stored = record as StoredEntry;
-    if (stored.type === 'compaction' || stored.type === 'context-edit')
-      return this.normalizeContextRecord(stored);
-    const entry = storedEntry(stored);
+    const entry = storedEntry(record as StoredEntry);
     if (
       entry.type === 'message' &&
       entry.message.role === 'toolResult' &&
@@ -129,58 +120,6 @@ export class SessionLog extends RecordLog<SessionEvent> implements SessionLogPor
       entry.message = { ...entry.message, outcome: 'denied', details };
     }
     return entry;
-  }
-
-  /** Convert old storage envelopes at ingestion; projection and validation use only replacements. */
-  private normalizeContextRecord(
-    entry: Extract<StoredEntry, { type: 'compaction' | 'context-edit' }>,
-  ): SessionEntry {
-    const { version, seq, id, parentId, timestamp } = entry;
-    const identity = { version, seq, id, parentId, timestamp };
-    const state = this.context(parentId);
-    if (entry.type === 'compaction') {
-      if (
-        typeof entry.summary !== 'string' ||
-        (entry.keepFromId !== null &&
-          !this.branchEntries(parentId).some(
-            (source) => source.id === entry.keepFromId && source.type === 'message',
-          ))
-      )
-        throw new Error('Invalid historical compaction');
-      if (!state.contextMessages.length) return { ...identity, type: 'branch' };
-      const keep = entry.keepFromId === null ? -1 : state.contextEntryIds.indexOf(entry.keepFromId);
-      const deleteCount = keep < 0 ? state.contextMessages.length : keep;
-      return {
-        ...identity,
-        type: 'context-replace',
-        replacements: [
-          {
-            start: 0,
-            deleteCount,
-            insert: [
-              {
-                role: 'user',
-                content: 'Summary of earlier conversation:\n' + entry.summary,
-                timestamp: Date.parse(timestamp),
-              },
-            ],
-          },
-        ],
-      };
-    }
-    const source = this.byId.get(entry.targetId);
-    if (source?.type !== 'message' || !this.branchEntries(parentId).some(({ id }) => id === entry.targetId))
-      throw new Error('Invalid historical context edit');
-    const start = state.contextEntryIds.indexOf(entry.targetId);
-    if (start < 0) return { ...identity, type: 'branch' };
-    const message = state.contextMessages[start];
-    const insert =
-      entry.replacement === null ? [] : [{ ...message, content: entry.replacement } as NativeMessage];
-    return {
-      ...identity,
-      type: 'context-replace',
-      replacements: [{ start, deleteCount: 1, insert, preserveSource: insert.length ? true : undefined }],
-    };
   }
 
   protected advancesBranch(entry: SessionEntry) {
@@ -328,7 +267,7 @@ export class SessionLog extends RecordLog<SessionEvent> implements SessionLogPor
 
   recordRequest(snapshot: Omit<LlmRequest, 'signal'>, purpose?: 'summary') {
     const projected = this.contextAt();
-    const { messages, tools, model, systemPrompt, thinkingLevel, maxTokens } = snapshot;
+    const { messages, tools, model, systemPrompt, thinkingLevel, maxTokens, inputMeasurement } = snapshot;
     const patch = messagePatch(projected.contextMessages, messages);
     const toolSchema = tools === undefined ? undefined : digest(tools);
     if (toolSchema && tools && !this.schemas.has(toolSchema))
@@ -341,6 +280,7 @@ export class SessionLog extends RecordLog<SessionEvent> implements SessionLogPor
           systemPrompt,
           thinkingLevel,
           maxTokens,
+          inputMeasurement,
           toolSchema,
           purpose,
           ...(patch && { messagesPatch: patch }),

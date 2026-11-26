@@ -80,7 +80,6 @@ The read projection exposes:
 - `timeline`: the selected branch's visible messages and display records, plus applicable run terminations, with stable identities and presentation metadata.
 - `contextMessages`: effective model messages after applying the branch's context replacements.
 - `contextEntryIds`: source IDs aligned with model messages. A checkpoint uses its replacement record's ID.
-- `contextRevisions`: identities for the effective content, including content changes that retain the same original source.
 - `model`, `thinkingLevel` and `leafId`: the selected branch's settings and identity.
 - `run`: the latest operational run state, reduced in append order.
 
@@ -88,7 +87,7 @@ Pending input is read separately through `SessionLogPort.inbox()`; `queue()` als
 
 A `context-replace` event applies one or more ordered splices to the parent branch's effective model messages as one durable write. A splice can preserve source identities for one-for-one edits. Full history continues to use the original records. The effective context is updated incrementally as the branch advances and can be read without building the display timeline.
 
-Model attempts record timing and provider-reported usage separately from assistant messages. Conversation settings store plugin-owned values without advancing the branch; null removes a setting. Historical context-edit and compaction envelopes normalize into generic replacement records when loaded.
+Model requests may record their measured input counts and budget. Model attempts record timing and provider-reported usage by request ID, separately from assistant messages. Conversation settings store plugin-owned values without advancing the branch; null removes a setting.
 
 User presentation is stored separately from the accepted model input. Preparation can
 change the model-visible content while the interface keeps the submitted text and

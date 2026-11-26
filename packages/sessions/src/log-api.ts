@@ -7,6 +7,7 @@ import type { ThinkingLevel, ModelChoice, ToolSchema } from '@mini-harness/llm/v
 import type { ImageInput, PreparedMessage } from '@mini-harness/input/message';
 import type {
   LlmRequest,
+  InputMeasurement,
   ModelRequestSnapshot,
   NativeMessage,
   NativeToolMessage,
@@ -84,7 +85,7 @@ export type SessionEvent<Data = unknown> =
       data: unknown;
     }
   | PluginRecord<Data>
-  | { type: 'context-replace'; replacements: ContextReplacement[] }
+  | { type: 'context-replace'; replacements: ContextReplacement[]; measurement?: InputMeasurement & { model: ModelChoice } }
   | ({ type: 'model-attempt' } & ModelAttempt)
   | { type: 'session-setting'; owner: string; value: unknown }
   | { type: 'inbox-enqueued'; item: InboxItem }
@@ -109,8 +110,6 @@ export interface SessionContext {
   contextMessages: NativeMessage[];
   /** Original entry IDs parallel to contextMessages. Synthetic entries use their replacement record ID. */
   contextEntryIds: string[];
-  /** Cache keys change when content changes, even when its source remains the same. */
-  contextRevisions: string[];
   model?: ModelChoice;
   thinkingLevel?: ThinkingLevel;
 }
@@ -123,8 +122,6 @@ export interface SessionProjection extends SessionContext {
 export interface SessionLogPort {
   readonly sessionId: string;
   entries(after?: number): SessionEntry[];
-  /** Read the original durable record by identity. */
-  entry(id: string): SessionEntry | undefined;
   /** Fetch the pre-pruning message or, for tool results, the raw execution before transforms. */
   originalMessage(id: string, raw?: boolean): NativeMessage | undefined;
   setting(owner: string): unknown;

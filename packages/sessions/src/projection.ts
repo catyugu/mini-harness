@@ -92,11 +92,11 @@ export function displayRecord(
 }
 
 export function newContext(): SessionContext {
-  return { leafId: null, contextMessages: [], contextEntryIds: [], contextRevisions: [] };
+  return { leafId: null, contextMessages: [], contextEntryIds: [] };
 }
 
 export function applyReplacements(
-  { contextMessages, contextEntryIds, contextRevisions }: SessionContext,
+  { contextMessages, contextEntryIds }: SessionContext,
   replacements: ContextReplacement[],
   id: string,
 ) {
@@ -106,17 +106,15 @@ export function applyReplacements(
       !Number.isSafeInteger(start) ||
       !Number.isSafeInteger(deleteCount) ||
       start < 0 ||
-      deleteCount < 0 ||
+      deleteCount < 1 ||
       start + deleteCount > end ||
       !Array.isArray(insert) ||
-      (deleteCount === 0 && insert.length === 0) ||
       (preserveSource && insert.length !== deleteCount)
     )
       throw new Error('Invalid context replacement interval');
     end = start;
     contextMessages.splice(start, deleteCount, ...insert);
     if (!preserveSource) contextEntryIds.splice(start, deleteCount, ...insert.map(() => id));
-    contextRevisions.splice(start, deleteCount, ...insert.map((_, index) => id + ':' + (start + index)));
   }
 }
 
@@ -131,7 +129,6 @@ export function projectContextEntry(state: SessionContext, entry: SessionEntry, 
   if (message) {
     state.contextMessages.push(message);
     state.contextEntryIds.push(entry.id);
-    state.contextRevisions.push(entry.id);
     return;
   }
   if (entry.type === 'context-replace') applyReplacements(state, entry.replacements, entry.id);

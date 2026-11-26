@@ -1,5 +1,4 @@
 import { DomainError } from '@mini-harness/platform/errors';
-import { writeText } from '@mini-harness/platform/json';
 import { createHash, randomBytes } from 'node:crypto';
 import {
   closeSync,
@@ -108,7 +107,6 @@ export abstract class RecordLog<Event extends { type: string }> {
     )
       throw new Error('Invalid session log header');
     this.header = header;
-    let migrated = false;
     for (const line of lines) {
       let record: Record<string, unknown>;
       try {
@@ -119,23 +117,11 @@ export abstract class RecordLog<Event extends { type: string }> {
       const { checksum, ...entry } = record;
       if (checksum !== digest(entry)) throw new Error('Corrupt session log checksum');
       const normalized = this.decodeRecord(entry);
-      migrated ||= digest(normalized) !== checksum;
       this.validateEntry(normalized, true);
       this.remember(normalized);
     }
     // An incomplete, unacknowledged final write can be discarded; complete corrupt records cannot.
-    if (this.readOnly) return;
-    if (migrated) {
-      const document = encodeLog(this.header, this.records);
-      this.checkFile(bytes.length);
-      writeText(this.file, document);
-      const previous = this.handle;
-      this.handle = openSync(this.file, constants.O_RDWR | (constants.O_NOFOLLOW ?? 0));
-      closeSync(previous);
-      this.length = Buffer.byteLength(document);
-      this.checkFile(this.length);
-      syncDirectory(dirname(this.file));
-    } else if (end < bytes.length) {
+    if (!this.readOnly && end < bytes.length) {
       this.checkFile(bytes.length);
       ftruncateSync(this.handle, end);
       fsyncSync(this.handle);
@@ -178,10 +164,6 @@ export abstract class RecordLog<Event extends { type: string }> {
 
   protected get leafId() {
     return this.currentLeafId;
-  }
-
-  entry(id: string) {
-    return structuredClone(this.byId.get(id));
   }
 
   entries(after = 0) {

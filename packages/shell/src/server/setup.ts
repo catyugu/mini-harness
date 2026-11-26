@@ -29,29 +29,6 @@ export function setup(ctx: Context) {
         { additionalProperties: false },
       ),
       background: true,
-      pruneResult(text, maxCharacters) {
-        let output: { stdout?: string; stderr?: string } | null;
-        try {
-          output = JSON.parse(text);
-        } catch (error) {
-          if (error instanceof SyntaxError) return;
-          throw error;
-        }
-        if (typeof output?.stdout !== 'string' || typeof output.stderr !== 'string') return;
-        const diagnostics = (output.stderr + '\n' + output.stdout)
-          .split('\n')
-          .filter((line) => /error|fatal|failed|warning|undefined reference/i.test(line))
-          .join('\n')
-          .slice(0, Math.floor(maxCharacters * 0.6));
-        const rest = Math.floor((maxCharacters - diagnostics.length - 2) / 2);
-        return [
-          diagnostics,
-          rest > 0 ? output.stderr.slice(-rest) : '',
-          rest > 0 ? output.stdout.slice(-rest) : '',
-        ]
-          .filter(Boolean)
-          .join('\n');
-      },
       projectResult(result) {
         if (result.details?.exitCode === undefined) return JSON.parse(JSON.stringify(result));
         const { stdout: _stdout, stderr: _stderr, ...details } = result.details;
@@ -96,7 +73,7 @@ export function setup(ctx: Context) {
             content: [{ type: 'text', text: JSON.stringify(output) }],
             isError: Boolean(output.reason) || output.code !== 0,
             outcome: cancelled ? 'cancelled' : undefined,
-            details: { ...output, timeoutMs, exitCode: output.code },
+            details: { ...output, timeoutMs, exitCode: output.code, diagnostics: (output.stderr + '\n' + output.stdout).split('\n').filter((line) => /error|fatal|failed|warning|undefined reference/i.test(line)).join('\n').slice(0, 1000) },
             elapsedMs: performance.now() - startedAt,
           };
         } finally {
