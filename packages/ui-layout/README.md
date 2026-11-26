@@ -34,7 +34,7 @@ The fragment assumes a browser plugin injecting `miniTabs` and a valid workspace
 
 ## Ownership and lifecycle
 
-`core:layout` in the [web Profile](../../profiles/web.yml) injects `miniSlots` and `miniPrimitives` and publishes the frame services. It declares application outlets such as `sidebar.actions`, `conversation.header`, `conversation.body` and `dialog.root`; see the [slot declarations](src/browser/api.ts) for names and cardinality. Header contributions share the metadata row to the right of `workspace.header`, below the conversation title.
+`core:layout` in the [web Profile](../../profiles/web.yml) injects `miniSlots` and `miniPrimitives` and publishes the frame services. It declares application outlets such as `sidebar.actions`, `conversation.header`, `conversation.body` and `dialog.root`; see the [slot declarations](src/browser/api.ts) for names and cardinality. Header contributions share the metadata row to the right of `workspace.header`, below the conversation title. Layout moves the trailing contributions into a native ellipsis popover when the row runs out of space, preserving their mounted instances and restoring them inline as space returns.
 
 Page IDs are unique. `miniPages.register` and `contribute` return disposers; register them with `ctx.effect`. Removing the selected page returns to the conversation. A dialog is mounted at creation, opened with its element's `showModal()`, and released with its returned disposer.
 

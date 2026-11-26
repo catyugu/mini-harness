@@ -4,7 +4,7 @@ Mounts browser contributions into named outlets. The registry owns selection, or
 
 ## Usage and public API
 
-Import types from [`mini-harness/ui-slots`](src/browser/api.ts) and inject `miniSlots` in a browser plugin. `define(name, container, kind)` declares an empty outlet; `register(name, contribution, options)` contributes an element or renderer. Both return a disposer, which belongs in a Cordis effect.
+Import types from [`mini-harness/ui-slots`](src/browser/api.ts) and inject `miniSlots` in a browser plugin. `define(name, outlet, kind)` declares an empty element outlet or an owner-supplied placement callback receiving the ordered mounted nodes; `register(name, contribution, options)` contributes an element or renderer. Both return a disposer, which belongs in a Cordis effect.
 
 For example, a plugin can contribute a control to a Layout outlet:
 

@@ -16,7 +16,7 @@ interface Mounted {
   release(): void;
 }
 interface Outlet {
-  container: HTMLElement;
+  place(nodes: readonly HTMLElement[]): void;
   kind: SlotKind;
   active: Map<Entry, Mounted>;
 }
@@ -25,16 +25,18 @@ export class SlotRegistry {
   private readonly owners = new Map<SlotName, Outlet>();
   private readonly entries = new Map<SlotName, KeyedRegistry<SlotKey, Entry>>();
 
-  define(name: SlotName, container: HTMLElement, kind: SlotKind = 'list'): () => void {
+  define(name: SlotName, outlet: HTMLElement | ((nodes: readonly HTMLElement[]) => void), kind: SlotKind = 'list'): () => void {
     if (this.owners.has(name)) throw new Error('Duplicate slot owner: ' + name);
-    if (container.childElementCount) throw new Error('Slot outlet must start empty: ' + name);
-    const owner: Outlet = { container, kind, active: new Map() };
+    if (typeof outlet !== 'function' && outlet.childElementCount)
+      throw new Error('Slot outlet must start empty: ' + name);
+    const place = typeof outlet === 'function' ? outlet : (nodes: readonly HTMLElement[]) => placeNodes(outlet, nodes);
+    const owner: Outlet = { place, kind, active: new Map() };
     this.owners.set(name, owner);
     const dispose = () => {
       if (this.owners.get(name) !== owner) return;
       this.owners.delete(name);
       for (const [entry, active] of owner.active) this.unmount(owner, entry, active);
-      container.replaceChildren();
+      owner.place([]);
     };
     try {
       this.render(name);
@@ -123,12 +125,15 @@ export class SlotRegistry {
       if (!active) throw new Error('Missing mounted slot contribution');
       return active.node;
     });
-    const desired = new Set<Element>(nodes);
-    const container = owner.container;
-    for (const child of Array.from(container.children)) if (!desired.has(child)) child.remove();
-    nodes.forEach((node, index) => {
-      const current = container.children[index];
-      if (current !== node) container.insertBefore(node, current ?? null);
-    });
+    owner.place(nodes);
   }
+}
+
+function placeNodes(container: HTMLElement, nodes: readonly HTMLElement[]) {
+  const desired = new Set<Element>(nodes);
+  for (const child of Array.from(container.children)) if (!desired.has(child)) child.remove();
+  nodes.forEach((node, index) => {
+    const current = container.children[index];
+    if (current !== node) container.insertBefore(node, current ?? null);
+  });
 }

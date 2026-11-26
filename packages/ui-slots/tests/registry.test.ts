@@ -177,3 +177,29 @@ test('keyed priority is independent of display order and activation order', () =
   removeBase();
   stop();
 });
+
+test('an outlet can place the original ordered nodes across containers without remounting', () => {
+  const registry = new SlotRegistry();
+  const inline = element(), overflow = element(), alpha = element(), beta = element();
+  const lifetimes: AbortSignal[] = [];
+  const close = registry.define('conversation.header', (nodes) => {
+    inline.replaceChildren(...nodes.slice(0, 1) as unknown as ElementStub[]);
+    overflow.replaceChildren(...nodes.slice(1) as unknown as ElementStub[]);
+  });
+  const removeAlpha = registry.register('conversation.header', (signal) => {
+    lifetimes.push(signal);
+    return node(alpha);
+  }, { order: 10 });
+  const removeBeta = registry.register('conversation.header', node(beta), { order: 0 });
+  assert.deepEqual(inline.children, [beta]);
+  assert.deepEqual(overflow.children, [alpha]);
+  assert.equal(lifetimes.length, 1);
+  assert.equal(lifetimes[0]?.aborted, false);
+  removeBeta();
+  assert.deepEqual(inline.children, [alpha]);
+  assert.deepEqual(overflow.children, []);
+  assert.equal(lifetimes[0]?.aborted, false);
+  removeAlpha();
+  close();
+  assert.equal(lifetimes[0]?.aborted, true);
+});

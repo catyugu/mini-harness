@@ -546,10 +546,28 @@ export const apply = (ctx) => {
     await expect(notification.locator('article')).toBeHidden();
     await page.getByRole('textbox', { name: 'Message', exact: true }).fill('Start child');
     await page.getByRole('button', { name: 'Send', exact: true }).click();
-    await expect(agentToggle).toBeInViewport();
-    await expect(toggle).toBeInViewport();
     await expect(agentToggle).toHaveText('1 subagent');
     await expect(toggle).toHaveText('1 task');
+
+    await page.setViewportSize({ width: 280, height: 844 });
+    const more = page.getByRole('button', { name: 'More conversation controls', exact: true });
+    const overflow = page.locator('#headerOverflow');
+    await expect(more).toBeVisible();
+    await expect(overflow).toBeHidden();
+    await more.click();
+    await expect(overflow).toBeInViewport({ ratio: 0.95 });
+    const overflowed = overflow.getByRole('button', { name: /^(Tasks|Subagents)$/ }).first();
+    await expect(overflowed).toBeVisible();
+    const type = await overflowed.getAttribute('aria-label');
+    await overflowed.click();
+    await expect(page.getByRole('region', { name: type!, exact: true })).toBeInViewport({ ratio: 0.95 });
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('Escape');
+
+    await page.setViewportSize({ width: 1280, height: 844 });
+    await expect(more).toBeHidden();
+    await expect(page.locator('#conversationExtensions').getByRole('button', { name: 'Subagents', exact: true })).toBeVisible();
+    await expect(page.locator('#conversationExtensions').getByRole('button', { name: 'Tasks', exact: true })).toBeVisible();
     await agentToggle.click();
     const agentPanel = agents.locator('.subagent-list');
     await expect(agentPanel).toBeInViewport({ ratio: 0.95 });

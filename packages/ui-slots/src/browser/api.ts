@@ -18,7 +18,7 @@ export interface SlotOptions {
 declare module 'mini-harness/cordis' {
   interface Context {
     miniSlots: {
-      define(name: SlotName, container: HTMLElement, kind?: SlotKind): () => void;
+      define(name: SlotName, outlet: HTMLElement | ((nodes: readonly HTMLElement[]) => void), kind?: SlotKind): () => void;
       register(name: SlotName, contribution: HTMLElement | SlotRenderer, options?: SlotOptions): () => void;
     };
   }

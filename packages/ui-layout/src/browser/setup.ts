@@ -4,6 +4,7 @@ import type { PageContribution } from './api.ts';
 import type { Context } from 'mini-harness/cordis';
 import { createLayout } from './layout.ts';
 import { createRightTabs } from './right-tabs.ts';
+import { createHeaderOutlet } from './header-overflow.ts';
 
 /** App frame owns geometry and slot declarations, never feature navigation controls. */
 const slots = {
@@ -64,7 +65,7 @@ function createAppFrame(
   <main class="main" id="main">
     <header class="topbar">
       <button id="sidebarOpen" class="icon-button" type="button" aria-label="Toggle navigation" aria-controls="sidebar" data-icon="menu"></button>
-      <div class="title-block" id="titleBlock"><strong id="conversationTitle">New conversation</strong><div class="header-meta"><div id="workspaceHeader" hidden></div><div id="conversationExtensions"></div></div></div>
+      <div class="title-block" id="titleBlock"><strong id="conversationTitle">New conversation</strong><div class="header-meta" id="headerMeta"><div id="workspaceHeader" hidden></div><div id="headerActions" hidden><div id="conversationExtensions"></div><button id="headerMore" type="button" class="link-button" aria-label="More conversation controls" aria-expanded="false" aria-controls="headerOverflow" popovertarget="headerOverflow" data-icon="ellipsis" hidden></button><div id="headerOverflow" class="ui-header-popover" popover="auto" role="region" aria-label="More conversation controls"></div></div></div></div>
       <button id="inspectorOpen" class="icon-button" type="button" aria-label="Open workspace panel" aria-controls="inspector" data-icon="files"></button>
     </header>
     <div id="conversationSlot"></div>
@@ -83,6 +84,15 @@ function createAppFrame(
   document.body.append(root);
   signal.addEventListener('abort', () => root.remove(), { once: true });
   const { element } = scopedElements(root);
+  const placeHeader = createHeaderOutlet(
+    element('headerMeta'),
+    element('workspaceHeader'),
+    element('headerActions'),
+    element('conversationExtensions'),
+    element<'button'>('headerMore'),
+    element('headerOverflow'),
+    signal,
+  );
   const layout = createLayout(
     {
       root,
@@ -197,6 +207,6 @@ function createAppFrame(
     pages,
     tabs,
     dialogs,
-    outlet: (name: keyof typeof slots) => element(slots[name]),
+    outlet: (name: keyof typeof slots) => name === 'conversation.header' ? placeHeader : element(slots[name]),
   };
 }
