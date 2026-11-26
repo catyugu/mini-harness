@@ -19,7 +19,7 @@ import { basicCompaction } from '../src/compaction.ts';
 import { SessionRegistry } from '@mini-harness/sessions/registry';
 import { WorkspaceCatalog } from '@mini-harness/workspaces/catalog';
 import { ToolRegistry } from '@mini-harness/tools/registry';
-import { defineTool } from '@mini-harness/tools/api';
+import { defineTool, toolResultState } from '@mini-harness/tools/api';
 import type { LlmPort, NativeAssistantMessage, ToolCallPart } from '@mini-harness/llm/api';
 import type { ModelRetry } from '../src/events.ts';
 import { createFixturePaths } from '../../../test/helpers/mock-provider.ts';
@@ -340,8 +340,12 @@ test('cancellation closes the whole tool batch durably and never executes later 
       },
     }),
   );
+  const events: AgentEvent[] = [];
   await assert.rejects(
-    agent.prompt(ctx, record, 'Run tools', () => {}, { fallback: model, signal: controller.signal }),
+    agent.prompt(ctx, record, 'Run tools', (event) => events.push(event), {
+      fallback: model,
+      signal: controller.signal,
+    }),
     /Stopped by test/,
   );
   const results = sessions
@@ -352,12 +356,37 @@ test('cancellation closes the whole tool batch durably and never executes later 
   assert.equal(ranFirst, 1);
   assert.equal(ranSecond, 0);
   assert.deepEqual(
-    results.map(({ toolCallId, isError }) => [toolCallId, isError]),
+    results.map(({ toolCallId, isError, toolState }) => [toolCallId, isError, toolState]),
     [
-      ['one', true],
-      ['two', true],
+      ['one', true, 'cancelled'],
+      ['two', true, 'skipped'],
     ],
   );
+  assert.deepEqual(
+    events.flatMap((event) => (event.type === 'tool-end' ? [event.message.toolState] : [])),
+    ['cancelled', 'skipped'],
+  );
+});
+
+test('a concurrent cancellation does not hide a genuine tool failure', async () => {
+  const controller = new AbortController();
+  const tool = defineTool({
+    name: 'fail',
+    description: 'Fail independently of cancellation',
+    parameters: Type.Object({}),
+    async execute() {
+      controller.abort(new Error('Stopped by test'));
+      throw new Error('Independent failure');
+    },
+  });
+  const states: string[] = [];
+  await nativeExecutor.execute([call('one', 'fail'), call('two', 'fail')], new Map([[tool.name, tool]]), {
+    signal: controller.signal,
+    async deliver(result) {
+      states.push(toolResultState(result));
+    },
+  });
+  assert.deepEqual(states, ['error', 'skipped']);
 });
 
 test('interrupted calls receive an error record before the next prompt and are not retried', async (t) => {

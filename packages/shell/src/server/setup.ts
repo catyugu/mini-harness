@@ -46,10 +46,13 @@ export function setup(ctx: Context) {
               if (!automatic) break;
             }
           } catch (error) {
+            const cancelled =
+              (signal?.aborted && error === signal.reason) ||
+              (error instanceof Error && error.name === 'AbortError');
             return {
               content: [{ type: 'text', text: error instanceof Error ? error.message : String(error) }],
               isError: true,
-              outcome: error instanceof ApprovalDenied ? ('denied' as const) : undefined,
+              outcome: error instanceof ApprovalDenied ? 'denied' : cancelled ? 'cancelled' : undefined,
               elapsedMs: 0,
               details: { approvalMs: performance.now() - requestedAt },
             };
@@ -109,8 +112,11 @@ export function setup(ctx: Context) {
           if (!allowed()) throw new Error('Tool denied by conversation policy: sandbox_shell');
           const startedAt = performance.now();
           const output = await runShellCommand(execution, command, timeoutSeconds, signal);
+          const cancelled = output.reason === 'cancelled';
           return {
             content: [{ type: 'text', text: JSON.stringify(output) }],
+            isError: cancelled,
+            outcome: cancelled ? 'cancelled' : undefined,
             details: { ...output, exitCode: output.code, approvalMs },
             elapsedMs: performance.now() - startedAt,
           };
