@@ -15,6 +15,7 @@ import {
 import { TaskOutputRing, readTaskOutput } from './output.ts';
 import { RecentTasks } from './history.ts';
 import { TaskPool } from './pool.ts';
+import { runBatch } from './batch.ts';
 
 interface Entry {
   snapshot: TaskSnapshot;
@@ -22,6 +23,7 @@ interface Entry {
   output: TaskOutputRing;
   finishing: boolean;
   ancestors: string[];
+  waitingFor?: string;
 }
 
 const describe = (error: unknown) => (error instanceof Error ? error.message : String(error));
@@ -48,10 +50,13 @@ export class TaskRuntime implements TaskPort {
     return new TaskPool(limit);
   }
 
+  batch = runBatch;
+
   service(): TaskPort {
     const runtime = this;
     return Service.track<TaskPort>({
       pool: runtime.pool.bind(runtime),
+      batch: runtime.batch,
       start<T>(options: TaskOptions, execute: (context: TaskContext) => Promise<T>) {
         return runtime.start({ ...options, provider: options.provider ?? Service.caller(this) }, execute);
       },
@@ -142,6 +147,22 @@ export class TaskRuntime implements TaskPort {
         if (terminal(snapshot.state) || !text) return;
         entry.output.write(text, channel);
         update({ outputCursor: entry.output.cursor }, 'output');
+      },
+      waitFor: async (id, cancellation) => {
+        const target = this.get(id);
+        if (!target) throw new Error('Task not found: ' + id);
+        if (terminal(target.state)) return target;
+        if (snapshot.state !== 'running' || entry.finishing)
+          throw new Error('Wait requires a single whole-task wait point');
+        this.assertWait(entry, id);
+        entry.waitingFor = id;
+        try {
+          return await context.suspend((signal) =>
+            this.wait(id, cancellation ? AbortSignal.any([signal, cancellation]) : signal),
+          );
+        } finally {
+          entry.waitingFor = undefined;
+        }
       },
       suspend: async (wait) => {
         signal.throwIfAborted();
@@ -261,6 +282,22 @@ export class TaskRuntime implements TaskPort {
     void result.catch(() => {});
     this.notify('created', snapshot);
     return handle;
+  }
+
+  private assertWait(waiter: Entry, target: string) {
+    // A parent cannot settle before its descendants. Follow both explicit
+    // waits and this implicit dependency when detecting cycles.
+    const seen = new Set<string>();
+    const visit = (id: string): void => {
+      if (id === waiter.snapshot.id) throw new Error('Circular task wait');
+      if (seen.has(id)) return;
+      seen.add(id);
+      const entry = this.entries.get(id);
+      if (!entry) return;
+      if (entry.waitingFor) visit(entry.waitingFor);
+      for (const child of this.children(id)) visit(child.snapshot.id);
+    };
+    visit(target);
   }
 
   get(id: string) {

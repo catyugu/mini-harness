@@ -1,5 +1,5 @@
 import type { Context } from 'mini-harness/cordis';
-import type { TaskContext, TaskData, TaskOptions } from '@mini-harness/tasks/api';
+import type { TaskContext, TaskData, TaskOptions, TaskSnapshot } from '@mini-harness/tasks/api';
 import type { ScopeKey } from '@mini-harness/plugin-api/scopes';
 import type { Static, TSchema } from 'typebox';
 import type { TextPart, ImagePart, NativeToolMessage } from '@mini-harness/llm/api';
@@ -52,6 +52,8 @@ export interface ToolContext {
   task: TaskContext;
   signal: AbortSignal;
   update(update: ToolUpdate): void;
+  /** For a serial tool, wait on behalf of the enclosing scheduling task. */
+  waitFor(id: string): Promise<TaskSnapshot>;
   /** Present for inline calls made by another task. */
   owner?: TaskContext;
 }

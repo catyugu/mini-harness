@@ -70,6 +70,10 @@ export function invokeTool(
         task,
         signal: task.signal,
         owner: ownerTask,
+        waitFor: (id) => {
+          if (id === task.id) throw new Error('A task cannot wait for itself');
+          return (ownerTask ?? task).waitFor(id, task.signal);
+        },
         update(update) {
           task.update(update as unknown as TaskData);
           onUpdate?.(update);

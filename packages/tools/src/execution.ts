@@ -50,60 +50,39 @@ const parallelLimit = 16;
 
 export const executeTools: ToolExecutorPort['execute'] = async (calls, tools, execution) => {
   const { signal } = execution;
-  const controller = new AbortController();
-  const batchSignal = AbortSignal.any([signal, controller.signal]);
-  const active = new Set<Promise<void>>();
-  let failure: { error: unknown } | undefined;
-  const start = (run: () => Promise<NativeToolMessage>) => {
-    const task = Promise.resolve()
-      .then(run)
-      .then((result) => execution.deliver(result, batchSignal))
-      .catch((error) => {
-        if (!failure) {
-          failure = { error };
-          controller.abort(error);
+  function* jobs() {
+    for (const call of calls) {
+      const tool = tools.get(call.name);
+      let invalid = call.argumentsError && 'Invalid arguments for ' + call.name + ': ' + call.argumentsError;
+      let prepared: ReturnType<typeof prepareTool> | undefined;
+      if (!invalid && tool) {
+        try {
+          prepared = prepareTool(tool, call.arguments);
+        } catch (error) {
+          invalid = error instanceof Error ? error.message : String(error);
         }
-      })
-      .finally(() => active.delete(task));
-    active.add(task);
-    return task;
-  };
-  for (const call of calls) {
-    if (failure) break;
-    const tool = tools.get(call.name);
-    let invalid = call.argumentsError && 'Invalid arguments for ' + call.name + ': ' + call.argumentsError;
-    let prepared: ReturnType<typeof prepareTool> | undefined;
-    if (!invalid && tool) {
-      try {
-        prepared = prepareTool(tool, call.arguments);
-      } catch (error) {
-        invalid = error instanceof Error ? error.message : String(error);
       }
-    }
-    let parallel = false;
-    if (!invalid && tool?.isConcurrencySafe) {
-      try {
-        parallel = tool.isConcurrencySafe(call.arguments);
-      } catch {
-        // A scheduling hint that fails leaves the call serial.
+      let parallel = false;
+      if (!invalid && tool?.isConcurrencySafe) {
+        try {
+          parallel = tool.isConcurrencySafe(call.arguments);
+        } catch {
+          // A scheduling hint that fails leaves the call serial.
+        }
       }
-    }
-    const run = async () => {
-      const rejection = execution.start?.(call);
-      if (rejection) return toolFailure(call, rejection.reason, rejection.outcome);
-      return executeTool(call, tool, prepared, execution, batchSignal, invalid);
-    };
-    if (parallel) {
-      start(run);
-      if (active.size === parallelLimit) await Promise.race(active);
-    } else {
-      await Promise.all(active);
-      if (failure) break;
-      await start(run);
+      yield {
+        parallel,
+        async run(batchSignal: AbortSignal) {
+          const rejection = execution.start?.(call);
+          const result = rejection
+            ? toolFailure(call, rejection.reason, rejection.outcome)
+            : await executeTool(call, tool, prepared, execution, batchSignal, invalid);
+          await execution.deliver(result, batchSignal);
+        },
+      };
     }
   }
-  await Promise.all(active);
-  if (failure) throw failure.error;
+  await execution.tasks.batch(jobs(), { signal, limit: parallelLimit });
 };
 
 export const toolFailure = (

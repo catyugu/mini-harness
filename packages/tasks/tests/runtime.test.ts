@@ -344,3 +344,61 @@ test('pool resizing, queued cancellation and failed execution return capacity', 
   await first.result;
   assert.equal(pool.active, 0);
 });
+
+test('task waits release capacity and reject circular waits', async () => {
+  const runtime = new TaskRuntime();
+  const pool = runtime.pool(1);
+  let first!: TaskHandle<void>;
+  let second!: TaskHandle<void>;
+  first = runtime.start({ owner: 'one', pool }, async (task) => {
+    assert.equal((await task.waitFor(second.id)).state, 'completed');
+  });
+  second = runtime.start({ owner: 'two', pool }, async (task) => {
+    await assert.rejects(task.waitFor(first.id), /Circular task wait/);
+  });
+  await Promise.all([first.result, second.result]);
+  assert.equal(pool.active, 0);
+});
+
+test('batch executes parallel jobs up to capacity and serial jobs as barriers', async () => {
+  const runtime = new TaskRuntime();
+  const order: string[] = [];
+  const ready = gate();
+  const release = gate();
+  const batch = runtime.batch(
+    [
+      {
+        parallel: true,
+        async run() {
+          order.push('first');
+          await release.promise;
+          order.push('first done');
+        },
+      },
+      {
+        parallel: true,
+        async run() {
+          order.push('second');
+          ready.release();
+        },
+      },
+      {
+        async run() {
+          order.push('barrier');
+        },
+      },
+      {
+        parallel: true,
+        async run() {
+          order.push('last');
+        },
+      },
+    ],
+    { signal: new AbortController().signal, limit: 2 },
+  );
+  await ready.promise;
+  assert.deepEqual(order, ['first', 'second']);
+  release.release();
+  await batch;
+  assert.deepEqual(order, ['first', 'second', 'first done', 'barrier', 'last']);
+});

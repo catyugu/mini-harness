@@ -1,5 +1,7 @@
 import type { Context } from 'mini-harness/cordis';
 import type { TaskPool } from './pool.ts';
+import type { TaskJob } from './batch.ts';
+export type { TaskJob } from './batch.ts';
 export type { TaskPool } from './pool.ts';
 
 export type TaskState =
@@ -76,6 +78,8 @@ export interface TaskContext {
   write(output: string, channel?: string): void;
   /** Call only at a whole-task wait point; reacquires admission before returning or throwing. */
   suspend<T>(wait: (signal: AbortSignal) => Promise<T>): Promise<T>;
+  /** Wait at a whole-task boundary, releasing pool capacity. */
+  waitFor(id: string, signal?: AbortSignal): Promise<TaskSnapshot>;
 }
 
 export interface TaskChunk {
@@ -99,6 +103,7 @@ export interface TaskHistoryRecord {
 
 export interface TaskPort {
   pool(limit: number): TaskPool;
+  batch(jobs: Iterable<TaskJob>, options: { signal: AbortSignal; limit: number }): Promise<void>;
   start<T>(options: TaskOptions, execute: (context: TaskContext) => Promise<T>): TaskHandle<T>;
   get(id: string): TaskSnapshot | undefined;
   /** Active tasks and bounded recent history; older durable records remain queryable by ID. */

@@ -6,7 +6,7 @@ Registers and resolves scoped tool definitions, validates arguments and dispatch
 
 A registration is no longer available once replaced or removed. Removal cancels and drains its active Task invocations. The registering provider fiber owns executing code. For independent factory calls, a consumer may explicitly supply its long-lived composition context instead of retaining a short-lived run context.
 
-`mini-harness/tools/execution` supplies the executor contract, `executeTools` and `startTool`. The native executor decides serial/parallel dispatch, validates calls and delivers exactly one result per call. An optional consumer policy can acknowledge a background task without waiting for completion. Tools that suspend their owning run must be serial.
+`mini-harness/tools/execution` supplies the executor contract, `executeTools` and `startTool`. The native executor declares serial/parallel policy, validates calls and delivers exactly one result per call. Task Runtime executes the batch. An optional consumer policy can acknowledge a background task without waiting for completion. Tools that suspend their owning run must be serial.
 
 The optional `@mini-harness/task-control` plugin registers `task_control` independently of
 Subagents. It only uses the Task Runtime contract.

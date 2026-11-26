@@ -8,7 +8,8 @@ Creator and resource annotations are ordinary metadata. The provider Cordis fibe
 Cancellation is cooperative. A task remains active until its executor and owned work have settled.
 `pool(limit)` creates a shared concurrency budget with a live limit. `suspend` is a whole-task
 waiting point: it releases pool capacity and reacquires it before returning or propagating an ordinary wait error. A cancelled wait does not resume work.
-Waiting reuses the execution promise and observes the committed terminal state, even for ephemeral tasks.
+`waitFor(id)` rejects circular waits. `batch` dispatches jobs with bounded parallelism and serial barriers,
+then cancels and drains started jobs on failure. Waiting reuses the execution promise and observes the committed terminal state, even for ephemeral tasks.
 
 `subscribe` observes creation, updates, output and removal from the recent runtime view. Subscriptions
 are scoped to the consumer fiber. Output uses absolute UTF-8 byte cursors and channel names.

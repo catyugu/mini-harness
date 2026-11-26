@@ -21,17 +21,12 @@ const plugin: Plugin.Object = {
             taskId: Type.String({ minLength: 1, maxLength: 128 }),
           }),
           isConcurrencySafe: ({ action }) => action !== 'wait',
-          async execute({ action, taskId }, { signal, task: current, owner }) {
+          async execute({ action, taskId }, { waitFor }) {
             let task = tasks.get(taskId);
             if (!task) throw new Error('Task not found: ' + taskId);
             if (action === 'cancel') tasks.cancel(taskId);
             if (action === 'wait' && !terminal(task.state)) {
-              if (taskId === current.id || taskId === owner?.id)
-                throw new Error('A task cannot wait for itself or its owner');
-              const waiter = owner ?? current;
-              task = await waiter.suspend((ownerSignal) =>
-                tasks.wait(taskId, AbortSignal.any([signal, ownerSignal])),
-              );
+              task = await waitFor(taskId);
             } else task = tasks.get(taskId) ?? task;
             return {
               content: [
