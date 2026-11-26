@@ -211,13 +211,19 @@ test('automatic compaction preserves the pending multimodal input and accepts a 
   await sendRun(ctx.harnessRuns, session.id, fresh, undefined, { attachments: [attachment] });
   assert.equal(checkpoints, 1);
   const log = ctx.harnessSessions.log(session.id);
-  const submitted = log.branch().filter((entry) => entry.type === 'message' && entry.message.role === 'user').at(-1);
+  const submitted = log
+    .branch()
+    .filter((entry) => entry.type === 'message' && entry.message.role === 'user')
+    .at(-1);
   assert.ok(submitted?.type === 'message');
   const normal = log.entries().filter((entry) => entry.type === 'model-request' && !entry.request.purpose);
   assert.equal(normal.length, 2);
   const prepared = log.requestSnapshot(normal[1].id);
   assert.deepEqual(prepared.messages.at(-1), submitted.message);
-  assert.ok(Array.isArray(submitted.message.content) && submitted.message.content.some((part) => part.type === 'image'));
+  assert.ok(
+    Array.isArray(submitted.message.content) &&
+      submitted.message.content.some((part) => part.type === 'image'),
+  );
   const counts = prepared.inputMeasurement;
   assert.ok(counts && totalTokens(counts) > counts.budget * targetRatio);
   assert.ok(totalTokens(counts) <= counts.budget);
