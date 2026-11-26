@@ -133,20 +133,26 @@ async function executeTool(
     if (!tool) throw new Error('Tool is no longer available: ' + call.name);
     if (invalid) throw new Error('Invalid arguments for ' + call.name + ': ' + invalid);
     const background = execution.background?.(call);
-    const task = startTool(execution.tasks, tool, call.id, call.arguments, background
-      ? {
-          ...background,
-          ownerTask: undefined,
-          creator: execution.ownerTask?.id,
-          resourceId: background.resourceId ?? execution.resourceId,
-          retain: true,
-        }
-      : {
-          signal,
-          ownerTask: execution.ownerTask,
-          resourceId: execution.resourceId,
-          onUpdate: (update) => execution.update?.(call, update),
-        });
+    const task = startTool(
+      execution.tasks,
+      tool,
+      call.id,
+      call.arguments,
+      background
+        ? {
+            ...background,
+            ownerTask: undefined,
+            creator: execution.ownerTask?.id,
+            resourceId: background.resourceId ?? execution.resourceId,
+            retain: true,
+          }
+        : {
+            signal,
+            ownerTask: execution.ownerTask,
+            resourceId: execution.resourceId,
+            onUpdate: (update) => execution.update?.(call, update),
+          },
+    );
     taskSignal = task.signal;
     if (background) {
       const accepted = { taskId: task.id, state: 'queued' };
