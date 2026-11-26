@@ -206,6 +206,7 @@ export function mountComposer(ctx: Context, signal: AbortSignal) {
   async function send() {
     if (control.get().interaction.operation || model.draft().awaitingAcceptance) return;
     if (!model.draft().text.trim() && !model.draft().attachments.length) return;
+    if (ui.submitCommand()) return;
     if (!isRunning(control.get().run) && !modelPicker.selected()) {
       control.report(new Error('Choose a configured model before sending.'));
       modelPicker.open();
