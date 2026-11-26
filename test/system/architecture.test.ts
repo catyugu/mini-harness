@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { isBuiltin } from 'node:module';
 import { dirname, join, relative, resolve, sep } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
@@ -29,20 +30,20 @@ function sources(directory: string): string[] {
     const { name } = entry;
     const path = join(directory, name);
     return entry.isDirectory()
-      ? name === 'node_modules' || name === 'tests'
+      ? name === 'node_modules'
         ? []
         : sources(path)
-      : name.endsWith('.ts') && !/\.(?:test|spec)\.ts$/.test(name)
+      : name.endsWith('.ts')
         ? [path]
         : [];
   });
 }
 
-function checkCycles(graph: Map<string, Set<string>>, kind: string) {
+function checkCycles(graph: Map<string, Set<string>>) {
   const visiting = new Set<string>();
   const checked = new Set<string>();
   function visit(name: string) {
-    assert.ok(!visiting.has(name), kind + ' cycle: ' + [...visiting, name].join(' -> '));
+    assert.ok(!visiting.has(name), 'Workspace dependency cycle: ' + [...visiting, name].join(' -> '));
     if (checked.has(name)) return;
     visiting.add(name);
     for (const dependency of graph.get(name) ?? []) visit(dependency);
@@ -52,17 +53,55 @@ function checkCycles(graph: Map<string, Set<string>>, kind: string) {
   for (const name of graph.keys()) visit(name);
 }
 
-test('workspace dependencies are acyclic and browser imports are browser-safe', async () => {
+function references(file: string) {
+  return moduleReferences(ts.createSourceFile(file, readFileSync(file, 'utf8'), ts.ScriptTarget.Latest, true));
+}
+
+function workspaceTarget(specifier: string, file: string) {
+  const [owner, ...parts] = specifier.slice(prefix.length).split('/');
+  const entry = manifests.get(owner)?.exports?.['./' + parts.join('/')];
+  const directory = join(packages, owner);
+  const target = entry && resolve(directory, entry);
+  assert.ok(target && target.startsWith(directory + sep) && existsSync(target), file + ' references ' + specifier);
+  return { owner, target };
+}
+
+test('workspace boundaries include tests and build scripts', () => {
+  const support = join(root, 'test', 'support') + sep;
+  for (const [directory, owner] of [
+    ...[...manifests.keys()].map((name) => [join(packages, name), name]),
+    ...['test', 'scripts', 'bin'].map((name) => [join(root, name), '']),
+  ]) {
+    for (const file of sources(directory)) {
+      for (const { literal: { text: specifier } } of references(file)) {
+        const reason = file + ' references ' + specifier;
+        assert.ok(!/^(?:#|@\/|~\/)/.test(specifier), reason);
+        if (isBuiltin(specifier)) assert.ok(specifier.startsWith('node:'), reason);
+        if (specifier.startsWith('.')) {
+          const target = resolve(dirname(file), specifier);
+          if (owner) {
+            const isTest = relative(directory, file).split(sep)[0] === 'tests';
+            assert.ok(target.startsWith(directory + sep) || (isTest && target.startsWith(support)), reason);
+          } else {
+            assert.ok(!target.startsWith(packages + sep), reason);
+          }
+        } else if (specifier.startsWith(prefix)) {
+          const dependency = workspaceTarget(specifier, file);
+          assert.notEqual(dependency.owner, owner, reason);
+        }
+      }
+    }
+  }
+});
+
+test('workspace dependencies are acyclic and browser imports are browser-safe', () => {
   const browserModules = new Map<string, string[]>();
   const browserRoots: string[] = [];
-  const runtime = new Map<string, Set<string>>();
   const declared = new Map<string, Set<string>>();
   for (const [name, manifest] of manifests) {
     const directory = join(packages, name);
     const actual = new Set<string>();
-    const loaded = new Set<string>();
     for (const file of sources(join(directory, 'src'))) {
-      const source = ts.createSourceFile(file, readFileSync(file, 'utf8'), ts.ScriptTarget.Latest, true);
       const imports: string[] = [];
       browserModules.set(file, imports);
       const area = relative(directory, file).split(sep)[1];
@@ -70,14 +109,12 @@ test('workspace dependencies are acyclic and browser imports are browser-safe', 
       for (const {
         literal: { text: specifier },
         typeOnly,
-      } of moduleReferences(source)) {
+      } of references(file)) {
         const reason = file + ' ' + (typeOnly ? 'references ' : 'loads ') + specifier;
         if (specifier.startsWith('.')) {
           const target = resolve(dirname(file), specifier);
           assert.ok(target.startsWith(directory + sep), reason);
           if (!typeOnly) imports.push(target);
-          if (area === 'browser' || area === 'shared')
-            assert.ok(!relative(directory, target).split(sep).includes('server'), reason);
           continue;
         }
         if (specifier === 'mini-harness/cordis' || specifier.startsWith('@codemirror/')) continue;
@@ -85,18 +122,9 @@ test('workspace dependencies are acyclic and browser imports are browser-safe', 
           if (!typeOnly) imports.push(specifier);
           continue;
         }
-        const [owner, ...parts] = specifier.slice(prefix.length).split('/');
-        const entry = './' + parts.join('/');
-        const dependency = manifests.get(owner);
-        const target = dependency?.exports?.[entry] && resolve(packages, owner, dependency.exports[entry]);
-        assert.ok(target && target.startsWith(join(packages, owner) + sep) && existsSync(target), reason);
+        const { owner, target } = workspaceTarget(specifier, file);
         actual.add(owner);
-        if (area === 'browser' || area === 'shared')
-          assert.ok(!relative(join(packages, owner), target).split(sep).includes('server'), reason);
-        if (!typeOnly) {
-          loaded.add(owner);
-          imports.push(target);
-        }
+        if (!typeOnly) imports.push(target);
       }
     }
     assert.deepEqual(
@@ -105,7 +133,6 @@ test('workspace dependencies are acyclic and browser imports are browser-safe', 
       name,
     );
     declared.set(name, actual);
-    runtime.set(name, loaded);
   }
 
   const visited = new Set<string>();
@@ -128,8 +155,7 @@ test('workspace dependencies are acyclic and browser imports are browser-safe', 
   }
   for (const file of browserRoots) checkBrowser(file);
 
-  checkCycles(runtime, 'Runtime dependency');
-  checkCycles(declared, 'Workspace dependency');
+  checkCycles(declared);
   assert.ok(
     Object.keys(readManifest(join(root, 'package.json')).dependencies ?? {}).every(
       (name) => !name.startsWith(prefix),
