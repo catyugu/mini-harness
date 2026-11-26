@@ -13,7 +13,7 @@ export function settingsForm(
   const node = document.createElement('section');
   node.className = 'context-settings';
   const heading = document.createElement('h4');
-  heading.textContent = 'Context Management';
+  heading.textContent = 'Compaction';
   const auto = toggle('Auto compaction', true);
   const model = button('Current model');
   model.classList.add('context-model');
