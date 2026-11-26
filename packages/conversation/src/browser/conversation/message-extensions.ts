@@ -4,14 +4,19 @@ import type {
   MessageAction,
   RecordRenderer,
   ToolRenderer,
+  ToolPlacement,
   ToolView,
   TurnFooterRenderer,
 } from '../history-api.ts';
 
 export class MessageExtensions {
   private readonly actions = new Map<string, MessageAction>();
-  private readonly renderers = new KeyedRegistry<string, ToolRenderer>();
-  private readonly toolActions = new KeyedRegistry<string, ToolRenderer>();
+  private readonly tools = {
+    body: new KeyedRegistry<string, ToolRenderer>(),
+    action: new KeyedRegistry<string, ToolRenderer>(),
+    summary: new KeyedRegistry<string, ToolRenderer>(),
+    status: new KeyedRegistry<string, ToolRenderer>(),
+  };
   private readonly records = new KeyedRegistry<string, RecordRenderer>();
   private readonly footers = new Map<string, TurnFooterRenderer>();
   private readonly events = new EventTarget();
@@ -129,9 +134,8 @@ export class MessageExtensions {
     };
   }
 
-  registerTool(name: string, render: ToolRenderer, action = false, priority = 0) {
-    const registry = action ? this.toolActions : this.renderers;
-    return this.replace(registry, name, render, 'tools', priority);
+  registerTool(name: string, render: ToolRenderer, placement: ToolPlacement = 'body', priority = 0) {
+    return this.replace(this.tools[placement], name, render, 'tools', priority);
   }
 
   subscribeToTools(listener: (name: string) => void, signal: AbortSignal) {
@@ -144,8 +148,8 @@ export class MessageExtensions {
     );
   }
 
-  render(tool: ToolView, signal: AbortSignal, action = false) {
-    const render = (action ? this.toolActions : this.renderers).get(tool.name);
+  render(tool: ToolView, signal: AbortSignal, placement: ToolPlacement = 'body') {
+    const render = this.tools[placement].get(tool.name);
     if (render) return this.renderWithLifetime(signal, (lifetime) => render(tool, lifetime));
   }
 }

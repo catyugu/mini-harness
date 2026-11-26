@@ -8,9 +8,11 @@ import type { ToolSchema } from '@mini-harness/llm/vocabulary';
 export interface ToolUpdate {
   content?: (TextPart | ImagePart)[];
   details?: Record<string, unknown>;
+  state?: 'running' | 'approval';
 }
 export interface ToolResult extends ToolUpdate {
   content: (TextPart | ImagePart)[];
+  detailKeys?: NativeToolMessage['detailKeys'];
   isError?: boolean;
   outcome?: NativeToolMessage['outcome'];
   elapsedMs?: number;

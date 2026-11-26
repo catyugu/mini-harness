@@ -76,6 +76,12 @@ export class Runs implements RunPort {
     events.publish(event);
   }
 
+  recordChange(id: string, executionId: string, path: string) {
+    const info = this.streams.get(id)?.events?.info;
+    if (info?.id === executionId && isRunning(info))
+      info.changedFiles = [...new Set([...(info.changedFiles ?? []), path])];
+  }
+
   branchChanged(id: string, record: RecordAppend) {
     const events = this.streams.get(id)?.events;
     if (!events || !isRunning(events.info)) return;
@@ -201,10 +207,6 @@ export class Runs implements RunPort {
                 signal,
                 task,
                 revision: prepared,
-                changed: (path) => {
-                  const info = activity.events!.info;
-                  info.changedFiles = [...new Set([...(info.changedFiles ?? []), path])];
-                },
               },
             ),
           ).catch((error) => {

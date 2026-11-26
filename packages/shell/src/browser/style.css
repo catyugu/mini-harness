@@ -1,0 +1,9 @@
+.tool-exit-code {
+  flex-shrink: 0;
+  color: var(--muted);
+  font-size: var(--font-caption);
+  font-variant-numeric: tabular-nums;
+}
+.tool-exit-code[data-failed='true'] {
+  color: var(--danger);
+}

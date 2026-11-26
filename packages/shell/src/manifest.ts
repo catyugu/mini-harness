@@ -31,6 +31,7 @@ export const metadata: PluginInfo = {
   description: 'Run commands with the host user’s permissions through the configured process provider.',
   icon: 'terminal',
   browser: 'packages/shell/src/browser/setup.js',
+  browserStyles: ['packages/shell/src/browser/style.css'],
   configHint:
     'Enabling Shell authorizes commands to run with your user permissions without per-command confirmation. Use only trusted workspaces.',
 };

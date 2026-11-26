@@ -25,6 +25,7 @@ export interface ToolExecution {
   /** Decides whether to start the call. A rejection still produces a model-visible result. */
   start?(call: ToolCallPart): { outcome: 'skipped' | 'denied'; reason: string } | undefined;
   update?(call: ToolCallPart, result: ToolUpdate): void;
+  write?(call: ToolCallPart, text: string, channel: string): void;
   deliver(result: NativeToolMessage, signal: AbortSignal): Promise<void>;
 }
 
@@ -119,6 +120,7 @@ async function executeTool(
       executionId: execution.executionId,
       waitFor: execution.waitFor,
       onUpdate: (update) => execution.update?.(call, update),
+      write: (text, channel = 'output') => execution.write?.(call, text, channel),
     });
     return {
       ...result,

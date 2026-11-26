@@ -8,16 +8,11 @@ const live = ({ state }: TaskSnapshot) => ['queued', 'running', 'waiting'].inclu
 const object = (value?: TaskData): Record<string, TaskData> =>
   value && typeof value === 'object' && !Array.isArray(value) ? value : {};
 
-function exitCode(task: TaskSnapshot) {
-  const code = object(object(task.result).details).exitCode;
-  return typeof code === 'number' ? code : undefined;
-}
-
 function status(task: TaskSnapshot) {
   if (task.cancellationRequested && live(task)) return 'Cancelling';
-  if (live(task) && object(object(task.progress).details).approvalPending) return 'Awaiting approval';
-  const code = exitCode(task);
-  if (task.state === 'completed' && code !== undefined) return 'Exit ' + code;
+  if (live(task) && object(task.progress).state === 'approval') return 'Awaiting approval';
+  const summary = object(task.result).summary;
+  if (task.state === 'completed' && typeof summary === 'string') return summary;
   if (task.state === 'completed' && object(task.result).isError) return 'Failed';
   return task.state[0].toUpperCase() + task.state.slice(1);
 }
@@ -402,8 +397,9 @@ function setup(ctx: Context) {
     if (open()) for (const row of rows.values()) row.tick();
   }, 1000);
   ctx.effect(() => () => clearInterval(interval));
-  const receipt = ({ taskId }: { taskId?: string }, signal: AbortSignal) => {
-    if (!taskId) return;
+  const receipt = ({ details }: { details?: Record<string, unknown> }, signal: AbortSignal) => {
+    const taskId = details?.taskId;
+    if (typeof taskId !== 'string') return;
     const node = document.createElement('div');
     node.className = 'task-receipt';
     const text = document.createElement('span');
@@ -428,6 +424,14 @@ function setup(ctx: Context) {
     return node;
   };
   ctx.effect(() => ctx.miniMessages.registerTool('start_background', receipt));
+  ctx.effect(() =>
+    ctx.miniMessages.registerTool('start_background', ({ details }) => {
+      if (details?.state !== 'accepted') return;
+      const node = document.createElement('span');
+      node.textContent = 'Accepted';
+      return node;
+    }, 'status'),
+  );
   void refresh();
 }
 

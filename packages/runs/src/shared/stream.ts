@@ -24,6 +24,14 @@ export interface ToolProgress {
   state: 'approval' | 'running';
   arguments?: unknown;
   content?: MessageContent;
+  streams?: Readonly<Record<string, string>>;
+}
+
+export interface ToolOutput {
+  type: 'tool-output';
+  id: string;
+  channel: string;
+  text: string;
 }
 
 export type RunEvent = StreamEvent & { runId: string; runSessionId: string; sequence: number };
@@ -43,6 +51,7 @@ export type RunStreamEvent =
     }
   | { type: 'delta' | 'complete'; text: string }
   | ToolProgress
+  | ToolOutput
   | { type: 'error'; error: string };
 
 /** Runtime-only record channels are never part of the durable history projection. */
@@ -72,6 +81,30 @@ export function updateRecords(records: readonly LiveRecord[], event: RecordUpdat
         ...streams,
         [event.channel]: (Object.hasOwn(streams, event.channel) ? streams[event.channel] : '') + event.text,
       },
+    };
+  }
+  return next;
+}
+
+/** The owner and browser replica reduce the same tool events. Output snapshots retain a bounded tail. */
+export function updateTools(
+  tools: readonly ToolProgress[],
+  event: ToolProgress | ToolOutput | Extract<RunStreamEvent, { type: 'tool-end' }>,
+): ToolProgress[] {
+  if (event.type === 'tool-end') return tools.filter(({ id }) => id !== event.message.toolCallId);
+  const index = tools.findIndex(({ id }) => id === event.id);
+  const next = [...tools];
+  if (event.type === 'tool') {
+    const streams = tools[index]?.streams;
+    next.splice(index < 0 ? next.length : index, index < 0 ? 0 : 1, { ...event, streams });
+  } else {
+    if (index < 0) throw new Error('Tool has not been started: ' + event.id);
+    const tool = tools[index];
+    const streams = tool.streams ?? {};
+    const previous = Object.hasOwn(streams, event.channel) ? streams[event.channel] : '';
+    next[index] = {
+      ...tool,
+      streams: { ...streams, [event.channel]: (previous + event.text).slice(-1048576) },
     };
   }
   return next;

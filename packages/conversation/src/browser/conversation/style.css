@@ -86,15 +86,11 @@
 .tool-card > summary > .ui-record-label {
   font-weight: 500;
 }
-.tool-duration,
-.tool-exit-code {
+.tool-duration {
   flex-shrink: 0;
   color: var(--muted);
   font-size: var(--font-caption);
   font-variant-numeric: tabular-nums;
-}
-.tool-exit-code[data-failed='true'] {
-  color: var(--danger);
 }
 .tool-state {
   padding: 1px 3px;
@@ -108,7 +104,7 @@
   color: var(--danger);
 }
 .tool-card:is([data-state='denied'], [data-state='skipped'], [data-state='cancelled'])
-  :is(.tool-state, .tool-exit-code) {
+  .tool-state {
   color: var(--warning);
 }
 .tool-content:not(:empty),

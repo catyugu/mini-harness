@@ -94,6 +94,8 @@ export interface NativeToolMessage {
   /** Non-success disposition distinct from an execution failure. */
   outcome?: 'skipped' | 'denied' | 'cancelled';
   details?: Record<string, unknown>;
+  /** Fields of details selected by the producing tool for its consumers' presentation. */
+  detailKeys?: readonly string[];
   elapsedMs?: number;
 }
 export type NativeMessage = NativeUserMessage | NativeAssistantMessage | NativeToolMessage;

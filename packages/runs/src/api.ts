@@ -36,6 +36,8 @@ export interface RunPort {
   current(id: string): TaskHandle | undefined;
   /** Publish an active record update to this exact run, never a newer run of the same session. */
   publishRecord(id: string, runId: string, event: RecordUpdate): void;
+  /** Record a file change if its execution belongs to the active Run. */
+  recordChange(id: string, executionId: string, path: string): void;
   activity(id: string): { partial?: string; tools: ToolProgress[]; records: LiveRecord[] };
   send(id: string, input: RunSubmission): SendReceipt;
   stop(id: string): boolean;

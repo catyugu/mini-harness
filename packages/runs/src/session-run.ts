@@ -50,7 +50,6 @@ interface SessionPrompt {
   signal: AbortSignal;
   task: TaskContext;
   fallback?: ModelChoice;
-  changed?: (path: string) => void;
   revision?: Pick<InboxItem, 'text' | 'images' | 'input' | 'model' | 'thinkingLevel'> & {
     parentId: string | null;
     expectedLeafId: string | null;
@@ -122,7 +121,7 @@ export class SessionRun {
     options: SessionPrompt,
   ): Promise<string> {
     const { id } = record;
-    const { signal, task, revision, changed, fallback } = options;
+    const { signal, task, revision, fallback } = options;
     const submissionId = task.id;
     signal.throwIfAborted();
     const log = this.sessions.log(id);
@@ -350,16 +349,18 @@ export class SessionRun {
                 return undefined;
               },
               update(call, value) {
-                const pending = value.details?.approvalPending;
-                if (pending === undefined && hooks.length) return;
+                if (value.state === undefined && hooks.length) return;
                 emit({
                   type: 'tool',
                   id: call.id,
                   name: call.name,
-                  state: pending === true ? 'approval' : 'running',
+                  state: value.state ?? 'running',
                   arguments: call.arguments,
                   content: hooks.length ? undefined : value.content,
                 });
+              },
+              write(call, text, channel) {
+                emit({ type: 'tool-output', id: call.id, channel, text });
               },
             },
             async deliver(output, toolSignal, call) {
@@ -391,10 +392,6 @@ export class SessionRun {
                 executionId && !transformError
                   ? log.acceptToolResult(executionId, output.content)
                   : log.append({ type: 'message', message: output, elapsedMs: output.elapsedMs });
-              const details = output.details;
-              const state = toolResultState(output);
-              if (state === 'finished' && typeof details?.changedPath === 'string')
-                changed?.(details.changedPath);
               emit({
                 type: 'tool-end',
                 message: displayMessage(entry, output, submissionId, call.arguments),

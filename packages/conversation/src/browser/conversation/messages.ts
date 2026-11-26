@@ -7,6 +7,7 @@ import type {
   MessageActionContext,
   MessageActionTarget,
   TurnFooterRenderer,
+  ToolView,
 } from '../history-api.ts';
 import { icon } from '@mini-harness/ui-primitives/icons';
 import { renderMarkdown } from '@mini-harness/ui-primitives/markdown';
@@ -174,24 +175,16 @@ export function createMessageView(
   }
 
   function toolCard(
-    data: {
-      name: string;
-      state: string;
-      content?: MessageContent;
-      arguments?: unknown;
-      sessionId?: string;
-      id?: string;
-      taskId?: string;
-      elapsedMs?: number;
-      approvalMs?: number;
-      exitCode?: number;
-    },
+    data: ToolView & { id?: string; elapsedMs?: number },
     card?: HTMLDetailsElement,
   ) {
     const item = card ?? document.createElement('details');
     toolItems.set(item, data);
     item.className = 'tool-card ui-record ui-disclosure';
     item.dataset.state = data.state;
+    resources.get(item)?.abort();
+    const resource = new AbortController();
+    resources.set(item, resource);
     const summary = document.createElement('summary');
     const name = document.createElement('strong');
     name.className = 'ui-record-label';
@@ -208,8 +201,9 @@ export function createMessageView(
       cancelled: 'Cancelled',
       error: 'Failed',
     };
-    status.textContent =
-      data.taskId && data.state === 'finished' ? 'Accepted' : (labels[data.state] ?? data.state);
+    const customStatus = extensions.render(data, resource.signal, 'status');
+    if (customStatus) status.append(customStatus);
+    else status.textContent = labels[data.state] ?? data.state;
     summary.append(icon('chevron'), name);
     const elapsed = data.elapsedMs;
     if (elapsed !== undefined && Number.isFinite(elapsed)) {
@@ -217,17 +211,10 @@ export function createMessageView(
       duration.className = 'tool-duration';
       duration.textContent =
         elapsed < 1000 ? Math.round(elapsed) + ' ms' : (elapsed / 1000).toFixed(1) + ' s';
-      if (data.approvalMs !== undefined)
-        duration.title = 'Execution only. Approval took ' + Math.round(data.approvalMs) + ' ms.';
       summary.append(duration);
     }
-    if (data.exitCode !== undefined && Number.isInteger(data.exitCode)) {
-      const code = document.createElement('span');
-      code.className = 'tool-exit-code';
-      code.textContent = 'Exit ' + data.exitCode;
-      if (data.exitCode !== 0) code.dataset.failed = 'true';
-      summary.append(code);
-    }
+    const annotation = extensions.render(data, resource.signal, 'summary');
+    if (annotation) summary.append(annotation);
     summary.append(status);
     const body = document.createElement('div');
     body.className = 'tool-content';
@@ -237,12 +224,9 @@ export function createMessageView(
       args.textContent = JSON.stringify(data.arguments, null, 2);
       body.append(args);
     }
-    resources.get(item)?.abort();
-    const resource = new AbortController();
-    resources.set(item, resource);
     const custom = extensions.render(data, resource.signal);
     if (custom) body.append(custom);
-    const output = custom ? '' : textOf(data.content);
+    const output = custom ? '' : (textOf(data.content) || Object.values(data.streams ?? {}).join(''));
     if (output) {
       const result = document.createElement('pre');
       result.textContent = output;
@@ -256,7 +240,7 @@ export function createMessageView(
       img.src = 'data:' + block.mimeType + ';base64,' + block.data;
       body.append(img);
     }
-    const action = extensions.render(data, resource.signal, true);
+    const action = extensions.render(data, resource.signal, 'action');
     if (action) {
       body.append(action);
     }
@@ -458,11 +442,8 @@ export function createMessageView(
                 id: part.toolCallId,
                 content: part.content,
                 arguments: part.arguments,
-                sessionId: part.sessionId,
-                taskId: part.taskId,
+                details: part.details,
                 elapsedMs: part.elapsedMs,
-                approvalMs: part.approvalMs,
-                exitCode: part.exitCode,
               },
               node ?? progress,
             );

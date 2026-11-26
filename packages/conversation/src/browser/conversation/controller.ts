@@ -8,7 +8,7 @@ import type {
   ConversationSubmission,
   RetryInput,
 } from '../conversation-api.ts';
-import { updateRecords, type RunEvent } from '@mini-harness/runs/stream';
+import { updateRecords, updateTools, type RunEvent } from '@mini-harness/runs/stream';
 import type { SendReceipt } from '@mini-harness/runs/api';
 import { defaultMessageMode, type MessageMode } from '@mini-harness/sessions/queue';
 import type { RunInfo } from '@mini-harness/sessions/run-state';
@@ -143,18 +143,18 @@ export function createConversationController(ctx: Context): ConversationControll
           append(event.message, { partial: '' });
           break;
         case 'tool-end':
-          append(event.message, { tools: state.tools.filter(({ id }) => id !== event.message.toolCallId) });
+          append(event.message, { tools: updateTools(state.tools, event) });
           status('Thinking…');
           break;
         case 'tool': {
           const { runId: _runId, runSessionId: _sessionId, sequence: _sequence, ...tool } = event;
-          const tools = [...state.tools];
-          const index = tools.findIndex(({ id }) => id === tool.id);
-          tools.splice(index === -1 ? tools.length : index, 1, tool);
-          update({ tools });
+          update({ tools: updateTools(state.tools, tool) });
           status(tool.state === 'approval' ? 'Waiting for approval…' : 'Running ' + tool.name + '…');
           break;
         }
+        case 'tool-output':
+          update({ tools: updateTools(state.tools, event) });
+          break;
         case 'record-update':
           update({ records: updateRecords(state.records, event) });
           break;

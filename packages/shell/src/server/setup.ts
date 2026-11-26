@@ -35,6 +35,7 @@ export function setup(ctx: Context) {
         return JSON.parse(
           JSON.stringify({
             details,
+            summary: 'Exit ' + details.exitCode,
             isError: result.isError,
             outcome: result.outcome,
             elapsedMs: result.elapsedMs,
@@ -73,6 +74,7 @@ export function setup(ctx: Context) {
             content: [{ type: 'text', text: JSON.stringify(output) }],
             isError: Boolean(output.reason) || output.code !== 0,
             outcome: cancelled ? 'cancelled' : undefined,
+            detailKeys: ['exitCode'],
             details: {
               ...output,
               timeoutMs,

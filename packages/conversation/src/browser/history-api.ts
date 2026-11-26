@@ -2,14 +2,15 @@ import type { PluginIcon } from '@mini-harness/plugin-api/descriptor';
 import type { LiveRecord } from '@mini-harness/runs/stream';
 import type { MessageContent, ViewMessage } from '@mini-harness/sessions/message';
 
+export type ToolPlacement = 'body' | 'action' | 'summary' | 'status';
 export type ToolRenderer = (tool: ToolView, signal: AbortSignal) => HTMLElement | undefined;
 export interface ToolView {
   name: string;
   state: string;
   content?: MessageContent;
   arguments?: unknown;
-  sessionId?: string;
-  taskId?: string;
+  details?: Record<string, unknown>;
+  streams?: Readonly<Record<string, string>>;
 }
 export type MessageActionTarget =
   | {
@@ -60,7 +61,7 @@ declare module 'mini-harness/cordis' {
       registerTurnFooter(id: string, render: TurnFooterRenderer): () => void;
       registerRecord(plugin: string, kind: string, render: RecordRenderer, priority?: number): () => void;
       registerAction(action: MessageAction): () => void;
-      registerTool(name: string, render: ToolRenderer, action?: boolean, priority?: number): () => void;
+      registerTool(name: string, render: ToolRenderer, placement?: ToolPlacement, priority?: number): () => void;
     };
   }
 }

@@ -50,6 +50,8 @@ Message actions target either one original user message or an entire assistant t
 
 Tool and record renderers use keyed priority selection. A higher priority wins; equal priorities for the same key conflict. Each mounted renderer receives a view signal. Returning `undefined` or throwing releases the attempted renderer's lifetime and lets the native fallback render. Plugin display records come from the selected SessionLog branch; a missing or failed record renderer falls back to the saved title. Private record changes still advance the projected branch leaf, preventing revision actions from using a stale leaf.
 
+Tool renderers select a placement (`body`, `summary`, `status` or `action`). Tools explicitly select exposed metadata with `detailKeys`; renderers read those values from `ToolView.details`. The generic history renderer does not interpret tool-specific details. Live output is available through `ToolView.streams`.
+
 Server plugins can import [`mini-harness/conversation/display-events`](src/server/display-events.ts) and listen for `conversation/tool-projection`. The synchronous hook transforms a clone of a tool result for browser history or replay. Handlers resolve in the conversation's scope; a failed or invalid transformation is logged and preserves the previous projected content. This presentation hook does not modify the durable tool result or the model's context.
 
 ## Implementation and verification

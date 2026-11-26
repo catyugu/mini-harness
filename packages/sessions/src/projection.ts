@@ -72,13 +72,12 @@ export function displayMessage(
     view.error = message.errorMessage;
   if (message.role === 'toolResult') {
     view.isError = message.isError;
-    if (typeof message.details?.approvalMs === 'number') view.approvalMs = message.details.approvalMs;
     view.arguments = toolArguments;
     view.elapsedMs = (entry.type === 'message' ? entry.elapsedMs : undefined) ?? message.elapsedMs;
-    if (typeof message.details?.taskId === 'string') view.taskId = message.details.taskId;
-    if (typeof message.details?.sessionId === 'string') view.sessionId = message.details.sessionId;
-    if (typeof message.details?.exitCode === 'number' && Number.isInteger(message.details.exitCode))
-      view.exitCode = message.details.exitCode;
+    if (message.details && message.detailKeys)
+      view.details = Object.fromEntries(
+        message.detailKeys.filter((key) => Object.hasOwn(message.details!, key)).map((key) => [key, message.details![key]]),
+      );
   }
   return view;
 }
