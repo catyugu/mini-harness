@@ -301,7 +301,8 @@ export class SessionRun {
           step,
           { systemPrompt, messages: current.contextMessages, thinkingLevel: current.thinkingLevel },
           (content) => {
-            for (const [name, tool] of advertisedTools) if (!toolAvailable(tool)) advertisedTools.delete(name);
+            for (const [name, tool] of advertisedTools)
+              if (!toolAvailable(tool)) advertisedTools.delete(name);
             const available = toolMetadata
               .filter(({ name }) => advertisedTools.has(name))
               .map(({ name, description, parameters }) => ({ name, description, parameters }));

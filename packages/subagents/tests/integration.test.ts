@@ -188,7 +188,11 @@ test(
       'delegate tool',
     );
     const start = (task: string) =>
-      startTool(app.runtime.plugins.ctx.harnessTasks, delegate, task, { task, provider: 'local-mock', model: 'mock-model' }).result;
+      startTool(app.runtime.plugins.ctx.harnessTasks, delegate, task, {
+        task,
+        provider: 'local-mock',
+        model: 'mock-model',
+      }).result;
     const first = await start('First child');
     assert.ok(entered[0] && entered[1]);
     await entered[0].promise;

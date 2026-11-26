@@ -76,7 +76,8 @@ export function invokeTool(
       });
       if (!result || !isToolContent(result.content))
         throw new Error('Invalid result from tool: ' + tool.name);
-      if (retain) task.setResult(tool.projectResult?.(result) ?? (JSON.parse(JSON.stringify(result)) as TaskData));
+      if (retain)
+        task.setResult(tool.projectResult?.(result) ?? (JSON.parse(JSON.stringify(result)) as TaskData));
       return result;
     },
   );

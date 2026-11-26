@@ -4,12 +4,7 @@ import { Service, type Context } from 'mini-harness/cordis';
 import { randomUUID } from 'node:crypto';
 import { terminal, type TaskPort } from '@mini-harness/tasks/api';
 import { bindTool } from './invocation.ts';
-import {
-  type ToolDefinition,
-  type ToolPort,
-  type ToolFactory,
-  type ToolSelection,
-} from './api.ts';
+import { type ToolDefinition, type ToolPort, type ToolFactory, type ToolSelection } from './api.ts';
 interface ToolRegistration {
   name: string;
   resolve(selection: ToolSelection, caller?: Context): ToolDefinition;
@@ -52,7 +47,9 @@ export class ToolRegistry {
         !expired() && (!factory || (resourceId !== undefined && (factory.visible?.(resourceId) ?? true))),
       resolve(selection, caller) {
         const resolve = (context?: Context) => {
-          const tool = factory ? factory.resolve(selection.resourceId!, context ?? caller) : (definition as ToolDefinition);
+          const tool = factory
+            ? factory.resolve(selection.resourceId!, context ?? caller)
+            : (definition as ToolDefinition);
           if (tool.name !== name) throw new Error('Tool binding changed its registered name: ' + name);
           return tool;
         };

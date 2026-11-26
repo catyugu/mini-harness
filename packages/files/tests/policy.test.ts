@@ -30,7 +30,10 @@ test('workspace tools share one policy for reads, searches and writes', async (t
   const execute = async (name: string, value: object) =>
     startTool(
       tasks,
-      expectPresent(fileTools(cwd, () => workspace).find((tool) => tool.name === name), 'file tool ' + name),
+      expectPresent(
+        fileTools(cwd, () => workspace).find((tool) => tool.name === name),
+        'file tool ' + name,
+      ),
       'test',
       value as Record<string, unknown>,
     ).result;

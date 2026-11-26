@@ -109,10 +109,13 @@ test('ownership, not creation, controls cancellation and deletion', async () => 
       signal.addEventListener('abort', () => reject(signal.reason), { once: true });
     });
   });
-  const background = runtime.start({ owner: 'session:parent', metadata: { creator: parent.id } }, async () => {
-    await released.promise;
-    return 'independent';
-  });
+  const background = runtime.start(
+    { owner: 'session:parent', metadata: { creator: parent.id } },
+    async () => {
+      await released.promise;
+      return 'independent';
+    },
+  );
   await childEntered.promise;
   parent.cancel();
   released.release();
@@ -315,13 +318,10 @@ test('observation data is detached from arbitrary result objects', async () => {
   const runtime = new TaskRuntime();
   const metadata = { nested: { value: 'original' } };
   const result = { value: 'answer' };
-  const handle = runtime.start<{ value: string }>(
-    { owner: 'one', metadata },
-    async (task) => {
-      task.setResult(result);
-      return result;
-    },
-  );
+  const handle = runtime.start<{ value: string }>({ owner: 'one', metadata }, async (task) => {
+    task.setResult(result);
+    return result;
+  });
   metadata.nested.value = 'modified';
   assert.strictEqual(await handle.result, result);
   result.value = 'modified';

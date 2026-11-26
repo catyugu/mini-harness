@@ -123,13 +123,7 @@ export function setup(ctx: Context) {
         try {
           if (!allowed()) throw new Error('Tool denied by conversation policy: sandbox_shell');
           const startedAt = performance.now();
-          const output = await runShellCommand(
-            execution,
-            command,
-            timeoutSeconds,
-            signal,
-            task.write,
-          );
+          const output = await runShellCommand(execution, command, timeoutSeconds, signal, task.write);
           const cancelled = output.reason === 'cancelled';
           return {
             content: [{ type: 'text', text: JSON.stringify(output) }],

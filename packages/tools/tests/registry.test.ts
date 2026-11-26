@@ -49,7 +49,10 @@ test('scoped tools inherit locally and disposal aborts and drains active executi
   );
   const pending = startTool(
     tasks,
-    expectPresent(registry.list({ scope: child }).find(({ name }) => name === 'wait'), 'wait tool'),
+    expectPresent(
+      registry.list({ scope: child }).find(({ name }) => name === 'wait'),
+      'wait tool',
+    ),
     'call',
     {},
   ).result;
@@ -84,7 +87,9 @@ test('a scoped replacement invalidates existing leases and removal restores inhe
   assert.equal(toolAvailable(original), false);
   assert.throws(() => startTool(tasks, original, 'old', {}), /no longer available/);
   const replacement = registry.list({ scope: child })[0];
-  assert.deepEqual((await startTool(tasks, replacement, 'call', {}).result).content, [{ type: 'text', text: 'scoped' }]);
+  assert.deepEqual((await startTool(tasks, replacement, 'call', {}).result).content, [
+    { type: 'text', text: 'scoped' },
+  ]);
   assert.equal(registry.list()[0].description, 'application');
   await remove();
   assert.throws(() => startTool(tasks, replacement, 'disposed', {}), /no longer available/);

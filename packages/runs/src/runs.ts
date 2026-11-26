@@ -176,17 +176,7 @@ export class Runs implements RunPort {
     id: string,
     prompt: string,
     emit: ((event: StreamEvent) => void) | undefined,
-    {
-      signal,
-      source,
-      model,
-      attachments,
-      thinkingLevel,
-      revision,
-      acquire,
-      metadata,
-      provider,
-    }: RunOptions,
+    { signal, source, model, attachments, thinkingLevel, revision, acquire, metadata, provider }: RunOptions,
     reserved?: Activity,
   ) {
     const activity = reserved ?? this.reserve(id);
@@ -452,12 +442,10 @@ export class Runs implements RunPort {
   async compact(id: string) {
     const activity = this.reserve(id);
     try {
-      const task = this.tasks.start(
-        { owner: 'session:' + id, type: 'compaction' },
-        ({ signal }) =>
-          this.withAgentContext(id, activity, signal, (ctx, signal) =>
-            this.sessionRun.compact(ctx, id, signal),
-          ),
+      const task = this.tasks.start({ owner: 'session:' + id, type: 'compaction' }, ({ signal }) =>
+        this.withAgentContext(id, activity, signal, (ctx, signal) =>
+          this.sessionRun.compact(ctx, id, signal),
+        ),
       );
       activity.task = task;
       this.changed(id);

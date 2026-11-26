@@ -95,10 +95,15 @@ function fixture(
   const record = sessions.create();
   type Prompt = Parameters<SessionRun['prompt']>;
   const agent = {
-    prompt(ctx: Prompt[0], record: Prompt[1], text: Prompt[2], emit: Prompt[3], options: Omit<Prompt[4], 'task'>) {
-      return runtime.start(
-        { owner: 'session:' + record.id, signal: options.signal, retain: false },
-        (task) => sessionRun.prompt(ctx, record, text, emit, { ...options, signal: task.signal, task }),
+    prompt(
+      ctx: Prompt[0],
+      record: Prompt[1],
+      text: Prompt[2],
+      emit: Prompt[3],
+      options: Omit<Prompt[4], 'task'>,
+    ) {
+      return runtime.start({ owner: 'session:' + record.id, signal: options.signal, retain: false }, (task) =>
+        sessionRun.prompt(ctx, record, text, emit, { ...options, signal: task.signal, task }),
       ).result;
     },
   };
