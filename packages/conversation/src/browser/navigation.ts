@@ -422,7 +422,6 @@ export function sessionNavigation(ctx: Context, options: NavigationServices) {
         .map(({ id }) => id),
     );
     for (const id of selection) if (!available.has(id)) selection.delete(id);
-    const active = sessions.find(({ id }) => id === state.activeConversation);
     if (state.activeConversation && !available.has(state.activeConversation)) options.clearConversation();
     else render();
   }
