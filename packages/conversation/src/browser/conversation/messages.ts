@@ -458,9 +458,11 @@ export function createMessageView(
         case 'thinking':
           return retain('thinking:' + part.id, part.text, () => {
             const details = document.createElement('details');
-            details.className = 'assistant-reasoning';
+            details.className = 'assistant-reasoning ui-disclosure';
             const summary = document.createElement('summary');
-            summary.textContent = 'Reasoning';
+            const label = document.createElement('span');
+            label.textContent = 'Reasoning';
+            summary.append(icon('chevron'), label);
             const body = document.createElement('p');
             body.textContent = part.text;
             details.append(summary, body);
