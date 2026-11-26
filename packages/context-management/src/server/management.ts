@@ -158,7 +158,8 @@ export class ContextManagement {
         throw new DomainError('unavailable', 'No further images can be offloaded');
     }
     const overflow = failure?.kind === 'context-overflow';
-    if (overflow && !settings.autoCompact) throw new DomainError('unavailable', 'Automatic compaction is off');
+    if (overflow && !settings.autoCompact)
+      throw new DomainError('unavailable', 'Automatic compaction is off');
     if (settings.autoCompact && (overflow || pressure()))
       return this.compact(log, current, rebuild, settings, taskId);
     if (totalTokens(current.inputMeasurement) > current.inputMeasurement.budget)
