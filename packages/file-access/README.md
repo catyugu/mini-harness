@@ -38,4 +38,4 @@ The base Profile activates `core:file-access` as `@mini-harness/file-access`. Th
 
 ## Testing
 
-[File-policy tests](../files/tests/policy.test.ts) exercise shared confinement, failed atomic writes, binary data and streaming beyond preview limits. [Workspace API tests](../../test/system/workspace-api.test.ts) exercise root identity and scope selection. Implementation details live in [root.ts](src/root.ts).
+[Rooted file tests](tests/root.test.ts) exercise failed atomic writes, binary data and streaming beyond preview limits. [File-policy tests](../files/tests/policy.test.ts) exercise shared confinement through the tools. [Workspace API tests](../../test/system/workspace-api.test.ts) exercise root identity and scope selection. Implementation details live in [root.ts](src/root.ts).

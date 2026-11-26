@@ -27,4 +27,4 @@ Shell drains stdout and stderr concurrently, retaining up to the configured limi
 
 Foreground calls follow their caller's signal. Independent tasks stream output through their task channels and retain compact process status and overflow paths in the task result. Timeout, cancellation or plugin unload terminates the process through the Process Execution provider. Shell invalidates the workspace file projection after execution.
 
-[Shell tests](tests/shell.test.ts) cover tool permissions, native execution and independent calls. [Process tests](../process-execution/tests/execution.test.ts) cover concurrent streams, cancellation, timeouts and overflow files.
+[Shell integration tests](../../test/system/shell.test.ts) cover tool permissions, native execution and independent calls. [Command tests](tests/command.test.ts) cover cancellation, timeouts and overflow files. [Process tests](../process-execution/tests/execution.test.ts) cover concurrent streams.

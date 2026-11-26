@@ -1,9 +1,9 @@
 import { runTool } from '@mini-harness/tools/execution';
 import { conversationTools } from '@mini-harness/runs/tool-selection';
-import { expectPresent } from '../../../test/support/required.ts';
+import { expectPresent } from '../support/required.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { fixture } from '../../../test/support/api-fixture.ts';
+import { fixture } from '../support/api-fixture.ts';
 import { realpath } from 'node:fs/promises';
 
 test('enabled Shell runs consecutive commands without approval and respects read-only ancestry', async (t) => {

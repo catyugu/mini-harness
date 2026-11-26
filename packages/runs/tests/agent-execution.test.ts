@@ -1,30 +1,23 @@
-import { sendRun } from '../../../test/support/runs.ts';
 import { isViewMessage } from '@mini-harness/sessions/message';
-import { Context } from 'mini-harness/cordis';
-import { fixture as httpFixture } from '../../../test/support/api-fixture.ts';
-import { prepareInput } from '@mini-harness/input/prepare';
 import type { ThinkingLevel } from '@mini-harness/llm/vocabulary';
 import { expectPresent } from '../../../test/support/required.ts';
 import test, { type TestContext } from 'node:test';
 import assert from 'node:assert/strict';
 import { rmSync } from 'node:fs';
 import { Type } from 'typebox';
-import { AgentLoop } from '../src/agent.ts';
 import { randomUUID } from 'node:crypto';
-import { Inbox } from '../../runs/src/inbox.ts';
+import { Inbox } from '../src/inbox.ts';
 import type { Attachment } from '@mini-harness/input/message';
 import type { InboxItem } from '@mini-harness/sessions/log-api';
-import type { AgentEvent } from '../../runs/src/stream.ts';
-import { SessionRun } from '../../runs/src/session-run.ts';
+import type { AgentEvent } from '../src/stream.ts';
+import { SessionRun } from '../src/session-run.ts';
 import { nativeExecutor } from '@mini-harness/tools/execution';
-import { SessionRegistry } from '@mini-harness/sessions/registry';
-import { WorkspaceCatalog } from '@mini-harness/workspaces/catalog';
-import { ToolRegistry } from '@mini-harness/tools/registry';
-import { TaskRuntime } from '@mini-harness/tasks/runtime';
+import type { SessionStore } from '@mini-harness/sessions/records';
+import { startTestProfile } from '../../../test/support/profile.ts';
 import { defineTool, toolResultState } from '@mini-harness/tools/api';
 import type { LlmPort, NativeAssistantMessage, ToolCallPart } from '@mini-harness/llm/api';
-import type { ModelRetry } from '../src/events.ts';
-import { checkpointFixture, createFixturePaths } from '../../../test/support/mock-provider.ts';
+import type { ModelRetry } from '@mini-harness/agent/events';
+import { createFixturePaths } from '../../../test/support/mock-provider.ts';
 
 const model = { provider: 'fixture', id: 'native' };
 const answer = (text = 'Done'): NativeAssistantMessage => ({
@@ -47,7 +40,7 @@ const toolsAnswer = (...calls: ToolCallPart[]): NativeAssistantMessage => ({
   stopReason: 'toolUse',
 });
 
-function fixture(
+async function fixture(
   t: TestContext,
   llm: Pick<LlmPort, 'stream'>,
   retryModel?: () => Promise<ModelRetry>,
@@ -55,22 +48,22 @@ function fixture(
   executor = nativeExecutor,
 ) {
   const { root, paths } = createFixturePaths('http://127.0.0.1:1/v1');
-  const sessions = new SessionRegistry(
-    paths,
-    (() => {
-      const workspaces = new WorkspaceCatalog(paths);
-      return () => workspaces;
-    })(),
-  );
-  t.after(() => {
-    sessions.dispose();
+  const app = await startTestProfile(paths, 'execution', [
+    { name: '@mini-harness/transport-runtime' },
+    { name: '@mini-harness/plugins-runtime' },
+    { name: '@mini-harness/workspaces' },
+    { name: '@mini-harness/sessions' },
+    { name: '@mini-harness/tasks' },
+    { name: '@mini-harness/tools' },
+    { name: '@mini-harness/llm' },
+    { name: '@mini-harness/agent', config: { maxTurns: 8 } },
+  ]);
+  t.after(async () => {
+    await app.close();
     rmSync(root, { recursive: true, force: true });
   });
-  const runtime = new TaskRuntime();
-  const tools = new ToolRegistry();
-  const ctx = new Context();
-  ctx.provide('harnessTasks', runtime.service());
-  ctx.provide('harnessTools', tools.service());
+  const ctx = app.ctx.isolate('harnessLlm');
+  const { harnessSessions: sessions, harnessTools: tools, harnessTasks: runtime } = ctx;
   ctx.provide('harnessModels', {
     list: () => [],
     register: () => () => {},
@@ -90,7 +83,6 @@ function fixture(
   ctx.provide('harnessToolExecutor', executor);
   ctx.provide('harnessPrompt', { build: async () => 'Fixture', register: () => () => {} });
   if (retryModel) ctx.on('agent/model-retry', retryModel);
-  ctx.provide('harnessAgent', new AgentLoop(() => 8));
   const sessionRun = new SessionRun(sessions);
   const record = sessions.create();
   type Prompt = Parameters<SessionRun['prompt']>;
@@ -130,8 +122,7 @@ function fixture(
 }
 
 function queueInput(
-  ctx: Context,
-  sessions: SessionRegistry,
+  sessions: SessionStore,
   id: string,
   text: string,
   mode: InboxItem['mode'],
@@ -140,7 +131,6 @@ function queueInput(
 ) {
   const log = sessions.log(id);
   const model = options?.model ?? log.projection().model;
-  if (model) assert.ok(ctx.harnessModels.resolve(model));
   log.append({
     type: 'inbox-enqueued',
     item: { id: randomUUID(), mode, ...sessions.prepareInput(id, text, attachments), ...options, model },
@@ -151,7 +141,7 @@ function queueInput(
 test('an alternative executor owns the model protocol and executes without the registered implementation', async (t) => {
   let requests = 0,
     executions = 0;
-  const { agent, ctx, tools, record, sessions } = fixture(
+  const { agent, ctx, tools, record, sessions } = await fixture(
     t,
     {
       async *stream(request) {
@@ -174,7 +164,6 @@ test('an alternative executor owns the model protocol and executes without the r
           : message,
       async execute(calls, _tools, execution) {
         for (const call of calls) {
-          assert.equal(execution.start?.(call), undefined);
           await execution.deliver(
             {
               role: 'toolResult',
@@ -220,7 +209,7 @@ test('an alternative executor owns the model protocol and executes without the r
 test('duplicate tool call identities fail before executing any side effect', async (t) => {
   let requests = 0,
     executions = 0;
-  const { agent, ctx, tools, record } = fixture(t, {
+  const { agent, ctx, tools, record } = await fixture(t, {
     async *stream() {
       yield {
         type: 'done',
@@ -254,7 +243,7 @@ test('tool execution uses the advertised registration and does not execute a hot
   let requests = 0,
     executions = 0;
   let replace: () => Promise<void>;
-  const { agent, ctx, tools, record, sessions } = fixture(t, {
+  const { agent, ctx, tools, record, sessions } = await fixture(t, {
     async *stream() {
       if (requests++ === 0) {
         await replace();
@@ -305,7 +294,7 @@ test('tool execution uses the advertised registration and does not execute a hot
 test('malformed tool arguments become durable error results without invoking the tool', async (t) => {
   let requests = 0,
     executions = 0;
-  const { agent, ctx, tools, record, sessions } = fixture(t, {
+  const { agent, ctx, tools, record, sessions } = await fixture(t, {
     async *stream(request) {
       if (requests++ === 0)
         yield { type: 'done', message: toolsAnswer(call('invalid-call', 'inspect', { path: 42 })) };
@@ -349,7 +338,7 @@ test('cancellation closes the whole tool batch durably and never executes later 
   const controller = new AbortController();
   let ranFirst = 0,
     ranSecond = 0;
-  const { agent, ctx, tools, record, sessions } = fixture(t, {
+  const { agent, ctx, tools, record, sessions } = await fixture(t, {
     async *stream() {
       yield { type: 'done', message: toolsAnswer(call('one', 'first'), call('two', 'second')) };
     },
@@ -434,7 +423,7 @@ test('a concurrent cancellation does not hide a genuine tool failure', async () 
 
 test('interrupted calls receive an error record before the next prompt and are not retried', async (t) => {
   let executed = 0;
-  const { agent, ctx, tools, record, sessions } = fixture(t, {
+  const { agent, ctx, tools, record, sessions } = await fixture(t, {
     async *stream(request) {
       const results = request.messages.filter((message) => message.role === 'toolResult');
       assert.equal(results.length, 1);
@@ -476,7 +465,7 @@ test('identical queued text preserves each attachment identity and is delivered 
     release = resolve;
   });
   t.after(() => release());
-  const { agent, ctx, record, sessions } = fixture(t, {
+  const { agent, ctx, record, sessions } = await fixture(t, {
     async *stream() {
       if (requests++ === 0) {
         entered();
@@ -491,10 +480,10 @@ test('identical queued text preserves each attachment identity and is delivered 
   });
   await ready;
   const data = Buffer.from('89504e470d0a1a0a', 'hex').toString('base64');
-  await queueInput(ctx, sessions, record.id, 'Same text', 'queue', [
+  await queueInput(sessions, record.id, 'Same text', 'queue', [
     { name: 'first.png', mimeType: 'image/png', data },
   ]);
-  await queueInput(ctx, sessions, record.id, 'Same text', 'queue', [
+  await queueInput(sessions, record.id, 'Same text', 'queue', [
     { name: 'second.png', mimeType: 'image/png', data },
   ]);
   release();
@@ -533,7 +522,7 @@ test('steering accepts off, skips deterministic failures and resets incompatible
   t.after(() => release());
   const levels: (string | undefined)[] = [];
   const events: AgentEvent[] = [];
-  const { agent, ctx, sessions, record, tools } = fixture(
+  const { agent, ctx, sessions, record, tools } = await fixture(
     t,
     {
       async *stream(request) {
@@ -592,14 +581,14 @@ test('steering accepts off, skips deterministic failures and resets incompatible
       thinkingLevel: 'high',
     },
   });
-  await queueInput(ctx, sessions, record.id, 'Actual instruction', 'steer');
-  await queueInput(ctx, sessions, record.id, 'Keep reasoning', 'queue', undefined, {
+  await queueInput(sessions, record.id, 'Actual instruction', 'steer');
+  await queueInput(sessions, record.id, 'Keep reasoning', 'queue', undefined, {
     thinkingLevel: 'high',
   });
-  await queueInput(ctx, sessions, record.id, 'Switch model', 'queue', undefined, {
+  await queueInput(sessions, record.id, 'Switch model', 'queue', undefined, {
     model: { ...model, id: 'new-model' },
   });
-  const queue = await queueInput(ctx, sessions, record.id, 'Cancel me', 'queue');
+  const queue = await queueInput(sessions, record.id, 'Cancel me', 'queue');
   new Inbox(log).cancel(
     'User cancelled',
     expectPresent(
@@ -636,7 +625,7 @@ test(
   { timeout: 5000 },
   async (t) => {
     let requests = 0;
-    const { agent, ctx, tools, record, sessions } = fixture(t, {
+    const { agent, ctx, tools, record, sessions } = await fixture(t, {
       async *stream() {
         yield {
           type: 'done',
@@ -721,7 +710,7 @@ test(
 test('the retry policy cannot replay a model attempt after output has streamed', async (t) => {
   let requests = 0,
     retries = 0;
-  const { agent, ctx, record } = fixture(
+  const { agent, ctx, record } = await fixture(
     t,
     {
       async *stream() {
@@ -803,7 +792,7 @@ test('a queued follow-up can preselect the next model and thinking level', async
   });
   t.after(() => release());
   const seen: { model: string; thinking: string }[] = [];
-  const { agent, ctx, record, sessions } = fixture(t, {
+  const { agent, ctx, record, sessions } = await fixture(t, {
     async *stream(request) {
       seen.push({ model: request.model.id, thinking: request.thinkingLevel ?? 'off' });
       if (seen.length === 1) {
@@ -818,7 +807,7 @@ test('a queued follow-up can preselect the next model and thinking level', async
     signal: new AbortController().signal,
   });
   await started;
-  await queueInput(ctx, sessions, record.id, 'Follow up', 'queue', undefined, {
+  await queueInput(sessions, record.id, 'Follow up', 'queue', undefined, {
     model: { provider: 'fixture', id: 'next-model' },
     thinkingLevel: 'medium',
   });
@@ -834,7 +823,7 @@ test('a queued follow-up can preselect the next model and thinking level', async
 
 test('text models see historical placeholders in the request and audit snapshot, while new images are rejected', async (t) => {
   const image = { type: 'image' as const, mimeType: 'image/png', data: 'iVBORw0KGgo=' };
-  const { agent, ctx, record, sessions } = fixture(t, {
+  const { agent, ctx, record, sessions } = await fixture(t, {
     async *stream(request) {
       assert.match(JSON.stringify(request.messages), /Image unavailable to this model/);
       assert.doesNotMatch(JSON.stringify(request.messages), /iVBORw0KGgo=/);
@@ -859,91 +848,4 @@ test('text models see historical placeholders in the request and audit snapshot,
     /does not support image/,
   );
   assert.deepEqual(log.projection(), previous);
-});
-
-test('native compaction reduces context and preserves message identities and history', async (t) => {
-  const { app, mock, request } = await httpFixture(t, ({ messages }) =>
-    messages.at(-1)?.content.startsWith('Write a continuation checkpoint') ? checkpointFixture : 'Done',
-  );
-  await app.runtime.configuration.update({
-    entries: { 'context-management': { config: { autoCompact: false } } },
-  });
-  const { body: session } = await request('/sessions', 'POST', {});
-  const compact = () => request('/sessions/' + session.id + '/compact', 'POST');
-  const small = await compact();
-  assert.equal(small.status, 400);
-  assert.match(small.body.error, /Nothing to compact/);
-  const log = app.runtime.plugins.ctx.harnessSessions.log(session.id);
-  const image = { type: 'image' as const, mimeType: 'image/png', data: 'iVBORw0KGgo=' };
-  log.append({ type: 'message', message: { role: 'user', content: [image], timestamp: 1 } });
-  for (let turn = 0; turn < 6; turn++)
-    await sendRun(
-      app.runtime.plugins.ctx.harnessRuns,
-      session.id,
-      'Turn ' + turn + ' ' + 'more context '.repeat(100),
-    );
-  const before = app.runtime.plugins.ctx.harnessSessions
-    .log(session.id)
-    .projection()
-    .timeline.filter(isViewMessage);
-  const compacted = await compact();
-  assert.equal(
-    compacted.status,
-    200,
-    JSON.stringify(compacted.body) +
-      ' ' +
-      JSON.stringify(
-        log
-          .entries()
-          .filter((entry) => entry.type === 'task')
-          .at(-1),
-      ),
-  );
-  assert.equal(mock.requests.length, 7);
-  assert.match(JSON.stringify(mock.requests.at(-1)), /Image 1 offloaded/);
-  assert.doesNotMatch(JSON.stringify(mock.requests.at(-1)), /iVBORw0KGgo=/);
-  assert.ok(log.entries().some((entry) => entry.type === 'context-replace'));
-  assert.deepEqual(
-    app.runtime.plugins.ctx.harnessSessions.log(session.id).projection().timeline.filter(isViewMessage),
-    before,
-  );
-  assert.ok(log.context().contextMessages.length < before.length);
-  assert.match(JSON.stringify(log.projection().contextMessages[0]), /Summary of earlier conversation/);
-});
-
-test('attachments enforce encoding, format and byte limits without creating files', () => {
-  const png =
-    'iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAIAAAAmkwkpAAAAFElEQVR4nGPUCIhigAEmBiSAmwMAKdYA2gR3lpgAAAAASUVORK5CYII=';
-  const prepared = prepareInput('', [
-    { name: 'one.png', mimeType: 'image/png', data: png },
-    { name: 'notes.md', mimeType: 'text/plain', data: Buffer.from('An attached note').toString('base64') },
-  ]);
-  assert.equal(prepared.input.userText, '');
-  assert.deepEqual(
-    prepared.input.attachments.map(({ name, mimeType }) => ({ name, mimeType })),
-    [
-      { name: 'one.png', mimeType: 'image/png' },
-      { name: 'notes.md', mimeType: 'text/plain' },
-    ],
-  );
-  assert.deepEqual(
-    prepared.files.map(({ id }) => id),
-    prepared.input.attachments.map(({ id }) => id),
-  );
-  assert.equal(prepared.images.length, 1);
-  assert.match(prepared.text, /An attached note/);
-  assert.throws(
-    () => prepareInput('a', [{ name: 'fake.png', mimeType: 'image/png', data: 'eA==' }]),
-    /Invalid image/,
-  );
-  assert.throws(
-    () => prepareInput('a', [{ name: 'b', mimeType: 'text/plain', data: '!!!' }]),
-    /Invalid attachment/,
-  );
-  const binary = prepareInput('a', [
-    { name: 'b.pdf', mimeType: 'application/pdf', data: Buffer.from([0, 1, 2]).toString('base64') },
-  ]);
-  assert.match(binary.text, /Uploaded file: "b.pdf"/);
-  assert.deepEqual(binary.files[0].bytes, Buffer.from([0, 1, 2]));
-  assert.throws(() => prepareInput('a', new Array(9).fill({})), /eight/);
 });

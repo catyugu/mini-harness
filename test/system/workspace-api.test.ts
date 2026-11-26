@@ -31,6 +31,10 @@ test('workspace registration, session navigation and scoped tools leave an activ
       : { tool: 'write', args: { path: 'isolated.txt', content: 'second workspace' } };
   });
   const first = '/workspaces/' + app.runtime.plugins.ctx.harnessWorkspaces.defaultId;
+  assert.throws(
+    () => app.runtime.plugins.ctx.harnessSessions.create({ workspaceId: 'f'.repeat(32) }),
+    /Workspace not found/,
+  );
   const next = join(root, 'second');
   mkdirSync(next);
   writeFileSync(join(next, 'note.txt'), 'only in second');

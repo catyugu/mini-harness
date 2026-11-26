@@ -76,6 +76,7 @@ test('the composed browser graph serves its runtime dependencies and excludes se
   assert.equal((await fetch(base + files.browser)).status, 404);
   const shell = changed.ui.find(({ id }) => id === 'shell');
   assert.ok(shell);
+  assert.equal((await fetch(base + shell.browser)).status, 200);
   const conversation = changed.ui.find(({ id }) => id === 'core:conversation');
   assert.ok(conversation);
   const conversationStyle = conversation?.styles?.[0];

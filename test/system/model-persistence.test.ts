@@ -1,13 +1,13 @@
-import { sendRun } from '../../../test/support/runs.ts';
-import { expectPresent } from '../../../test/support/required.ts';
+import { sendRun } from '../support/runs.ts';
+import { expectPresent } from '../support/required.ts';
 import test from 'node:test';
 import { runTool } from '@mini-harness/tools/execution';
 import assert from 'node:assert/strict';
 import { mkdirSync, renameSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
-import { MiniHarnessRuntime } from '../../../test/support/profile.ts';
+import { MiniHarnessRuntime } from '../support/profile.ts';
 import { readJson, writeJson } from '@mini-harness/platform/json';
-import { createFixturePaths, createMockProvider } from '../../../test/support/mock-provider.ts';
+import { createFixturePaths, createMockProvider } from '../support/mock-provider.ts';
 
 test('recent main model survives child overrides and a restart through the native agent', async (t) => {
   const mock = await createMockProvider();

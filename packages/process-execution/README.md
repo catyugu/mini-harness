@@ -31,4 +31,4 @@ The base Profile mounts `core:process`; this provider has no plugin configuratio
 
 ## Verification
 
-[Process tests](tests/execution.test.ts) exercise concurrent streams, cancellation, timeouts and output overflow. See [execution](../../docs/subsystems/execution.md), [scoped providers](../../docs/scoped-providers.md) and the [package index](../../docs/packages.md).
+[Process tests](tests/execution.test.ts) exercise concurrent streams. See [execution](../../docs/subsystems/execution.md), [scoped providers](../../docs/scoped-providers.md) and the [package index](../../docs/packages.md).

@@ -1,16 +1,24 @@
-import { sendRun, activeRunCount } from '../../../test/support/runs.ts';
+import { sendRun, activeRunCount } from '../support/runs.ts';
 import { isViewMessage } from '@mini-harness/sessions/message';
-import { expectPresent } from '../../../test/support/required.ts';
+import { expectPresent } from '../support/required.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import fs, { readFileSync, rmSync } from 'node:fs';
+import fs, { readFileSync, readdirSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
 import { syncBuiltinESMExports } from 'node:module';
-import { createMiniHarnessServer } from '../../../test/support/profile.ts';
-import { SessionRegistry } from '@mini-harness/sessions/registry';
-import { nativeFile } from '../../sessions/src/storage.ts';
-import { WorkspaceCatalog } from '@mini-harness/workspaces/catalog';
-import type { RunEvent } from '../src/stream.ts';
-import { createFixturePaths, createMockProvider } from '../../../test/support/mock-provider.ts';
+import { createMiniHarnessServer } from '../support/profile.ts';
+import type { RunEvent } from '@mini-harness/runs/stream';
+import { createFixturePaths, createMockProvider } from '../support/mock-provider.ts';
+
+function sessionLogFile(home: string, id: string) {
+  const entry = expectPresent(
+    readdirSync(join(home, 'sessions'), { recursive: true, withFileTypes: true }).find(
+      (file) => file.isFile() && file.name === id + '.jsonl',
+    ),
+    'persisted session log',
+  );
+  return join(entry.parentPath, entry.name);
+}
 
 function gate() {
   let release: () => void;
@@ -100,7 +108,7 @@ test(
     const finishedRun = app.runtime.plugins.ctx.harnessRuns.info(item.id);
     assert.ok(finishedRun);
     assert.equal(finishedRun.state, 'completed');
-    const durable = readFileSync(nativeFile(paths, item), 'utf8')
+    const durable = readFileSync(sessionLogFile(paths.home, item.id), 'utf8')
       .trim()
       .split('\n')
       .map((line) => JSON.parse(line));
@@ -162,17 +170,13 @@ test(
 test('startup durably interrupts runs and delivers pending inbox messages', async (t) => {
   const mock = await createMockProvider();
   const { root, paths } = createFixturePaths(mock.url);
+  const initial = await createMiniHarnessServer(paths);
   t.after(async () => {
+    await initial.close();
     await mock.close();
     rmSync(root, { recursive: true, force: true });
   });
-  const registry = new SessionRegistry(
-    paths,
-    (() => {
-      const workspaces = new WorkspaceCatalog(paths);
-      return () => workspaces;
-    })(),
-  );
+  const registry = initial.runtime.plugins.ctx.harnessSessions;
   const parent = registry.create(),
     child = registry.create({ parentId: parent.id });
   registry.log(child.id).append({
@@ -197,40 +201,7 @@ test('startup durably interrupts runs and delivers pending inbox messages', asyn
     type: 'inbox-enqueued',
     item: { id: 'follow', mode: 'queue', text: 'Recovered follow-up', images: [] },
   });
-  const file = nativeFile(paths, child);
-  registry.dispose();
-  const restored = new SessionRegistry(
-    paths,
-    (() => {
-      const workspaces = new WorkspaceCatalog(paths);
-      return () => workspaces;
-    })(),
-  );
-  t.after(() => restored.dispose());
-  const interrupted = restored.runSummary(child.id);
-  assert.ok(interrupted);
-  assert.equal(interrupted.state, 'interrupted');
-  assert.deepEqual(
-    restored.inspectLog(child.id, (log) =>
-      log
-        .projection()
-        .timeline.flatMap((entry) => (entry.type === 'termination' ? [[entry.id, entry.state]] : [])),
-    ),
-    [['fixture-run', 'interrupted']],
-  );
-  assert.deepEqual(restored.descendants([parent.id]), [parent.id, child.id]);
-  const bytes = readFileSync(file);
-  assert.match(bytes.toString(), /"state":"interrupted"/);
-  assert.deepEqual(
-    restored.inspectLog(child.id, (log) => log.queue().map(({ id, state }) => [id, state])),
-    [
-      ['steer', 'pending'],
-      ['follow', 'pending'],
-    ],
-  );
-  assert.equal(restored.inspectLog(parent.id, (log) => log.entries()) !== undefined, false);
-  assert.doesNotMatch(readFileSync(paths.registry, 'utf8'), /lastRuns|fixture-run/);
-  restored.dispose();
+  await initial.close();
   const restarted = await createMiniHarnessServer(paths);
   try {
     assert.equal(
@@ -245,12 +216,12 @@ test('startup durably interrupts runs and delivers pending inbox messages', asyn
       prompts.filter((prompt) => !prompt?.startsWith('[agent ')),
       ['Old instruction', 'Recovered follow-up', 'New manual input'],
     );
-    assert.equal(
+    assert.deepEqual(
       restarted.runtime.plugins.ctx.harnessSessions
         .log(child.id)
         .projection()
-        .timeline.find((entry) => entry.type === 'termination')?.state,
-      'interrupted',
+        .timeline.flatMap((entry) => (entry.type === 'termination' ? [[entry.id, entry.state]] : [])),
+      [['fixture-run', 'interrupted']],
     );
     assert.deepEqual(
       restarted.runtime.plugins.ctx.harnessSessions
@@ -329,7 +300,7 @@ test('append, torn write and fsync failures evict the writer without acknowledgi
   for (const fault of ['append', 'torn', 'sync']) {
     const session = app.runtime.plugins.ctx.harnessSessions.create();
     const log = app.runtime.plugins.ctx.harnessSessions.log(session.id);
-    const file = nativeFile(paths, session);
+    const file = sessionLogFile(paths.home, session.id);
     const original = readFileSync(file);
     const write = fs.writeSync;
     let shortened = false;

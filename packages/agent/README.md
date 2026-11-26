@@ -47,4 +47,4 @@ The caller's signal owns cancellation. Agent reports phase, request, attempt met
 
 ## Verification
 
-[Execution tests](tests/execution.test.ts) cover alternate executors, tool identity, cancellation, retry boundaries, compaction and background receipts. See [model provider development](../../docs/cookbook/adding-a-model-provider.md) and the [package index](../../docs/packages.md).
+[Execution tests](../runs/tests/agent-execution.test.ts) cover alternate executors, tool identity, cancellation, retry boundaries and background receipts. See [model provider development](../../docs/cookbook/adding-a-model-provider.md) and the [package index](../../docs/packages.md).

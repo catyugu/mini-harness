@@ -33,4 +33,4 @@ There is no public `mini-harness/files` SDK constructor or Files Config schema. 
 
 The plugin's Cordis lifetime owns its tool registrations, HTTP routes, projection domain, tabs and completion handlers. Tool invocations use their Task cancellation signal; file mutations rely on File Access's atomic publication. Unloading the feature removes its contributions without changing workspace files.
 
-[Policy tests](tests/policy.test.ts) cover shared read/search/write access rules and atomic writes. [Write API tests](../../test/system/file-write.test.ts) cover durable edit information. [Files browser tests](../../test/browser/files.spec.ts) cover directory navigation and preview interactions. See [frontend coordination](../../docs/subsystems/frontend.md) for the neighboring view owners.
+[Policy tests](tests/policy.test.ts) cover shared read/search/write access rules. [Write API tests](../../test/system/file-write.test.ts) cover durable edit information. [Files browser tests](../../test/browser/files.spec.ts) cover directory navigation and preview interactions. See [frontend coordination](../../docs/subsystems/frontend.md) for the neighboring view owners.
