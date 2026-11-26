@@ -18,7 +18,6 @@
       display: block;
     }
     .topbar {
-      --topbar-control-size: var(--control-touch);
       padding-inline: 10px;
       gap: 7px;
     }

@@ -70,13 +70,12 @@
     flex-direction: column;
   }
   .topbar {
-    --topbar-control-size: var(--control);
     flex: 0 0 auto;
     display: grid;
     grid-template-columns: auto minmax(0, 1fr) auto;
     align-items: start;
     gap: var(--space);
-    padding: calc(var(--space-6) + env(safe-area-inset-top)) var(--space-4) var(--space-1);
+    padding: calc(20px + env(safe-area-inset-top)) var(--space-4) var(--space-1);
   }
   #inspectorOpen {
     grid-column: 3;
@@ -92,7 +91,7 @@
     grid-column: 2;
     min-width: 0;
     align-items: center;
-    padding-block-start: calc((var(--topbar-control-size) - 20px) / 2);
+    padding-top: 12px;
   }
   .title-block > strong {
     font-weight: 600;
