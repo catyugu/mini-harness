@@ -70,6 +70,9 @@ declare module 'mini-harness/cordis' {
   interface Context {
     miniConversation: ConversationController;
   }
+  interface Events {
+    'conversation/initialize'(workspaceId: string, sessionId: string): void | Promise<void>;
+  }
 }
 
 declare module '@mini-harness/ui-slots/browser/api' {
