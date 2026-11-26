@@ -4,16 +4,16 @@ Documentation is part of the implementation. Maintain English Markdown in the re
 
 ## One home per fact
 
-| Information | Authoritative home |
-| --- | --- |
-| Public type, signature, default, validation | Exported source or configuration schema |
-| Package behavior, ownership, lifecycle and extension contracts | Owning package README |
-| Cross-package coordination | Relevant subsystem reference |
-| Global structure and reading order | Architecture and documentation index |
-| Profile file format, layer precedence and scope composition | Configuration references |
-| End-user workflows | User guide |
-| Step-by-step extension development | Cookbook and linked runnable examples |
-| Build, tests and distribution | Development guide |
+| Information                                                    | Authoritative home                      |
+| -------------------------------------------------------------- | --------------------------------------- |
+| Public type, signature, default, validation                    | Exported source or configuration schema |
+| Package behavior, ownership, lifecycle and extension contracts | Owning package README                   |
+| Cross-package coordination                                     | Relevant subsystem reference            |
+| Global structure and reading order                             | Architecture and documentation index    |
+| Profile file format, layer precedence and scope composition    | Configuration references                |
+| End-user workflows                                             | User guide                              |
+| Step-by-step extension development                             | Cookbook and linked runnable examples   |
+| Build, tests and distribution                                  | Development guide                       |
 
 Other documents should link to the owner rather than duplicate its reference material. A short contextual sentence or quick-start example is useful; a second API catalog or full description is not.
 

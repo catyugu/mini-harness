@@ -14,16 +14,16 @@ Use a separate `MINI_HARNESS_HOME` for experiments that should not touch your no
 
 ## Verification
 
-| Command | Purpose |
-| --- | --- |
-| `pnpm run format` | Apply repository formatting |
-| `pnpm run format:check` | Check formatting |
-| `pnpm run typecheck` | Strict compile-only check |
-| `pnpm test` | Build and execute Node tests |
-| `pnpm run check:deps` | Build and check package boundaries |
-| `pnpm run test:browser` | Build and run Playwright tests |
-| `pnpm run pack:check` | Build and verify the published tarball and external SDK consumers |
-| `pnpm run check` | Formatting check, build and Node tests |
+| Command                 | Purpose                                                           |
+| ----------------------- | ----------------------------------------------------------------- |
+| `pnpm run format`       | Apply repository formatting                                       |
+| `pnpm run format:check` | Check formatting                                                  |
+| `pnpm run typecheck`    | Strict compile-only check                                         |
+| `pnpm test`             | Build and execute Node tests                                      |
+| `pnpm run check:deps`   | Build and check package boundaries                                |
+| `pnpm run test:browser` | Build and run Playwright tests                                    |
+| `pnpm run pack:check`   | Build and verify the published tarball and external SDK consumers |
+| `pnpm run check`        | Formatting check, build and Node tests                            |
 
 After building, run a focused test with `node --test dist/packages/tasks/tests/runtime.test.js` (substitute the relevant compiled test file). The Node test runner also covers [framework](../test/framework/), [plugin integration](../test/plugins/) and [system](../test/system/) suites. For browser tests, first run `pnpm exec playwright install chromium --only-shell`; the [browser suites](../test/browser/) cover desktop, tablet, and mobile workflows.
 

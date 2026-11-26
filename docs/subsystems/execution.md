@@ -2,14 +2,14 @@
 
 The runtime is assembled from independent services, not a second scheduler in the conversation layer.
 
-| Capability | Owns |
-| --- | --- |
-| [Tasks](../../packages/tasks/README.md) | Generic scheduling, admission, live state, cancellation and settlement |
-| [Runs](../../packages/runs/README.md) | Conversation-specific admission policy, input delivery and replay |
-| [Agent](../../packages/agent/README.md) | Model-turn protocol, prompt/compaction contracts |
-| [LLM](../../packages/llm/README.md) | Native model protocol and transport selection |
-| [Tools](../../packages/tools/README.md) | Scoped registration, argument validation and invocation |
-| [Sessions](../../packages/sessions/README.md) | Durable history and optional task history binding |
+| Capability                                    | Owns                                                                   |
+| --------------------------------------------- | ---------------------------------------------------------------------- |
+| [Tasks](../../packages/tasks/README.md)       | Generic scheduling, admission, live state, cancellation and settlement |
+| [Runs](../../packages/runs/README.md)         | Conversation-specific admission policy, input delivery and replay      |
+| [Agent](../../packages/agent/README.md)       | Model-turn protocol, prompt/compaction contracts                       |
+| [LLM](../../packages/llm/README.md)           | Native model protocol and transport selection                          |
+| [Tools](../../packages/tools/README.md)       | Scoped registration, argument validation and invocation                |
+| [Sessions](../../packages/sessions/README.md) | Durable history and optional task history binding                      |
 
 ## A conversation run
 

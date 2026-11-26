@@ -62,23 +62,23 @@ A Run is a Task with a conversation-specific lane and durable projection. Agent 
 
 ## State ownership
 
-| State or resource | Owner |
-| --- | --- |
-| Profile layer composition and accepted configuration | Host / Profile composition |
-| Service activation, injection, effects and Entry lifecycle | Cordis |
-| Plugin resolution, configured scope bindings and browser asset graph | Plugins |
-| Workspace identity and canonical roots | Workspaces |
-| Conversation identity, ancestry, branch history, inbox records and attachments | Sessions |
-| Live task state, exclusive lanes, capacity and settlement | Tasks |
-| Conversation admission policy, model selection for a run, transient replay | Runs |
-| Tool registrations and invocation contract | Tools |
-| Provider credentials/catalog, recent application model | Models |
-| Pending confirmations | Approvals |
-| HTTP registrations and projection revisions | Transport |
-| Selected conversation and composer drafts | Conversation |
-| Workspace-owned open tabs and page/dialog contributions | UI Layout |
-| Slot declarations, contributions and renderer lifetime | UI Slots |
-| Theme configuration and visual tokens | UI Theme |
+| State or resource                                                              | Owner                      |
+| ------------------------------------------------------------------------------ | -------------------------- |
+| Profile layer composition and accepted configuration                           | Host / Profile composition |
+| Service activation, injection, effects and Entry lifecycle                     | Cordis                     |
+| Plugin resolution, configured scope bindings and browser asset graph           | Plugins                    |
+| Workspace identity and canonical roots                                         | Workspaces                 |
+| Conversation identity, ancestry, branch history, inbox records and attachments | Sessions                   |
+| Live task state, exclusive lanes, capacity and settlement                      | Tasks                      |
+| Conversation admission policy, model selection for a run, transient replay     | Runs                       |
+| Tool registrations and invocation contract                                     | Tools                      |
+| Provider credentials/catalog, recent application model                         | Models                     |
+| Pending confirmations                                                          | Approvals                  |
+| HTTP registrations and projection revisions                                    | Transport                  |
+| Selected conversation and composer drafts                                      | Conversation               |
+| Workspace-owned open tabs and page/dialog contributions                        | UI Layout                  |
+| Slot declarations, contributions and renderer lifetime                         | UI Slots                   |
+| Theme configuration and visual tokens                                          | UI Theme                   |
 
 The owner exposes the authoritative contract; a derived view, historical record or transport projection is not another mutable owner.
 
