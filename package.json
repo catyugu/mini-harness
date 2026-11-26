@@ -64,7 +64,6 @@
     "@mini-harness/plugin-api": "workspace:*",
     "@mini-harness/plugins": "workspace:*",
     "@mini-harness/runs": "workspace:*",
-    "@mini-harness/sandbox": "workspace:*",
     "@mini-harness/sessions": "workspace:*",
     "@mini-harness/settings": "workspace:*",
     "@mini-harness/tasks": "workspace:*",
@@ -179,10 +178,6 @@
     "./process-execution": {
       "types": "./dist/types/packages/process-execution/src/api.d.ts",
       "default": "./dist/packages/process-execution/src/api.js"
-    },
-    "./sandbox": {
-      "types": "./dist/types/packages/sandbox/src/api.d.ts",
-      "default": "./dist/packages/sandbox/src/api.js"
     },
     "./scopes": {
       "types": "./dist/types/packages/plugin-api/src/scopes.d.ts",

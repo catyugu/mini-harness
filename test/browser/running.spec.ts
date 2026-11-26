@@ -1,6 +1,6 @@
 import { expectPresent } from '../support/required.ts';
 import { test, expect } from '@playwright/test';
-import { rmSync, mkdirSync, realpathSync, writeFileSync } from 'node:fs';
+import { rmSync, mkdirSync, writeFileSync } from 'node:fs';
 import { createFixturePaths, createMockProvider } from '../helpers/mock-provider.ts';
 import { writePlugin } from '../support/plugin-fixture.ts';
 import { startIsolatedHost, settingsSection } from '../support/browser.ts';
@@ -125,7 +125,7 @@ test('refresh and navigation preserve a run while another conversation completes
   }
 });
 
-test('running messages can queue follow-ups and approve shell commands from the GUI', async ({ page }) => {
+test('running messages can queue follow-ups and run shell commands from the GUI', async ({ page }) => {
   let release: () => void = () => {
     throw new Error('Not started');
   };
@@ -145,12 +145,12 @@ test('running messages can queue follow-ups and approve shell commands from the 
       return 'First reply';
     }
     if (messages.at(-1)?.content === 'Shell task')
-      return { tool: 'sandbox_shell', args: { command: 'echo approved' } };
+      return { tool: 'shell', args: { command: 'echo approved' } };
     return 'Finished';
   });
   const { root, paths } = createFixturePaths(mock.url);
   writeJson(join(paths.home, 'profiles', 'web', 'cordis.patch.yml'), {
-    plugins: [{ id: 'shell', disabled: false, config: { mode: 'host', timeoutSeconds: 60 } }],
+    plugins: [{ id: 'shell', disabled: false, config: { timeoutMs: 60000, maxOutputBytes: 64000 } }],
   });
   const workspace = join(root, 'Workspace path with spaces ' + 'x'.repeat(100));
   mkdirSync(workspace);
@@ -211,34 +211,10 @@ test('running messages can queue follow-ups and approve shell commands from the 
     );
     await page.getByRole('button', { name: 'Send', exact: true }).click();
     expect((await normalSend).postDataJSON()).not.toHaveProperty('mode');
-    await expect(page.locator('.approval-card pre')).toHaveText('echo approved');
-    await expect(mode).toBeVisible();
-    await expect(mode).toHaveValue('queue');
-    await expect(page.locator('.approval-card strong')).toHaveText('Shell approval');
-    await expect(page.locator('.approval-heading small')).toHaveText(
-      'shell · ' + realpathSync.native(workspace),
-    );
-    const viewport = page.viewportSize();
-    if (!viewport) throw new Error('Missing browser viewport');
-    await page.setViewportSize({ width: 390, height: 844 });
-    await expect(page.getByRole('button', { name: 'Allow once', exact: true })).toBeInViewport();
-    expect(
-      await page.locator('.approval-card').evaluate((node) => node.scrollWidth <= node.clientWidth + 1),
-    ).toBe(true);
-    await page.setViewportSize(viewport);
-    await expect(page.locator('.tool-state')).toHaveText('Waiting for approval');
-    await page.getByRole('button', { name: 'New conversation', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Send', exact: true })).toBeVisible();
     await expect(page.locator('.approval-card')).toHaveCount(0);
-    await page.getByRole('button', { name: 'Wait', exact: true }).click();
-    await expect(page.locator('.approval-card pre')).toHaveText('echo approved');
     const tool = page.locator('.tool-card');
     await tool.locator('summary').click();
-    await tool.evaluate((node) => node.setAttribute('data-before-completion', 'true'));
-    await page.getByRole('button', { name: 'Allow once', exact: true }).click();
-    await expect(page.getByRole('button', { name: 'Send', exact: true })).toBeVisible();
-    await expect(tool).toHaveAttribute('open', '');
-    await expect(tool).toHaveAttribute('data-before-completion', 'true');
-    await expect(page.locator('.approval-card')).toHaveCount(0);
     await expect(page.locator('.tool-arguments')).toContainText('echo approved');
     await expect(page.locator('.tool-content')).toContainText('Exit 0');
     expect(

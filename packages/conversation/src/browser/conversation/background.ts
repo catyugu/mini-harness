@@ -38,7 +38,7 @@ function duration(task: TaskSnapshot) {
 
 function input(task: TaskSnapshot) {
   const args = task.metadata?.arguments;
-  if (task.metadata?.tool === 'sandbox_shell' && typeof object(args).command === 'string')
+  if (task.metadata?.tool === 'shell' && typeof object(args).command === 'string')
     return String(object(args).command);
   return args === undefined ? '' : JSON.stringify(args, null, 2);
 }
@@ -107,9 +107,7 @@ function setup(ctx: Context) {
   let expanded: ReturnType<typeof createOutput> | undefined;
 
   function label(task: TaskSnapshot) {
-    return task.metadata?.tool === 'sandbox_shell'
-      ? input(task) || task.name || 'Shell'
-      : (task.name ?? 'Task');
+    return task.metadata?.tool === 'shell' ? input(task) || task.name || 'Shell' : (task.name ?? 'Task');
   }
 
   function closeOutput() {
@@ -156,7 +154,15 @@ function setup(ctx: Context) {
         output.textContent = shown;
         if (following) output.scrollTop = output.scrollHeight;
       }
-      warning.textContent = [truncated ? 'Earlier output was truncated' : '', failure || next.error || '']
+      const details = object(object(next.result).details);
+      const overflow = [details.stdoutOverflow, details.stderrOverflow].filter(
+        (path) => typeof path === 'string',
+      );
+      warning.textContent = [
+        truncated ? 'Earlier output was truncated' : '',
+        ...overflow,
+        failure || next.error || '',
+      ]
         .filter(Boolean)
         .join(' · ');
     }

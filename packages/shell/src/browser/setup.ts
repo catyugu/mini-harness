@@ -14,7 +14,13 @@ function renderResult(tool: ToolView) {
   try {
     const output = JSON.parse(result);
     pre.textContent =
-      'Exit ' + output.code + '\n' + (output.stdout ?? '') + (output.stderr ? '\n' + output.stderr : '');
+      'Exit ' +
+      output.code +
+      '\n' +
+      (output.stdout ?? '') +
+      (output.stdoutOverflow ? '\n[Remaining stdout: ' + output.stdoutOverflow + ']' : '') +
+      (output.stderr ? '\n' + output.stderr : '') +
+      (output.stderrOverflow ? '\n[Remaining stderr: ' + output.stderrOverflow + ']' : '');
   } catch {
     pre.textContent = result;
   }
@@ -22,6 +28,6 @@ function renderResult(tool: ToolView) {
 }
 
 const setup = (ctx: Context) => {
-  ctx.effect(() => ctx.miniMessages.registerTool('sandbox_shell', renderResult));
+  ctx.effect(() => ctx.miniMessages.registerTool('shell', renderResult));
 };
 export default { inject: ['miniMessages'], provide: [], apply: setup };

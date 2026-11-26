@@ -1,0 +1,112 @@
+import { runTool } from '@mini-harness/tools/execution';
+import { conversationTools } from '@mini-harness/runs/tool-selection';
+import { expectPresent } from '../../../test/support/required.ts';
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { fixture } from '../../../test/support/api-fixture.ts';
+import { realpath } from 'node:fs/promises';
+
+test('enabled Shell runs consecutive commands without approval and respects read-only ancestry', async (t) => {
+  const { app, request, finish } = await fixture(t, ({ messages }) =>
+    messages.filter(({ role }) => role === 'tool').length >= 2
+      ? 'Done'
+      : { tool: 'shell', args: { command: 'echo permitted' } },
+  );
+  await app.runtime.configuration.update({ entries: { shell: { disabled: false } } });
+  const ctx = app.runtime.plugins.ctx;
+  const { body: session } = await request('/sessions', 'POST', {});
+  await request('/sessions/' + session.id + '/runs', 'POST', { message: 'Run twice' });
+  assert.equal((await finish(session.id)).body.run.state, 'completed');
+  assert.deepEqual((await request('/approvals')).body, []);
+  const history = (await request('/sessions/' + session.id)).body.timeline;
+  const results = history.filter((message: { role: string }) => message.role === 'toolResult');
+  assert.equal(results.length, 2);
+  assert.ok(
+    results.every(
+      (result: { exitCode: number; isError: boolean }) => result.exitCode === 0 && !result.isError,
+    ),
+  );
+  assert.equal(
+    (await request('/sessions/' + session.id + '/permissions', 'PATCH', { permission: 'readOnly' })).status,
+    200,
+  );
+  const child = ctx.harnessSessions.create({ parentId: session.id, permission: 'fullAccess' });
+  for (const id of [session.id, child.id]) {
+    const tools = conversationTools(ctx, id, ctx.harnessSessions.runScope(id));
+    assert.ok(tools.some(({ name }) => name === 'read'));
+    assert.ok(!tools.some(({ name }) => name === 'shell' || name === 'write'));
+  }
+  const sibling = ctx.harnessSessions.create();
+  assert.ok(
+    conversationTools(ctx, sibling.id, ctx.harnessSessions.runScope(sibling.id)).some(
+      ({ name }) => name === 'shell',
+    ),
+  );
+  await app.runtime.configuration.update({ entries: { shell: { disabled: true } } });
+  assert.ok(
+    !conversationTools(ctx, sibling.id, ctx.harnessSessions.runScope(sibling.id)).some(
+      ({ name }) => name === 'shell',
+    ),
+  );
+});
+
+test('Shell preserves native workspace and environment', async (t) => {
+  const { app, paths } = await fixture(t);
+  const ctx = app.runtime.plugins.ctx;
+  await app.runtime.configuration.update({ entries: { shell: { disabled: false } } });
+  const previous = process.env.MINI_HARNESS_TEST_ENV;
+  process.env.MINI_HARNESS_TEST_ENV = 'native-environment';
+  t.after(() => {
+    if (previous === undefined) delete process.env.MINI_HARNESS_TEST_ENV;
+    else process.env.MINI_HARNESS_TEST_ENV = previous;
+  });
+  const { id } = ctx.harnessSessions.create();
+  const tool = expectPresent(
+    conversationTools(ctx, id, ctx.harnessSessions.runScope(id)).find(({ name }) => name === 'shell'),
+    'shell',
+  );
+  const result = await runTool(tool, 'native-environment', {
+    command: 'node -e "console.log(JSON.stringify([process.cwd(), process.env.MINI_HARNESS_TEST_ENV]))"',
+  });
+  assert.equal(result.isError, false);
+  const [cwd, value] = JSON.parse(String(result.details?.stdout));
+  assert.equal(await realpath(cwd), await realpath(paths.cwd));
+  assert.equal(value, 'native-environment');
+});
+
+test('independent shell calls use one task, retain output channels and do not duplicate process output', async (t) => {
+  const { app } = await fixture(t);
+  const ctx = app.runtime.plugins.ctx;
+  await app.runtime.configuration.update({
+    entries: { shell: { disabled: false, config: { timeoutMs: 1000 } } },
+  });
+  const session = ctx.harnessSessions.create({ permission: 'fullAccess' });
+  ctx.harnessRuns.stop(session.id);
+  const tool = ctx.harnessTools
+    .list({ resourceId: session.id, scope: ctx.harnessSessions.runScope(session.id) })
+    .find(({ name }) => name === 'start_background');
+  assert.ok(tool);
+  const command = 'node -e "setTimeout(() => console.log(\'task-output\'), 1500)"';
+  const receipt = await runTool(tool, 'background-shell', {
+    tool: 'shell',
+    arguments: { command, timeoutMs: 30000 },
+  });
+  const id = String(receipt.details?.taskId);
+  const task = await ctx.harnessTasks.wait(id);
+  assert.equal(task.state, 'completed');
+  assert.deepEqual(task.metadata, { tool: 'shell', arguments: { command, timeoutMs: 30000 } });
+  assert.equal((task.result as { details: { exitCode: number } }).details.exitCode, 0);
+  assert.equal((task.result as { details: { timeoutMs: number } }).details.timeoutMs, 30000);
+  assert.equal(ctx.harnessTasks.list('session:' + session.id).length, 1);
+  assert.match(
+    ctx.harnessTasks
+      .readOutput(id)
+      ?.chunks.filter(({ channel }) => channel === 'stdout')
+      .map(({ text }) => text)
+      .join('') ?? '',
+    /task-output/,
+  );
+  assert.doesNotMatch(JSON.stringify(task.result), /task-output/);
+  await ctx.harnessSessions.delete([session.id]);
+  assert.equal(ctx.harnessTasks.get(id), undefined);
+});

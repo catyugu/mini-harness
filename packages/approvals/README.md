@@ -1,6 +1,6 @@
 # Approvals
 
-Approvals owns pending user confirmations and their resolution. It binds requests to a conversation, the requesting plugin's lifetime and the supplied execution signal. The operation itself remains owned by the caller, such as [Shell](../shell/README.md).
+Approvals owns pending user confirmations and their resolution. It binds requests to a conversation, the requesting plugin's lifetime and the supplied execution signal. The operation itself remains owned by the caller.
 
 ## Public API and usage
 
@@ -32,8 +32,8 @@ Pending requests expire after five minutes. An identical denied operation with t
 
 The base Profile's `core:approvals` entry requires Sessions, Runs and change notifications. HTTP routes are installed when Transport routing is present. The Web Profile's `core:approval-data` entry owns the browser `miniApprovals` projection, and [Conversation](../conversation/README.md) renders the shared approval panel.
 
-There is no approval configuration schema or durable request queue. Restart does not recreate pending confirmations. Approval is an operation decision; filesystem isolation and tool policy remain separate contracts.
+There is no approval configuration schema or durable request queue. Restart does not recreate pending confirmations. Approval is an optional operation decision; tool policy and process execution remain separate contracts.
 
 ## Verification
 
-[Shell approval tests](../shell/tests/approval-api.test.ts) cover explicit decisions, Full access, repeated denials and cancellation. [Task notes](../../docs/examples/task-notes/plugin.ts) demonstrates an installed plugin using the same interface. See [transport](../../docs/subsystems/transport.md) and the [package index](../../docs/packages.md).
+[Task notes](../../docs/examples/task-notes/plugin.ts) demonstrates an installed plugin using the same interface. See [transport](../../docs/subsystems/transport.md) and the [package index](../../docs/packages.md).

@@ -1,38 +1,30 @@
 # Shell
 
-Shell contributes the `sandbox_shell` tool and its command-result renderer. It owns workspace command construction, approval policy, timeout and bounded output. [Process Execution](../process-execution/README.md) owns the child process; [Sandbox](../sandbox/README.md) prepares isolation.
+Shell contributes the `shell` tool and its command-result renderer. It owns workspace command construction, command timeout and output capture. [Process Execution](../process-execution/README.md) owns the child process.
 
 ## Activation and configuration
 
-Shell is disabled in the base Profile. Enable the `shell` entry in Plugins, then choose its execution mode. The [schema](src/manifest.ts) defines:
+Shell is disabled in the base Profile. Enable the `shell` entry in Plugins to authorize native command execution with your user permissions. Commands use the host environment, working directory and network. Standard and Full access conversations execute enabled Shell calls without per-command confirmation; read-only conversations and descendants cannot use Shell. See [SECURITY.md](../../SECURITY.md).
 
-| Setting          | Behavior                                                                                                                                              |
-| ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `mode`           | `isolated` uses Linux bubblewrap; `host` executes with the application's host permissions. The initial default depends on detected isolation support. |
-| `timeoutSeconds` | Command timeout, default 60 seconds, allowed range 1–300.                                                                                             |
+The [configuration schema](src/manifest.ts) defines:
 
-Configuration belongs to the Shell entry. Conversation permission determines whether confirmation is required and whether tool policy permits execution; it does not change the configured isolation mode.
+| Setting          | Behavior                                                                           |
+| ---------------- | ---------------------------------------------------------------------------------- |
+| `timeoutMs`      | Default command timeout in milliseconds (120000).                                  |
+| `maxOutputBytes` | Maximum captured bytes per stream (64000). Remaining bytes go to a temporary file. |
 
-The `sandbox_shell` tool accepts a nonempty command string and is exposed only for conversations bound to a workspace. It is serial by default. Plugins can resolve the same definition through Tools and invoke it through `runTool`; there is no separate public Shell SDK.
+The `shell` tool accepts a nonempty `command` and an optional `timeoutMs` override, including when invoked independently through `start_background`. For long builds or tests, an agent can submit:
 
-## Approval and execution
+```json
+{ "tool": "shell", "arguments": { "command": "pnpm run build", "timeoutMs": 600000 } }
+```
 
-Standard conversations request confirmation through [Approvals](../approvals/README.md). Full access skips the prompt for that conversation and can release an opted-in pending request. Policy is checked again before execution. Repeating a denied command within the same run does not reopen an identical approval.
+Shell uses `/bin/sh` on POSIX or `cmd.exe` on Windows. `MINI_HARNESS_ATTACHMENTS` points to available attachment storage. The selected scoped `harnessProcess` provider determines how a command runs; there is no built-in isolation layer.
 
-In isolated mode, Shell requires a canonical workspace separate from protected application storage, mounts it at `/workspace`, and mounts attachments read-only at `/attachments`. It uses a limited environment and configured resource limits. Failure to prepare isolation is an error; it never silently retries on the host.
+## Output and lifetime
 
-Host mode uses `/bin/sh` on POSIX or `cmd.exe` on Windows with the host environment. `MINI_HARNESS_ATTACHMENTS` points to available attachment storage. See [SECURITY.md](../../SECURITY.md) for the consequences of host execution and Full access.
+Shell drains stdout and stderr concurrently, retaining up to the configured limit independently for each stream. Remaining bytes are saved in separate files under the system temporary directory. The result exposes `stdoutOverflow` and `stderrOverflow` paths when applicable. Output limits do not terminate the command. Temporary files remain available for inspection until removed by the user or system temporary-file cleanup.
 
-## Output, cancellation and ownership
+Foreground calls follow their caller's signal. Independent tasks stream output through their task channels and retain compact process status and overflow paths in the task result. Timeout, cancellation or plugin unload terminates the process through the Process Execution provider. Shell invalidates the workspace file projection after execution.
 
-Shell drains stdout and stderr concurrently, records their channels in task output and bounds combined captured output to 1 MiB. Timeout, caller cancellation or excess output terminates the process. The result exposes exit status, stdout/stderr, a termination reason and truncation status; callers inspect these fields rather than treating every resolved tool result as a successful command.
-
-Foreground calls follow their caller's signal. The tool also accepts independent execution through `start_background`. Background output lives in task channels and the compact result records process status. Pending confirmation still follows the [approval request lifetime](../approvals/README.md#ownership-and-lifetime). Unloading the tool registration cancels and drains active calls.
-
-Shell invalidates the workspace file projection after execution. Its browser contribution renders command details through Conversation; it does not own a second process or file store.
-
-## Dependencies and verification
-
-The server requires Sessions, application state, Approval Requests, Process Execution, Tools and change notifications. Sandbox is required only when isolated mode executes.
-
-[Approval tests](tests/approval-api.test.ts) cover decisions, permissions, cancellation, repeated denial and independent calls. [Process tests](../process-execution/tests/sandbox.test.ts) cover limits and isolation. See [execution](../../docs/subsystems/execution.md) and the [package index](../../docs/packages.md).
+[Shell tests](tests/shell.test.ts) cover tool permissions, native execution and independent calls. [Process tests](../process-execution/tests/execution.test.ts) cover concurrent streams, cancellation, timeouts and overflow files.

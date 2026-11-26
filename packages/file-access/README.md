@@ -22,11 +22,11 @@ The [API](src/api.ts) supports file reads, binary or text writes, streaming chun
 
 ## Filesystem behavior
 
-A confined view rejects paths outside its root, redirected roots, link traversal, hard-linked files and unsupported file types. The Linux implementation anchors traversal to directory descriptors; other supported systems verify filesystem identity around operations. `FileTypeError.kind` distinguishes a directory, a non-directory path component and an unsupported file type. Policy failures use the shared operational error contract; ordinary filesystem failures propagate.
+A workspace view checks lexical paths and their resolved targets against the root and exclusions. Explicit operations accept symbolic links and junctions to targets inside the view, and regular hard-linked files. Directory enumeration skips links to avoid recursion cycles. Special files are not supported. This is a convenience boundary for trusted local development, not protection against concurrent filesystem manipulation. `FileTypeError.kind` distinguishes a directory, a non-directory path component and an unsupported file type. Policy failures use the shared operational error contract; ordinary filesystem failures propagate.
 
 Writes prepare and sync a temporary file, recheck the destination, then publish it atomically. A failed, aborted or superseded write removes its temporary file and preserves the existing destination. Existing-file replacement checks for an intervening filesystem change; creation does not overwrite a concurrently created file.
 
-`chunks` reads until EOF and closes its handle when iteration ends or aborts. The view itself imposes no workspace-preview byte limit. Callers must choose appropriate read limits and pass cancellation signals for long operations. `validatePath` checks the resolved location and parent traversal; use `access`, `stat` or a read when the target's existence or type matters.
+`chunks` reads until EOF and closes its handle when iteration ends or aborts. The view itself imposes no workspace-preview byte limit. Callers must choose appropriate read limits and pass cancellation signals for long operations. `validatePath` checks the resolved location, permitting missing targets; use `access`, `stat` or a read when the target's existence or type matters.
 
 `harnessFileAccess.native` exposes Node promise-based filesystem operations and `createReadStream` with the host process's permissions, including normal link behavior. The confined view is a consumer-selected interface; it is not a sandbox for trusted plugin code. See [SECURITY.md](../../SECURITY.md).
 

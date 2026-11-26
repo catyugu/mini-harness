@@ -32,7 +32,6 @@ test('settings merge preserves other sections and validates bounds', () => {
     () => validateSettings({ ...before, entries: { shell: { config: null } } }),
     /Invalid plugin configuration/,
   );
-  assert.throws(() => mergeSettings(before, { sandbox: { mode: 'host' } }), /Unknown settings field/);
   assert.throws(() => mergeSettings(before, { bogus: true }), /Unknown/);
   assert.throws(() => mergeSettings(before, { plugins: {} }), /Unknown/);
   assert.throws(() => mergeSettings(before, { pluginConfig: {} }), /Unknown/);
