@@ -207,6 +207,7 @@ function createAppFrame(
     pages,
     tabs,
     dialogs,
-    outlet: (name: keyof typeof slots) => name === 'conversation.header' ? placeHeader : element(slots[name]),
+    outlet: (name: keyof typeof slots) =>
+      name === 'conversation.header' ? placeHeader : element(slots[name]),
   };
 }

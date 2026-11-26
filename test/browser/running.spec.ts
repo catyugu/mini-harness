@@ -566,8 +566,12 @@ export const apply = (ctx) => {
 
     await page.setViewportSize({ width: 1280, height: 844 });
     await expect(more).toBeHidden();
-    await expect(page.locator('#conversationExtensions').getByRole('button', { name: 'Subagents', exact: true })).toBeVisible();
-    await expect(page.locator('#conversationExtensions').getByRole('button', { name: 'Tasks', exact: true })).toBeVisible();
+    await expect(
+      page.locator('#conversationExtensions').getByRole('button', { name: 'Subagents', exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.locator('#conversationExtensions').getByRole('button', { name: 'Tasks', exact: true }),
+    ).toBeVisible();
     await agentToggle.click();
     const agentPanel = agents.locator('.subagent-list');
     await expect(agentPanel).toBeInViewport({ ratio: 0.95 });

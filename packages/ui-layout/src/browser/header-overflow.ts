@@ -56,17 +56,24 @@ export function createHeaderOutlet(
     const overflowed = new Set(overflow);
     if (!overflow.length && panel.matches(':popover-open')) panel.hidePopover();
     more.hidden = !overflow.length;
-    place(row, nodes.filter((node) => !overflowed.has(node)));
+    place(
+      row,
+      nodes.filter((node) => !overflowed.has(node)),
+    );
     place(panel, overflow);
   }
 
   const resize = new ResizeObserver(schedule);
   const visibility = new MutationObserver(schedule);
-  signal.addEventListener('abort', () => {
-    resize.disconnect();
-    visibility.disconnect();
-    cancelAnimationFrame(frame);
-  }, { once: true });
+  signal.addEventListener(
+    'abort',
+    () => {
+      resize.disconnect();
+      visibility.disconnect();
+      cancelAnimationFrame(frame);
+    },
+    { once: true },
+  );
   return (next: readonly HTMLElement[]) => {
     nodes = next;
     // Keep each mounted contribution measurable even while the overflow menu is closed.

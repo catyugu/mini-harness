@@ -25,11 +25,16 @@ export class SlotRegistry {
   private readonly owners = new Map<SlotName, Outlet>();
   private readonly entries = new Map<SlotName, KeyedRegistry<SlotKey, Entry>>();
 
-  define(name: SlotName, outlet: HTMLElement | ((nodes: readonly HTMLElement[]) => void), kind: SlotKind = 'list'): () => void {
+  define(
+    name: SlotName,
+    outlet: HTMLElement | ((nodes: readonly HTMLElement[]) => void),
+    kind: SlotKind = 'list',
+  ): () => void {
     if (this.owners.has(name)) throw new Error('Duplicate slot owner: ' + name);
     if (typeof outlet !== 'function' && outlet.childElementCount)
       throw new Error('Slot outlet must start empty: ' + name);
-    const place = typeof outlet === 'function' ? outlet : (nodes: readonly HTMLElement[]) => placeNodes(outlet, nodes);
+    const place =
+      typeof outlet === 'function' ? outlet : (nodes: readonly HTMLElement[]) => placeNodes(outlet, nodes);
     const owner: Outlet = { place, kind, active: new Map() };
     this.owners.set(name, owner);
     const dispose = () => {
