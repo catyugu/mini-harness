@@ -21,11 +21,6 @@ export class TaskOutputRing {
     this.trim();
   }
 
-  shrink(capacity: number) {
-    this.capacity = Math.min(this.capacity, capacity);
-    this.trim();
-  }
-
   private trim() {
     const minimum = this.cursor - this.capacity;
     while (this.chunks.length && (this.chunks[0].end <= minimum || this.chunks.length > 2048))
@@ -41,8 +36,13 @@ export class TaskOutputRing {
   }
 
   read(after = 0): TaskOutput {
-    const first = this.chunks[0]?.start ?? this.cursor;
-    const chunks = this.chunks
+    return readTaskOutput({ cursor: this.cursor, truncated: false, chunks: this.chunks }, after);
+  }
+}
+
+export function readTaskOutput(output: TaskOutput, after = 0): TaskOutput {
+    const first = output.chunks[0]?.start ?? output.cursor;
+    const chunks = output.chunks
       .filter(({ end }) => end > after)
       .map((chunk) => {
         if (after <= chunk.start) return { ...chunk };
@@ -52,9 +52,8 @@ export class TaskOutputRing {
       })
       .filter(({ text }) => text.length > 0);
     return {
-      cursor: this.cursor,
-      truncated: after < first || (chunks[0]?.start ?? this.cursor) > after,
+      cursor: output.cursor,
+      truncated: after < first || (chunks[0]?.start ?? output.cursor) > after,
       chunks,
     };
   }
-}

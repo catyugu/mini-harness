@@ -6,11 +6,13 @@ import {
   type TaskContext,
   type TaskEvent,
   type TaskHandle,
+  type TaskHistoryRecord,
   type TaskOptions,
+  type TaskOutput,
   type TaskPort,
   type TaskSnapshot,
 } from './api.ts';
-import { TaskOutputRing } from './output.ts';
+import { TaskOutputRing, readTaskOutput } from './output.ts';
 
 interface Entry {
   snapshot: TaskSnapshot;
@@ -29,6 +31,12 @@ export class TaskRuntime implements TaskPort {
   private readonly removing = new Map<string, Promise<void>>();
   private readonly waiters = new Map<string, Set<(task: TaskSnapshot) => void>>();
   private closing = false;
+
+  constructor(private readonly domain: {
+    admit?(owner: string): void;
+    record?(record: TaskHistoryRecord): void;
+    history?(id: string): TaskHistoryRecord | undefined;
+  } = {}) {}
 
   service(): TaskPort {
     const runtime = this;
@@ -72,6 +80,7 @@ export class TaskRuntime implements TaskPort {
       ...metadata
     } = options;
     if (this.removing.has(options.owner)) throw new Error('Task owner has been removed');
+    this.domain.admit?.(options.owner);
     const parent = options.owner.startsWith('task:') ? this.entries.get(options.owner.slice(5)) : undefined;
     if (options.owner.startsWith('task:') && (!parent || parent.finishing || terminal(parent.snapshot.state)))
       throw new Error('Task owner has ended');
@@ -90,7 +99,11 @@ export class TaskRuntime implements TaskPort {
       outputCursor: 0,
       retained: retain,
     };
-    record?.(clone(snapshot));
+    const persist = (next: TaskSnapshot, output?: TaskOutput) => {
+      if (record) record(clone(next));
+      else if (retain) this.domain.record?.({ task: clone(next), output });
+    };
+    persist(snapshot);
     let release: (() => void) | undefined;
     const relinquish = () => {
       const held = release;
@@ -103,7 +116,8 @@ export class TaskRuntime implements TaskPort {
       this.notify(type, snapshot);
     };
     const transition = (patch: Partial<TaskSnapshot>) => {
-      record?.(clone({ ...snapshot, ...patch }));
+      const next = { ...snapshot, ...patch };
+      persist(next, terminal(next.state) && next.outputCursor ? entry.output.read() : undefined);
       update(patch);
     };
     const enter = async () => {
@@ -224,7 +238,9 @@ export class TaskRuntime implements TaskPort {
 
   get(id: string) {
     const entry = this.entries.get(id);
-    return entry && clone(entry.snapshot);
+    if (entry) return clone(entry.snapshot);
+    const historical = this.domain.history?.(id)?.task;
+    return historical && clone(historical);
   }
 
   list(owner?: string) {
@@ -291,7 +307,11 @@ export class TaskRuntime implements TaskPort {
   }
 
   readOutput(id: string, after = 0) {
-    return this.entries.get(id)?.output.read(after);
+    const entry = this.entries.get(id);
+    if (entry) return entry.output.read(after);
+    const history = this.domain.history?.(id);
+    if (!history) return;
+    return readTaskOutput(history.output ?? { cursor: history.task.outputCursor, truncated: history.task.outputCursor > 0, chunks: [] }, after);
   }
 
   private owned(owner: string) {

@@ -1,5 +1,6 @@
 import { observe } from '@mini-harness/plugin-api/observations';
 import { terminal } from '@mini-harness/tasks/api';
+import { bindTaskHistory } from './task-history.ts';
 import type { Context } from 'mini-harness/cordis';
 import { SessionRegistry } from './registry.ts';
 
@@ -44,6 +45,7 @@ export function setup(ctx: Context) {
   });
   ctx.inject(['harnessTasks'], (scope) => {
     const tasks = scope.harnessTasks;
+    bindTaskHistory(scope, registry);
     scope.effect(() =>
       registry.beforeDelete({
         busy: (id) => tasks.list('session:' + id).some((task) => !terminal(task.state)),

@@ -145,6 +145,7 @@ export class Runs implements RunPort {
       const project = (task: TaskSnapshot): RunInfo => ({
         ...info,
         state: task.state,
+        executedAt: task.startedAt,
         finishedAt: task.finishedAt,
         error: task.error,
         sequence: info.sequence + 1,
@@ -166,6 +167,8 @@ export class Runs implements RunPort {
                 sessionId: id,
                 state: snapshot.state,
                 startedAt: snapshot.createdAt,
+                creator: snapshot.creator,
+                taskMetadata: snapshot.metadata,
                 sequence: 0,
                 inputEntryId: null,
               };

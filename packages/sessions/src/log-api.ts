@@ -1,4 +1,5 @@
 import type { PluginRecord } from './records.ts';
+import type { TaskHistoryRecord } from '@mini-harness/tasks/api';
 import type { LogEntry } from './record-log.ts';
 import type { QueueEntry } from './shared/queue.ts';
 import type { ContentDelta } from './content-delta.ts';
@@ -67,6 +68,7 @@ export type SessionEvent<Data = unknown> =
   | { type: 'inbox-consumed' | 'inbox-cancelled'; ids: string[]; reason?: string }
   | { type: 'inbox-failed'; inboxId: string; reason: string }
   | { type: 'run'; run: RunInfo }
+  | ({ type: 'task' } & TaskHistoryRecord)
   | { type: 'branch' };
 
 export type SessionEntry<Data = unknown> = LogEntry<SessionEvent<Data>>;

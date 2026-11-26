@@ -92,9 +92,16 @@ export interface TaskOutput {
   chunks: TaskChunk[];
 }
 
+/** Durable facts supplied by a domain, never reconstructed live execution handles. */
+export interface TaskHistoryRecord {
+  task: TaskSnapshot;
+  output?: TaskOutput;
+}
+
 export interface TaskPort {
   start<T>(options: TaskOptions<T>, execute: (context: TaskContext) => Promise<T>): TaskHandle<T>;
   get(id: string): TaskSnapshot | undefined;
+  /** Active tasks and bounded recent history; older durable records remain queryable by ID. */
   list(owner?: string): TaskSnapshot[];
   cancel(id: string, reason?: unknown): boolean;
   wait(id: string, predicate?: (task: TaskSnapshot) => boolean, signal?: AbortSignal): Promise<TaskSnapshot>;
@@ -113,5 +120,10 @@ export class TaskInterrupted extends Error {
 declare module 'mini-harness/cordis' {
   interface Context {
     harnessTasks: TaskPort;
+  }
+  interface Events {
+    'tasks/admit'(owner: string): void;
+    'tasks/record'(record: TaskHistoryRecord): void;
+    'tasks/history'(id: string): TaskHistoryRecord | undefined;
   }
 }
