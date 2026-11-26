@@ -100,7 +100,7 @@ test('external services and their declared consumers compose through Cordis serv
   assert.equal((await request(endpoint)).body.greeting, 'Hello, Harness!');
 });
 
-test('Shell delegates to a selected external process provider and still requires approval', async (t) => {
+test('Shell delegates to a selected external process provider without approval', async (t) => {
   const { paths, app, request } = await fixture(t);
   copyExample(paths.plugins, 'process-preview');
   const result = await request('/settings', 'PATCH', {
@@ -115,18 +115,14 @@ test('Shell delegates to a selected external process provider and still requires
   const tool = expectPresent(
     app.runtime.plugins.ctx.harnessTools
       .list({ resourceId: id, scope: app.runtime.plugins.ctx.harnessSessions.runScope(id) })
-      .find(({ name }) => name === 'sandbox_shell'),
+      .find(({ name }) => name === 'shell'),
     'shell tool',
   );
   const execution = runTool(tool, 'preview', {
     command: 'Preview command',
   });
-  const pending = await waitUntil(
-    () => request('/approvals'),
-    ({ body }) => body.length === 1,
-  );
-  await request('/approvals', 'POST', { id: pending.body[0].id, allow: true });
   const response = await execution;
+  assert.deepEqual((await request('/approvals')).body, []);
   assert.match(JSON.stringify(response.content), /Preview command/);
 });
 
@@ -509,7 +505,7 @@ export const apply = (ctx, config) => { ctx.effect(() => ctx.harnessLlm.register
   assert.equal(mock.requests.length, 1);
 });
 
-test('native file and shell tools use scoped file, process and sandbox services without changing siblings', async (t) => {
+test('native file and shell tools use scoped file and process services without changing siblings', async (t) => {
   const { app, paths, request } = await fixture(t, ({ messages }) => {
     const last = expectPresent(messages.at(-1), 'model input');
     if (last.content.startsWith('[agent ')) return 'Observed child update';
@@ -517,20 +513,26 @@ test('native file and shell tools use scoped file, process and sandbox services 
       ? 'Completed'
       : last.content.startsWith('read')
         ? { tool: 'read', args: { path: 'note.txt' } }
-        : { tool: 'sandbox_shell', args: { command: 'requested command' } };
+        : { tool: 'shell', args: { command: 'requested command' } };
   });
   writeFileSync(join(paths.cwd, 'note.txt'), 'application file');
-  const isolated = (output: string) => `({ async prepare(request) {
-    return { file: process.execPath, args: ['-e', ${JSON.stringify('process.stdout.write(' + JSON.stringify(output) + ')')}],
-      cwd: request.cwd, env: {} };
+  const processProvider = (output: string) => `({ start(request) {
+    if (!request.file) throw new Error('Missing executable');
+    return {
+      stdin: new PassThrough(),
+      stdout: Readable.from([Buffer.from(${JSON.stringify(output)})]),
+      stderr: Readable.from([]),
+      finished: Promise.resolve({ code: 0, signal: null }),
+    };
   } })`;
   writePlugin(
     paths.plugins,
-    'application-sandbox',
+    'application-process',
     {},
     `
-export const provide = ["harnessSandbox"];
-export const apply = (ctx) => { ctx.provide('harnessSandbox', ${isolated('application sandbox')}); };
+import { PassThrough, Readable } from "node:stream";
+export const provide = ["harnessProcess"];
+export const apply = (ctx) => { ctx.provide('harnessProcess', ${processProvider('application process')}); };
 `,
   );
   writePlugin(
@@ -538,14 +540,15 @@ export const apply = (ctx) => { ctx.provide('harnessSandbox', ${isolated('applic
     'scoped-environment',
     {},
     `
-export const provide = ["harnessFileAccess","harnessSandbox"];
+import { PassThrough, Readable } from "node:stream";
+export const provide = ["harnessFileAccess","harnessProcess"];
 export const apply = (ctx) => {
       ctx.provide('harnessFileAccess', { open: () => ({
         access: async () => {}, stat: async () => ({ isDirectory: () => false }),
         readFile: async () => Buffer.from('scoped file'),
         async *chunks() { yield Buffer.from('scoped file'); }
       }) });
-      ctx.provide('harnessSandbox', ${isolated('scoped sandbox')});
+      ctx.provide('harnessProcess', ${processProvider('parent process')});
     };
 `,
   );
@@ -574,14 +577,14 @@ export const apply = (ctx) => { ctx.provide('harnessProcess', {
   const sibling = app.runtime.plugins.ctx.harnessSessions.create();
   const configured = await request('/settings', 'PATCH', {
     entries: {
-      shell: { disabled: false, config: { mode: 'isolated' } },
-      'core:sandbox': { disabled: true },
-      'application-sandbox': { name: '../../plugins/application-sandbox', disabled: false },
+      shell: { disabled: false },
+      'core:process': { disabled: true },
+      'application-process': { name: '../../plugins/application-process', disabled: false },
     },
 
     scopes: {
       ['session:' + parent.id]: {
-        isolate: ['harnessFileAccess', 'harnessSandbox'],
+        isolate: ['harnessFileAccess', 'harnessProcess'],
         entries: { 'scoped-environment': { name: '../../plugins/scoped-environment', disabled: false } },
       },
       ['session:' + child.id]: {
@@ -614,21 +617,12 @@ export const apply = (ctx) => { ctx.provide('harnessProcess', {
   await sendRun(app.runtime.plugins.ctx.harnessRuns, sibling.id, 'read in sibling');
   assert.match(JSON.stringify(lastTool(sibling.id).content), /application file/);
   for (const [id, expected] of [
-    [parent.id, 'scoped sandbox'],
+    [parent.id, 'parent process'],
     [child.id, 'scoped process'],
-    [sibling.id, 'application sandbox'],
+    [sibling.id, 'application process'],
   ]) {
-    const running = sendRun(app.runtime.plugins.ctx.harnessRuns, id, 'shell execution');
-    const pending = await waitUntil(
-      () => request('/approvals'),
-      ({ body }) => body.some((item: { sessionId: string }) => item.sessionId === id),
-    );
-    const approval = expectPresent(
-      pending.body.find((item: { sessionId: string }) => item.sessionId === id),
-      'pending approval',
-    );
-    assert.equal((await request('/approvals', 'POST', { id: approval.id, allow: true })).status, 200);
-    await running;
+    await sendRun(app.runtime.plugins.ctx.harnessRuns, id, 'shell execution');
+    assert.deepEqual((await request('/approvals')).body, []);
     assert.equal(lastTool(id).isError, false);
     assert.match(JSON.stringify(lastTool(id).content), new RegExp(expected));
   }
