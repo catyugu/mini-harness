@@ -2,6 +2,7 @@ import type { Context } from 'mini-harness/cordis';
 import type {} from '@mini-harness/conversation/browser/composer-api';
 import type {} from '@mini-harness/conversation/browser/conversation-api';
 import type {} from '@mini-harness/conversation/browser/history-api';
+import type {} from '@mini-harness/settings/browser/api';
 import type {} from '@mini-harness/ui-slots/browser/api';
 import type {} from '@mini-harness/ui-runtime/projection-api';
 import { bindPopover, button as uiButton, iconButton } from '@mini-harness/ui-primitives/primitives';

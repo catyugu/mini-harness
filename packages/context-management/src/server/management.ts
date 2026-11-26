@@ -46,7 +46,7 @@ export class ContextManagement {
     return this.meter.measure(
       request,
       ctx.harnessModels.capabilities(request.model),
-      ctx.harnessLlm.select(request.model),
+      ctx.harnessLlm.select?.(request.model),
       count,
     );
   }
@@ -113,7 +113,7 @@ export class ContextManagement {
     let projection = log.context();
     let occupancy = await this.measure(ctx, request);
     const finish = () => {
-      const adapter = ctx.harnessLlm.select(request.model);
+      const adapter = ctx.harnessLlm.select?.(request.model);
       if (adapter) this.prepared.set(log, { occupancy, adapter, leafId: log.context().leafId });
       return request;
     };

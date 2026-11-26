@@ -183,7 +183,8 @@ test('session overrides inherit defaults, reject invalid ratios and accept unstr
   await sendRun(ctx.harnessRuns, session.id, 'Second request. '.repeat(60));
   const sessionLog = ctx.harnessSessions.log(session.id);
   const before = sessionLog.projection();
-  assert.equal((await request(path + '/compact', 'POST')).status, 200);
+  const compacted = await request(path + '/compact', 'POST');
+  assert.equal(compacted.status, 200, JSON.stringify(sessionLog.entries().filter((entry) => entry.type === 'task').at(-1)));
   assert.ok(sessionLog.context().contextMessages.length < before.contextMessages.length);
   const exported = ctx.harnessSessions.export([session.id])[0];
   const copy = join(paths.cwd, 'reopened-log.jsonl');
@@ -305,8 +306,8 @@ test('cancelling a manual checkpoint keeps the active branch and releases the co
   try {
     await Promise.race([
       entered,
-      compact.then(() => {
-        throw new Error('Compaction settled before cancellation');
+      compact.then((result) => {
+        throw new Error('Compaction settled before cancellation: ' + JSON.stringify(result) + ' ' + JSON.stringify(log.entries().filter((entry) => entry.type === 'task').at(-1)));
       }),
     ]);
     assert.equal((await request(endpoint + '/context')).body.compacting, 'manual');
