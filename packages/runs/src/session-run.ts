@@ -304,86 +304,85 @@ export class SessionRun {
             rebuild: assemble,
           });
           if (failure && request === initial) return;
-            const hooks = ctx.events.listeners('agent/tool-result', scopeTarget(ctx));
-            return {
-              request,
-              executor,
-              tools: advertisedTools,
-              execution: {
-                executionId: task.id,
-                async waitFor(id, signal) {
-                  await task.waitFor(id, signal);
-                },
-                start(call) {
-                  if (signal.aborted) return { outcome: 'skipped', reason: 'Agent run cancelled' };
-                  if (inbox.hasValid('steer', selection))
-                    return { outcome: 'skipped', reason: 'Skipped because a steering message arrived.' };
-                  const tool = advertisedTools.get(call.name);
-                  if (tool && ctx.get('harnessToolPolicy')?.(id, tool) === false)
-                    return { outcome: 'denied', reason: 'Tool denied by conversation policy: ' + call.name };
-                  emit({
-                    type: 'tool',
-                    id: call.id,
-                    name: call.name,
-                    state: 'running',
-                    arguments: call.arguments,
-                  });
-                  return undefined;
-                },
-                update(call, value) {
-                  const pending = value.details?.approvalPending;
-                  if (pending === undefined && hooks.length) return;
-                  emit({
-                    type: 'tool',
-                    id: call.id,
-                    name: call.name,
-                    state: pending === true ? 'approval' : 'running',
-                    arguments: call.arguments,
-                    content: hooks.length ? undefined : value.content,
-                  });
-                },
+          const hooks = ctx.events.listeners('agent/tool-result', scopeTarget(ctx));
+          return {
+            request,
+            executor,
+            tools: advertisedTools,
+            execution: {
+              executionId: task.id,
+              async waitFor(id, signal) {
+                await task.waitFor(id, signal);
               },
-              async deliver(output, toolSignal, call) {
-                let executionId: string | undefined;
-                let transformError: Error | undefined;
-                if (toolResultState(output) === 'finished' && hooks.length) {
-                  executionId = log.append({ type: 'tool-execution', result: output }).id;
-                  try {
-                    const resultContext = { ...step, signal: toolSignal, tool: call.name, callId: call.id };
-                    const content = await applyTransforms(hooks, output.content, resultContext);
-                    if (!isToolContent(content)) throw new Error('Invalid tool result content');
-                    output = { ...output, content };
-                  } catch (error) {
-                    if (!toolSignal.aborted) {
-                      output = {
-                        ...toolFailure(
-                          call,
-                          'Tool execution completed, but the model-visible result transformation failed.',
-                        ),
-                        elapsedMs: output.elapsedMs,
-                      };
-                      transformError = new Error('Could not transform the result of ' + call.name, {
-                        cause: error,
-                      });
-                    }
+              start(call) {
+                if (signal.aborted) return { outcome: 'skipped', reason: 'Agent run cancelled' };
+                if (inbox.hasValid('steer', selection))
+                  return { outcome: 'skipped', reason: 'Skipped because a steering message arrived.' };
+                const tool = advertisedTools.get(call.name);
+                if (tool && ctx.get('harnessToolPolicy')?.(id, tool) === false)
+                  return { outcome: 'denied', reason: 'Tool denied by conversation policy: ' + call.name };
+                emit({
+                  type: 'tool',
+                  id: call.id,
+                  name: call.name,
+                  state: 'running',
+                  arguments: call.arguments,
+                });
+                return undefined;
+              },
+              update(call, value) {
+                const pending = value.details?.approvalPending;
+                if (pending === undefined && hooks.length) return;
+                emit({
+                  type: 'tool',
+                  id: call.id,
+                  name: call.name,
+                  state: pending === true ? 'approval' : 'running',
+                  arguments: call.arguments,
+                  content: hooks.length ? undefined : value.content,
+                });
+              },
+            },
+            async deliver(output, toolSignal, call) {
+              let executionId: string | undefined;
+              let transformError: Error | undefined;
+              if (toolResultState(output) === 'finished' && hooks.length) {
+                executionId = log.append({ type: 'tool-execution', result: output }).id;
+                try {
+                  const resultContext = { ...step, signal: toolSignal, tool: call.name, callId: call.id };
+                  const content = await applyTransforms(hooks, output.content, resultContext);
+                  if (!isToolContent(content)) throw new Error('Invalid tool result content');
+                  output = { ...output, content };
+                } catch (error) {
+                  if (!toolSignal.aborted) {
+                    output = {
+                      ...toolFailure(
+                        call,
+                        'Tool execution completed, but the model-visible result transformation failed.',
+                      ),
+                      elapsedMs: output.elapsedMs,
+                    };
+                    transformError = new Error('Could not transform the result of ' + call.name, {
+                      cause: error,
+                    });
                   }
                 }
-                const entry =
-                  executionId && !transformError
-                    ? log.acceptToolResult(executionId, output.content)
-                    : log.append({ type: 'message', message: output, elapsedMs: output.elapsedMs });
-                const details = output.details;
-                const state = toolResultState(output);
-                if (state === 'finished' && typeof details?.changedPath === 'string')
-                  changed?.(details.changedPath);
-                emit({
-                  type: 'tool-end',
-                  message: displayMessage(entry, output, submissionId, call.arguments),
-                });
-                if (transformError) throw transformError;
-              },
-            };
-
+              }
+              const entry =
+                executionId && !transformError
+                  ? log.acceptToolResult(executionId, output.content)
+                  : log.append({ type: 'message', message: output, elapsedMs: output.elapsedMs });
+              const details = output.details;
+              const state = toolResultState(output);
+              if (state === 'finished' && typeof details?.changedPath === 'string')
+                changed?.(details.changedPath);
+              emit({
+                type: 'tool-end',
+                message: displayMessage(entry, output, submissionId, call.arguments),
+              });
+              if (transformError) throw transformError;
+            },
+          };
         },
       })
       .catch((error) => {

@@ -27,12 +27,20 @@ function setup(ctx: Context) {
   const notify = (id?: string) => changes.invalidate('context-management', id);
   const defaults = () => validateSettings(ctx.fiber.effectiveConfig);
   const statistics = new WeakMap<Pick<SessionLogPort, 'entries'>, Statistics>();
-  const createManager = (scoped: Context, id: string) => new ContextManagement(scoped.harnessModels, scoped.harnessLlm, modelRetry(scoped, id));
+  const createManager = (scoped: Context, id: string) =>
+    new ContextManagement(scoped.harnessModels, scoped.harnessLlm, modelRetry(scoped, id));
   ctx.on('agent/setup', (run, id) => {
     const manager = createManager(run, id);
     const log = sessions.log(id);
     run.on('agent/prepare-request', (request, step) =>
-      manager.prepare(log, request, step.rebuild, configuration(log.setting(owner), defaults()).settings, step.runId, step.failure),
+      manager.prepare(
+        log,
+        request,
+        step.rebuild,
+        configuration(log.setting(owner), defaults()).settings,
+        step.runId,
+        step.failure,
+      ),
     );
   });
   ctx.effect(() => changes.register('context-management'));
@@ -59,16 +67,36 @@ function setup(ctx: Context) {
               const { harnessModels: models } = scoped;
               const { model } = selectModel(models, { explicit: projection.model });
               const ancestors = new Set(log.branch().map(({ id }) => id));
-              const latest = log.entries().reverse().find((entry) => entry.type === 'model-request' && !entry.request.purpose && entry.parentId !== null && ancestors.has(entry.parentId));
-              if (!latest) throw new HttpError('invalid_input', 'No model request has been prepared for this branch');
+              const latest = log
+                .entries()
+                .reverse()
+                .find(
+                  (entry) =>
+                    entry.type === 'model-request' &&
+                    !entry.request.purpose &&
+                    entry.parentId !== null &&
+                    ancestors.has(entry.parentId),
+                );
+              if (!latest)
+                throw new HttpError('invalid_input', 'No model request has been prepared for this branch');
               const { systemPrompt, tools } = log.requestDefinition(latest.id);
               const rebuild = async (messages: LlmRequest['messages']): Promise<LlmRequest> => ({
-                model, systemPrompt, tools, thinkingLevel: projection.thinkingLevel,
-                messages: prepareModelMessages(models.capabilities(model), messages), signal,
+                model,
+                systemPrompt,
+                tools,
+                thinkingLevel: projection.thinkingLevel,
+                messages: prepareModelMessages(models.capabilities(model), messages),
+                signal,
               });
               const manager = createManager(scoped, params.id);
               const request = await manager.prune(log, await rebuild(projection.contextMessages), rebuild);
-              await manager.compact(log, request, rebuild, configuration(log.setting(owner), defaults()).settings, taskId);
+              await manager.compact(
+                log,
+                request,
+                rebuild,
+                configuration(log.setting(owner), defaults()).settings,
+                taskId,
+              );
             });
             return { ok: true };
           } catch (error) {
@@ -98,7 +126,9 @@ function setup(ctx: Context) {
           },
           true,
         );
-        const manual = ctx.harnessTasks.list('session:' + id).some((task) => task.type === 'compaction' && !terminal(task.state));
+        const manual = ctx.harnessTasks
+          .list('session:' + id)
+          .some((task) => task.type === 'compaction' && !terminal(task.state));
         return {
           ...(result ?? { ...configuration(undefined, defaults()), turns: 0, steps: 0, assistantUsage: {} }),
           compacting: manual ? 'manual' : undefined,
@@ -112,7 +142,8 @@ function setup(ctx: Context) {
         if (custom?.summaryModel && !ctx.harnessModels.resolve(custom.summaryModel))
           throw new HttpError('invalid_input', 'Unknown summary model');
         const log = sessions.log(params.id);
-        if (custom || log.setting(owner) != null) log.append({ type: 'session-setting', owner, value: custom });
+        if (custom || log.setting(owner) != null)
+          log.append({ type: 'session-setting', owner, value: custom });
         return { ok: true };
       }),
     );

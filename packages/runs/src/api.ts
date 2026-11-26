@@ -70,7 +70,11 @@ export interface RunPort {
   ): () => void;
   cancelQueue(id: string, itemId?: string, signal?: AbortSignal): Promise<QueueEntry[]>;
   /** Execute independent work in the conversation's exclusive lane and agent scope. */
-  runTask<T>(id: string, type: string, work: (ctx: Context, signal: AbortSignal, taskId: string) => Promise<T>): Promise<T>;
+  runTask<T>(
+    id: string,
+    type: string,
+    work: (ctx: Context, signal: AbortSignal, taskId: string) => Promise<T>,
+  ): Promise<T>;
 }
 
 declare module 'mini-harness/cordis' {

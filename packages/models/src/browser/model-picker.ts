@@ -109,7 +109,9 @@ export function createModelPicker(
         results.append(group);
         groups.set(model.provider, group);
       }
-      const option = addOption(group, model === selected, () => onSelect({ provider: model.provider, id: model.id }));
+      const option = addOption(group, model === selected, () =>
+        onSelect({ provider: model.provider, id: model.id }),
+      );
       const label = document.createElement('span');
       label.className = 'model-option-label';
       const name = document.createElement('strong');
@@ -179,9 +181,12 @@ export function createModelPicker(
             a.provider.localeCompare(b.provider) ||
             a.name.localeCompare(b.name),
         );
-      selected = choice === null ? null : models.find(
-        (model) => model.provider === choice.provider && (!choice.id || model.id === choice.id),
-      );
+      selected =
+        choice === null
+          ? null
+          : models.find(
+              (model) => model.provider === choice.provider && (!choice.id || model.id === choice.id),
+            );
       const label = document.createElement('span');
       label.textContent = selected?.name ?? (choice?.id || emptyLabel);
       button.replaceChildren(label, icon('chevron'));

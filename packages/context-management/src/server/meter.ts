@@ -1,4 +1,10 @@
-import type { InputMeasurement, LlmAdapter, LlmRequest, NativeContent, NativeMessage } from '@mini-harness/llm/api';
+import type {
+  InputMeasurement,
+  LlmAdapter,
+  LlmRequest,
+  NativeContent,
+  NativeMessage,
+} from '@mini-harness/llm/api';
 import type { ProviderModel } from '@mini-harness/models/catalog';
 import { DomainError } from '@mini-harness/platform/errors';
 
@@ -15,7 +21,8 @@ export function textTokens(text: string) {
 
 /** Split text once at an estimated token budget, without cutting Unicode characters. */
 export function tokenPrefix(text: string, budget: number) {
-  let size = 0, cost = 0;
+  let size = 0,
+    cost = 0;
   for (const character of text) {
     cost += units(character);
     if (cost > budget * 4) break;
@@ -26,32 +33,55 @@ export function tokenPrefix(text: string, budget: number) {
 
 function partTokens(part: NativeContent) {
   switch (part.type) {
-    case 'image': return Math.min(4096, 256 + Math.ceil(part.data.length / 4096));
-    case 'text': return textTokens(part.text);
-    case 'thinking': return textTokens(part.thinking);
-    case 'toolCall': return 8 + textTokens(part.name) + textTokens(JSON.stringify(part.arguments));
+    case 'image':
+      return Math.min(4096, 256 + Math.ceil(part.data.length / 4096));
+    case 'text':
+      return textTokens(part.text);
+    case 'thinking':
+      return textTokens(part.thinking);
+    case 'toolCall':
+      return 8 + textTokens(part.name) + textTokens(JSON.stringify(part.arguments));
   }
 }
 
 export function messageTokens(message: NativeMessage) {
-  return 4 + (typeof message.content === 'string'
-    ? textTokens(message.content)
-    : message.content.reduce((sum, part) => sum + partTokens(part), 0))
-    + (message.role === 'toolResult' ? textTokens(message.toolName) + 4 : 0);
+  return (
+    4 +
+    (typeof message.content === 'string'
+      ? textTokens(message.content)
+      : message.content.reduce((sum, part) => sum + partTokens(part), 0)) +
+    (message.role === 'toolResult' ? textTokens(message.toolName) + 4 : 0)
+  );
 }
 
 export const totalTokens = (counts: InputMeasurement) => counts.system + counts.tools + counts.messages;
 
 export type MeasuredRequest = LlmRequest & { maxTokens: number; inputMeasurement: InputMeasurement };
 
-export async function measure(request: LlmRequest, capability: ProviderModel, adapter: LlmAdapter): Promise<MeasuredRequest> {
+export async function measure(
+  request: LlmRequest,
+  capability: ProviderModel,
+  adapter: LlmAdapter,
+): Promise<MeasuredRequest> {
   const window = capability.contextWindow;
   const maxTokens = request.maxTokens ?? capability.maxTokens;
-  if (!Number.isSafeInteger(window) || !Number.isSafeInteger(maxTokens) || maxTokens <= 0 || maxTokens > capability.maxTokens || window <= maxTokens)
-    throw new DomainError('invalid_input', 'Configure a valid context window and output limit for ' + request.model.id);
+  if (
+    !Number.isSafeInteger(window) ||
+    !Number.isSafeInteger(maxTokens) ||
+    maxTokens <= 0 ||
+    maxTokens > capability.maxTokens ||
+    window <= maxTokens
+  )
+    throw new DomainError(
+      'invalid_input',
+      'Configure a valid context window and output limit for ' + request.model.id,
+    );
   const prepared = { ...request, maxTokens };
   const exact = await adapter.countInputTokens?.(prepared);
-  if (exact && ![exact.system, exact.tools, exact.messages].every((count) => Number.isSafeInteger(count) && count >= 0))
+  if (
+    exact &&
+    ![exact.system, exact.tools, exact.messages].every((count) => Number.isSafeInteger(count) && count >= 0)
+  )
     throw new Error('Invalid adapter input token counts');
   const counts = exact ?? {
     system: textTokens(request.systemPrompt),

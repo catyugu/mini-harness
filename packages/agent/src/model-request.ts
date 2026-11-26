@@ -76,7 +76,9 @@ export async function requestModel(
       return message;
     if (attempt >= 3) return message;
     const failure: ModelFailure = {
-      model, attempt, signal,
+      model,
+      attempt,
+      signal,
       error: message.errorMessage || 'Model request failed',
       kind: message.errorKind,
     };

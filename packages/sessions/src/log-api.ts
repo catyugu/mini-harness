@@ -85,7 +85,11 @@ export type SessionEvent<Data = unknown> =
       data: unknown;
     }
   | PluginRecord<Data>
-  | { type: 'context-replace'; replacements: ContextReplacement[]; measurement?: InputMeasurement & { model: ModelChoice } }
+  | {
+      type: 'context-replace';
+      replacements: ContextReplacement[];
+      measurement?: InputMeasurement & { model: ModelChoice };
+    }
   | ({ type: 'model-attempt' } & ModelAttempt)
   | { type: 'session-setting'; owner: string; value: unknown }
   | { type: 'inbox-enqueued'; item: InboxItem }

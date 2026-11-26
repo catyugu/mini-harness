@@ -45,23 +45,27 @@ export class AgentLoop implements AgentPort {
       if (!step) throw new Error('The step was not prepared');
       input.onEvent?.({ type: 'phase', phase: 'model', turn });
       input.onEvent?.({ type: 'assistant-start' });
-      const original = await requestModel(llm, { ...step.request, signal }, {
-        request(request) {
-          for (const id of validateRequestSnapshot(request) ?? []) knownCalls.add(id);
-          input.onEvent?.({ type: 'request', request });
+      const original = await requestModel(
+        llm,
+        { ...step.request, signal },
+        {
+          request(request) {
+            for (const id of validateRequestSnapshot(request) ?? []) knownCalls.add(id);
+            input.onEvent?.({ type: 'request', request });
+          },
+          delta: (text) => input.onEvent?.({ type: 'delta', text }),
+          attempt: (metrics) => input.onEvent?.({ type: 'model-attempt', metrics }),
+          retry: input.retry,
+          async recover(failure) {
+            if (!('prepare' in input)) return;
+            const next = await input.prepare(turn, failure);
+            if (!next) return;
+            step = next;
+            input.onEvent?.({ type: 'assistant-start' });
+            return { ...next.request, signal };
+          },
         },
-        delta: (text) => input.onEvent?.({ type: 'delta', text }),
-        attempt: (metrics) => input.onEvent?.({ type: 'model-attempt', metrics }),
-        retry: input.retry,
-        async recover(failure) {
-          if (!('prepare' in input)) return;
-          const next = await input.prepare(turn, failure);
-          if (!next) return;
-          step = next;
-          input.onEvent?.({ type: 'assistant-start' });
-          return { ...next.request, signal };
-        },
-      });
+      );
       const { request, executor, execution, deliver } = step;
       let result = original;
       let diagnostic: Extract<AgentEvent, { type: 'assistant' }>['diagnostic'];

@@ -5,7 +5,11 @@ import { createModelPicker } from '@mini-harness/models/browser/model-picker';
 import { button, field, toggle } from '@mini-harness/ui-primitives/primitives';
 import type { ContextSettings } from '../shared/state.ts';
 
-export function settingsForm(ctx: Context, signal: AbortSignal, write: (value: ContextSettings) => Promise<void>) {
+export function settingsForm(
+  ctx: Context,
+  signal: AbortSignal,
+  write: (value: ContextSettings) => Promise<void>,
+) {
   const node = document.createElement('section');
   node.className = 'context-settings';
   const heading = document.createElement('h4');
@@ -23,11 +27,13 @@ export function settingsForm(ctx: Context, signal: AbortSignal, write: (value: C
   error.className = 'hint form-error';
   error.setAttribute('role', 'alert');
   error.hidden = true;
-  const ratios = ([
-    ['triggerRatio', 'Trigger threshold (%)'],
-    ['targetRatio', 'Target threshold (%)'],
-    ['retainRatio', 'Retain ratio (%)'],
-  ] as const).map(([key, label]) => {
+  const ratios = (
+    [
+      ['triggerRatio', 'Trigger threshold (%)'],
+      ['targetRatio', 'Target threshold (%)'],
+      ['retainRatio', 'Retain ratio (%)'],
+    ] as const
+  ).map(([key, label]) => {
     const input = document.createElement('input');
     input.type = 'number';
     input.min = '0.1';
@@ -41,7 +47,19 @@ export function settingsForm(ctx: Context, signal: AbortSignal, write: (value: C
   fields.append(field('Auto compaction', auto), ...ratios.map(({ row }) => row), modelRow, save);
   node.append(heading, fields, error);
   let choice: ModelChoice | null = null;
-  const picker = createModelPicker(model, (value) => { choice = value; renderModel(); }, signal, 'Current model', () => { choice = null; renderModel(); });
+  const picker = createModelPicker(
+    model,
+    (value) => {
+      choice = value;
+      renderModel();
+    },
+    signal,
+    'Current model',
+    () => {
+      choice = null;
+      renderModel();
+    },
+  );
   function renderModel() {
     const { models, providers } = ctx.miniModels.get();
     picker.update(models, providers, choice);

@@ -73,7 +73,16 @@ export function setup(ctx: Context) {
             content: [{ type: 'text', text: JSON.stringify(output) }],
             isError: Boolean(output.reason) || output.code !== 0,
             outcome: cancelled ? 'cancelled' : undefined,
-            details: { ...output, timeoutMs, exitCode: output.code, diagnostics: (output.stderr + '\n' + output.stdout).split('\n').filter((line) => /error|fatal|failed|warning|undefined reference/i.test(line)).join('\n').slice(0, 1000) },
+            details: {
+              ...output,
+              timeoutMs,
+              exitCode: output.code,
+              diagnostics: (output.stderr + '\n' + output.stdout)
+                .split('\n')
+                .filter((line) => /error|fatal|failed|warning|undefined reference/i.test(line))
+                .join('\n')
+                .slice(0, 1000),
+            },
             elapsedMs: performance.now() - startedAt,
           };
         } finally {

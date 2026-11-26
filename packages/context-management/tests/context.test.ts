@@ -89,7 +89,12 @@ test('a single user turn supports repeated token-budget compaction while tools e
   const submitted = log
     .projection()
     .timeline.find((entry) => entry.type === 'message' && entry.role === 'user');
-  assert.ok(submitted && JSON.stringify(log.context().contextMessages).includes('Complete the task and preserve the constraints'));
+  assert.ok(
+    submitted &&
+      JSON.stringify(log.context().contextMessages).includes(
+        'Complete the task and preserve the constraints',
+      ),
+  );
   assertPaired(log, mock);
 
   const { body: state } = await request(path + '/context');

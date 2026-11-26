@@ -31,7 +31,9 @@ function ratioIssue({ retainRatio, targetRatio, triggerRatio }: ContextSettings)
     return 'Use 0 < retain < target < trigger < 100%.';
 }
 
-export const Config = defineConfig(schema, (config) => Check(schema, config) ? ratioIssue(config) : 'Invalid context settings');
+export const Config = defineConfig(schema, (config) =>
+  Check(schema, config) ? ratioIssue(config) : 'Invalid context settings',
+);
 
 export function validateSettings(value: unknown): ContextSettings {
   if (!Check(schema, value)) throw new DomainError('invalid_input', 'Invalid context settings');
