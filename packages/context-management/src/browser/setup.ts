@@ -376,7 +376,10 @@ function mountStats(ctx: Context) {
 }
 
 function setup(ctx: Context) {
-  ctx.inject(['miniConversation', 'miniModels', 'miniSlots', 'miniProjections', 'harnessBrowser'], mountStats);
+  ctx.inject(
+    ['miniConversation', 'miniModels', 'miniSlots', 'miniProjections', 'harnessBrowser'],
+    mountStats,
+  );
   ctx.inject(['miniSettingsRegistry', 'miniModels'], (settings) => {
     const { configuration, read } = profileSettings(ctx);
     settings.effect(() =>

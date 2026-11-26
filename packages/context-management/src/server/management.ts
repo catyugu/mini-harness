@@ -120,7 +120,9 @@ export class ContextManagement {
     const summaryRequest: LlmRequest = {
       model,
       systemPrompt:
-        'Prepare a continuation checkpoint. Aim for at most ' + checkpointTarget + ' tokens of checkpoint text.',
+        'Prepare a continuation checkpoint. Aim for at most ' +
+        checkpointTarget +
+        ' tokens of checkpoint text.',
       messages: [],
       thinkingLevel: 'off',
       maxTokens: capability.maxTokens,
