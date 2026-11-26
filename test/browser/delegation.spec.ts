@@ -104,6 +104,18 @@ test('plugin schema controls, recursive tree navigation, batch export and perman
     await expect(page.locator('.message.assistant')).toHaveText('Leaf result');
     const ancestors = page.getByRole('navigation', { name: 'Parent conversations' });
     await expect(ancestors.getByRole('button')).toHaveText(['Parent task', 'Child task']);
+    await expect
+      .poll(async () => {
+        const workspace = await page.locator('#workspaceHeader').boundingBox();
+        const trail = await ancestors.boundingBox();
+        return (
+          workspace &&
+          trail &&
+          trail.x >= workspace.x + workspace.width &&
+          Math.abs(trail.y + trail.height / 2 - workspace.y - workspace.height / 2) < 2
+        );
+      })
+      .toBe(true);
     await ancestors.getByRole('button', { name: 'Child task', exact: true }).click();
     await expect(page.locator('#conversationTitle')).toHaveText('Child task');
     await page.getByRole('button', { name: 'Leaf task', exact: true }).click();

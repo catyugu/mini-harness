@@ -38,9 +38,9 @@ A new conversation stays a draft until its first send. Paste images, drop files,
 
 Use `@` to reference a workspace file without copying it, and `/` to discover skills and commands. Click an attachment or workspace reference to preview it. Reference text remains in the message; a workspace reference opens the current file rather than a stored snapshot.
 
-Choose **Steer**, **Interrupt**, or **Queue** beside the send button. Steer uses the next model or tool boundary. Interrupt cancels the current response and continues with the new message after cleanup. Queue waits for the current response to finish. **Settings → General → Add instructions** selects the global default for conversations without an explicit selection. **Stop response** pauses automatic delivery until you send another message. Pending messages remain visible and can be cancelled individually.
+Send normally while the conversation is idle. While its Run is active, choose **Steer**, **Interrupt**, or **Queue** beside the send button. Steer uses the next model or tool boundary. Interrupt cancels the current response and continues with the new message after cleanup. Queue waits for the current response to finish. **Settings → General → Add instructions** selects the global default for conversations without an explicit selection. **Stop response** pauses automatic delivery until you send another message. Pending messages remain visible and can be cancelled individually.
 
-Open **Tasks** in the conversation header to inspect background tools and direct child runs. Expand a task to view and copy its output, cancel active work, or open its child conversation.
+Open **Tasks** beside the working directory in the conversation header to inspect background tools and direct child runs. Expand a task to view and copy its output, cancel active work, or open its child conversation.
 
 Refreshing, disconnecting or switching conversations leaves runs active. Reopen a conversation to reconnect, or choose **Stop** to cancel that run and its inline work. Independently owned child conversations continue. Restart marks unfinished work interrupted and never retries unknown tool outcomes automatically. Pending follow-ups remain for a later explicit run; steering targeted at the interrupted run is recorded as failed.
 
@@ -54,7 +54,7 @@ Expand the conversation tree to view descendants. Use checkboxes for bulk export
 
 ## Enable tools and set permissions
 
-Use Plugins to toggle Files, Skills, Subagents, Shell, Session helper and installed extensions. Session helper supplies message copy and edit/resend actions. Tool availability updates at the next model turn. Unloading a tool revokes its outstanding invocations while unrelated work can continue.
+Use **Settings → Built-in plugins → Optional plugins** to toggle Files, Skills, Subagents, Shell, Session helper and other optional bundled capabilities. Configure Subagents, Agent and Shell from the Plugins page, which also manages local plugins. Built-in infrastructure is listed for reference in Settings. Session helper supplies message copy and edit/resend actions. Tool availability updates at the next model turn. Unloading a tool revokes its outstanding invocations while unrelated work can continue.
 
 Choose permissions from the left side of the composer:
 

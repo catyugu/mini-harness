@@ -2,7 +2,7 @@ import { expect } from '@playwright/test';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { readJson, writeJson } from '@mini-harness/platform/json';
-import { browserTest as test, chooseModel, expectInViewport } from '../support/browser.ts';
+import { browserTest as test, chooseModel, expectInViewport, settingsSection } from '../support/browser.ts';
 import { writePlugin } from '../support/plugin-fixture.ts';
 
 test('copy, preview and revise a message with its image, and release editing drafts by owner', async ({
@@ -198,12 +198,18 @@ export const apply = (ctx) => {
   await disablePlugin('new-editor');
   await expect(page.getByRole('button', { name: 'Cancel editing' })).toBeHidden();
 
-  await page.getByRole('button', { name: 'Browse plugins' }).click();
-  const helper = page.getByRole('switch', { name: 'Session helper', exact: true });
+  await page.getByRole('button', { name: 'Settings', exact: true }).click();
+  await settingsSection(page, 'Built-in plugins').click();
+  const settings = page.getByRole('dialog', { name: 'Settings' });
+  const helper = settings.getByRole('switch', { name: 'Session helper', exact: true });
   await helper.uncheck();
   await expect(user.locator('.message-action')).toHaveCount(0);
   await expect(assistant.locator('.message-action')).toHaveCount(0);
+  await expect(helper).toBeEnabled();
   await helper.check();
+  await expect(helper).toBeChecked();
+  await expect(helper).toBeEnabled();
+  await settings.getByRole('button', { name: 'Close settings' }).click();
   await page.getByRole('button', { name: 'Original prompt', exact: true }).click();
   await expect(edit).toBeVisible();
   await expect(assistant.getByRole('button', { name: 'Copy message' })).toBeVisible();

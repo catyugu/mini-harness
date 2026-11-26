@@ -64,7 +64,7 @@ function createAppFrame(
   <main class="main" id="main">
     <header class="topbar">
       <button id="sidebarOpen" class="icon-button" type="button" aria-label="Toggle navigation" aria-controls="sidebar" data-icon="menu"></button>
-      <div class="title-block" id="titleBlock"><strong id="conversationTitle">New conversation</strong><div id="conversationExtensions"></div><div id="workspaceHeader" hidden></div></div>
+      <div class="title-block" id="titleBlock"><strong id="conversationTitle">New conversation</strong><div class="header-meta"><div id="workspaceHeader" hidden></div><div id="conversationExtensions"></div></div></div>
       <button id="inspectorOpen" class="icon-button" type="button" aria-label="Open workspace panel" aria-controls="inspector" data-icon="files"></button>
     </header>
     <div id="conversationSlot"></div>

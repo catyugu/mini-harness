@@ -152,7 +152,8 @@ export function mountComposer(ctx: Context, signal: AbortSignal) {
   function render(focus = false) {
     const current = model.draft(),
       state = control.get();
-    const sending = isRunning(state.run) || state.interaction.operation === 'submit';
+    const running = isRunning(state.run);
+    const sending = running || state.interaction.operation === 'submit';
     const draftScope = state.session?.id ?? 'workspace:' + ctx.miniSelection.selectedWorkspace;
     if (previousDraftScope !== draftScope || editor.value !== current.text) {
       previousDraftScope = draftScope;
@@ -163,12 +164,12 @@ export function mountComposer(ctx: Context, signal: AbortSignal) {
     banner.hidden = !current.editTitle;
     required(banner.querySelector('span')).textContent = current.editTitle ?? '';
     const sendButton = element<'button'>('send');
-    const sendLabel = sending ? 'Send with ' + modeLabel[state.mode] : 'Send';
+    const sendLabel = running ? 'Send with ' + modeLabel[state.mode] : 'Send';
     sendButton.setAttribute('aria-label', sendLabel);
     sendButton.title = sendLabel;
-    modeSelect.hidden = !state.session;
+    modeSelect.hidden = !running;
     modeSelect.value = state.mode;
-    element<'button'>('stop').hidden = !isRunning(state.run);
+    element<'button'>('stop').hidden = !running;
     element<'button'>('stop').disabled = Boolean(state.interaction.cancelling);
     ui.render(Boolean(state.interaction.operation));
     renderPermission();

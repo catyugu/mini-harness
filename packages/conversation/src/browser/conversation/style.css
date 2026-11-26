@@ -873,10 +873,6 @@ button.file-card:hover {
   flex: 1;
   min-width: 0;
 }
-#conversationExtensions:empty,
-.parent-conversations[hidden] {
-  display: none;
-}
 .parent-conversations {
   display: flex;
   min-width: 0;
@@ -921,9 +917,6 @@ button.file-card:hover {
   color: var(--danger);
 }
 @media (max-width: 860px) {
-  .topbar:has(.parent-conversations:not([hidden])) {
-    flex-basis: calc(88px + env(safe-area-inset-top));
-  }
   .parent-conversations .link-button {
     min-height: 32px;
   }
