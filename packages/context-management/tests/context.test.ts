@@ -170,6 +170,60 @@ test('a single user turn supports repeated token-budget compaction while tools e
   assert.deepEqual(Object.values(state.assistantUsage), [state.usage]);
 });
 
+test('automatic compaction preserves the pending multimodal input and accepts a result above the soft target', async (t) => {
+  let checkpoints = 0;
+  const fresh = 'Fresh attachment. '.repeat(500);
+  const { app, request } = await fixture(
+    t,
+    ({ messages }) => {
+      if (summary(messages.at(-1)?.content)) {
+        checkpoints++;
+        assert.ok(messages.every(({ content }) => !content.includes('Fresh attachment.')));
+        return 'The earlier analysis is complete.';
+      }
+      return 'Done';
+    },
+    (paths) => {
+      const file = join(paths.home, 'models.json');
+      const models = JSON.parse(readFileSync(file, 'utf8'));
+      models.providers['local-mock'].models[0].input.push('image');
+      writeFileSync(file, JSON.stringify(models));
+    },
+  );
+  const ctx = app.runtime.plugins.ctx;
+  const { body: session } = await request('/sessions', 'POST', {});
+  const endpoint = '/sessions/' + session.id + '/context';
+  const targetRatio = 0.05;
+  assert.equal(
+    (
+      await request(endpoint, 'PUT', {
+        ...settings,
+        triggerRatio: 0.15,
+        targetRatio,
+        retainRatio: 0.02,
+      })
+    ).status,
+    200,
+  );
+  await sendRun(ctx.harnessRuns, session.id, 'Earlier analysis. '.repeat(1800));
+  assert.equal(checkpoints, 0, 'The first user message must reach the model before being compressed');
+  const attachment = { name: 'sample.png', mimeType: 'image/png', data: 'iVBORw0KGgo=' };
+  await sendRun(ctx.harnessRuns, session.id, fresh, undefined, { attachments: [attachment] });
+  assert.equal(checkpoints, 1);
+  const log = ctx.harnessSessions.log(session.id);
+  const submitted = log.branch().filter((entry) => entry.type === 'message' && entry.message.role === 'user').at(-1);
+  assert.ok(submitted?.type === 'message');
+  const normal = log.entries().filter((entry) => entry.type === 'model-request' && !entry.request.purpose);
+  assert.equal(normal.length, 2);
+  const prepared = log.requestSnapshot(normal[1].id);
+  assert.deepEqual(prepared.messages.at(-1), submitted.message);
+  assert.ok(Array.isArray(submitted.message.content) && submitted.message.content.some((part) => part.type === 'image'));
+  const counts = prepared.inputMeasurement;
+  assert.ok(counts && totalTokens(counts) > counts.budget * targetRatio);
+  assert.ok(totalTokens(counts) <= counts.budget);
+  assert.ok(log.context().contextEntryIds.includes(submitted.id));
+});
+
 test('context overflow repairs the current request and leaves raw tool results recoverable', async (t) => {
   let calls = 0,
     overflowed = false;
