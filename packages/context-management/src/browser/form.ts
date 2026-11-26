@@ -3,7 +3,7 @@ import type { ModelChoice } from '@mini-harness/llm/vocabulary';
 import type {} from '@mini-harness/models/browser/api';
 import { createModelPicker } from '@mini-harness/models/browser/model-picker';
 import { button, field, toggle } from '@mini-harness/ui-primitives/primitives';
-import type { ContextSettings } from '../shared/state.ts';
+import { ratioIssue, type ContextSettings } from '../shared/state.ts';
 
 export function settingsForm(
   ctx: Context,
@@ -70,13 +70,16 @@ export function settingsForm(
     fields.disabled = true;
     error.hidden = true;
     try {
-      await write({
+      const value = {
         autoCompact: auto.checked,
         triggerRatio: ratios[0].input.valueAsNumber / 100,
         targetRatio: ratios[1].input.valueAsNumber / 100,
         retainRatio: ratios[2].input.valueAsNumber / 100,
         summaryModel: choice,
-      });
+      };
+      const issue = ratioIssue(value);
+      if (issue) throw new Error(issue);
+      await write(value);
     } catch (failure) {
       error.textContent = failure instanceof Error ? failure.message : String(failure);
       error.hidden = false;
