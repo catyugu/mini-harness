@@ -84,18 +84,13 @@ export async function checkpoint(
       .flatMap((part) => (part.type === 'text' ? [part.text] : []))
       .join('')
       .trim();
-    if (
-      answer.errorMessage ||
-      answer.stopReason === 'error' ||
-      answer.stopReason === 'aborted' ||
-      answer.stopReason === 'length' ||
-      answer.content.some(({ type }) => type === 'toolCall') ||
-      !summary
-    )
-      throw new DomainError(
-        'unavailable',
-        answer.errorMessage ?? 'Summary model returned an incomplete checkpoint',
-      );
+    if (answer.errorMessage || answer.stopReason === 'error' || answer.stopReason === 'aborted')
+      throw new DomainError('unavailable', answer.errorMessage ?? 'Summary model request failed');
+    if (answer.stopReason === 'length')
+      throw new DomainError('unavailable', 'Summary model reached its output limit before completing the checkpoint');
+    if (answer.stopReason === 'toolUse' || answer.content.some(({ type }) => type === 'toolCall'))
+      throw new DomainError('unavailable', 'Summary model returned a tool call instead of a checkpoint');
+    if (!summary) throw new DomainError('unavailable', 'Summary model returned no checkpoint text');
     return user(title + summary);
   }
   const whole = await assemble(messages);
