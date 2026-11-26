@@ -22,7 +22,9 @@ test(
             return { tool: 'task_control', args: { action: 'wait', taskId: payload.taskId } };
           if (payload.taskId) assert.equal(payload.state, 'completed');
         }
-        return 'Finished ' + ([...messages].reverse().find((message) => message.role === 'user')?.content ?? '');
+        return (
+          'Finished ' + ([...messages].reverse().find((message) => message.role === 'user')?.content ?? '')
+        );
       }
       if (last.content === 'root task')
         return { tool: 'delegate', args: { task: 'child task', provider: 'local-mock' } };
@@ -50,7 +52,10 @@ test(
     await app.runtime.plugins.ctx.harnessRuns.send(parent.id, 'root task', (event) => {
       if (event.type === 'tool-end') toolEvents.push(event);
     });
-    await waitUntil(() => app.runtime.plugins.ctx.harnessSessions.descendants([parent.id]).length, (length) => length === 3);
+    await waitUntil(
+      () => app.runtime.plugins.ctx.harnessSessions.descendants([parent.id]).length,
+      (length) => length === 3,
+    );
     const records = app.runtime.plugins.ctx.harnessSessions
       .descendants([parent.id])
       .map((id) => app.runtime.plugins.ctx.harnessSessions.get(id));
@@ -114,41 +119,36 @@ test(
   },
 );
 
-test(
-  'stopping a root leaves its delegated child running',
-  { timeout: 15000 },
-  async (t) => {
-    const parentEntered = gate();
-    const childEntered = gate();
-    const held = gate();
-    t.after(() => held.release());
-    const { app } = await fixture(t, async ({ messages }) => {
-      const last = messages.at(-1);
-      if (last?.content === 'start child')
-        return { tool: 'delegate', args: { task: 'hold child' } };
-      if (last?.content === 'hold child') childEntered.release();
-      else parentEntered.release();
-      await held.promise;
-      return 'Released';
-    });
-    const ctx = app.runtime.plugins.ctx;
-    const parent = ctx.harnessSessions.create();
-    const pending = ctx.harnessRuns.send(parent.id, 'start child');
-    const aborted = assert.rejects(pending, /cancelled/);
-    await Promise.all([parentEntered.promise, childEntered.promise]);
-    const child = ctx.harnessSessions.list().find(({ parentId }) => parentId === parent.id);
-    assert.ok(child);
-    const childRun = expectPresent(ctx.harnessRuns.info(child.id), 'child run');
-    assert.equal(ctx.harnessRuns.cancel(parent.id), true);
-    await aborted;
-    assert.equal(ctx.harnessTasks.get(childRun.id)?.state, 'running');
-    held.release();
-    await ctx.harnessRuns.completion(child.id);
-    assert.equal(ctx.harnessTasks.get(childRun.id)?.state, 'completed');
-    assert.equal(ctx.harnessRuns.size, 0);
-    assert.equal(ctx.harnessSessions.export([parent.id]).length, 2);
-  },
-);
+test('stopping a root leaves its delegated child running', { timeout: 15000 }, async (t) => {
+  const parentEntered = gate();
+  const childEntered = gate();
+  const held = gate();
+  t.after(() => held.release());
+  const { app } = await fixture(t, async ({ messages }) => {
+    const last = messages.at(-1);
+    if (last?.content === 'start child') return { tool: 'delegate', args: { task: 'hold child' } };
+    if (last?.content === 'hold child') childEntered.release();
+    else parentEntered.release();
+    await held.promise;
+    return 'Released';
+  });
+  const ctx = app.runtime.plugins.ctx;
+  const parent = ctx.harnessSessions.create();
+  const pending = ctx.harnessRuns.send(parent.id, 'start child');
+  const aborted = assert.rejects(pending, /cancelled/);
+  await Promise.all([parentEntered.promise, childEntered.promise]);
+  const child = ctx.harnessSessions.list().find(({ parentId }) => parentId === parent.id);
+  assert.ok(child);
+  const childRun = expectPresent(ctx.harnessRuns.info(child.id), 'child run');
+  assert.equal(ctx.harnessRuns.cancel(parent.id), true);
+  await aborted;
+  assert.equal(ctx.harnessTasks.get(childRun.id)?.state, 'running');
+  held.release();
+  await ctx.harnessRuns.completion(child.id);
+  assert.equal(ctx.harnessTasks.get(childRun.id)?.state, 'completed');
+  assert.equal(ctx.harnessRuns.size, 0);
+  assert.equal(ctx.harnessSessions.export([parent.id]).length, 2);
+});
 
 function gate() {
   let release: () => void;
@@ -226,7 +226,11 @@ test(
     assert.ok(held[0] && held[1]);
     held[0].release();
     held[1].release();
-    await Promise.all([first, second].map((result) => app.runtime.plugins.ctx.harnessRuns.completion(String(result.details?.sessionId))));
+    await Promise.all(
+      [first, second].map((result) =>
+        app.runtime.plugins.ctx.harnessRuns.completion(String(result.details?.sessionId)),
+      ),
+    );
     assert.equal(app.runtime.plugins.ctx.harnessRuns.size, 0);
     assert.equal(requests, 2, 'Cancelled queued children never reach the provider');
   },

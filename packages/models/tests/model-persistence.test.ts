@@ -41,7 +41,11 @@ test('recent main model survives child overrides and a restart through the nativ
       .find(({ name }) => name === 'delegate'),
     'delegate tool',
   );
-  const child = await delegate.execute('override', { task: 'Child override', provider: 'local-mock', model: 'mock-model' });
+  const child = await delegate.execute('override', {
+    task: 'Child override',
+    provider: 'local-mock',
+    model: 'mock-model',
+  });
   await runtime.plugins.ctx.harnessRuns.completion(String(child.details?.sessionId));
   assert.equal(runtime.plugins.ctx.harnessModelPreference.recent().id, 'second-model');
   runtime.plugins.ctx.harnessSessions.log(other.id).append({
