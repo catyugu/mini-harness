@@ -17,7 +17,6 @@ import type { InboxItem } from '@mini-harness/sessions/log-api';
 import type { AgentEvent } from '../../runs/src/stream.ts';
 import { SessionRun } from '../../runs/src/session-run.ts';
 import { nativeExecutor } from '@mini-harness/tools/execution';
-import { basicCompaction } from '../src/compaction.ts';
 import { SessionRegistry } from '@mini-harness/sessions/registry';
 import { WorkspaceCatalog } from '@mini-harness/workspaces/catalog';
 import { ToolRegistry } from '@mini-harness/tools/registry';
@@ -25,7 +24,7 @@ import { TaskRuntime } from '@mini-harness/tasks/runtime';
 import { defineTool, toolResultState } from '@mini-harness/tools/api';
 import type { LlmPort, NativeAssistantMessage, ToolCallPart } from '@mini-harness/llm/api';
 import type { ModelRetry } from '../src/events.ts';
-import { createFixturePaths } from '../../../test/helpers/mock-provider.ts';
+import { checkpointFixture, createFixturePaths } from '../../../test/helpers/mock-provider.ts';
 
 const model = { provider: 'fixture', id: 'native' };
 const answer = (text = 'Done'): NativeAssistantMessage => ({
@@ -89,7 +88,6 @@ function fixture(
   });
   ctx.provide('harnessLlm', { ...llm, register: () => () => {}, select: () => undefined });
   ctx.provide('harnessToolExecutor', executor);
-  ctx.provide('harnessCompaction', { ...basicCompaction, shouldCompact: () => false });
   ctx.provide('harnessPrompt', { build: async () => 'Fixture', register: () => () => {} });
   if (retryModel) ctx.on('agent/model-retry', retryModel);
   ctx.provide('harnessAgent', new AgentLoop(() => 8));
@@ -864,9 +862,11 @@ test('text models see historical placeholders in the request and audit snapshot,
 });
 
 test('native compaction reduces context and preserves message identities and history', async (t) => {
-  const { app, mock, request } = await httpFixture(t);
+  const { app, mock, request } = await httpFixture(t, ({ messages }) =>
+    messages.at(-1)?.content.startsWith('Write a continuation checkpoint') ? checkpointFixture : 'Done',
+  );
   await app.runtime.configuration.update({
-    entries: { 'core:compaction': { config: { autoCompact: false } } },
+    entries: { 'core:context-management': { config: { autoCompact: false } } },
   });
   const { body: session } = await request('/sessions', 'POST', {});
   const compact = () => request('/sessions/' + session.id + '/compact', 'POST');
@@ -889,14 +889,14 @@ test('native compaction reduces context and preserves message identities and his
   const compacted = await compact();
   assert.equal(compacted.status, 200, JSON.stringify(compacted.body));
   assert.equal(mock.requests.length, 7);
-  assert.match(JSON.stringify(mock.requests.at(-1)), /Image unavailable/);
+  assert.match(JSON.stringify(mock.requests.at(-1)), /Image 1 offloaded/);
   assert.doesNotMatch(JSON.stringify(mock.requests.at(-1)), /iVBORw0KGgo=/);
-  assert.ok(log.entries().some((entry) => entry.type === 'compaction'));
+  assert.ok(log.entries().some((entry) => entry.type === 'context-replace'));
   assert.deepEqual(
     app.runtime.plugins.ctx.harnessSessions.log(session.id).projection().timeline.filter(isViewMessage),
     before,
   );
-  assert.equal(log.projection().contextMessages.length, 5);
+  assert.ok(log.context().contextMessages.length < before.length);
   assert.match(JSON.stringify(log.projection().contextMessages[0]), /Summary of earlier conversation/);
 });
 

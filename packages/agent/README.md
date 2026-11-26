@@ -4,7 +4,7 @@ Agent executes the native model-and-tool turn loop. The caller supplies a signal
 
 ## Public API and usage
 
-[`mini-harness/agent`](src/api.ts) exposes `AgentPort`, `AgentRun`, turn events and the compaction contract. Inject `harnessAgent`, `harnessLlm` and `harnessToolExecutor` to execute an in-memory conversation:
+[`mini-harness/agent`](src/api.ts) exposes `AgentPort`, `AgentRun`, turn and model-attempt events. Inject `harnessAgent`, `harnessLlm` and `harnessToolExecutor` to execute an in-memory conversation:
 
 ```ts
 import type { Context } from 'mini-harness/cordis';
@@ -20,11 +20,9 @@ Await the returned Promise for the assistant message. The fixed `request` form m
 
 The executor presents tool schemas, interprets the assistant response and delivers tool results. Agent rejects duplicate call IDs, unmatched results and omitted results before another model turn. Executor implementations and reusable execution helpers belong to [Tools](../tools/README.md).
 
-## Prompt and compaction capabilities
+## Prompt capability
 
 [`mini-harness/agent/prompt`](src/prompt-api.ts) declares `harnessPrompt`. Register named sections in an activation-owned effect. Selection uses the nearest scope, then the highest priority for the same section ID; equal winning priorities conflict. Selected sections render by ascending order and then ID. The caller supplies the fields required by each section, and rendering runs under the section provider's Fiber and the request signal.
-
-`harnessCompaction` summarizes a prefix and returns `summary` plus `keepFromIndex`. The caller maps that index to its own history and commits the result. The built-in implementation does not own Session Log entries or branch selection.
 
 ## Conversation hooks
 
@@ -42,9 +40,9 @@ These hooks are dispatched by conversation orchestration in Runs; a direct `harn
 
 ## Configuration, lifetime and failures
 
-The base Profile mounts separate `core:agent`, `core:prompt`, `core:prompt-defaults` and `core:compaction` entries. [Agent configuration](src/manifests/agent.ts) bounds a run's turns; [compaction configuration](src/manifests/compaction.ts) controls automatic compaction. These capabilities can be replaced independently through Cordis.
+The base Profile mounts separate `core:agent`, `core:prompt` and `core:prompt-defaults` entries. [Agent configuration](src/manifests/agent.ts) bounds a run's model steps. [Context Management](../context-management/README.md) prepares and repairs persistent conversation requests.
 
-The caller's signal owns cancellation. Agent reports phase, request, assistant-start, text delta and assistant events through `onEvent`. Model errors, invalid tool protocol and exhausting the turn limit reject the run. Retry policy cannot replay an attempt after streamed output.
+The caller's signal owns cancellation. Agent reports phase, request, attempt metrics, assistant-start, text delta and assistant events through `onEvent`. Model errors, invalid tool protocol and exhausting the turn limit reject the run. Transient retry applies before streamed output. A normalized context-limit error can invoke the caller’s recovery hook to replace the request for the same step.
 
 ## Verification
 

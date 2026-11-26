@@ -11,10 +11,26 @@ export interface MockProvider {
   close(): Promise<void>;
 }
 
+interface MockUsage {
+  prompt_tokens: number;
+  completion_tokens: number;
+  total_tokens: number;
+  prompt_tokens_details?: { cached_tokens: number };
+}
+
 type MockAnswer =
+  | { text: string; usage: MockUsage }
   | string
   | AsyncIterable<string>
+  | { overflow: 'context' | 'image' }
   | { tool: string; args: Record<string, unknown>; text?: string; thinking?: string; callId?: string };
+
+export const checkpointFixture = [
+  '## Goal and constraints\nContinue the original task.',
+  '## Decisions\nKeep the working approach.',
+  '## Files and diagnostics\nSee retained tool results.',
+  '## Progress and next steps\nContinue pending work.',
+].join('\n\n');
 
 export async function createMockProvider(
   reply?: (request: { messages: { role: string; content: string }[] }) => MockAnswer | Promise<MockAnswer>,
@@ -52,11 +68,31 @@ export async function createMockProvider(
             ),
           })
         : 'Mock response';
+      if (typeof answer === 'object' && 'overflow' in answer) {
+        const message = answer.overflow === 'context' ? 'maximum context length exceeded' : 'Too many images';
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(
+          JSON.stringify({
+            error: {
+              message,
+              code: answer.overflow === 'context' ? 'context_length_exceeded' : 'invalid_image',
+            },
+          }),
+        );
+        return;
+      }
       res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache' });
-      if (typeof answer === 'string') {
-        res.write('data: ' + item({ role: 'assistant', content: answer.slice(0, 5) }, null) + '\n\n');
-        res.write('data: ' + item({ content: answer.slice(5) }, null) + '\n\n');
+      if (typeof answer === 'string' || 'usage' in answer) {
+        const text = typeof answer === 'string' ? answer : answer.text;
+        res.write('data: ' + item({ role: 'assistant', content: text.slice(0, 5) }, null) + '\n\n');
+        res.write('data: ' + item({ content: text.slice(5) }, null) + '\n\n');
         res.write('data: ' + item({}, 'stop') + '\n\n');
+        if (typeof answer !== 'string')
+          res.write(
+            'data: ' +
+              JSON.stringify({ ...JSON.parse(item({}, null)), choices: [], usage: answer.usage }) +
+              '\n\n',
+          );
       } else if (Symbol.asyncIterator in answer) {
         res.write('data: ' + item({ role: 'assistant' }, null) + '\n\n');
         for await (const content of answer) res.write('data: ' + item({ content }, null) + '\n\n');

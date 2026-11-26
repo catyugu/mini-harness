@@ -6,7 +6,7 @@ LLM owns the harness message protocol and scoped adapter selection. It translate
 
 [`mini-harness/llm`](src/api.ts) exports requests, native user/assistant/tool messages, stream events, validation helpers and the `LlmAdapter`/`LlmPort` contracts. Shared model choices, thinking levels and tool schemas are exported by [`mini-harness/llm/vocabulary`](src/vocabulary.ts).
 
-An adapter implements a synchronous `accepts(model)` predicate and `stream(request)`. For a transport-only replacement, inject `harnessLlm` and bind its registration to the plugin's activation:
+An adapter implements a synchronous `accepts(model)` predicate and `stream(request)`. It can supply `countInputTokens(request)` for exact system, tool and message totals, and classify failures as transient, permanent, context overflow or image limit. Report known usage with uncached input, cached reads, cached writes and output as disjoint counts. For a transport-only replacement, inject `harnessLlm` and bind its registration to the plugin's activation:
 
 ```ts
 import type { Context } from 'mini-harness/cordis';
