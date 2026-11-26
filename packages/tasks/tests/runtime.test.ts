@@ -402,3 +402,25 @@ test('batch executes parallel jobs up to capacity and serial jobs as barriers', 
   await batch;
   assert.deepEqual(order, ['first', 'second', 'first done', 'barrier', 'last']);
 });
+
+test('a lane stays exclusive while its task releases pool capacity', async () => {
+  const runtime = new TaskRuntime();
+  const pool = runtime.pool(1);
+  const ready = gate();
+  const wake = gate();
+  const first = runtime.start({ owner: 'one', lane: 'one', pool }, async (task) => {
+    await task.suspend(async () => {
+      ready.release();
+      await wake.promise;
+    });
+  });
+  await ready.promise;
+  assert.equal(runtime.active('one')?.id, first.id);
+  assert.equal(pool.active, 0);
+  assert.throws(() => runtime.start({ owner: 'one', lane: 'one' }, async () => {}), /occupied/);
+  const second = runtime.start({ owner: 'two', lane: 'two', pool }, async () => 42);
+  assert.equal(await second.result, 42);
+  wake.release();
+  await first.result;
+  assert.equal(runtime.active('one'), undefined);
+});

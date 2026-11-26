@@ -4,8 +4,9 @@ Admits session runs and projects Task Runtime lifecycle into bounded replay. Ses
 same Task snapshot plus conversation-specific run details; the runtime owns the lifecycle.
 
 `harnessRuns.submit(id, input, options)` returns the original Task Handle. The Task ID is the Run ID.
-Runs owns the one-active-run-per-session constraint, model selection, input preparation, inbox
-delivery, compaction and replay. Task Runtime owns execution, cancellation and settlement.
+Runs selects an exclusive conversation lane for both runs and compaction. Task Runtime owns its
+admission, execution, cancellation and settlement. Runs owns model selection, input preparation,
+inbox delivery, compaction and replay.
 
 `src/session-run.ts` connects the Agent Loop to SessionLog. `events.ts` maintains bounded replay
 and transient presentation data; `routes.ts` adapts HTTP commands. The same scoped composition is

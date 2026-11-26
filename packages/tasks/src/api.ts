@@ -32,6 +32,8 @@ export interface TaskOptions {
   signal?: AbortSignal;
   /** Capacity is held during execution and released at a whole-task wait point. */
   pool?: TaskPool;
+  /** Exclusive admission from submission to settlement, including waits. */
+  lane?: string;
   /** Inline callers can discard runtime history after terminal observation and result delivery. */
   retain?: boolean;
 }
@@ -39,6 +41,7 @@ export interface TaskOptions {
 export interface TaskSnapshot {
   id: string;
   owner: string;
+  lane?: string;
   parentId?: string;
   name?: string;
   type?: string;
@@ -102,6 +105,8 @@ export interface TaskHistoryRecord {
 }
 
 export interface TaskPort {
+  readonly sealed: boolean;
+  active(lane: string): TaskHandle | undefined;
   pool(limit: number): TaskPool;
   batch(jobs: Iterable<TaskJob>, options: { signal: AbortSignal; limit: number }): Promise<void>;
   start<T>(options: TaskOptions, execute: (context: TaskContext) => Promise<T>): TaskHandle<T>;

@@ -46,6 +46,16 @@ export class TaskRuntime implements TaskPort {
     } = {},
   ) {}
 
+  get sealed() {
+    return this.closing;
+  }
+
+  active(lane: string) {
+    return [...this.entries.values()].find(
+      ({ snapshot }) => snapshot.lane === lane && !terminal(snapshot.state),
+    )?.handle;
+  }
+
   pool(limit: number) {
     return new TaskPool(limit);
   }
@@ -55,6 +65,10 @@ export class TaskRuntime implements TaskPort {
   service(): TaskPort {
     const runtime = this;
     return Service.track<TaskPort>({
+      get sealed() {
+        return runtime.sealed;
+      },
+      active: runtime.active.bind(runtime),
       pool: runtime.pool.bind(runtime),
       batch: runtime.batch,
       start<T>(options: TaskOptions, execute: (context: TaskContext) => Promise<T>) {
@@ -89,6 +103,8 @@ export class TaskRuntime implements TaskPort {
     const { signal: lifetime, provider, pool, retain = true, ...metadata } = options;
     if (this.removing.has(options.owner)) throw new Error('Task owner has been removed');
     this.domain.admit?.(options.owner);
+    if (options.lane !== undefined && this.active(options.lane))
+      throw new Error('Task lane is already occupied');
     const parent = options.parentId ? this.entries.get(options.parentId) : undefined;
     if (options.parentId && (!parent || parent.finishing || terminal(parent.snapshot.state)))
       throw new Error('Task owner has ended');
@@ -110,7 +126,6 @@ export class TaskRuntime implements TaskPort {
     const persist = (task: TaskSnapshot, output?: TaskOutput) => {
       if (retain) this.domain.record?.({ task: clone(task), output });
     };
-    persist(snapshot);
     let release: (() => void) | undefined;
     const relinquish = () => {
       const held = release;
@@ -254,9 +269,13 @@ export class TaskRuntime implements TaskPort {
     // Fiber.run owns execution, including cleanup. If activation ends before
     // its callback starts, settle using the already-aborted task signal.
     let executing: Promise<T> | undefined;
-    const result = provider
-      ? provider.fiber.run(() => (executing = run())).catch(() => executing ?? run())
-      : Promise.resolve().then(run);
+    let accepted = false;
+    const result = Promise.resolve().then(() => {
+      if (!accepted) throw new Error('Task submission failed');
+      return provider
+        ? provider.fiber.run(() => (executing = run())).catch(() => executing ?? run())
+        : run();
+    });
     const handle: TaskHandle<T> = {
       id: snapshot.id,
       signal,
@@ -278,8 +297,16 @@ export class TaskRuntime implements TaskPort {
       ancestors: parent ? [...parent.ancestors, parent.snapshot.id] : [],
     };
     this.entries.set(handle.id, entry);
-    signal.addEventListener('abort', cancelled, { once: true });
     void result.catch(() => {});
+    try {
+      persist(snapshot);
+      accepted = true;
+    } catch (error) {
+      this.entries.delete(handle.id);
+      throw error;
+    }
+    if (signal.aborted) snapshot.cancellationRequested = true;
+    else signal.addEventListener('abort', cancelled, { once: true });
     this.notify('created', snapshot);
     return handle;
   }

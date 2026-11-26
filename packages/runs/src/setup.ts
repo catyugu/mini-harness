@@ -25,6 +25,5 @@ export function setup(ctx: Context) {
     catalog.events.addEventListener('change', changed);
     return () => catalog.events.removeEventListener('change', changed);
   });
-  ctx.on('harness/seal', () => runs.seal());
   ctx.inject(['harnessRoutes'], registerRoutes);
 }
