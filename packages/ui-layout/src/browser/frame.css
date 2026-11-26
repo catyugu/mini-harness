@@ -78,6 +78,7 @@
 }
 .title-block {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   flex: 1;
   min-width: 0;
   gap: 1px;
@@ -94,15 +95,21 @@
   min-width: 0;
 }
 #workspaceHeader {
+  flex: 0 1 auto;
   min-width: 0;
+  overflow: hidden;
 }
 #conversationExtensions {
   display: flex;
   align-items: center;
   gap: 8px;
-  flex: 0 1 auto;
+  flex: 0 0 auto;
   min-width: 0;
   max-width: 100%;
+  overflow-x: auto;
+}
+#workspaceHeader:not([hidden]) + #conversationExtensions {
+  max-width: calc(100% - 8px);
 }
 #conversationExtensions:not(:has(> :not([hidden]))) {
   display: none;
