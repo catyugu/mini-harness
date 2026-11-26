@@ -162,6 +162,7 @@ async function executeTool(
         toolName: call.name,
         content: [{ type: 'text', text: JSON.stringify(accepted) }],
         details: accepted,
+        isError: false,
         timestamp: Date.now(),
         elapsedMs: performance.now() - start,
       };
