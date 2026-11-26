@@ -140,18 +140,30 @@ test('a durable projection fault cannot acknowledge a successful task', async ()
 test('a caught whole-task wait error reacquires admission', async () => {
   const runtime = new TaskRuntime();
   let held = 0;
-  const task = runtime.start({
-    owner: 'one',
-    acquire: async () => { held++; return () => held--; },
-  }, async (context) => {
-    await assert.rejects(context.suspend(async () => {
-      assert.equal(held, 0);
-      await assert.rejects(context.suspend(async () => {}), /whole-task/);
-      throw new Error('wait failed');
-    }), /wait failed/);
-    assert.equal(held, 1);
-    assert.equal(runtime.get(context.id)?.state, 'running');
-  });
+  const task = runtime.start(
+    {
+      owner: 'one',
+      acquire: async () => {
+        held++;
+        return () => held--;
+      },
+    },
+    async (context) => {
+      await assert.rejects(
+        context.suspend(async () => {
+          assert.equal(held, 0);
+          await assert.rejects(
+            context.suspend(async () => {}),
+            /whole-task/,
+          );
+          throw new Error('wait failed');
+        }),
+        /wait failed/,
+      );
+      assert.equal(held, 1);
+      assert.equal(runtime.get(context.id)?.state, 'running');
+    },
+  );
   await task.result;
   assert.equal(held, 0);
 });
@@ -210,7 +222,9 @@ test('terminal waiters settle before observers can cancel their wait', async () 
   const runtime = new TaskRuntime();
   const cancel = new AbortController();
   const gatekeeper = gate();
-  const task = runtime.start({ owner: 'one' }, async () => { await gatekeeper.promise; });
+  const task = runtime.start({ owner: 'one' }, async () => {
+    await gatekeeper.promise;
+  });
   runtime.subscribe(({ task: snapshot }) => {
     if (snapshot.id === task.id && snapshot.state === 'completed') cancel.abort();
   });

@@ -174,7 +174,8 @@ export class TaskRuntime implements TaskPort {
       signal.removeEventListener('abort', cancelled);
       const error = failure?.error;
       const aborted =
-        !admissionFailure && signal.aborted &&
+        !admissionFailure &&
+        signal.aborted &&
         (error === signal.reason ||
           (error instanceof Error && (error.name === 'AbortError' || error.cause === signal.reason)));
       const reason = aborted ? signal.reason : error;
@@ -298,7 +299,7 @@ export class TaskRuntime implements TaskPort {
   }
 
   private async drainOwned(owner: string, reason?: unknown) {
-    const handles = this.owned(owner).flatMap(({ handle }) => handle ? [handle] : []);
+    const handles = this.owned(owner).flatMap(({ handle }) => (handle ? [handle] : []));
     for (const handle of handles) handle.cancel(reason);
     await Promise.allSettled(handles.map(({ result }) => result));
   }
@@ -318,10 +319,12 @@ export class TaskRuntime implements TaskPort {
   removeOwner(owner: string): Promise<void> {
     const existing = this.removing.get(owner);
     if (existing) return existing;
-    const operation = Promise.resolve().then(async () => {
-      await this.drainOwned(owner);
-      for (const entry of this.owned(owner)) this.forgetTree(entry);
-    }).finally(() => this.removing.delete(owner));
+    const operation = Promise.resolve()
+      .then(async () => {
+        await this.drainOwned(owner);
+        for (const entry of this.owned(owner)) this.forgetTree(entry);
+      })
+      .finally(() => this.removing.delete(owner));
     this.removing.set(owner, operation);
     return operation;
   }
@@ -332,7 +335,7 @@ export class TaskRuntime implements TaskPort {
 
   async stop() {
     this.seal();
-    const handles = [...this.entries.values()].flatMap(({ handle }) => handle ? [handle] : []);
+    const handles = [...this.entries.values()].flatMap(({ handle }) => (handle ? [handle] : []));
     for (const handle of handles) handle.cancel(new TaskInterrupted());
     await Promise.allSettled(handles.map(({ result }) => result));
   }
