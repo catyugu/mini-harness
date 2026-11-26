@@ -165,6 +165,7 @@ export const apply = (ctx) => {
     const toolHeader = turn.locator('.tool-card summary');
     await expect(reasonHeader).toHaveText('Reasoning');
     await expect(reasonHeader.locator('svg')).toHaveCount(1);
+    await expect(toolHeader).toHaveCSS('min-height', '24px');
     await expect(reasonHeader).toHaveCSS(
       'min-height',
       await toolHeader.evaluate((node) => getComputedStyle(node).minHeight),
@@ -175,7 +176,15 @@ export const apply = (ctx) => {
       'font-family',
       await toolLabel.evaluate((node) => getComputedStyle(node).fontFamily),
     );
+    await expect(toolLabel).toHaveCSS('font-size', '12px');
+    await expect(toolLabel).toHaveCSS('font-weight', '500');
+    await expect(reasonLabel).toHaveCSS('font-size', '12px');
     await expect(reasonLabel).toHaveCSS('font-weight', '400');
+    await expect(toolLabel).toHaveCSS(
+      'color',
+      await toolHeader.evaluate((node) => getComputedStyle(node).color),
+    );
+    await expect(reasoning.locator('p')).toHaveCSS('font-size', '12px');
     await expect(reasoning.locator('p')).toBeHidden();
     await reasonHeader.click();
     await expect(reasoning.locator('p')).toHaveText('Inspect the workspace first.');
