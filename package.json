@@ -254,6 +254,10 @@
     "./models/selection": {
       "types": "./dist/types/packages/models/src/server/selection.d.ts",
       "default": "./dist/packages/models/src/server/selection.js"
+    },
+    "./tasks": {
+      "types": "./dist/types/packages/tasks/src/api.d.ts",
+      "default": "./dist/packages/tasks/src/api.js"
     }
   },
   "packageManager": "pnpm@10.34.9"

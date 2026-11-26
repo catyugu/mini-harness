@@ -486,6 +486,8 @@ importers:
         specifier: workspace:*
         version: link:../ui-primitives
 
+  packages/tasks: {}
+
   packages/tools:
     dependencies:
       '@mini-harness/llm':
