@@ -6,16 +6,16 @@ import type {} from '@mini-harness/conversation/browser/navigation-api';
 import type {} from '@mini-harness/settings/browser/api';
 import type {} from '@mini-harness/ui-slots/browser/api';
 import type {} from '@mini-harness/ui-runtime/projection-api';
-import {
-  bindPopover,
-  button as uiButton,
-  iconButton,
-  recordRow,
-} from '@mini-harness/ui-primitives/primitives';
+import { bindPopover, iconButton, recordRow } from '@mini-harness/ui-primitives/primitives';
 import { renderMarkdown } from '@mini-harness/ui-primitives/markdown';
 import { browserRequest, payload } from '@mini-harness/ui-runtime/http';
 import { browserPluginId, browserPluginSettings } from '@mini-harness/ui-runtime/plugin-settings';
-import type { ContextSettings, ContextState, TokenTotals } from '../shared/state.ts';
+import {
+  defaultContextSettings,
+  type ContextSettings,
+  type ContextState,
+  type TokenTotals,
+} from '../shared/state.ts';
 import { settingsForm } from './form.ts';
 
 const number = new Intl.NumberFormat(undefined, { maximumFractionDigits: 1 });
@@ -318,15 +318,11 @@ function mountStats(ctx: Context) {
           position();
         }
       };
-      const form = settingsForm(ctx, signal, write);
-      const reset = uiButton('Restore defaults', 'quiet');
-      reset.onclick = () =>
-        void write(null)
-          .then(() => {
-            form.update(currentSettings());
-          })
-          .catch(conversation.report);
-      panel.append(form.node, reset);
+      const form = settingsForm(ctx, signal, write, async () => {
+        await write(null);
+        return currentSettings();
+      });
+      panel.append(form.node);
       let shownId = id;
       let shownWorkspace = workspace();
       const render = () => {
@@ -337,7 +333,7 @@ function mountStats(ctx: Context) {
           shownWorkspace = key;
           if (panel.matches(':popover-open')) panel.hidePopover();
         }
-        reset.disabled = !(id ? state?.customized : draft());
+        form.reset.disabled = !(id ? state?.customized : draft());
       };
       updates.addEventListener('change', render, { signal });
       render();
@@ -402,7 +398,15 @@ function setup(ctx: Context) {
           section: { title: 'Context', icon: 'file-text', order: 40 },
           order: 10,
           render({ signal }) {
-            const form = settingsForm(settings, signal, (value) => configuration.patch({ ...value }));
+            const form = settingsForm(
+              settings,
+              signal,
+              (value) => configuration.patch({ ...value }),
+              async () => {
+                await configuration.patch({ ...defaultContextSettings });
+                return read();
+              },
+            );
             const update = () => form.update(read());
             for (const key of ['autoCompact', 'triggerRatio', 'targetRatio', 'retainRatio', 'summaryModel'])
               signal.addEventListener('abort', configuration.subscribe(key, update), { once: true });

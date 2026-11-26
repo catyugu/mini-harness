@@ -9,6 +9,14 @@ export interface ContextSettings {
   summaryModel: ModelChoice | null;
 }
 
+export const defaultContextSettings: Readonly<ContextSettings> = {
+  autoCompact: true,
+  triggerRatio: 0.8,
+  targetRatio: 0.6,
+  retainRatio: 0.16,
+  summaryModel: null,
+};
+
 export function ratioIssue({ retainRatio, targetRatio, triggerRatio }: ContextSettings) {
   if (!(0 < retainRatio && retainRatio < targetRatio && targetRatio < triggerRatio && triggerRatio < 1))
     return 'Use 0 < retain < target < trigger < 100%.';

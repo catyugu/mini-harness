@@ -94,9 +94,10 @@
   height: 12px;
   transform: rotate(90deg);
 }
-.context-details > .ui-button {
-  margin-top: 0.5rem;
-  width: 100%;
+.context-actions {
+  display: grid;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
 }
 .context-bar {
   display: flex;

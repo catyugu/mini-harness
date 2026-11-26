@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { rmSync } from 'node:fs';
 import { checkpointFixture, createFixturePaths, createMockProvider } from '../support/mock-provider.ts';
-import { settingsSection, startIsolatedHost } from '../support/browser.ts';
+import { readWebProfile, settingsSection, startIsolatedHost } from '../support/browser.ts';
 
 test('context settings and statistics stay usable at desktop and mobile widths', async ({ page }) => {
   const mock = await createMockProvider(({ messages }) => ({
@@ -25,7 +25,27 @@ test('context settings and statistics stay usable at desktop and mobile widths',
     await expect(page.getByRole('switch', { name: 'Auto compaction' })).toHaveCount(0);
     await settingsSection(page, 'Context').click();
     await expect(page.getByRole('heading', { name: 'Context', exact: true })).toBeVisible();
-    await expect(page.getByRole('spinbutton', { name: 'Trigger threshold (%)' })).toHaveValue('80');
+    const global = page.getByRole('dialog', { name: 'Settings', exact: true });
+    const trigger = global.getByRole('spinbutton', { name: 'Trigger threshold (%)' });
+    const globalAuto = global.getByRole('switch', { name: 'Auto compaction' });
+    await expect(trigger).toHaveValue('80');
+    await trigger.fill('90');
+    await globalAuto.uncheck();
+    await global.getByRole('button', { name: 'Apply' }).click();
+    const restore = global.getByRole('button', { name: 'Restore Default' });
+    await expect(restore).toBeEnabled();
+    expect(readWebProfile(paths).configuration('context-management')).toMatchObject({
+      autoCompact: false,
+      triggerRatio: 0.9,
+    });
+    await restore.click();
+    await expect(restore).toBeEnabled();
+    await expect(trigger).toHaveValue('80');
+    await expect(globalAuto).toBeChecked();
+    expect(readWebProfile(paths).configuration('context-management')).toMatchObject({
+      autoCompact: true,
+      triggerRatio: 0.8,
+    });
     await page.getByRole('button', { name: 'Close settings' }).click();
 
     const settings = page.getByRole('button', { name: 'Context settings', exact: true });
@@ -72,7 +92,7 @@ test('context settings and statistics stay usable at desktop and mobile widths',
     await page.reload();
     await settings.click();
     await expect(auto).not.toBeChecked();
-    await config.getByRole('button', { name: 'Restore defaults' }).click();
+    await config.getByRole('button', { name: 'Restore Default' }).click();
     await expect(auto).toBeChecked();
     await page.keyboard.press('Escape');
     await page.getByRole('button', { name: 'Toggle navigation' }).click();

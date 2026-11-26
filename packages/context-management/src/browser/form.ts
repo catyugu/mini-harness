@@ -9,6 +9,7 @@ export function settingsForm(
   ctx: Context,
   signal: AbortSignal,
   write: (value: ContextSettings) => Promise<void>,
+  restore: () => Promise<ContextSettings>,
 ) {
   const node = document.createElement('section');
   node.className = 'context-settings';
@@ -23,6 +24,10 @@ export function settingsForm(
   caption.textContent = 'Summary model';
   modelRow.append(caption, model);
   const save = button('Apply', 'primary');
+  const reset = button('Restore Default');
+  const actions = document.createElement('div');
+  actions.className = 'context-actions';
+  actions.append(save, reset);
   const error = document.createElement('p');
   error.className = 'hint form-error';
   error.setAttribute('role', 'alert');
@@ -44,7 +49,7 @@ export function settingsForm(
   });
   const fields = document.createElement('fieldset');
   fields.className = 'context-fields';
-  fields.append(field('Auto compaction', auto), ...ratios.map(({ row }) => row), modelRow, save);
+  fields.append(field('Auto compaction', auto), ...ratios.map(({ row }) => row), modelRow, actions);
   node.append(heading, fields, error);
   let choice: ModelChoice | null = null;
   const picker = createModelPicker(
@@ -66,10 +71,20 @@ export function settingsForm(
     model.setAttribute('aria-label', 'Summary model');
   }
   ctx.miniModels.subscribe(renderModel, signal);
-  save.onclick = async () => {
+  async function submit(operation: () => Promise<void>) {
     fields.disabled = true;
     error.hidden = true;
     try {
+      await operation();
+    } catch (failure) {
+      error.textContent = failure instanceof Error ? failure.message : String(failure);
+      error.hidden = false;
+    } finally {
+      fields.disabled = false;
+    }
+  }
+  save.onclick = () =>
+    submit(async () => {
       const value = {
         autoCompact: auto.checked,
         triggerRatio: ratios[0].input.valueAsNumber / 100,
@@ -80,20 +95,13 @@ export function settingsForm(
       const issue = ratioIssue(value);
       if (issue) throw new Error(issue);
       await write(value);
-    } catch (failure) {
-      error.textContent = failure instanceof Error ? failure.message : String(failure);
-      error.hidden = false;
-    } finally {
-      fields.disabled = false;
-    }
-  };
-  return {
-    node,
-    update(next: ContextSettings) {
-      auto.checked = next.autoCompact;
-      for (const { key, input } of ratios) input.value = String(Number((next[key] * 100).toFixed(4)));
-      choice = next.summaryModel;
-      renderModel();
-    },
-  };
+    });
+  reset.onclick = () => submit(async () => update(await restore()));
+  function update(next: ContextSettings) {
+    auto.checked = next.autoCompact;
+    for (const { key, input } of ratios) input.value = String(Number((next[key] * 100).toFixed(4)));
+    choice = next.summaryModel;
+    renderModel();
+  }
+  return { node, reset, update };
 }
