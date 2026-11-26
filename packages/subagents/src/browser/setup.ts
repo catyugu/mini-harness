@@ -116,7 +116,9 @@ const setup = (ctx: Context) => {
       text.className = 'subagent-receipt';
       const update = () => {
         const child = services.session(sessionId);
-        text.textContent = child ? child.title + ' · ' + runStatus(child.run, child.waitingApproval) : 'Accepted';
+        text.textContent = child
+          ? child.title + ' · ' + runStatus(child.run, child.waitingApproval)
+          : 'Accepted';
       };
       services.onConversationChange(update, lifetime);
       update();
@@ -139,4 +141,8 @@ const setup = (ctx: Context) => {
     ),
   );
 };
-export default { inject: ['harnessBrowser', 'miniSessions', 'miniMessages', 'miniSlots'], provide: [], apply: setup };
+export default {
+  inject: ['harnessBrowser', 'miniSessions', 'miniMessages', 'miniSlots'],
+  provide: [],
+  apply: setup,
+};

@@ -553,13 +553,17 @@ export const apply = (ctx) => {
     await agentToggle.click();
     const agentPanel = agents.locator('.subagent-list');
     await expect(agentPanel).toBeInViewport({ ratio: 0.95 });
-    await expect(agentPanel.getByRole('button', { name: 'Open conversation: Child fixture', exact: true })).toBeVisible();
+    await expect(
+      agentPanel.getByRole('button', { name: 'Open conversation: Child fixture', exact: true }),
+    ).toBeVisible();
     await expect(agentPanel.locator('.task-output')).toHaveCount(0);
     await expect(panel).toBeHidden();
     await toggle.click();
     await expect(agentPanel).toBeHidden();
     await expect(panel.getByRole('button', { name: 'Fixture job · Cancelled', exact: true })).toBeVisible();
-    await expect(panel.getByRole('button', { name: 'Open conversation: Child fixture', exact: true })).toHaveCount(0);
+    await expect(
+      panel.getByRole('button', { name: 'Open conversation: Child fixture', exact: true }),
+    ).toHaveCount(0);
     await panel.getByRole('button', { name: 'Clear', exact: true }).click();
     await expect(toggle).toBeHidden();
     await expect(agentToggle).toHaveText('1 subagent');
