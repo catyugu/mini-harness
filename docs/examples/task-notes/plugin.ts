@@ -87,7 +87,12 @@ export function apply(ctx: Context) {
   ctx.effect(() =>
     routes.register('POST', '/api/extensions/task-notes/cancel-follow-up', async ({ body }) => {
       const { runId } = await body();
-      return { cancelled: typeof runId === 'string' && tasks.get(runId)?.metadata?.origin === 'task-notes' && tasks.cancel(runId) };
+      return {
+        cancelled:
+          typeof runId === 'string' &&
+          tasks.get(runId)?.metadata?.origin === 'task-notes' &&
+          tasks.cancel(runId),
+      };
     }),
   );
   ctx.effect(() =>

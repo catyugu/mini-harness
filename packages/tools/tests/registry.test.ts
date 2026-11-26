@@ -119,19 +119,28 @@ test('a registered tool uses one task for inline and independent background call
   const tasks = new TaskRuntime();
   const registry = new ToolRegistry(tasks);
   let ready!: () => void;
-  const entered = new Promise<void>((resolve) => { ready = resolve; });
+  const entered = new Promise<void>((resolve) => {
+    ready = resolve;
+  });
   let release!: () => void;
-  const gate = new Promise<void>((resolve) => { release = resolve; });
-  registry.register(defineTool({
-    name: 'work',
-    description: 'Work',
-    parameters: Type.Object({ hold: Type.Boolean() }),
-    async execute(_id, args, _signal, _update, context) {
-      assert.ok(context);
-      if (args.hold) { ready(); await gate; }
-      return { content: [{ type: 'text', text: 'done' }] };
-    },
-  }));
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  registry.register(
+    defineTool({
+      name: 'work',
+      description: 'Work',
+      parameters: Type.Object({ hold: Type.Boolean() }),
+      async execute(_id, args, _signal, _update, context) {
+        assert.ok(context);
+        if (args.hold) {
+          ready();
+          await gate;
+        }
+        return { content: [{ type: 'text', text: 'done' }] };
+      },
+    }),
+  );
   const tool = registry.list({ resourceId: 'session' })[0];
   assert.equal((await tool.execute('inline', { hold: false })).content[0].type, 'text');
   assert.equal(tasks.list().length, 0);
