@@ -101,7 +101,9 @@ type SessionOperation<Data = unknown> =
   | ({ type: 'task'; run?: RunDetails } & TaskHistoryRecord)
   | { type: 'branch' };
 
-export type SessionEvent<Data = unknown> = SessionOperation<Data> & { displays?: readonly RecordPresentation[] };
+export type SessionEvent<Data = unknown> = SessionOperation<Data> & {
+  displays?: readonly RecordPresentation[];
+};
 
 export type SessionEntry<Data = unknown> = LogEntry<SessionEvent<Data>>;
 

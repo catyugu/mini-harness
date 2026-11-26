@@ -240,9 +240,9 @@ export class SessionRun {
     let attemptsRecorded = false;
     let modelStep = 0;
     const publisher = recordPublisher(emit);
-    const observers = ctx.events.listeners('agent/records', scopeTarget(ctx)).map(({ callback }) =>
-      callback(publisher),
-    );
+    const observers = ctx.events
+      .listeners('agent/records', scopeTarget(ctx))
+      .map(({ callback }) => callback(publisher));
     const answer = await requireService(ctx, 'harnessAgent')
       .run(ctx, {
         signal,

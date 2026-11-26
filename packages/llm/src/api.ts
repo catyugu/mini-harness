@@ -255,7 +255,8 @@ export function validateNativeMessage(message: NativeMessage) {
       typeof message.toolName !== 'string' ||
       typeof message.isError !== 'boolean' ||
       (message.detailKeys !== undefined &&
-        (!Array.isArray(message.detailKeys) || !message.detailKeys.every((key) => typeof key === 'string'))) ||
+        (!Array.isArray(message.detailKeys) ||
+          !message.detailKeys.every((key) => typeof key === 'string'))) ||
       (message.outcome !== undefined &&
         (!message.isError ||
           (message.outcome !== 'skipped' &&
