@@ -39,6 +39,7 @@
     "@mini-harness/llm": "workspace:*",
     "@mini-harness/platform": "workspace:*",
     "@mini-harness/plugin-api": "workspace:*",
+    "@mini-harness/tasks": "workspace:*",
     "@mini-harness/tools": "workspace:*",
     "@mini-harness/workspaces": "workspace:*"
   }

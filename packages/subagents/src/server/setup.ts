@@ -12,7 +12,7 @@ export function setup(ctx: Context) {
       throw new DomainError('invalid_input', 'Unknown child model: ' + model.provider + '/' + model.id);
   };
   validate(policy());
-  const delegation = new Delegation(ctx.harnessSessions, ctx.harnessExecution, policy);
+  const delegation = new Delegation(ctx.harnessSessions, ctx.harnessRuns, policy);
   ctx.on('internal/update', (next) => {
     const config = next as unknown as SubagentPolicy;
     validate(config);
@@ -22,7 +22,7 @@ export function setup(ctx: Context) {
     defineTool({
       name: 'delegate',
       label: 'Delegate',
-      description: 'Create a child agent for a specific task. Set provider/model to override the default.',
+      description: 'Start a child agent asynchronously. Returns its session ID and task ID immediately; the child continues independently. Set provider/model to override the default.',
       parameters: Type.Object({
         task: Type.String({ minLength: 1, maxLength: 12000 }),
         provider: Type.Optional(Type.String({ maxLength: 160 })),
@@ -30,8 +30,8 @@ export function setup(ctx: Context) {
       }),
       isConcurrencySafe: () => true,
       execute: async (_callId, args, signal) => {
-        const child = await delegation.delegate(id, args, signal);
-        return { content: [{ type: 'text', text: child.text }], details: { sessionId: child.id } };
+        const child = delegation.delegate(id, args, signal);
+        return { content: [{ type: 'text', text: JSON.stringify(child) }], details: child };
       },
     });
   ctx.effect(() =>

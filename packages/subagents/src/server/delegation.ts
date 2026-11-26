@@ -1,4 +1,4 @@
-import type { Execution } from '@mini-harness/runs/execution';
+import type { RunPort } from '@mini-harness/runs/api';
 import type { SessionStore } from '@mini-harness/sessions/records';
 import type { ModelChoice } from '@mini-harness/llm/vocabulary';
 
@@ -60,34 +60,7 @@ export class Semaphore {
     });
   }
 
-  async lease(signal?: AbortSignal) {
-    let release: (() => void) | undefined = await this.acquire(signal);
-    let waiting = 0;
-    const semaphore = this;
-    return {
-      release: () => {
-        release?.();
-      },
-      async pause<T>(task: () => Promise<T>) {
-        waiting++;
-        release?.();
-        release = undefined;
-        try {
-          return await task();
-        } finally {
-          waiting--;
-          if (!waiting && !signal?.aborted) {
-            const next = await semaphore.acquire(signal);
-            if (waiting) next();
-            else release = next;
-          }
-        }
-      },
-    };
-  }
 }
-
-type ChildLease = Awaited<ReturnType<Semaphore['lease']>>;
 
 export function selectChildModel(
   request: { provider?: string; model?: string },
@@ -118,11 +91,10 @@ export function requireChildDepth(parentDepth: number, maxDepth = 1): void {
 
 export class Delegation {
   readonly semaphore: Semaphore;
-  private readonly leases = new Map<string, ChildLease>();
 
   constructor(
     private readonly sessions: SessionStore,
-    private readonly execution: Execution,
+    private readonly runs: RunPort,
     private readonly settings: () => SubagentPolicy,
   ) {
     this.semaphore = new Semaphore(settings().maxParallel);
@@ -132,52 +104,20 @@ export class Delegation {
     return this.sessions.depth(id) < this.settings().maxDepth;
   }
 
-  private async acquire(id: string, signal: AbortSignal) {
-    const lease = await this.semaphore.lease(signal);
-    this.leases.set(id, lease);
-    return () => {
-      this.leases.delete(id);
-      lease.release();
-    };
-  }
-
-  delegate(id: string, request: { task: string; provider?: string; model?: string }, signal?: AbortSignal) {
-    const model = selectChildModel(request, this.settings().model, this.sessions.history(id).model);
-    const task = () => this.run(id, request.task, model, signal);
-    const lease = this.leases.get(id);
-    return lease ? lease.pause(task) : task();
-  }
-
-  private async run(parentId: string, task: string, choice: ModelChoice, signal?: AbortSignal) {
+  delegate(parentId: string, request: { task: string; provider?: string; model?: string }, signal?: AbortSignal) {
     signal?.throwIfAborted();
     const parent = this.sessions.get(parentId);
     if (!parent) throw new Error('Parent conversation not found');
     requireChildDepth(this.sessions.depth(parentId), this.settings().maxDepth);
+    const model = selectChildModel(request, this.settings().model, this.sessions.history(parentId).model);
     const record = this.sessions.create({
       parentId,
       workspaceId: parent.workspaceId,
-      title: childTitle(task),
+      title: childTitle(request.task),
     });
-    try {
-      const { result } = this.execution.submit(
-        record.id,
-        { message: task, model: choice },
-        {
-          signal,
-          acquire: (cancellation) => this.acquire(record.id, cancellation),
-        },
-      );
-      const text = await result;
-      return { id: record.id, text };
-    } catch (error) {
-      if (this.sessions.get(record.id))
-        this.sessions.rename(
-          record.id,
-          (signal?.aborted || this.execution.status(record.id)?.state === 'cancelled'
-            ? '[Cancelled] '
-            : '[Failed] ') + childTitle(task).slice(0, 60),
-        );
-      throw error;
-    }
+    const task = this.runs.submit(record.id, { message: request.task, model }, {
+      acquire: (cancellation) => this.semaphore.acquire(cancellation),
+    });
+    return { sessionId: record.id, taskId: task.id, state: 'queued' as const };
   }
 }

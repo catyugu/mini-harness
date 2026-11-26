@@ -1,7 +1,9 @@
+import type { TaskState } from '@mini-harness/tasks/api';
+
 export interface RunInfo {
   id: string;
   sessionId: string;
-  state: 'queued' | 'running' | 'completed' | 'failed' | 'cancelled' | 'interrupted';
+  state: TaskState;
   startedAt: string;
   finishedAt?: string;
   error?: string;
@@ -20,4 +22,4 @@ export interface RunTermination {
   error?: string;
 }
 
-export const isRunning = (run?: RunInfo) => run?.state === 'queued' || run?.state === 'running';
+export const isRunning = (run?: RunInfo) => run?.state === 'queued' || run?.state === 'running' || run?.state === 'waiting';

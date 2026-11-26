@@ -75,6 +75,9 @@ importers:
       '@mini-harness/settings':
         specifier: workspace:*
         version: link:packages/settings
+      '@mini-harness/tasks':
+        specifier: workspace:*
+        version: link:packages/tasks
       '@mini-harness/tools':
         specifier: workspace:*
         version: link:packages/tools
@@ -359,6 +362,9 @@ importers:
       '@mini-harness/sessions':
         specifier: workspace:*
         version: link:../sessions
+      '@mini-harness/tasks':
+        specifier: workspace:*
+        version: link:../tasks
       '@mini-harness/tools':
         specifier: workspace:*
         version: link:../tools
@@ -401,6 +407,9 @@ importers:
       '@mini-harness/plugin-api':
         specifier: workspace:*
         version: link:../plugin-api
+      '@mini-harness/tasks':
+        specifier: workspace:*
+        version: link:../tasks
       '@mini-harness/tools':
         specifier: workspace:*
         version: link:../tools
