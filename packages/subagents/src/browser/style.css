@@ -25,30 +25,11 @@
 }
 .subagent-dot {
   grid-area: 1 / 1 / 3 / 2;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--muted);
-}
-.subagent-row:is([data-state='running'], [data-state='queued']) .subagent-dot {
-  background: #4d83df;
-}
-.subagent-row[data-state='completed'] .subagent-dot {
-  background: #239c6c;
-}
-.subagent-row:is([data-state='failed'], [data-state='interrupted']) .subagent-dot {
-  background: var(--danger);
-}
-.subagent-row:is([data-state='waiting'], [data-state='cancelled']) .subagent-dot {
-  background: var(--warning);
+  --dot-size: 8px;
 }
 .subagent-title {
   grid-area: 1 / 2 / 2 / 3;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 13px;
+  font-size: var(--font-ui);
 }
 .subagent-status {
   grid-area: 2 / 2 / 3 / 3;
@@ -61,7 +42,7 @@
 .subagent-row time,
 .subagent-receipt {
   color: var(--muted);
-  font-size: 11px;
+  font-size: var(--font-meta);
 }
 .subagent-row svg {
   grid-area: 1 / 4 / 3 / 5;
@@ -75,7 +56,7 @@
 .parent-conversations {
   display: flex;
   min-width: 0;
-  overflow: auto;
+  overflow: hidden;
   gap: 2px;
   align-items: center;
 }
@@ -83,13 +64,15 @@
   display: inline-flex;
   align-items: center;
   min-width: 0;
+  flex: 0 1 auto;
 }
 .parent-conversations .link-button {
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
   padding: 0 4px;
-  font-size: 11px;
+  min-width: 0;
+  font-size: var(--font-meta);
 }
 .parent-conversations svg {
   flex: 0 0 11px;

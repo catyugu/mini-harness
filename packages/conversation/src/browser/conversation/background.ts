@@ -2,7 +2,7 @@ import type { Context } from 'mini-harness/cordis';
 import type { TaskData, TaskOutput, TaskSnapshot } from '@mini-harness/tasks/api';
 import { browserRequest } from '@mini-harness/ui-runtime/http';
 import { icon } from '@mini-harness/ui-primitives/icons';
-import { bindHeaderPopover, button, fromMarkup, required } from '@mini-harness/ui-primitives/primitives';
+import { bindPopover, button, fromMarkup, required } from '@mini-harness/ui-primitives/primitives';
 
 const live = ({ state }: TaskSnapshot) => ['queued', 'running', 'waiting'].includes(state);
 const object = (value?: TaskData): Record<string, TaskData> =>
@@ -73,8 +73,8 @@ function setup(ctx: Context) {
   const signal = ctx.fiber.signal;
   const events = new EventTarget();
   const container = fromMarkup(`<div class="background-tasks" hidden>
-    <button type="button" class="link-button ui-header-trigger" aria-label="Tasks" aria-expanded="false" aria-controls="backgroundTasks" popovertarget="backgroundTasks"><span class="task-count"></span></button>
-    <div id="backgroundTasks" class="background-task-list ui-header-popover" popover="auto" role="region" aria-label="Tasks">
+    <button type="button" class="link-button ui-disclosure-trigger" aria-label="Tasks" aria-expanded="false" aria-controls="backgroundTasks" popovertarget="backgroundTasks"><span class="task-count"></span></button>
+    <div id="backgroundTasks" class="background-task-list ui-popover" popover="auto" role="region" aria-label="Tasks">
       <p class="task-notice" role="status"></p>
       <section class="task-group" hidden><h3>Running <span></span></h3><div class="task-rows"></div></section>
       <section class="task-group" hidden><div class="task-group-header">
@@ -207,16 +207,17 @@ function setup(ctx: Context) {
 
   function createRow(task: TaskSnapshot) {
     const node = fromMarkup(`<div class="task-item">
-      <div class="task-line">
-        <button type="button" class="task-row">
-          <span class="task-dot" aria-hidden="true"></span><span class="task-kind"></span>
-          <span class="task-label"></span><span class="task-state"></span><time></time>
+      <div class="task-line ui-list-row">
+        <button type="button" class="task-row ui-row ui-fill">
+          <span class="task-dot ui-status-dot" aria-hidden="true"></span><span class="task-kind ui-meta"></span>
+          <span class="task-label ui-fill ui-truncate"></span><span class="task-state ui-meta"></span><time></time>
         </button>
       </div>
     </div>`);
     node.dataset.taskId = task.id;
     const line = required(node.querySelector('.task-line'));
     const row = required(node.querySelector<HTMLButtonElement>('.task-row'));
+    const dot = required(row.querySelector<HTMLElement>('.task-dot'));
     const kind = required(row.querySelector<HTMLElement>('.task-kind'));
     const name = required(row.querySelector<HTMLElement>('.task-label'));
     const state = required(row.querySelector<HTMLElement>('.task-state'));
@@ -257,6 +258,17 @@ function setup(ctx: Context) {
           : next.cancellationRequested && live(next)
             ? 'cancelled'
             : next.state;
+      const tone = node.dataset.tone;
+      dot.dataset.tone =
+        tone === 'running' || tone === 'queued'
+          ? 'info'
+          : tone === 'completed'
+            ? 'success'
+            : tone === 'failed' || tone === 'interrupted'
+              ? 'danger'
+              : tone === 'waiting' || tone === 'cancelled'
+                ? 'warning'
+                : 'neutral';
       row.title = title + ' · ' + state.textContent;
       row.setAttribute('aria-label', title + ' · ' + state.textContent);
       row.setAttribute('aria-expanded', String(expanded?.id === next.id));
@@ -309,7 +321,7 @@ function setup(ctx: Context) {
     const total = pending.length + settled.length;
     const liveCount = pending.length;
     count.textContent = total + (total === 1 ? ' task' : ' tasks');
-    toggle.dataset.running = String(liveCount > 0);
+    toggle.dataset.tone = (liveCount > 0) ? 'info' : 'neutral';
     toggle.title = liveCount + ' running · ' + (total - liveCount) + ' finished';
     container.hidden = !active || (!total && !notice.textContent);
     if (container.hidden && open()) panel.hidePopover();
@@ -352,7 +364,7 @@ function setup(ctx: Context) {
     }
   }
 
-  ctx.effect(() => ctx.miniSlots.register('conversation.header', container));
+  ctx.effect(() => ctx.miniSlots.register('header.actions', container));
   ctx.effect(() =>
     ctx.miniProjections.register('tasks', {
       sync(_revision, reconnect, id) {
@@ -368,7 +380,7 @@ function setup(ctx: Context) {
     signal,
   );
   signal.addEventListener('abort', closeOutput, { once: true });
-  bindHeaderPopover(toggle, panel, signal);
+  bindPopover(toggle, panel, signal);
   panel.addEventListener(
     'toggle',
     () => {

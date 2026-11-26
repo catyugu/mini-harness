@@ -183,7 +183,7 @@ export function createMessageView(
   ) {
     const item = card ?? document.createElement('details');
     toolItems.set(item, data);
-    item.className = 'tool-card';
+    item.className = 'tool-card ui-disclosure';
     item.dataset.state = data.state;
     const summary = document.createElement('summary');
     const name = document.createElement('strong');
@@ -265,7 +265,7 @@ export function createMessageView(
     const origin = message.origin;
     const notification = notificationLabel(origin, message.inboxId);
     const entry = document.createElement(notification ? 'details' : 'div');
-    entry.className = notification ? 'async-message' : 'message-row user';
+    entry.className = notification ? 'async-message ui-disclosure' : 'message-row user';
     const text = textOf(message.content);
     const attachments = message.attachments ?? [];
     const bubble = document.createElement('article');

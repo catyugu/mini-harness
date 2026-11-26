@@ -17,7 +17,7 @@
   margin: 0;
   padding-inline: 6px;
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--font-meta);
   font-weight: 400;
 }
 .task-group-toggle,
@@ -43,10 +43,8 @@
   transform: rotate(90deg);
 }
 .task-line {
-  display: flex;
-  align-items: center;
-  border-radius: 6px;
-  min-width: 0;
+  --gap: 0px;
+  --row-size: 30px;
 }
 .task-line:hover,
 .task-line:has(.task-row[aria-expanded='true']) {
@@ -66,13 +64,6 @@
   text-align: left;
   font: inherit;
 }
-.task-label {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
 .task-kind,
 .task-state,
 .task-row time {
@@ -80,24 +71,6 @@
   color: var(--muted);
   font-size: 11px;
   font-variant-numeric: tabular-nums;
-}
-.task-dot {
-  flex: 0 0 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--muted);
-}
-.task-item[data-tone='running'] .task-dot {
-  background: #4d83df;
-}
-.task-item[data-tone='completed'] .task-dot {
-  background: #239c6c;
-}
-.task-item:is([data-tone='failed'], [data-tone='interrupted']) .task-dot {
-  background: var(--danger);
-}
-.task-item:is([data-tone='waiting'], [data-tone='cancelled']) .task-dot {
-  background: var(--warning);
 }
 .task-line .task-cancel {
   flex: none;
@@ -143,9 +116,7 @@
   margin: 0;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
-  font:
-    12px/1.55 ui-monospace,
-    monospace;
+  font: var(--font-meta) / 1.55 var(--font-mono);
 }
 .task-output-heading {
   align-items: center;
@@ -173,7 +144,7 @@
   justify-content: space-between;
   gap: 8px;
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--font-meta);
   overflow-wrap: anywhere;
 }
 @media (max-width: 560px) {

@@ -1,7 +1,6 @@
 import type { ThinkingLevel } from '@mini-harness/llm/vocabulary';
-import { scopedElements } from '@mini-harness/ui-primitives/primitives';
+import { bindPopover, scopedElements } from '@mini-harness/ui-primitives/primitives';
 import { icon } from '@mini-harness/ui-primitives/icons';
-import { positionPicker } from './picker-position.ts';
 
 const labels: Record<ThinkingLevel, string> = {
   off: 'Off',
@@ -24,9 +23,7 @@ export function createThinkingPicker(
     results = element('thinkingResults');
   let options: HTMLButtonElement[] = [];
 
-  function position() {
-    positionPicker(button, popup, 180, 320);
-  }
+  const position = bindPopover(button, popup, signal, { width: 180, maxHeight: 320, align: 'end', prefer: 'above' });
 
   function open() {
     if (button.hidden || popup.matches(':popover-open')) return;
@@ -63,13 +60,6 @@ export function createThinkingPicker(
       options[event.key === 'Home' ? 0 : options.length - 1]?.focus();
     }
   };
-  popup.addEventListener(
-    'toggle',
-    () => button.setAttribute('aria-expanded', String(popup.matches(':popover-open'))),
-    { signal },
-  );
-  window.addEventListener('resize', position, { signal });
-  window.visualViewport?.addEventListener('resize', position, { signal });
 
   return {
     update(levels: ThinkingLevel[], desired: ThinkingLevel | null | undefined) {

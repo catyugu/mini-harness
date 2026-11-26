@@ -1,7 +1,6 @@
 import type { ModelChoice } from '@mini-harness/llm/vocabulary';
-import { scopedElements } from '@mini-harness/ui-primitives/primitives';
+import { bindPopover, scopedElements } from '@mini-harness/ui-primitives/primitives';
 import { icon } from '@mini-harness/ui-primitives/icons';
-import { positionPicker } from './picker-position.ts';
 import type { ModelSummary } from '@mini-harness/models/catalog';
 
 export function createModelPicker(
@@ -25,9 +24,7 @@ export function createModelPicker(
     return providers.get(id) ?? id;
   }
 
-  function position() {
-    positionPicker(button, popup, 300);
-  }
+  const position = bindPopover(button, popup, signal, { width: 300, maxHeight: 420, align: 'end', prefer: 'above' });
 
   function matches(label: string, term: string) {
     if (label.includes(term)) return true;
@@ -121,7 +118,6 @@ export function createModelPicker(
     render();
     popup.showPopover();
     position();
-    button.setAttribute('aria-expanded', 'true');
     search.focus();
     options[cursor]?.scrollIntoView({ block: 'nearest' });
   }

@@ -10,10 +10,11 @@ const setup = (ctx: Context) => {
   const signal = ctx.fiber.signal;
   const { miniSelection: select, miniSessions: sessions, miniWorkspaces: workspaces, miniTabs: tabs } = ctx;
   const picker = workspacePicker(ctx, sessions.get);
-  const badges = (['workspace.header', 'workspace.welcome'] as const).map((slot) => {
+  const badges = (['header.context', 'workspace.welcome'] as const).map((slot) => {
     const node = document.createElement('div');
-    node.className = 'workspace-button';
+    node.className = 'workspace-button ui-row';
     const label = document.createElement('small');
+    label.className = 'ui-truncate ui-meta';
     node.append(icon('folder'), label);
     ctx.effect(() => ctx.miniSlots.register(slot, node));
     return { node, label };

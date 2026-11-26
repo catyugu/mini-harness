@@ -8,7 +8,7 @@
   max-height: none;
   border: 1px solid var(--border);
   border-radius: 18px;
-  box-shadow: 0 18px 65px #101b3033;
+  box-shadow: var(--shadow-dialog);
   color: var(--ink);
   background: var(--bg);
   overflow: hidden;
@@ -18,18 +18,7 @@
   flex-direction: column;
 }
 .settings-panel::backdrop {
-  background: #11192377;
-}
-.settings-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 11px 17px;
-  border-bottom: 1px solid var(--border);
-}
-.settings-header h2 {
-  margin: 0;
-  font-size: 17px;
+  background: var(--backdrop);
 }
 .settings-scroll {
   overflow: auto;
@@ -39,8 +28,7 @@
   min-height: 0;
   overscroll-behavior: contain;
 }
-.settings-header {
-  flex-shrink: 0;
+.settings-panel .ui-dialog-header {
   padding-top: max(11px, env(safe-area-inset-top));
 }
 .settings-scroll section {

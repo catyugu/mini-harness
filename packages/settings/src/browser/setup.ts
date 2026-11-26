@@ -36,7 +36,7 @@ function mountSettings(ctx: Context, registry: SettingsRegistry) {
   const signal = ctx.fiber.signal;
   const panel =
     fromMarkup<HTMLDialogElement>(`<dialog id="settingsPanel" class="settings-panel" aria-labelledby="settingsTitle">
-    <header class="settings-header">
+    <header class="ui-dialog-header">
       <h2 id="settingsTitle">Settings</h2>
       <button id="settingsClose" class="icon-button" type="button" aria-label="Close settings"></button>
     </header>

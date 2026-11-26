@@ -8,7 +8,7 @@
   border-radius: 8px;
   background: transparent;
   padding: 6px 8px;
-  font-size: 12px;
+  font-size: var(--font-meta);
   margin-left: auto;
 }
 .model-select:hover {
@@ -45,7 +45,7 @@
   min-height: 36px;
   padding: 8px 10px;
   border-radius: 8px;
-  font-size: 13px;
+  font-size: var(--font-ui);
 }
 #thinkingResults .model-option[aria-selected='true'] {
   background: var(--selected);
@@ -56,16 +56,10 @@
   color: var(--focus);
 }
 .model-picker {
-  position: fixed;
-  inset: auto;
-  margin: 0;
-  padding: 8px;
+  padding: var(--space);
   min-height: 0;
-  color: var(--ink);
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  box-shadow: 0 10px 32px #121c3122;
+  overflow: hidden;
+  font-size: var(--font-ui);
 }
 .model-picker:popover-open {
   display: flex;
@@ -99,7 +93,7 @@
   margin: 1px 0;
   padding: 8px 10px;
   border-radius: 8px;
-  font-size: 13px;
+  font-size: var(--font-ui);
 }
 .model-option-label {
   display: grid;
@@ -176,7 +170,7 @@
   flex-direction: column;
   gap: 12px;
   min-width: 0;
-  padding: 17px max(18px, calc((100% - 960px) / 2)) 12px;
+  padding-block: 17px 12px;
 }
 .assistant-turn {
   display: grid;
@@ -184,10 +178,7 @@
 }
 .assistant-reasoning {
   color: var(--muted);
-  font-size: 13px;
-}
-.assistant-reasoning summary {
-  cursor: pointer;
+  font-size: var(--font-ui);
 }
 .assistant-reasoning p {
   margin: 4px 0 0;
@@ -231,9 +222,7 @@
   margin: 0;
   padding: 12px;
   overflow: auto;
-  font:
-    13px/1.5 ui-monospace,
-    monospace;
+  font: var(--font-code) / 1.5 var(--font-mono);
 }
 .tool-card {
   min-width: 0;
@@ -241,39 +230,13 @@
   border-radius: 0;
   background: transparent;
 }
-.tool-card + .tool-card {
-  margin-top: -6px;
-}
 .tool-card summary {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 28px;
-  padding: 4px 3px;
   color: var(--muted);
-  font-size: 12px;
-  cursor: pointer;
-  list-style: none;
-  border-radius: 6px;
-}
-.tool-card summary:hover {
-  background: var(--hover);
-}
-.tool-card summary::-webkit-details-marker {
-  display: none;
-}
-.tool-card summary svg {
-  flex: 0 0 14px;
-  height: 14px;
-}
-.tool-card[open] summary svg {
-  transform: rotate(90deg);
+  font-size: var(--font-meta);
 }
 .tool-card summary strong {
   color: var(--ink);
-  font:
-    600 13px ui-monospace,
-    monospace;
+  font: 600 var(--font-code) var(--font-mono);
   min-width: 0;
   overflow-wrap: anywhere;
   margin-right: auto;
@@ -318,14 +281,12 @@
 }
 
 .composer-wrap {
-  width: min(996px, 100%);
-  margin-inline: auto;
-  padding: 4px 18px max(12px, env(safe-area-inset-bottom));
+  padding-block: 4px max(12px, env(safe-area-inset-bottom));
 }
 .status {
   padding: 0 8px 7px;
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--font-meta);
   overflow-wrap: anywhere;
 }
 .status:empty {
@@ -336,7 +297,7 @@
 }
 #changedFiles {
   position: relative;
-  font-size: 12px;
+  font-size: var(--font-meta);
   min-width: 0;
 }
 #changedFiles summary {
@@ -349,9 +310,7 @@
   max-height: 150px;
   overflow: auto;
   overflow-wrap: anywhere;
-  font:
-    11px/1.5 ui-monospace,
-    monospace;
+  font: var(--font-meta) / 1.5 var(--font-mono);
 }
 #changedFiles[hidden] {
   display: none;
@@ -490,7 +449,7 @@ button.file-card:hover {
   text-overflow: ellipsis;
 }
 .file-card-meta strong {
-  font-size: 12px;
+  font-size: var(--font-meta);
   font-weight: 600;
 }
 .file-card-meta small {
@@ -507,7 +466,7 @@ button.file-card:hover {
   border: 0;
   background: transparent;
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--font-meta);
   border-radius: 8px;
 }
 .permission-select:hover,
@@ -538,7 +497,7 @@ button.file-card:hover {
   background: transparent;
   color: var(--ink);
   text-align: left;
-  font-size: 13px;
+  font-size: var(--font-ui);
   cursor: pointer;
 }
 .permission-picker .permission-option strong,
@@ -593,7 +552,7 @@ button.file-card:hover {
   border-left: 2px solid var(--accent);
   border-radius: 5px;
   background: var(--bubble);
-  font-size: 12px;
+  font-size: var(--font-meta);
 }
 .draft-mode button {
   border: 0;
@@ -606,11 +565,8 @@ button.file-card:hover {
   color: var(--ink);
 }
 @media (max-width: 560px) {
-  .messages {
-    padding-inline: 12px;
-  }
-  .composer-wrap {
-    padding-inline: 9px;
+  .conversation {
+    --content-gutter: 12px;
   }
   .composer-footer {
     justify-content: flex-end;
@@ -770,7 +726,7 @@ button.file-card:hover {
   font-weight: 600;
 }
 .suggestion small {
-  font-size: 12px;
+  font-size: var(--font-meta);
   color: var(--muted);
 }
 .suggestion-group {
@@ -796,7 +752,7 @@ button.file-card:hover {
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
-  font-size: 13px;
+  font-size: var(--font-ui);
 }
 .suggestions-empty {
   padding: 0 10px;
@@ -805,7 +761,7 @@ button.file-card:hover {
   max-height: 84px;
   overflow: auto;
   white-space: pre-wrap;
-  font-size: 12px;
+  font-size: var(--font-meta);
   color: var(--muted);
   padding: 6px 10px;
 }
@@ -820,31 +776,10 @@ button.file-card:hover {
 .async-message {
   min-width: 0;
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--font-meta);
 }
 .async-message > summary {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  min-height: 28px;
-  padding: 4px;
-  border-radius: 6px;
-  cursor: pointer;
-  list-style: none;
   overflow-wrap: anywhere;
-}
-.async-message > summary::-webkit-details-marker {
-  display: none;
-}
-.async-message > summary:hover {
-  background: var(--hover);
-}
-.async-message > summary svg {
-  flex: 0 0 13px;
-  height: 13px;
-}
-.async-message[open] > summary svg {
-  transform: rotate(90deg);
 }
 .async-message-body {
   margin: 2px 0 4px 18px;
@@ -854,7 +789,7 @@ button.file-card:hover {
   overflow-wrap: anywhere;
 }
 .async-message-body .markdown {
-  font-size: 13px;
+  font-size: var(--font-ui);
 }
 .async-message-body .markdown > :first-child {
   margin-top: 0;
@@ -916,9 +851,7 @@ button.file-card:hover {
   display: flex;
   justify-content: flex-end;
   gap: 8px;
-  width: min(996px, 100%);
-  margin-inline: auto;
-  padding: 3px 18px;
+  padding-block: 3px;
   color: var(--muted);
   font-size: 11px;
 }
@@ -941,7 +874,7 @@ button.file-card:hover {
   border-radius: var(--radius);
   background: var(--surface);
   margin-bottom: 8px;
-  font-size: 12px;
+  font-size: var(--font-meta);
 }
 .approval-heading {
   display: flex;
