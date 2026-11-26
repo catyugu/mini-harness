@@ -18,7 +18,8 @@
   background: transparent;
   color: var(--ink);
   text-align: left;
-  font: inherit;
+  font-size: var(--font-ui);
+  line-height: var(--line-ui);
 }
 .subagent-row:hover {
   background: var(--hover);
@@ -29,7 +30,6 @@
 }
 .subagent-title {
   grid-area: 1 / 2 / 2 / 3;
-  font-size: var(--font-ui);
 }
 .subagent-status {
   grid-area: 2 / 2 / 3 / 3;

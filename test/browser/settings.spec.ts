@@ -47,6 +47,7 @@ test('settings stay reachable across viewport sizes and theme changes persist', 
     await expect(page.locator('html')).toHaveCSS('color-scheme', 'light');
     expect(await contrast()).toBeGreaterThanOrEqual(4.5);
     await expect(theme).toBeEnabled();
+    await expect(theme).toHaveCSS('font-size', viewport.width <= 860 ? '16px' : '13px');
     if (viewport.width > 860) {
       await dialog.getByRole('heading', { name: 'Appearance' }).click();
       await expect(dialog).toBeVisible();

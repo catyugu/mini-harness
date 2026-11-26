@@ -81,7 +81,7 @@
 }
 .model-provider {
   margin: 12px 10px 5px;
-  font-size: 11px;
+  font-size: var(--font-caption);
   line-height: 1.4;
   color: var(--muted);
 }
@@ -113,7 +113,7 @@
   font-weight: 550;
 }
 #modelResults .model-option small {
-  font-size: 11px;
+  font-size: var(--font-caption);
   color: var(--muted);
 }
 #modelResults .model-option[aria-selected='true'] {
@@ -124,7 +124,7 @@
   flex: 0 0 auto;
   margin-left: auto;
   color: var(--focus);
-  font-size: 14px;
+  font-size: var(--font-ui);
 }
 #modelResults .model-option.highlighted {
   outline: none;
@@ -146,14 +146,14 @@
 }
 .welcome h1 {
   margin: 0;
-  font-size: clamp(23px, 4vw, 30px);
-  font-weight: 620;
+  font-size: clamp(20px, 4vw, 26px);
+  font-weight: 600;
   line-height: 1.2;
   letter-spacing: -0.03em;
 }
 @media (max-width: 480px) {
   .welcome h1 {
-    font-size: clamp(20px, 5.5vw, 23px);
+    font-size: clamp(20px, 5.5vw, 22px);
   }
 }
 .messages {
@@ -168,13 +168,13 @@
   display: flex;
   flex: 0 0 auto;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
   min-width: 0;
-  padding-block: 17px 12px;
+  padding-block: 16px 12px;
 }
 .assistant-turn {
   display: grid;
-  gap: 10px;
+  gap: 8px;
 }
 .assistant-reasoning > p {
   margin: 0;
@@ -185,6 +185,8 @@
   margin: 0;
 }
 .message {
+  font-size: var(--font-body);
+  line-height: var(--line-body);
   min-width: 0;
   overflow-wrap: anywhere;
 }
@@ -255,7 +257,7 @@
 .tool-exit-code {
   flex-shrink: 0;
   color: var(--muted);
-  font-size: 11px;
+  font-size: var(--font-caption);
   font-variant-numeric: tabular-nums;
 }
 .tool-exit-code[data-failed='true'] {
@@ -264,7 +266,7 @@
 .tool-state {
   padding: 1px 3px;
   color: var(--muted);
-  font-size: 11px;
+  font-size: var(--font-caption);
 }
 .tool-card[data-state='running'] .tool-state {
   color: var(--focus);
@@ -348,6 +350,8 @@
 }
 .composer .cm-content {
   display: block;
+  font-size: var(--font-body);
+  line-height: var(--line-body);
   min-height: 32px;
   max-height: min(210px, 35vh);
   width: 100%;
@@ -471,7 +475,7 @@ button.file-card:hover {
   font-weight: 600;
 }
 .file-card-meta small {
-  font-size: 11px;
+  font-size: var(--font-caption);
   color: var(--muted);
 }
 
@@ -530,7 +534,7 @@ button.file-card:hover {
 }
 .permission-picker .permission-option small {
   color: var(--muted);
-  font-size: 11px;
+  font-size: var(--font-caption);
 }
 .permission-picker .permission-option:is(:hover, :focus-visible) {
   background: var(--hover);
@@ -659,7 +663,7 @@ button.file-card:hover {
 .message-time {
   margin-left: 8px;
   color: var(--muted);
-  font-size: 11px;
+  font-size: var(--font-caption);
   font-variant-numeric: tabular-nums;
 }
 .message-row.user .message-actions {
@@ -850,7 +854,7 @@ button.file-card:hover {
   gap: 8px;
   padding-block: 3px;
   color: var(--muted);
-  font-size: 11px;
+  font-size: var(--font-caption);
 }
 .run-summary time {
   white-space: nowrap;

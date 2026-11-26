@@ -100,7 +100,8 @@
     border-radius: 8px;
     background: transparent;
     text-align: left;
-    font-size: 13px;
+    font-size: var(--font-ui);
+    line-height: var(--line-ui);
   }
   .nav-action:hover,
   .nav-action[aria-current='page'] {

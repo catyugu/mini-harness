@@ -15,7 +15,7 @@
 }
 .git-change span {
   color: var(--focus);
-  font-family: monospace;
+  font-family: var(--font-mono);
   white-space: pre;
 }
 .diff .added {
