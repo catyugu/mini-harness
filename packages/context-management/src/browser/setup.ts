@@ -230,7 +230,6 @@ function mountStats(ctx: Context) {
         windowRatio.textContent =
           ratio === undefined ? '—' : (occupancy?.estimated ? '~' : '') + percent(ratio);
         showOccupancy(contextList, bar, state);
-
       }
       updates.addEventListener('change', render, { signal });
       render();
@@ -275,7 +274,11 @@ function mountStats(ctx: Context) {
       const compact = uiButton('Compact now');
       compact.onclick = () => {
         if (state?.compacting === 'manual' && id)
-          void browserRequest(ctx, '/sessions/' + encodeURIComponent(id) + '/cancel', payload('POST', {})).catch(conversation.report);
+          void browserRequest(
+            ctx,
+            '/sessions/' + encodeURIComponent(id) + '/cancel',
+            payload('POST', {}),
+          ).catch(conversation.report);
         else void compactConversation().catch(conversation.report);
       };
       panel.append(mode, form.node, compact);
@@ -288,11 +291,21 @@ function mountStats(ctx: Context) {
         mode.value = state.custom ? 'custom' : 'default';
         form.update(state.settings, Boolean(state.custom));
         const current = conversation.get();
-        compact.disabled = state.compacting !== 'manual' && Boolean(
-          state.compacting || current.interaction.operation ||
-          current.run?.state === 'running' || current.run?.state === 'queued' || current.run?.state === 'waiting'
-        );
-        compact.textContent = state.compacting === 'manual' ? 'Cancel compaction' : state.compacting ? 'Compacting…' : 'Compact now';
+        compact.disabled =
+          state.compacting !== 'manual' &&
+          Boolean(
+            state.compacting ||
+              current.interaction.operation ||
+              current.run?.state === 'running' ||
+              current.run?.state === 'queued' ||
+              current.run?.state === 'waiting',
+          );
+        compact.textContent =
+          state.compacting === 'manual'
+            ? 'Cancel compaction'
+            : state.compacting
+              ? 'Compacting…'
+              : 'Compact now';
       };
       updates.addEventListener('change', render, { signal });
       render();
@@ -353,13 +366,7 @@ function setup(ctx: Context) {
                 retainRatio: configuration.get('retainRatio'),
                 summaryModel: configuration.get('summaryModel'),
               });
-            for (const key of [
-              'autoCompact',
-              'triggerRatio',
-              'targetRatio',
-              'retainRatio',
-              'summaryModel',
-            ])
+            for (const key of ['autoCompact', 'triggerRatio', 'targetRatio', 'retainRatio', 'summaryModel'])
               signal.addEventListener('abort', configuration.subscribe(key, read), { once: true });
             read();
             return form.node;

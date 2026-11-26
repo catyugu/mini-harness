@@ -21,7 +21,10 @@ type Rebuild = (messages: LlmRequest['messages']) => Promise<LlmRequest>;
 export class ContextManagement {
   private readonly signatures = new WeakMap<SessionLogPort, Map<string, string | null>>();
   private readonly meter = new TokenMeter();
-  private readonly prepared = new WeakMap<SessionLogPort, { occupancy: ContextOccupancy; adapter: LlmAdapter; leafId: string | null; requestId?: string }>();
+  private readonly prepared = new WeakMap<
+    SessionLogPort,
+    { occupancy: ContextOccupancy; adapter: LlmAdapter; leafId: string | null; requestId?: string }
+  >();
   private readonly operations = new Map<string, NonNullable<ContextState['compacting']>>();
 
   constructor(
@@ -52,12 +55,24 @@ export class ContextManagement {
 
   observe(log: SessionLogPort, requestId: string, usage: NativeUsage) {
     const measured = this.prepared.get(log);
-    if (!measured || measured.leafId !== log.context().leafId || (measured.requestId && measured.requestId !== requestId)) return;
+    if (
+      !measured ||
+      measured.leafId !== log.context().leafId ||
+      (measured.requestId && measured.requestId !== requestId)
+    )
+      return;
     measured.requestId = requestId;
     this.meter.calibrate(measured.occupancy, measured.occupancy, measured.adapter, usage);
   }
 
-  prepare(ctx: Context, log: SessionLogPort, request: LlmRequest, rebuild: Rebuild, runId?: string, repair?: RequestRecovery) {
+  prepare(
+    ctx: Context,
+    log: SessionLogPort,
+    request: LlmRequest,
+    rebuild: Rebuild,
+    runId?: string,
+    repair?: RequestRecovery,
+  ) {
     return this.process(ctx, log, request, rebuild, repair ? 'recovery' : 'automatic', runId, repair);
   }
 
@@ -99,12 +114,11 @@ export class ContextManagement {
     const pressure = budget !== undefined && occupancy.total >= budget * config.triggerRatio;
     let signatures = this.signatures.get(log);
     if (!signatures) this.signatures.set(log, (signatures = new Map()));
-    const pruned =
-      prune(ctx, log, projection, signatures, {
-        offload: pressure || manual || repair !== undefined,
-        forceImages: repair?.kind === 'image-limit',
-        toolTokens: Math.max(256, Math.min(4096, Math.floor((budget ?? 64_000) * (repair ? 0.03 : 0.09)))),
-      });
+    const pruned = prune(ctx, log, projection, signatures, {
+      offload: pressure || manual || repair !== undefined,
+      forceImages: repair?.kind === 'image-limit',
+      toolTokens: Math.max(256, Math.min(4096, Math.floor((budget ?? 64_000) * (repair ? 0.03 : 0.09)))),
+    });
     if (pruned) {
       projection = log.context();
       request = await rebuild(projection.contextMessages);
@@ -138,17 +152,17 @@ export class ContextManagement {
         const retain = Math.max(
           1,
           Math.floor(
-            manual && occupancy.messages <= minimum
-              ? occupancy.messages * config.retainRatio
-              : minimum,
+            manual && occupancy.messages <= minimum ? occupancy.messages * config.retainRatio : minimum,
           ),
         );
         const force = repair || (budget !== undefined && occupancy.total > budget);
-        const checkpointAtStart = log.branch(projection.leafId).some(
-          (entry) =>
-            entry.id === projection.contextEntryIds[0] &&
-            (entry.type === 'context-replace' || entry.type === 'compaction'),
-        );
+        const checkpointAtStart = log
+          .branch(projection.leafId)
+          .some(
+            (entry) =>
+              entry.id === projection.contextEntryIds[0] &&
+              (entry.type === 'context-replace' || entry.type === 'compaction'),
+          );
         const cut = splitPoint(
           projection,
           this.meter,

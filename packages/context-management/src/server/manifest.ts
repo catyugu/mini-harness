@@ -30,7 +30,14 @@ function setup(ctx: Context) {
   const statistics = new WeakMap<Pick<SessionLogPort, 'entries'>, Statistics>();
   ctx.on('agent/prepare-request', (request, step) => {
     const scoped = ctx.harnessProfileScopes.context(`session:${step.sessionId}`);
-    return manager.prepare(scoped, sessions.log(step.sessionId), request, step.rebuild, step.runId, step.recovery);
+    return manager.prepare(
+      scoped,
+      sessions.log(step.sessionId),
+      request,
+      step.rebuild,
+      step.runId,
+      step.recovery,
+    );
   });
   ctx.on('agent/request-attempt', (id, requestId, metrics) => {
     if (metrics.usage) manager.observe(sessions.log(id), requestId, metrics.usage);
@@ -54,9 +61,15 @@ function setup(ctx: Context) {
             await run.harnessRuns.runTask(params.id, 'compaction', async (scoped, signal) => {
               const log = sessions.log(params.id);
               const projection = log.context();
-              if (!projection.contextMessages.length) throw new HttpError('invalid_input', 'Nothing to compact in this conversation');
-              const { model } = selectModel(scoped.harnessModels, { explicit: projection.model, unavailable: 'Configure a model before compacting' });
-              const latest = log.entries().findLast((entry) => entry.type === 'model-request' && !entry.request.purpose);
+              if (!projection.contextMessages.length)
+                throw new HttpError('invalid_input', 'Nothing to compact in this conversation');
+              const { model } = selectModel(scoped.harnessModels, {
+                explicit: projection.model,
+                unavailable: 'Configure a model before compacting',
+              });
+              const latest = log
+                .entries()
+                .findLast((entry) => entry.type === 'model-request' && !entry.request.purpose);
               const previous = latest && log.requestDefinition(latest.id);
               const rebuild = async (messages: LlmRequest['messages']): Promise<LlmRequest> => ({
                 ...previous,

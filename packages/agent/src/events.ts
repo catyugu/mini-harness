@@ -1,6 +1,13 @@
 import type { ModelChoice } from '@mini-harness/llm/vocabulary';
 import type { InputSource, PreparedMessage } from '@mini-harness/input/message';
-import type { NativeUserMessage, NativeMessage, LlmRequest, ModelAttemptMetrics, ModelRequestContent, ModelErrorKind } from '@mini-harness/llm/api';
+import type {
+  NativeUserMessage,
+  NativeMessage,
+  LlmRequest,
+  ModelAttemptMetrics,
+  ModelRequestContent,
+  ModelErrorKind,
+} from '@mini-harness/llm/api';
 
 import type { ToolTurn } from '@mini-harness/tools/execution';
 import type { ToolResult } from '@mini-harness/tools/api';
@@ -17,7 +24,11 @@ type Transform<Value, Input> = (
 ) => Value | undefined | Promise<Value | undefined>;
 export type ModelRequestTransform = Transform<ModelRequestContent, StepContext>;
 
-export type RequestRecovery = { kind: Extract<ModelErrorKind, 'context-overflow' | 'image-limit'>; message: string; attempt: number };
+export type RequestRecovery = {
+  kind: Extract<ModelErrorKind, 'context-overflow' | 'image-limit'>;
+  message: string;
+  attempt: number;
+};
 export interface RequestPreparation extends StepContext {
   readonly runId: string;
   readonly recovery?: RequestRecovery;

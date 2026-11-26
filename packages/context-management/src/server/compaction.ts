@@ -118,7 +118,10 @@ export async function checkpoint(
 
   async function assemble(segment: NativeMessage[]) {
     signal.throwIfAborted();
-    const outgoing = { ...base, messages: prepareModelMessages(capability, [...(prior ? [prior] : []), ...segment, user(instruction)]) };
+    const outgoing = {
+      ...base,
+      messages: prepareModelMessages(capability, [...(prior ? [prior] : []), ...segment, user(instruction)]),
+    };
     const tally = await measure(outgoing);
     return { outgoing, fits: tally.budget === undefined || tally.total <= tally.budget };
   }
@@ -130,7 +133,10 @@ export async function checkpoint(
       maxAttempts: 3,
       async retry(failure) {
         for (const { context, callback } of ctx.events.listeners('agent/model-retry', scopeTarget(ctx))) {
-          const result = await context.fiber.run((signal) => callback({ ...failure, sessionId: log.sessionId, signal }), signal);
+          const result = await context.fiber.run(
+            (signal) => callback({ ...failure, sessionId: log.sessionId, signal }),
+            signal,
+          );
           if (result !== undefined) return result;
         }
       },

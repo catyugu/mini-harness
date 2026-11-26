@@ -311,12 +311,16 @@ export class SessionRun {
           const { tools: advertisedTools, assemble } = await this.requestBuilder(ctx, step, log);
           const prepareHooks = ctx.events.listeners('agent/prepare-request', scopeTarget(ctx));
           prepareTurn = async (repair) => {
-            const request = await applyTransforms(prepareHooks, await assemble(log.context().contextMessages), {
-              ...step,
-              runId: submissionId,
-              recovery: repair,
-              rebuild: assemble,
-            });
+            const request = await applyTransforms(
+              prepareHooks,
+              await assemble(log.context().contextMessages),
+              {
+                ...step,
+                runId: submissionId,
+                recovery: repair,
+                rebuild: assemble,
+              },
+            );
             const hooks = ctx.events.listeners('agent/tool-result', scopeTarget(ctx));
             return {
               request,

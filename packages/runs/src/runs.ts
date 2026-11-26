@@ -452,9 +452,8 @@ export class Runs implements RunPort {
 
   async runTask<T>(id: string, type: string, work: (ctx: Context, signal: AbortSignal) => Promise<T>) {
     this.assertIdle(id);
-    const task = this.tasks.start(
-      { ...this.registry.task(id), type, lane: this.lane(id) },
-      ({ signal }) => this.withAgentContext(id, signal, async (ctx, signal) => {
+    const task = this.tasks.start({ ...this.registry.task(id), type, lane: this.lane(id) }, ({ signal }) =>
+      this.withAgentContext(id, signal, async (ctx, signal) => {
         this.sessionRun.closeUnfinishedTools(this.registry.log(id));
         return work(ctx, signal);
       }),
