@@ -24,7 +24,6 @@ export class ContextManagement {
     { occupancy: ContextOccupancy; adapter: LlmAdapter }
   >();
   private readonly operations = new Map<string, NonNullable<ContextState['compacting']>>();
-  private readonly issues = new Map<string, string>();
 
   constructor(
     private readonly settings: () => ContextSettings,
@@ -47,18 +46,19 @@ export class ContextManagement {
   }
 
   status(id: string) {
-    return { compacting: this.operations.get(id), issue: this.issues.get(id) };
+    return { compacting: this.operations.get(id) };
   }
 
-  async measure(ctx: Context, request: LlmRequest, projection?: SessionContext) {
+  async measure(ctx: Context, request: LlmRequest, projection?: SessionContext, count = true) {
     const adapter = ctx.get('harnessLlm')?.select?.(request.model);
     const occupancy = await this.meter.measure(
       request,
       ctx.get('harnessModels')?.capabilities(request.model),
       adapter,
       projection,
+      count,
     );
-    if (adapter) this.prepared.set(request.messages, { occupancy, adapter });
+    if (count && adapter) this.prepared.set(request.messages, { occupancy, adapter });
     return occupancy;
   }
 
@@ -102,9 +102,7 @@ export class ContextManagement {
     let signatures = this.signatures.get(log);
     if (!signatures) this.signatures.set(log, (signatures = new Map()));
     const pruned =
-      (config.pruneTools || pressure || manual || repair !== undefined) &&
       prune(input, projection, signatures, {
-        tools: config.pruneTools,
         offload: pressure || manual || repair !== undefined,
         forceImages: repair?.kind === 'image-limit',
         toolTokens: Math.max(256, Math.min(4096, Math.floor((budget ?? 64_000) * (repair ? 0.03 : 0.09)))),
@@ -135,7 +133,6 @@ export class ContextManagement {
 
     let reduced = false;
     this.operations.set(id, mode);
-    this.issues.delete(id);
     this.notify(id);
     try {
       for (let attempt = 0; attempt < 3; attempt++) {
@@ -145,23 +142,22 @@ export class ContextManagement {
           Math.floor(
             manual && occupancy.messages <= minimum
               ? occupancy.messages * config.retainRatio
-              : repair
-                ? Math.min(minimum, target * 0.6)
-                : minimum,
+              : minimum,
           ),
         );
         const force = repair || (budget !== undefined && occupancy.total > budget);
-        let cut = splitPoint(
+        const checkpointAtStart = log.branch(projection.leafId).some(
+          (entry) =>
+            entry.id === projection.contextEntryIds[0] &&
+            (entry.type === 'context-replace' || entry.type === 'compaction'),
+        );
+        const cut = splitPoint(
           projection,
           this.meter,
           retain,
-          force
-            ? {
-                available: Math.max(0, (budget ?? occupancy.total) - occupancy.system - occupancy.tools - 96),
-              }
-            : undefined,
+          checkpointAtStart,
+          force ? Math.max(0, (budget ?? occupancy.total) - occupancy.system - occupancy.tools) : undefined,
         );
-        if (!cut && manual) cut = splitPoint(projection, this.meter, 1);
         if (!cut) {
           if (reduced || (pruned && (manual || repair))) break;
           fail('Nothing to compact within the recent-context budget');
@@ -185,12 +181,9 @@ export class ContextManagement {
         };
         const next = await input.assemble(candidate);
         validateRequestSnapshot(next);
-        const [measured, baseline] = await Promise.all([
-          this.measure(input.ctx, next, candidate),
-          this.measure(input.ctx, request, projection),
-        ]);
+        const measured = await this.measure(input.ctx, next, candidate);
         signal.throwIfAborted();
-        if (measured.total >= baseline.total || measured.messages >= baseline.messages) {
+        if (measured.total >= occupancy.total || measured.messages >= occupancy.messages) {
           if (reduced) break;
           fail('The checkpoint did not reduce the prepared request');
         }
@@ -210,7 +203,6 @@ export class ContextManagement {
     } catch (error) {
       signal.throwIfAborted();
       const issue = error instanceof Error ? error.message : String(error);
-      this.issues.set(id, issue);
       if (manual) fail(issue);
       if ((repair && !pruned && !reduced) || (budget !== undefined && occupancy.total > budget)) fail(issue);
     } finally {

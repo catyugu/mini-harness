@@ -14,11 +14,11 @@ function shortened(text: string, size: number) {
 }
 
 function pruneText(text: string, size: number, customize?: (text: string, size: number) => string) {
-  try {
-    const excerpt = customize?.(text, size);
-    if (typeof excerpt === 'string' && excerpt.length <= size) return excerpt;
-  } catch {
-    // An unavailable tool-specific renderer still permits the default excerpt.
+  if (customize) {
+    const excerpt = customize(text, size);
+    if (typeof excerpt !== 'string' || excerpt.length > size)
+      throw new Error('Invalid tool result excerpt');
+    return excerpt;
   }
   return shortened(text, size);
 }
@@ -31,7 +31,7 @@ export function prune(
   input: ContextRequest,
   projection: SessionContext,
   signatures: Map<string, string | null>,
-  options: { tools: boolean; offload: boolean; forceImages: boolean; toolTokens: number },
+  options: { offload: boolean; forceImages: boolean; toolTokens: number },
 ) {
   const { contextMessages, contextEntryIds, contextRevisions } = projection;
   const replacements: ContextReplacement[] = [];
@@ -84,7 +84,7 @@ export function prune(
       return [part];
     });
     let replacement: NativeMessage = { ...message, content };
-    if (message.role === 'toolResult' && options.tools) {
+    if (message.role === 'toolResult') {
       const tool = input.tools.get(message.toolName);
       // A replacement revision can never become the original for a second text prune.
       const fresh = contextRevisions[index] === id;

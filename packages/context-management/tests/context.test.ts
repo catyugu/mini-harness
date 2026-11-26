@@ -151,9 +151,9 @@ test('context overflow repairs the current request and leaves raw, duplicate too
   assert.equal(restored, true);
 });
 
-test('session overrides inherit defaults, reject invalid ratios and preserve context on summary failure', async (t) => {
+test('session overrides inherit defaults, reject invalid ratios and accept unstructured checkpoints', async (t) => {
   const { app, request, paths } = await fixture(t, ({ messages }) =>
-    summary(messages.at(-1)?.content) ? 'Invalid checkpoint' : 'Answer to the task',
+    summary(messages.at(-1)?.content) ? 'Continue the earlier task.' : 'Answer to the task',
   );
   const ctx = app.runtime.plugins.ctx;
   const { body: session } = await request('/sessions', 'POST', {});
@@ -170,8 +170,8 @@ test('session overrides inherit defaults, reject invalid ratios and preserve con
   await sendRun(ctx.harnessRuns, session.id, 'Second request. '.repeat(60));
   const sessionLog = ctx.harnessSessions.log(session.id);
   const before = sessionLog.projection();
-  assert.equal((await request(path + '/compact', 'POST')).status, 400);
-  assert.deepEqual(sessionLog.context().contextMessages, before.contextMessages);
+  assert.equal((await request(path + '/compact', 'POST')).status, 200);
+  assert.ok(sessionLog.context().contextMessages.length < before.contextMessages.length);
   const exported = ctx.harnessSessions.export([session.id])[0];
   const copy = join(paths.cwd, 'reopened-log.jsonl');
   writeFileSync(copy, exported.log);

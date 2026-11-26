@@ -81,7 +81,7 @@ function setup(ctx: Context) {
             return {
               settings: manager.configuration(log.setting(owner), false),
               stats,
-              occupancy: request && manager.measure(scoped, request, exact ? undefined : projection),
+              occupancy: request && manager.measure(scoped, request, exact ? undefined : projection, false),
             };
           },
           true,
@@ -92,7 +92,7 @@ function setup(ctx: Context) {
           ...settings,
           ...(result?.stats ?? { turns: 0, steps: 0, assistantUsage: {} }),
           ...status,
-          issue: settings.issue ?? status.issue,
+          issue: settings.issue,
           occupancy: await result?.occupancy,
         } satisfies ContextState;
       }),

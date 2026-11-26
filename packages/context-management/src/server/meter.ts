@@ -47,17 +47,14 @@ export function usageInput(usage: NativeUsage) {
 }
 
 export class TokenMeter {
-  private readonly messages = new Map<string, number>();
   private readonly costs = new WeakMap<NativeMessage, number>();
   private readonly calibrations = new WeakMap<LlmAdapter, Map<string, number>>();
 
-  message(message: NativeMessage, revision?: string): number {
-    let tokens = this.costs.get(message) ?? (revision ? this.messages.get(revision) : undefined);
-    if (tokens === undefined) tokens = messageTokens(message);
-    this.costs.set(message, tokens);
-    if (revision && !this.messages.has(revision)) {
-      if (this.messages.size >= 32_768) this.messages.delete(this.messages.keys().next().value!);
-      this.messages.set(revision, tokens);
+  message(message: NativeMessage, _revision?: string): number {
+    let tokens = this.costs.get(message);
+    if (tokens === undefined) {
+      tokens = messageTokens(message);
+      this.costs.set(message, tokens);
     }
     return tokens;
   }
@@ -67,10 +64,11 @@ export class TokenMeter {
     capabilities?: ProviderModel,
     adapter?: LlmAdapter | null,
     projection?: SessionContext,
+    count = true,
   ): Promise<ContextOccupancy> {
     let measured;
     try {
-      measured = await adapter?.countInputTokens?.(request);
+      measured = count ? await adapter?.countInputTokens?.(request) : undefined;
     } catch {
       request.signal.throwIfAborted();
     }

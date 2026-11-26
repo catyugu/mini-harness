@@ -16,7 +16,7 @@ const instruction = [
   'Write a continuation checkpoint for the next assistant. Summarize the preceding work and merge any older checkpoint, removing obsolete information.',
   'Keep important user instructions, identifiers, paths, commands and errors verbatim where practical. Preserve failed attempts and their resolutions.',
   'Keep original entry references for offloaded data needed to continue.',
-  'Use Markdown headings exactly as follows and give concise factual details under each:',
+  'Organize the checkpoint using these suggested headings:',
   ...headings.map((name) => '## ' + name),
   'Respond with the checkpoint only.',
 ].join('\n');
@@ -39,7 +39,8 @@ export function splitPoint(
   projection: SessionContext,
   meter: TokenMeter,
   retain: number,
-  force?: { available: number },
+  checkpointAtStart: boolean,
+  available?: number,
 ) {
   const { contextMessages, contextRevisions } = projection;
   const blocks = groups(contextMessages);
@@ -55,13 +56,9 @@ export function splitPoint(
     );
     if (kept >= retain) break;
   }
-  if (index > 0 && !force && index === 1 && isCheckpoint(contextMessages[0])) return 0;
-  if (force && (index === 0 || kept >= force.available)) return contextMessages.length;
+  if (available !== undefined && kept >= available) return contextMessages.length;
+  if (index === 1 && checkpointAtStart) return 0;
   return index;
-}
-
-function isCheckpoint(message: NativeMessage) {
-  return message.role === 'user' && typeof message.content === 'string' && message.content.startsWith(title);
 }
 
 function transcript(group: NativeMessage[]) {
@@ -90,16 +87,6 @@ function transcript(group: NativeMessage[]) {
     .join('\n\n');
 }
 
-function validSummary(text: string) {
-  const sections = text.trim().split(/^## +/m).slice(1);
-  return headings.every((heading) =>
-    sections.some((section) => {
-      const end = section.indexOf('\n');
-      return end > 0 && section.slice(0, end).trim() === heading && Boolean(section.slice(end).trim());
-    }),
-  );
-}
-
 export async function checkpoint(
   input: ContextRequest,
   request: LlmRequest,
@@ -112,28 +99,29 @@ export async function checkpoint(
   if (!models) throw new Error('No model catalog is available to prepare a checkpoint');
   const { model } = selectModel(models, { explicit: settings.summaryModel ?? request.model });
   const capability = models.capabilities(model);
-  const window = capability?.contextWindow ?? 32000;
-  const maxTokens = Math.floor(Math.min(capability?.maxTokens ?? 4096, window / 6, desiredOutput));
-  if (maxTokens < 32) throw new Error('There is no output budget for a continuation checkpoint');
-  const base = { ...request, model, thinkingLevel: undefined, maxTokens };
-  const short = { ...base, systemPrompt: 'Prepare a continuation checkpoint.', tools: undefined };
+  const maxTokens = Math.floor(Math.min(capability?.maxTokens ?? desiredOutput, desiredOutput));
+  if (maxTokens <= 0) throw new Error('There is no output budget for a continuation checkpoint');
+  const base = {
+    ...request,
+    model,
+    systemPrompt: 'Prepare a continuation checkpoint.',
+    tools: undefined,
+    thinkingLevel: undefined,
+    maxTokens,
+  };
   let prior: NativeUserMessage | undefined;
-  let useShort = false;
-  let attempts = 0;
-  const limit = 12;
 
   async function assemble(segment: NativeMessage[]) {
     input.signal.throwIfAborted();
     const outgoing = await input.assembleSummary({
-      ...(useShort ? short : base),
+      ...base,
       messages: [...(prior ? [prior] : []), ...segment, user(instruction)],
     });
     const tally = await measure(outgoing);
-    return { outgoing, fits: tally.total <= (tally.budget ?? window - maxTokens) };
+    return { outgoing, fits: tally.budget === undefined || tally.total <= tally.budget };
   }
 
   async function summarize(outgoing: LlmRequest) {
-    if (++attempts > limit) throw new Error('Summary model requires too many segments for this context');
     validateRequestSnapshot(outgoing);
     const answer = await input.summarize(outgoing);
     input.signal.throwIfAborted();
@@ -147,7 +135,7 @@ export async function checkpoint(
       answer.stopReason === 'aborted' ||
       answer.stopReason === 'length' ||
       answer.content.some(({ type }) => type === 'toolCall') ||
-      !validSummary(summary)
+      !summary
     )
       throw new Error(answer.errorMessage ?? 'Summary model returned an incomplete continuation checkpoint');
     prior = user(title + summary);
@@ -158,48 +146,25 @@ export async function checkpoint(
     await summarize(whole.outgoing);
     return prior!;
   }
-  if (!(await assemble([user('A short segment')])).fits) useShort = true;
-  const pending = groups(messages);
-  for (let from = 0; from < pending.length; ) {
-    let best: LlmRequest | undefined;
-    let low = from + 1;
-    let high = pending.length;
+  // Oversized prefixes use a single textual representation for all segments.
+  const text = transcript(messages);
+  for (let from = 0; from < text.length; ) {
+    let low = 1;
+    let high = text.length - from;
     let end = from;
+    let best: LlmRequest | undefined;
     while (low <= high) {
-      const middle = Math.floor((low + high) / 2);
-      const result = await assemble(pending.slice(from, middle).flat());
+      const size = Math.floor((low + high) / 2);
+      const result = await assemble([user(text.slice(from, from + size))]);
       if (result.fits) {
-        end = middle;
+        end = from + size;
         best = result.outgoing;
-        low = middle + 1;
-      } else high = middle - 1;
+        low = size + 1;
+      } else high = size - 1;
     }
-    if (best) {
-      await summarize(best);
-      from = end;
-      continue;
-    }
-    useShort = true;
-    const group = pending[from++];
-    const result = await assemble(group);
-    if (result.fits) {
-      await summarize(result.outgoing);
-      continue;
-    }
-    // An indivisible exchange that exceeds the summary window uses a bounded text transcript.
-    const text = transcript(group);
-    let offset = 0;
-    let length = Math.max(64, Math.floor(window / 2));
-    while (offset < text.length) {
-      const result = await assemble([user(text.slice(offset, offset + length))]);
-      if (result.fits) {
-        await summarize(result.outgoing);
-        offset += length;
-      } else {
-        length = Math.floor(length / 2);
-        if (length < 32) throw new Error('Summary model has too little input capacity');
-      }
-    }
+    if (!best) throw new Error('Summary model has too little input capacity');
+    await summarize(best);
+    from = end;
   }
   if (!prior) throw new Error('No messages selected for compaction');
   return prior;
