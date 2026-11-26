@@ -19,9 +19,7 @@ export interface ToolTurn {
 export interface ToolExecution {
   readonly signal: AbortSignal;
   /** Decides whether to start the call. A rejection still produces a model-visible result. */
-  start?(
-    call: ToolCallPart,
-  ): { outcome: 'skipped' | 'denied'; reason: string } | undefined;
+  start?(call: ToolCallPart): { outcome: 'skipped' | 'denied'; reason: string } | undefined;
   update?(call: ToolCallPart, result: ToolUpdate): void;
   deliver(result: NativeToolMessage, signal: AbortSignal): Promise<void>;
 }
@@ -116,7 +114,11 @@ async function executeTool(
   invalid?: string,
 ): Promise<NativeToolMessage> {
   if (signal.aborted)
-    return toolFailure(call, signal.reason instanceof Error ? signal.reason.message : String(signal.reason), 'skipped');
+    return toolFailure(
+      call,
+      signal.reason instanceof Error ? signal.reason.message : String(signal.reason),
+      'skipped',
+    );
   const start = performance.now();
   try {
     if (!tool) throw new Error('Tool is no longer available: ' + call.name);
@@ -140,7 +142,11 @@ async function executeTool(
       (error === signal.reason ||
         (error instanceof Error && (error.name === 'AbortError' || error.cause === signal.reason)));
     return {
-      ...toolFailure(call, error instanceof Error ? error.message : String(error), cancelled ? 'cancelled' : undefined),
+      ...toolFailure(
+        call,
+        error instanceof Error ? error.message : String(error),
+        cancelled ? 'cancelled' : undefined,
+      ),
       elapsedMs: performance.now() - start,
     };
   }
