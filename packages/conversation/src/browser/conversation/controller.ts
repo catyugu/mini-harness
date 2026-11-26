@@ -271,7 +271,12 @@ export function createConversationController(ctx: Context): ConversationControll
   settings.subscribe('messageMode', () => update({ mode: modeFor(active()) }));
   sessions.subscribe(() => {
     const latest = sessions.get().find(({ id }) => id === active());
-    if (!isRunning(state.run) && isRunning(latest?.run) && !state.interaction.operation)
+    if (
+      latest?.run &&
+      latest.run.id !== state.run?.id &&
+      !isRunning(state.run) &&
+      !state.interaction.operation
+    )
       void refreshBranch().catch(report);
   }, ctx.fiber.signal);
 

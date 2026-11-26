@@ -2,6 +2,7 @@ import { expectPresent } from '../support/required.ts';
 import { test, expect } from '@playwright/test';
 import { rmSync, mkdirSync, realpathSync, writeFileSync } from 'node:fs';
 import { createFixturePaths, createMockProvider } from '../helpers/mock-provider.ts';
+import { writePlugin } from '../support/plugin-fixture.ts';
 import { startIsolatedHost, settingsSection } from '../support/browser.ts';
 import { join } from 'node:path';
 import { writeJson } from '@mini-harness/platform/json';
@@ -447,6 +448,60 @@ test('an already open tab reconnects to the same instance after restart', async 
   } finally {
     await page.close();
     await host.stop();
+    await mock.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('the mobile task panel reads live output and cancels independent work', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  const mock = await createMockProvider(({ messages }) => {
+    if (messages.at(-1)?.content === 'Start independent job')
+      return { tool: 'start_background', args: { tool: 'fixture_background', arguments: {} } };
+    return 'Acknowledged';
+  });
+  const { root, paths } = createFixturePaths(mock.url);
+  writePlugin(
+    paths.plugins,
+    'background-fixture',
+    {},
+    `
+export const inject = ['harnessTools'];
+export const apply = (ctx) => {
+  ctx.effect(() => ctx.harnessTools.register({
+    name: 'fixture_background',
+    label: 'Fixture job',
+    description: 'Produce output and wait for cancellation',
+    background: true,
+    parameters: { type: 'object' },
+    async execute(_, { signal, write }) {
+      write('Task output is visible');
+      await new Promise((_, reject) => signal.addEventListener('abort', () => reject(signal.reason), { once: true }));
+    }
+  }));
+};
+`,
+  );
+  writeJson(join(paths.home, 'profiles', 'web', 'cordis.patch.yml'), {
+    plugins: [{ id: 'background-fixture', name: '../../plugins/background-fixture' }],
+  });
+  const service = await startIsolatedHost(paths);
+  try {
+    await page.goto(service.url + '/#token=' + service.token);
+    await page.getByRole('textbox', { name: 'Message', exact: true }).fill('Start independent job');
+    await page.getByRole('button', { name: 'Send', exact: true }).click();
+    await expect(page.locator('.tool-card .tool-state')).toHaveText('Accepted');
+    const tasks = page.locator('.background-tasks');
+    await tasks.getByRole('button', { name: 'Tasks', exact: true }).click();
+    const panel = tasks.locator('.background-task-list');
+    await expect(panel).toBeInViewport({ ratio: 0.95 });
+    await panel.getByText(/Fixture job · running/).click();
+    await expect(panel.locator('pre')).toHaveText('Task output is visible');
+    await panel.getByRole('button', { name: 'Cancel', exact: true }).click();
+    await expect(panel.getByText(/Fixture job · cancelled/)).toBeVisible();
+    await expect(page.locator('.async-message')).toContainText('Background task');
+  } finally {
+    await service.stop();
     await mock.close();
     rmSync(root, { recursive: true, force: true });
   }

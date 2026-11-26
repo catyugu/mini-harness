@@ -30,7 +30,8 @@ test(
       }
       if (last.content === 'root task')
         return { tool: 'delegate', args: { task: 'child task', provider: 'local-mock' } };
-      if (last.content.endsWith('] child task')) return { tool: 'delegate', args: { task: 'leaf task' } };
+      if (last.content.replace(/^\[agent[^\]]+\] /, '') === 'child task')
+        return { tool: 'delegate', args: { task: 'leaf task' } };
       if (last.content === 'read policy') return { tool: 'read', args: { path: '../outside.txt' } };
       return 'Leaf finished';
     });
@@ -248,5 +249,81 @@ test(
     );
     assert.equal(activeRunCount(app.runtime.plugins.ctx), 0);
     assert.equal(requests, 2, 'Cancelled queued children never reach the provider');
+  },
+);
+
+test(
+  'agent messages steer an active child and wake an idle parent without ending the sender',
+  { timeout: 15000 },
+  async (t) => {
+    const entered = gate();
+    const held = gate();
+    t.after(held.release);
+    const { app } = await fixture(t, async ({ messages }) => {
+      if (messages.at(-1)?.content.endsWith('] Original child input')) {
+        entered.release();
+        await held.promise;
+      }
+      return 'Acknowledged';
+    });
+    const { harnessRuns: runs, harnessSessions: sessions, harnessTools: tools } = app.runtime.plugins.ctx;
+    const parent = sessions.create();
+    const tool = (id: string, name: string) =>
+      expectPresent(
+        tools.list({ resourceId: id, scope: sessions.runScope(id) }).find((tool) => tool.name === name),
+        name,
+      );
+    const child = await runTool(tool(parent.id, 'delegate'), 'delegate', {
+      task: 'Original child input',
+      provider: 'local-mock',
+      model: 'mock-model',
+    });
+    const childId = String(child.details?.sessionId);
+    const childRun = expectPresent(runs.current(childId), 'child task');
+    await entered.promise;
+    await runTool(tool(parent.id, 'send_message'), 'steer-child', {
+      sessionId: childId,
+      message: 'Additional instruction',
+    });
+    await runTool(
+      tool(childId, 'send_message'),
+      'report-to-parent',
+      {
+        sessionId: parent.id,
+        message: 'Work started',
+      },
+      { executionId: childRun.id },
+    );
+    assert.equal(runs.current(childId)?.id, childRun.id);
+    assert.equal(childRun.signal.aborted, false);
+    await expectPresent(runs.current(parent.id), 'awakened parent').result;
+    assert.equal(runs.current(childId)?.id, childRun.id);
+    held.release();
+    await childRun.result;
+    await runs.current(parent.id)?.result;
+    const childInputs = sessions
+      .log(childId)
+      .projection()
+      .timeline.filter(isViewMessage)
+      .filter(({ role }) => role === 'user');
+    assert.equal(childInputs.length, 2);
+    assert.ok(
+      childInputs.every(
+        ({ runId, origin }) => runId === childRun.id && origin?.senderSessionId === parent.id,
+      ),
+    );
+    const parentInputs = sessions
+      .log(parent.id)
+      .projection()
+      .timeline.filter(isViewMessage)
+      .filter(({ role }) => role === 'user');
+    assert.equal(parentInputs.length, 2);
+    assert.ok(
+      parentInputs.every(
+        ({ origin }) => origin?.senderSessionId === childId && origin.taskId === childRun.id,
+      ),
+    );
+    assert.equal(parentInputs[0].content, 'Work started');
+    assert.match(JSON.stringify(parentInputs[1].content), /Child run completed/);
   },
 );

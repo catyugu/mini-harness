@@ -8,7 +8,6 @@ interface Binding {
   provider?: Context;
   signal: AbortSignal;
   available(): boolean;
-  resolve(context: Context): ToolDefinition;
   track(work: Promise<unknown>): void;
 }
 
@@ -22,13 +21,12 @@ export function toolAvailable(tool: ToolDefinition) {
   return (tool as BoundTool)[bindingKey]?.available() ?? true;
 }
 
-export function prepareTool(tool: ToolDefinition, args: Record<string, unknown>, context?: Context) {
+export function prepareTool(tool: ToolDefinition, args: Record<string, unknown>) {
   const binding = (tool as BoundTool)[bindingKey];
   if (!toolAvailable(tool)) throw new Error('Tool is no longer available: ' + tool.name);
-  const definition = context && binding ? binding.resolve(context) : tool;
-  if (!Check(definition.parameters, args))
-    throw new Error('Invalid arguments for ' + definition.name + ': Schema mismatch');
-  return { tool: definition, binding, args };
+  if (!Check(tool.parameters, args))
+    throw new Error('Invalid arguments for ' + tool.name + ': Schema mismatch');
+  return { tool, binding, args };
 }
 
 /** Hold a registration from acceptance through settlement, including queued work. */

@@ -45,7 +45,7 @@ function start(ctx: Context, id: string, name: string, args: Record<string, unkn
     (candidate) => candidate.name === name,
   );
   if (!tool?.background) throw new Error('Tool does not support background execution: ' + name);
-  const prepared = prepareTool(tool, args, provider);
+  const prepared = prepareTool(tool, args);
   let taskId: string | undefined;
   withToolLease(prepared, (lifetime, owner) => {
     const task = ctx.harnessTasks.start(

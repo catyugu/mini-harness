@@ -43,14 +43,11 @@ export class ToolRegistry {
       visible: (resourceId) =>
         !expired() && (!factory || (resourceId !== undefined && (factory.visible?.(resourceId) ?? true))),
       resolve(selection, caller) {
-        const resolve = (context?: Context) => {
-          const tool = factory
-            ? factory.resolve(selection.resourceId!, context ?? caller)
-            : (definition as ToolDefinition);
-          if (tool.name !== name) throw new Error('Tool binding changed its registered name: ' + name);
-          return tool;
-        };
-        return bindTool(resolve(), {
+        const tool = factory
+          ? factory.resolve(selection.resourceId!, caller)
+          : (definition as ToolDefinition);
+        if (tool.name !== name) throw new Error('Tool binding changed its registered name: ' + name);
+        return bindTool(tool, {
           provider: owner,
           signal: lifetime.signal,
           track(work) {
@@ -59,7 +56,6 @@ export class ToolRegistry {
             void work.then(done, done);
           },
           available: () => registry.selected(name, selection) === entry,
-          resolve,
         });
       },
     };

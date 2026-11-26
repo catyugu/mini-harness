@@ -20,13 +20,20 @@ function setup(ctx: Context) {
   const control = ctx.miniConversation;
   const signal = ctx.fiber.signal;
   const events = new EventTarget();
-  const container = document.createElement('details');
+  const container = document.createElement('div');
   container.className = 'background-tasks';
-  const summary = document.createElement('summary');
-  summary.append(icon('list-checks'), document.createTextNode(' Tasks'));
+  const toggle = document.createElement('button');
+  toggle.type = 'button';
+  toggle.className = 'link-button';
+  toggle.setAttribute('aria-expanded', 'false');
+  toggle.setAttribute('aria-controls', 'backgroundTasks');
+  toggle.append(icon('list-checks'), document.createTextNode('Tasks'));
   const panel = document.createElement('div');
   panel.className = 'background-task-list';
-  container.append(summary, panel);
+  panel.id = 'backgroundTasks';
+  panel.popover = 'auto';
+  toggle.setAttribute('popovertarget', panel.id);
+  container.append(toggle, panel);
   const rows = new Map<string, HTMLDetailsElement>();
   let tasks: TaskSnapshot[] = [];
   let revision = 0;
@@ -106,7 +113,10 @@ function setup(ctx: Context) {
   function render() {
     const id = active;
     container.hidden = !id;
-    if (!id) return;
+    if (!id) {
+      if (panel.matches(':popover-open')) panel.hidePopover();
+      return;
+    }
     const displayed = new Set(tasks.map(({ id }) => id));
     for (const [id, node] of rows) {
       if (displayed.has(id)) continue;
@@ -169,11 +179,33 @@ function setup(ctx: Context) {
     signal,
   );
   signal.addEventListener('abort', () => outputRequest.abort(), { once: true });
-  container.ontoggle = () => {
-    if (container.open) void refresh();
+  const open = () => panel.matches(':popover-open');
+  const position = () => {
+    const bounds = toggle.getBoundingClientRect();
+    panel.style.left =
+      Math.max(8, Math.min(bounds.right - panel.offsetWidth, innerWidth - panel.offsetWidth - 8)) + 'px';
+    panel.style.top = bounds.bottom + 6 + 'px';
   };
+  panel.addEventListener(
+    'toggle',
+    () => {
+      toggle.setAttribute('aria-expanded', String(open()));
+      if (open()) {
+        position();
+        void refresh();
+      }
+    },
+    { signal },
+  );
+  window.addEventListener(
+    'resize',
+    () => {
+      if (open()) position();
+    },
+    { signal },
+  );
   const interval = setInterval(() => {
-    if (container.open) render();
+    if (open()) render();
   }, 1000);
   ctx.effect(() => () => clearInterval(interval));
   const receipt = ({ taskId }: { taskId?: string }, signal: AbortSignal) => {

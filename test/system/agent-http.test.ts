@@ -128,6 +128,8 @@ test(
     await sendRun(runs, child.id, '/skill:unavailable', undefined, { source: 'agent' });
     await assert.rejects(sendRun(runs, child.id, '/skill:unavailable'), /Unknown skill: unavailable/);
     await app.runtime.plugins.ctx.harnessSessions.delete([child.id]);
+    for (let pending = runs.current(session.id); pending; pending = runs.current(session.id))
+      await pending.result;
 
     // Use the new server's token after restart.
     const newPort = await app.listen(0);
