@@ -36,6 +36,9 @@ test('file inspection, responsive themes and reduced viewport height keep contro
       const page = await browser.newPage({ viewport: { width, height: 700 } });
       try {
         await page.goto(service.url + '/#token=' + service.token);
+        const title = page.locator('#conversationTitle');
+        await expect(title).toBeVisible();
+        expect(await title.evaluate((node) => node.getBoundingClientRect().top)).toBeGreaterThanOrEqual(8);
         if (width <= 860) {
           const navigation = page.getByRole('button', { name: 'Toggle navigation' });
           const close = page

@@ -68,15 +68,19 @@
     flex-direction: column;
   }
   .topbar {
-    flex: 0 0 56px;
+    flex: 0 0 calc(68px + env(safe-area-inset-top));
     display: grid;
     grid-template-columns: auto minmax(0, 1fr) auto;
     align-items: center;
     gap: var(--space);
-    padding: 0 var(--space-4);
+    padding: env(safe-area-inset-top) var(--space-4) 0;
   }
   #inspectorOpen {
     grid-column: 3;
+  }
+  #inspectorOpen svg {
+    width: 15px;
+    height: 15px;
   }
   .title-block {
     display: grid;

@@ -18,12 +18,8 @@
       display: block;
     }
     .topbar {
-      padding: 0 10px;
+      padding-inline: 10px;
       gap: 7px;
-    }
-    .topbar {
-      padding-top: env(safe-area-inset-top);
-      flex-basis: calc(60px + env(safe-area-inset-top));
     }
     .sidebar {
       overflow: hidden;
