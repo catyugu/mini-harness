@@ -43,7 +43,7 @@ export function invokeTool(
     if (binding && !binding.available()) throw new Error('Tool is no longer available: ' + tool.name);
   };
   assertAvailable();
-  const { owner, signal, retain = false, ownerTask, onUpdate, context, metadata } = options;
+  const { owner, signal, retain = false, ownerTask, onUpdate, context, metadata, commit } = options;
   const resourceId = binding?.resourceId ?? options.resourceId;
   return tasks.start<ToolResult>(
     {
@@ -62,6 +62,7 @@ export function invokeTool(
       provider: binding?.provider ?? context,
       signal,
       retain,
+      commit,
     },
     async (task) => {
       assertAvailable();

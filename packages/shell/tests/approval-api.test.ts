@@ -301,7 +301,7 @@ test('independent shell calls use one task, retain output channels and do not du
     tool,
     'background-shell',
     { command: 'echo task-output' },
-    { owner: 'session:' + session.id, retain: true },
+    { ...ctx.harnessSessions.task(session.id), retain: true },
   );
   const result = await handle.result;
   assert.equal(result.details?.exitCode, 0);

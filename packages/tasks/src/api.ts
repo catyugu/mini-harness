@@ -36,6 +36,10 @@ export interface TaskOptions {
   lane?: string;
   /** Inline callers can discard runtime history after terminal observation and result delivery. */
   retain?: boolean;
+  /** Synchronously commit a retained task transition before notifying observers. */
+  commit?(record: TaskHistoryRecord): void;
+  /** Observe this execution through settlement, without retaining the observer afterwards. */
+  onEvent?(event: TaskEvent): void;
 }
 
 export interface TaskSnapshot {
@@ -104,6 +108,8 @@ export interface TaskHistoryRecord {
   output?: TaskOutput;
 }
 
+export type TaskHistoryReader = (id: string) => TaskHistoryRecord | undefined;
+
 export interface TaskPort {
   readonly sealed: boolean;
   active(lane: string): TaskHandle | undefined;
@@ -117,6 +123,8 @@ export interface TaskPort {
   wait(id: string, signal?: AbortSignal): Promise<TaskSnapshot>;
   subscribe(listener: (event: TaskEvent) => void): () => void;
   readOutput(id: string, after?: number): TaskOutput | undefined;
+  /** Register a read-only source of durable observations, not live handles. */
+  registerHistory(reader: TaskHistoryReader): () => void;
   /** Exclude new work during removal, drain tasks and delete their history. The domain owns resource existence. */
   removeOwner(owner: string): Promise<void>;
 }
@@ -130,10 +138,5 @@ export class TaskInterrupted extends Error {
 declare module 'mini-harness/cordis' {
   interface Context {
     harnessTasks: TaskPort;
-  }
-  interface Events {
-    'tasks/admit'(owner: string): void;
-    'tasks/record'(record: TaskHistoryRecord): void;
-    'tasks/history'(id: string): TaskHistoryRecord | undefined;
   }
 }

@@ -16,7 +16,7 @@ test('durable retained tasks recover by ID without reconstructing execution hand
   let ctx = app.runtime.plugins.ctx;
   const session = ctx.harnessSessions.create();
   const owner = 'session:' + session.id;
-  const done = ctx.harnessTasks.start<string>({ owner }, async (task) => {
+  const done = ctx.harnessTasks.start<string>(ctx.harnessSessions.task(session.id), async (task) => {
     task.write('hello', 'stdout');
     task.setResult('finished');
     return 'finished';
@@ -28,7 +28,7 @@ test('durable retained tasks recover by ID without reconstructing execution hand
   const running = new Promise<void>((resolve) => {
     entered = resolve;
   });
-  const unfinished = ctx.harnessTasks.start({ owner }, async ({ signal }) => {
+  const unfinished = ctx.harnessTasks.start(ctx.harnessSessions.task(session.id), async ({ signal }) => {
     signal.throwIfAborted();
     entered();
     await new Promise<void>((_, reject) => {
@@ -71,5 +71,7 @@ test('durable retained tasks recover by ID without reconstructing execution hand
   assert.equal(ctx.harnessTasks.list().length, 0);
   await ctx.harnessSessions.delete([session.id]);
   assert.equal(ctx.harnessTasks.get(done.id), undefined);
-  assert.throws(() => ctx.harnessTasks.start({ owner }, async () => {}), /Conversation not found/);
+  assert.throws(() => ctx.harnessSessions.task(session.id), /Conversation not found/);
+  // The scheduler itself never interprets an opaque owner key as a session ID.
+  await ctx.harnessTasks.start({ owner }, async () => {}).result;
 });

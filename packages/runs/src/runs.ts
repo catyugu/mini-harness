@@ -5,7 +5,7 @@ import { tagScope, scopeTarget } from '@mini-harness/plugin-api/scopes';
 import type { ThinkingLevel, ModelChoice } from '@mini-harness/llm/vocabulary';
 import type { ProfileScopes } from '@mini-harness/plugin-api/configuration';
 import { DomainError } from '@mini-harness/platform/errors';
-import { terminal, type TaskEvent, type TaskPort, type TaskSnapshot } from '@mini-harness/tasks/api';
+import { terminal, type TaskEvent, type TaskPort, type TaskHistoryRecord } from '@mini-harness/tasks/api';
 import { imageMimeType } from '@mini-harness/input/prepare';
 import { validateModelOptions } from '@mini-harness/llm/options';
 import type { Attachment, InputSource } from '@mini-harness/input/message';
@@ -101,13 +101,16 @@ export class Runs implements RunPort {
     }
   }
 
-  /** Contribution to the session's one durable task record, before runtime settlement. */
-  taskDetails(id: string, task: TaskSnapshot): RunDetails | undefined {
-    const activity = this.streams.get(id);
-    if (task.type !== 'agent-run' || !activity) return;
+  /** The run owns its domain-specific commit, including inbox settlement. */
+  private commitRun(id: string, activity: Activity, { task, output }: TaskHistoryRecord) {
     const info = activity.events?.info;
-    if (!info) return { sequence: 0, inputEntryId: null };
-    if (info.id !== task.id) return;
+    const run: RunDetails = info
+      ? {
+          inputEntryId: info.inputEntryId,
+          changedFiles: info.changedFiles,
+          sequence: info.sequence + 1 + Number(task.state === 'failed' && Boolean(task.error)),
+        }
+      : { sequence: 0, inputEntryId: null };
     if (terminal(task.state)) {
       const inbox = new Inbox(this.registry.log(id));
       if (task.state === 'cancelled') inbox.cancel('Run cancelled');
@@ -119,18 +122,10 @@ export class Runs implements RunPort {
             : 'The target run ended before delivery',
         );
     }
-    return {
-      inputEntryId: info.inputEntryId,
-      changedFiles: info.changedFiles,
-      sequence: info.sequence + 1 + Number(task.state === 'failed' && Boolean(task.error)),
-    };
+    this.registry.log(id).append({ type: 'task', task: { ...task, result: undefined }, output, run });
   }
 
-  taskChanged({ type, task }: TaskEvent) {
-    if (task.type !== 'agent-run' || !task.owner.startsWith('session:')) return;
-    const id = task.owner.slice(8);
-    const activity = this.streams.get(id);
-    if (!activity) return;
+  private taskChanged(id: string, activity: Activity, { type, task }: TaskEvent) {
     if (type === 'created') {
       if (activity.events) return;
       activity.events = new RunEvents(projectRun(id, task, { sequence: 0, inputEntryId: null }));
@@ -181,6 +176,7 @@ export class Runs implements RunPort {
       if (!record) throw new DomainError('not_found', 'Conversation not found');
       signal?.throwIfAborted();
       const prepared = this.registry.prepareInput(id, prompt, attachments);
+      const { owner } = this.registry.task(id);
       this.streams.set(id, activity);
       const publish = (event: StreamEvent) => {
         if (event.type === 'user') activity.events!.info.inputEntryId = event.message.id;
@@ -198,7 +194,9 @@ export class Runs implements RunPort {
       };
       const task = this.tasks.start<string>(
         {
-          owner: 'session:' + id,
+          owner,
+          commit: (record) => this.commitRun(id, activity, record),
+          onEvent: (event) => this.taskChanged(id, activity, event),
           type: 'agent-run',
           lane: this.lane(id),
           metadata,
@@ -425,7 +423,7 @@ export class Runs implements RunPort {
   async compact(id: string) {
     this.assertIdle(id);
     const task = this.tasks.start(
-      { owner: 'session:' + id, type: 'compaction', lane: this.lane(id) },
+      { ...this.registry.task(id), type: 'compaction', lane: this.lane(id) },
       ({ signal }) =>
         this.withAgentContext(id, undefined, signal, (ctx, signal) =>
           this.sessionRun.compact(ctx, id, signal),

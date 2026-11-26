@@ -1,5 +1,5 @@
 import type { PluginRecord } from './records.ts';
-import type { TaskHistoryRecord, TaskSnapshot } from '@mini-harness/tasks/api';
+import type { TaskHistoryRecord } from '@mini-harness/tasks/api';
 import type { LogEntry } from './record-log.ts';
 import type { QueueEntry } from './shared/queue.ts';
 import type { ContentDelta } from './content-delta.ts';
@@ -77,12 +77,6 @@ export type SessionEntry<Data = unknown> = LogEntry<SessionEvent<Data>>;
 export function runFromEntry(sessionId: string, entry: SessionEntry): RunInfo | undefined {
   if (entry.type === 'run') return entry.run;
   if (entry.type === 'task' && entry.run) return projectRun(sessionId, entry.task, entry.run);
-}
-
-declare module 'mini-harness/cordis' {
-  interface Events {
-    'sessions/task-details'(sessionId: string, task: TaskSnapshot): RunDetails | undefined;
-  }
 }
 
 export interface SessionProjection {

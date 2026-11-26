@@ -12,6 +12,8 @@ import { writeJson } from '@mini-harness/platform/json';
 import type { Paths } from '@mini-harness/platform/runtime-paths';
 import type { WorkspacePort } from '@mini-harness/workspaces/api';
 import type { RecordOwner, SessionRecords, SessionStore } from './records.ts';
+import type { TaskOptions } from '@mini-harness/tasks/api';
+import { readTaskHistory } from './task-history.ts';
 import {
   createScopeKey,
   scopeParentOf,
@@ -47,6 +49,7 @@ export class SessionRegistry implements SessionStore {
   private readonly logs = new Map<string, SessionLog>();
   private readonly runtimeScopes: Map<string, ScopeKey>;
   private readonly latestRuns = new Map<string, RunInfo>();
+  private readonly taskOwners = new Map<string, string>();
   private readonly logErrors = new Map<string, string>();
   private closing = false;
   private pendingDeletion = Promise.resolve();
@@ -270,6 +273,7 @@ export class SessionRegistry implements SessionStore {
     const { id } = record;
     const writable = mode !== 'read';
     const onChange = (entry: SessionEntry) => {
+      if (entry.type === 'task') this.taskOwners.set(entry.task.id, id);
       const run = runFromEntry(id, entry);
       if (run) this.latestRuns.set(id, run);
       const inbox = entry.type.startsWith('inbox-');
@@ -302,6 +306,8 @@ export class SessionRegistry implements SessionStore {
       );
       if (writable) {
         log.recover();
+        for (const entry of log.entries())
+          if (entry.type === 'task') this.taskOwners.set(entry.task.id, id);
         const run = log.latestRun;
         if (run) this.latestRuns.set(id, run);
         else this.latestRuns.delete(id);
@@ -318,6 +324,24 @@ export class SessionRegistry implements SessionStore {
         { cause: error },
       );
     }
+  }
+
+  task(id: string): Pick<TaskOptions, 'owner' | 'commit'> {
+    this.assertAvailable(id);
+    // Open/recover the writer before the scheduler marks the task active.
+    this.log(id);
+    return {
+      owner: 'session:' + id,
+      commit: (record) => {
+        if (!record.task.startedAt && record.task.state === 'queued') this.assertAvailable(id);
+        this.log(id).append({ type: 'task', ...record });
+      },
+    };
+  }
+
+  taskHistory(id: string) {
+    const owner = this.taskOwners.get(id);
+    if (owner) return this.inspectLog(owner, (log) => readTaskHistory(log.entries(), id));
   }
 
   log(id: string): SessionLogPort {
@@ -567,6 +591,7 @@ export class SessionRegistry implements SessionStore {
         sessions: this.state.sessions.filter((entry) => !chosen.has(entry.id)),
         pendingDelete,
       });
+      for (const [taskId, owner] of this.taskOwners) if (chosen.has(owner)) this.taskOwners.delete(taskId);
       await this.recoverDeletion();
       for (const { id, key } of locations) {
         this.events.dispatchEvent(new CustomEvent('membership', { detail: id }));

@@ -6,7 +6,7 @@ import {
   type TaskContext,
   type TaskEvent,
   type TaskHandle,
-  type TaskHistoryRecord,
+  type TaskHistoryReader,
   type TaskOptions,
   type TaskOutput,
   type TaskPort,
@@ -24,6 +24,7 @@ interface Entry {
   finishing: boolean;
   ancestors: string[];
   waitingFor?: string;
+  onEvent?: (event: TaskEvent) => void;
 }
 
 const describe = (error: unknown) => (error instanceof Error ? error.message : String(error));
@@ -35,16 +36,9 @@ export class TaskRuntime implements TaskPort {
   private readonly entries = new Map<string, Entry>();
   private readonly recent = new RecentTasks();
   private readonly listeners = new Set<(event: TaskEvent) => void>();
+  private readonly readers = new Set<TaskHistoryReader>();
   private readonly removing = new Map<string, Promise<void>>();
   private closing = false;
-
-  constructor(
-    private readonly domain: {
-      admit?(owner: string): void;
-      record?(record: TaskHistoryRecord): void;
-      history?(id: string): TaskHistoryRecord | undefined;
-    } = {},
-  ) {}
 
   get sealed() {
     return this.closing;
@@ -94,15 +88,15 @@ export class TaskRuntime implements TaskPort {
         return unsubscribe;
       },
       readOutput: runtime.readOutput.bind(runtime),
+      registerHistory: runtime.registerHistory.bind(runtime),
       removeOwner: runtime.removeOwner.bind(runtime),
     });
   }
 
   start<T>(options: TaskOptions, execute: (context: TaskContext) => Promise<T>): TaskHandle<T> {
     if (this.closing) throw new Error('Task runtime is closing');
-    const { signal: lifetime, provider, pool, retain = true, ...metadata } = options;
+    const { signal: lifetime, provider, pool, retain = true, commit, onEvent, ...metadata } = options;
     if (this.removing.has(options.owner)) throw new Error('Task owner has been removed');
-    this.domain.admit?.(options.owner);
     if (options.lane !== undefined && this.active(options.lane))
       throw new Error('Task lane is already occupied');
     const parent = options.parentId ? this.entries.get(options.parentId) : undefined;
@@ -124,7 +118,7 @@ export class TaskRuntime implements TaskPort {
       retained: retain,
     };
     const persist = (task: TaskSnapshot, output?: TaskOutput) => {
-      if (retain) this.domain.record?.({ task: clone(task), output });
+      if (retain) commit?.({ task: clone(task), output });
     };
     let release: (() => void) | undefined;
     const relinquish = () => {
@@ -293,6 +287,7 @@ export class TaskRuntime implements TaskPort {
       output: new TaskOutputRing(),
       finishing: false,
       ancestors: parent ? [...parent.ancestors, parent.snapshot.id] : [],
+      onEvent,
     };
     this.entries.set(handle.id, entry);
     void result.catch(() => {});
@@ -328,7 +323,7 @@ export class TaskRuntime implements TaskPort {
   get(id: string) {
     const entry = this.entries.get(id);
     if (entry) return clone(entry.snapshot);
-    const historical = (this.recent.get(id) ?? this.domain.history?.(id))?.task;
+    const historical = (this.recent.get(id) ?? this.history(id))?.task;
     if (!historical) return;
     // A durable record without an executor cannot represent live work.
     return terminal(historical.state)
@@ -380,8 +375,23 @@ export class TaskRuntime implements TaskPort {
     };
   }
 
+  registerHistory(reader: TaskHistoryReader) {
+    this.readers.add(reader);
+    return () => {
+      this.readers.delete(reader);
+    };
+  }
+
+  private history(id: string) {
+    for (const reader of this.readers) {
+      const record = reader(id);
+      if (record) return record;
+    }
+  }
+
   private notify(type: TaskEvent['type'], snapshot: TaskSnapshot) {
-    for (const listener of [...this.listeners]) {
+    const local = this.entries.get(snapshot.id)?.onEvent;
+    for (const listener of local ? [local, ...this.listeners] : [...this.listeners]) {
       try {
         listener({ type, task: clone(snapshot) });
       } catch {
@@ -393,7 +403,7 @@ export class TaskRuntime implements TaskPort {
   readOutput(id: string, after = 0) {
     const entry = this.entries.get(id);
     if (entry) return entry.output.read(after);
-    const history = this.recent.get(id) ?? this.domain.history?.(id);
+    const history = this.recent.get(id) ?? this.history(id);
     if (!history) return;
     return readTaskOutput(
       history.output ?? {

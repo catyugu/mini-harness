@@ -15,8 +15,6 @@ export function setup(ctx: Context) {
     new SessionRun(catalog),
   );
   ctx.provide('harnessRuns', runs);
-  ctx.on('sessions/task-details', (id, task) => runs.taskDetails(id, task));
-  ctx.effect(() => ctx.harnessTasks.subscribe((event) => runs.taskChanged(event)));
   ctx.effect(() => {
     const changed = (event: Event) => {
       if (event instanceof CustomEvent && event.detail.record)
