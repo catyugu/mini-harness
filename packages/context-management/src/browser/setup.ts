@@ -263,14 +263,12 @@ function mountStats(ctx: Context) {
       };
       const form = settingsForm(ctx, signal, write);
       const reset = uiButton('Restore defaults', 'quiet');
-      reset.onclick = async () => {
-        try {
-          await write(null);
-          if (state) form.update(state.settings);
-        } catch (error) {
-          conversation.report(error);
-        }
-      };
+      reset.onclick = () =>
+        void write(null)
+          .then(() => {
+            if (state) form.update(state.settings);
+          })
+          .catch(conversation.report);
       const compact = uiButton('Compact now');
       compact.onclick = () => {
         if (state?.compacting === 'manual' && id)
