@@ -18,7 +18,7 @@ export interface RetryInput {
   attachments: Attachment[];
   missing: string[];
   model?: ModelChoice;
-  thinkingLevel?: ThinkingLevel;
+  thinkingLevel?: ThinkingLevel | null;
 }
 
 export interface ConversationSubmission {

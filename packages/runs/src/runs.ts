@@ -351,21 +351,37 @@ export class Runs implements RunPort {
       const start = entries.findIndex((entry) => matches(entry, 'queued'));
       const end = entries.findIndex((entry, index) => index > start && matches(entry, 'failed'));
       if (start < 0 || end < 0) return;
-      const delivered = entries
-        .slice(start + 1, end)
-        .filter((entry) => entry.type === 'message' && entry.message.role === 'user');
+      const activity = entries.slice(start + 1, end);
+      const delivered = activity.filter((entry) => entry.type === 'message' && entry.message.role === 'user');
       const input =
         run.inputEntryId === undefined
           ? delivered.length === 1 && delivered[0].type === 'message' && delivered[0].submissionId === runId
             ? delivered[0]
             : undefined
           : delivered.find(({ id }) => id === run.inputEntryId);
-      if (input?.type !== 'message' || input.message.role !== 'user') return;
-      const { message, presentation, selection } = input;
-      const parts = typeof message.content === 'string' ? [] : message.content;
+      const message =
+        input?.type === 'message' && input.message.role === 'user'
+          ? { content: input.message.content, presentation: input.presentation, selection: input.selection }
+          : undefined;
+      const failed = message ? undefined : activity.reverse().find((entry) => entry.type === 'inbox-failed');
+      const rejected =
+        failed &&
+        entries.find((entry) => entry.type === 'inbox-enqueued' && entry.item.id === failed.inboxId);
+      const pending = rejected?.type === 'inbox-enqueued' ? rejected.item : undefined;
+      const saved =
+        message ??
+        (pending && (!pending.origin || pending.origin.source === 'user')
+          ? {
+              content: [{ type: 'text' as const, text: pending.text }, ...pending.images],
+              presentation: pending.input,
+              selection: pending,
+            }
+          : undefined);
+      if (!saved) return;
+      const { content, presentation, selection } = saved;
       const attachments: Attachment[] = [],
         missing: string[] = [];
-      for (const { name, mimeType, id: attachmentId, data } of userContent(message.content, presentation)
+      for (const { name, mimeType, id: attachmentId, data } of userContent(content, presentation)
         .attachments) {
         const bytes = attachmentId && this.registry.readAttachment(id, attachmentId);
         if (bytes) attachments.push({ name, mimeType, data: bytes.toString('base64') });
@@ -373,9 +389,9 @@ export class Runs implements RunPort {
         else missing.push(name);
       }
       const text =
-        typeof message.content === 'string'
-          ? message.content
-          : parts.flatMap((part) => (part.type === 'text' ? [part.text] : [])).join('\n');
+        typeof content === 'string'
+          ? content
+          : content.flatMap((part) => (part.type === 'text' ? [part.text] : [])).join('\n');
       return {
         message: presentation?.userText ?? text,
         attachments,

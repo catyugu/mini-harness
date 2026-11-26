@@ -13,7 +13,9 @@ test('plugin schema controls, recursive tree navigation, batch export and perman
     const last = expectPresent(messages.at(-1), 'model message');
     if (last.role === 'tool') return 'Delegation complete';
     if (last.content === 'Parent task') return { tool: 'delegate', args: { task: 'Child task' } };
-    if (last.content === 'Child task') return { tool: 'delegate', args: { task: 'Leaf task' } };
+    if (last.content.replace(/^\[agent[^\]]+\] /, '') === 'Child task')
+      return { tool: 'delegate', args: { task: 'Leaf task' } };
+    if (last.content.includes('Child run completed')) return 'Child report received';
     return 'Leaf result';
   });
   const { root, paths } = createFixturePaths(mock.url);
@@ -94,7 +96,8 @@ test('plugin schema controls, recursive tree navigation, batch export and perman
     await page.getByRole('button', { name: 'New conversation', exact: true }).click();
     await page.getByRole('textbox', { name: 'Message' }).fill('Parent task');
     await page.getByRole('button', { name: 'Send', exact: true }).click();
-    await expect(page.locator('.message.assistant')).toHaveText('Delegation complete');
+    await expect(page.getByText('Delegation complete', { exact: true })).toBeVisible();
+    await expect(page.getByText('Child report received', { exact: true }).first()).toBeVisible();
     await page.getByRole('button', { name: 'Expand Parent task', exact: true }).click();
     await page.getByRole('button', { name: 'Expand Child task', exact: true }).click();
     await page.getByRole('button', { name: 'Leaf task', exact: true }).click();
@@ -107,6 +110,7 @@ test('plugin schema controls, recursive tree navigation, batch export and perman
     await expect(page.locator('#conversationTitle')).toHaveText('Leaf task');
     await page.reload();
     await expect(page.locator('#conversationTitle')).toHaveText('Leaf task');
+    await expect(page.locator('.session-row .run-state')).toHaveCount(0);
     await page.getByRole('button', { name: 'Select conversations' }).click();
     await page.getByRole('checkbox', { name: 'Select Parent task', exact: true }).check();
     const download = page.waitForEvent('download');

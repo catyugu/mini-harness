@@ -3,6 +3,7 @@ import type { Attachment } from '@mini-harness/input/message';
 import type { ConversationPermission } from '@mini-harness/sessions/identity';
 import type { ModelChoice, ThinkingLevel } from '@mini-harness/llm/vocabulary';
 import { isRunning } from '@mini-harness/sessions/run-state';
+import type { RetryInput } from '../conversation-api.ts';
 import type { Completer, ComposerDraft, ComposerModel, DraftMode } from '../composer-api.ts';
 import { CommandRegistry } from './commands.ts';
 import { exportSessions } from '../session-client.ts';
@@ -94,6 +95,50 @@ export function createComposerModel(ctx: Context): ComposerModel {
     }
   }
   control.subscribe(['session', 'history', 'run', 'interaction'], reconcileSubmission, signal);
+  function restoreDraft(current: Draft, input: RetryInput, focus: boolean) {
+    current.text = input.message;
+    current.attachments = input.attachments;
+    current.model ??= input.model;
+    if (current.thinkingLevel === undefined) current.thinkingLevel = input.thinkingLevel;
+    edited(current, focus);
+  }
+  control.subscribe(
+    ['run', 'interaction'],
+    () => {
+      const { run, interaction } = control.get();
+      const current = draft();
+      if (
+        run?.state !== 'failed' ||
+        run.inputEntryId !== null ||
+        interaction.operation ||
+        current.text ||
+        current.attachments.length ||
+        current.revision ||
+        entry().submission
+      )
+        return;
+      const version = current.version;
+      void control
+        .retryInput()
+        .then((input) => {
+          if (
+            !input ||
+            signal.aborted ||
+            control.get().run?.id !== run.id ||
+            current !== draft() ||
+            current.version !== version
+          )
+            return;
+          restoreDraft(current, input, false);
+          if (!input.missing.length) current.failedRun = run.id;
+        })
+        .catch((error) => {
+          if (!signal.aborted && control.get().run?.id === run.id) control.report(error);
+        });
+    },
+    signal,
+  );
+
   const register: ComposerModel['command'] = (command) => {
     const dispose = commands.register(command);
     change();
@@ -337,11 +382,7 @@ export function createComposerModel(ctx: Context): ComposerModel {
       const { missing, ...submission } = input;
       if (missing.length) {
         if (current === draft() && !current.text && !current.attachments.length && !current.revision) {
-          current.text = submission.message;
-          current.attachments = submission.attachments;
-          current.model ??= submission.model;
-          if (current.thinkingLevel === undefined) current.thinkingLevel = submission.thinkingLevel;
-          edited(current, true);
+          restoreDraft(current, input, true);
         }
         throw new Error('Reattach ' + missing.join(', ') + ' before sending this message again.');
       }
