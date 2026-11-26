@@ -61,7 +61,15 @@ export class TaskRuntime implements TaskPort {
 
   start<T>(options: TaskOptions<T>, execute: (context: TaskContext) => Promise<T>): TaskHandle<T> {
     if (this.closing) throw new Error('Task runtime is closing');
-    const { signal: lifetime, provider, acquire, record, retain = true, projectResult, ...metadata } = options;
+    const {
+      signal: lifetime,
+      provider,
+      acquire,
+      record,
+      retain = true,
+      projectResult,
+      ...metadata
+    } = options;
     if (this.closedOwners.has(options.owner)) throw new Error('Task owner has been removed');
     const parent = options.owner.startsWith('task:') ? this.entries.get(options.owner.slice(5)) : undefined;
     if (options.owner.startsWith('task:') && (!parent || parent.finishing || terminal(parent.snapshot.state)))
@@ -103,12 +111,14 @@ export class TaskRuntime implements TaskPort {
       signal.throwIfAborted();
       transition({ state: 'running', startedAt: snapshot.startedAt ?? new Date().toISOString() });
     };
-    let suspension: {
-      pending: number;
-      ready: Promise<void>;
-      resolve: () => void;
-      reject: (error: unknown) => void;
-    } | undefined;
+    let suspension:
+      | {
+          pending: number;
+          ready: Promise<void>;
+          resolve: () => void;
+          reject: (error: unknown) => void;
+        }
+      | undefined;
     const context: TaskContext = {
       id: snapshot.id,
       signal,
@@ -125,7 +135,10 @@ export class TaskRuntime implements TaskPort {
         if (!suspension) {
           let resolve!: () => void;
           let reject!: (error: unknown) => void;
-          const ready = new Promise<void>((ok, fail) => { resolve = ok; reject = fail; });
+          const ready = new Promise<void>((ok, fail) => {
+            resolve = ok;
+            reject = fail;
+          });
           void ready.catch(() => {});
           suspension = { pending: 0, ready, resolve, reject };
           relinquish();
@@ -179,24 +192,31 @@ export class TaskRuntime implements TaskPort {
       } catch (error) {
         failure ??= { error };
       }
-      await this.drainOwned(taskOwner(snapshot.id), signal.aborted ? signal.reason : new Error('Task owner ended'));
+      await this.drainOwned(
+        taskOwner(snapshot.id),
+        signal.aborted ? signal.reason : new Error('Task owner ended'),
+      );
       if (!failure && signal.aborted) failure = { error: signal.reason };
       signal.removeEventListener('abort', cancelled);
       const error = failure?.error;
-      const aborted = signal.aborted && (
-        error === signal.reason ||
-        (error instanceof Error && (error.name === 'AbortError' || error.cause === signal.reason))
-      );
+      const aborted =
+        signal.aborted &&
+        (error === signal.reason ||
+          (error instanceof Error && (error.name === 'AbortError' || error.cause === signal.reason)));
       const reason = aborted ? signal.reason : error;
       const state = failure
         ? aborted
-          ? reason instanceof TaskInterrupted ? 'interrupted' : 'cancelled'
+          ? reason instanceof TaskInterrupted
+            ? 'interrupted'
+            : 'cancelled'
           : 'failed'
         : 'completed';
       const finishedAt = new Date().toISOString();
       entry.output.shrink(128 * 1024);
       try {
-        transition(failure ? { state, error: describe(reason), finishedAt } : { state, result: projected, finishedAt });
+        transition(
+          failure ? { state, error: describe(reason), finishedAt } : { state, result: projected, finishedAt },
+        );
       } catch (error) {
         update({ state: 'failed', error: describe(error), finishedAt });
         throw error;
@@ -272,7 +292,9 @@ export class TaskRuntime implements TaskPort {
 
   subscribe(listener: (event: TaskEvent) => void) {
     this.listeners.add(listener);
-    return () => { this.listeners.delete(listener); };
+    return () => {
+      this.listeners.delete(listener);
+    };
   }
 
   private publish(type: TaskEvent['type'], snapshot: TaskSnapshot) {

@@ -125,7 +125,7 @@ export class Delegation {
       { message: request.task, model },
       {
         provider: this.provider,
-      acquire: (cancellation) => this.semaphore.acquire(cancellation),
+        acquire: (cancellation) => this.semaphore.acquire(cancellation),
       },
     );
     return { sessionId: record.id, taskId: task.id, state: 'queued' as const };

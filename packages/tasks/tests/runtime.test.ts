@@ -33,7 +33,9 @@ test('cancellation is a request until execution finishes cleaning up', async () 
   await assert.rejects(task.result, /cancelled/);
   assert.equal(runtime.get(task.id)?.state, 'cancelled');
   assert.equal(states.filter((state) => state === 'cancelled').length, 1);
-  assert.deepEqual(runtime.readOutput(task.id, 3)?.chunks, [{ start: 3, end: 6, channel: 'log', text: 'two' }]);
+  assert.deepEqual(runtime.readOutput(task.id, 3)?.chunks, [
+    { start: 3, end: 6, channel: 'log', text: 'two' },
+  ]);
 });
 
 test('suspending releases admission and resumes only after reacquisition', async () => {
@@ -138,24 +140,37 @@ test('overlapping suspensions resume together, including caught wait failures', 
   const second = gate();
   const waiting = gate();
   let held = 0;
-  const task = runtime.start({
-    owner: 'session:one',
-    acquire: async () => { held++; return () => held--; },
-  }, async (context) => {
-    const a = context.suspend(async () => {
-      await first.promise;
-      throw new Error('wait failed');
-    }).catch((error) => {
-      assert.equal(held, 1);
-      assert.match(String(error), /wait failed/);
-    });
-    const b = context.suspend(async () => { await second.promise; return 1; }).then((value) => {
-      assert.equal(held, 1);
-      return value;
-    });
-    waiting.release();
-    await Promise.all([a, b]);
-  });
+  const task = runtime.start(
+    {
+      owner: 'session:one',
+      acquire: async () => {
+        held++;
+        return () => held--;
+      },
+    },
+    async (context) => {
+      const a = context
+        .suspend(async () => {
+          await first.promise;
+          throw new Error('wait failed');
+        })
+        .catch((error) => {
+          assert.equal(held, 1);
+          assert.match(String(error), /wait failed/);
+        });
+      const b = context
+        .suspend(async () => {
+          await second.promise;
+          return 1;
+        })
+        .then((value) => {
+          assert.equal(held, 1);
+          return value;
+        });
+      waiting.release();
+      await Promise.all([a, b]);
+    },
+  );
   await waiting.promise;
   first.release();
   await Promise.resolve();

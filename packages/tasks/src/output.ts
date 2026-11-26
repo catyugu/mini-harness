@@ -35,18 +35,26 @@ export class TaskOutputRing {
       const bytes = Buffer.from(first.text);
       const cut = boundary(bytes, minimum - first.start);
       if (cut === bytes.length) this.chunks.shift();
-      else this.chunks[0] = { ...first, start: first.start + cut, text: bytes.subarray(cut).toString('utf8') };
+      else
+        this.chunks[0] = { ...first, start: first.start + cut, text: bytes.subarray(cut).toString('utf8') };
     }
   }
 
   read(after = 0): TaskOutput {
     const first = this.chunks[0]?.start ?? this.cursor;
-    const chunks = this.chunks.filter(({ end }) => end > after).map((chunk) => {
-      if (after <= chunk.start) return { ...chunk };
-      const bytes = Buffer.from(chunk.text);
-      const cut = boundary(bytes, after - chunk.start);
-      return { ...chunk, start: chunk.start + cut, text: bytes.subarray(cut).toString('utf8') };
-    }).filter(({ text }) => text.length > 0);
-    return { cursor: this.cursor, truncated: after < first || (chunks[0]?.start ?? this.cursor) > after, chunks };
+    const chunks = this.chunks
+      .filter(({ end }) => end > after)
+      .map((chunk) => {
+        if (after <= chunk.start) return { ...chunk };
+        const bytes = Buffer.from(chunk.text);
+        const cut = boundary(bytes, after - chunk.start);
+        return { ...chunk, start: chunk.start + cut, text: bytes.subarray(cut).toString('utf8') };
+      })
+      .filter(({ text }) => text.length > 0);
+    return {
+      cursor: this.cursor,
+      truncated: after < first || (chunks[0]?.start ?? this.cursor) > after,
+      chunks,
+    };
   }
 }

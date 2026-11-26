@@ -1,8 +1,16 @@
 import type { Context } from 'mini-harness/cordis';
 
-export type TaskState = 'queued' | 'running' | 'waiting' | 'completed' | 'failed' | 'cancelled' | 'interrupted';
+export type TaskState =
+  | 'queued'
+  | 'running'
+  | 'waiting'
+  | 'completed'
+  | 'failed'
+  | 'cancelled'
+  | 'interrupted';
 
-export const terminal = (state: TaskState) => state !== 'queued' && state !== 'running' && state !== 'waiting';
+export const terminal = (state: TaskState) =>
+  state !== 'queued' && state !== 'running' && state !== 'waiting';
 
 /** Serializable observation data, not the arbitrary JavaScript value returned by the executor. */
 export type TaskData = null | boolean | number | string | TaskData[] | { [key: string]: TaskData };
