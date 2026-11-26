@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { TaskPool, terminal, type TaskSnapshot } from '@mini-harness/tasks/api';
 import type { Context } from 'mini-harness/cordis';
 import { defineTool } from '@mini-harness/tools/api';
@@ -68,10 +69,13 @@ export function setup(ctx: Context) {
             const target = ctx.harnessSessions.get(sessionId);
             if (!sender || !target || (target.id !== sender.parentId && target.parentId !== sender.id))
               throw new Error('Choose a direct parent or child conversation');
+            const deliveryId = createHash('sha256')
+              .update(JSON.stringify([id, executionId, callId]))
+              .digest('hex');
             const { messageId, taskId } = ctx.harnessRuns.send(sessionId, {
               message,
               mode,
-              messageId: 'agent:' + id + ':' + callId.slice(0, 120),
+              messageId: 'agent:' + deliveryId,
               origin: { source: 'agent', senderSessionId: id, taskId: executionId },
             });
             const receipt = { messageId, taskId };
