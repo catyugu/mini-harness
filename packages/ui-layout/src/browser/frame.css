@@ -82,10 +82,33 @@
   min-width: 0;
   gap: 1px;
 }
-.title-block > * {
+.title-block > strong {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.header-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+#workspaceHeader {
+  min-width: 0;
+}
+#conversationExtensions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+  min-width: 0;
+  max-width: 100%;
+}
+#workspaceHeader:not([hidden]) + #conversationExtensions {
+  max-width: 60%;
+}
+#conversationExtensions:not(:has(> :not([hidden]))) {
+  display: none;
 }
 .title-block strong {
   font-weight: 600;

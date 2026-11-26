@@ -157,6 +157,8 @@ test('running messages can queue follow-ups and approve shell commands from the 
   const service = await startIsolatedHost({ ...paths, cwd: workspace });
   try {
     await page.goto(service.url + '/#token=' + service.token);
+    const mode = page.getByRole('combobox', { name: 'Message sending mode', exact: true });
+    await expect(mode).toBeHidden();
     await page.getByRole('textbox', { name: 'Message', exact: true }).fill('Wait');
     await page.getByRole('button', { name: 'Send', exact: true }).click();
     await waiting;
@@ -170,7 +172,7 @@ test('running messages can queue follow-ups and approve shell commands from the 
     await page.getByRole('option', { name: /Standard/ }).click();
     await expect(page.getByRole('button', { name: 'Permissions: Standard' })).toBeVisible();
     await page.getByRole('textbox', { name: 'Message', exact: true }).fill('First instruction');
-    const mode = page.getByRole('combobox', { name: 'Message sending mode', exact: true });
+    await expect(mode).toBeVisible();
     await expect(mode).toHaveValue('interrupt');
     await mode.selectOption('steer');
     await page.getByRole('button', { name: 'Send with Steer', exact: true }).click();
@@ -202,9 +204,16 @@ test('running messages can queue follow-ups and approve shell commands from the 
     await expect(page.locator('.message.assistant')).toHaveCount(3);
     await expect(page.getByRole('button', { name: 'Send', exact: true })).toBeVisible();
     await expect(page.locator('#queuedMessages')).toBeHidden();
+    await expect(mode).toBeHidden();
     await page.getByRole('textbox', { name: 'Message', exact: true }).fill('Shell task');
+    const normalSend = page.waitForRequest(
+      (request) => request.method() === 'POST' && new URL(request.url()).pathname.endsWith('/runs'),
+    );
     await page.getByRole('button', { name: 'Send', exact: true }).click();
+    expect((await normalSend).postDataJSON()).not.toHaveProperty('mode');
     await expect(page.locator('.approval-card pre')).toHaveText('echo approved');
+    await expect(mode).toBeVisible();
+    await expect(mode).toHaveValue('queue');
     await expect(page.locator('.approval-card strong')).toHaveText('Shell approval');
     await expect(page.locator('.approval-heading small')).toHaveText(
       'shell · ' + realpathSync.native(workspace),
@@ -491,8 +500,24 @@ export const apply = (ctx) => {
     await page.getByRole('textbox', { name: 'Message', exact: true }).fill('Start independent job');
     await page.getByRole('button', { name: 'Send', exact: true }).click();
     await expect(page.locator('.tool-card .tool-state')).toHaveText('Accepted');
+    await expect(page.getByRole('button', { name: 'Send', exact: true })).toBeVisible();
+    await expect(page.getByRole('combobox', { name: 'Message sending mode' })).toBeHidden();
     const tasks = page.locator('.background-tasks');
-    await tasks.getByRole('button', { name: 'Tasks', exact: true }).click();
+    const toggle = tasks.getByRole('button', { name: 'Tasks', exact: true });
+    await expect(toggle).toBeInViewport();
+    await expect
+      .poll(async () => {
+        const workspace = await page.locator('#workspaceHeader').boundingBox();
+        const button = await toggle.boundingBox();
+        return (
+          workspace &&
+          button &&
+          button.x >= workspace.x + workspace.width &&
+          Math.abs(button.y + button.height / 2 - workspace.y - workspace.height / 2) < 2
+        );
+      })
+      .toBe(true);
+    await toggle.click();
     const panel = tasks.locator('.background-task-list');
     await expect(panel).toBeInViewport({ ratio: 0.95 });
     await panel.getByText(/Fixture job · running/).click();

@@ -226,6 +226,7 @@ export function createConversationController(ctx: Context): ConversationControll
       throw new Error('Wait for the current operation to finish.');
     const signal = visit.signal;
     const workspace = selection.selectedWorkspace;
+    const mode = isRunning(state.run) ? state.mode : undefined;
     interact({ operation: 'submit', status: '' });
     let id = active();
     try {
@@ -253,7 +254,7 @@ export function createConversationController(ctx: Context): ConversationControll
         : await browserRequest<SendReceipt>(
             ctx,
             path(id, '/runs'),
-            payload('POST', { ...message, mode: state.mode }),
+            payload('POST', { ...message, mode }),
           );
       if (!signal.aborted) {
         if ('queue' in receipt) {
