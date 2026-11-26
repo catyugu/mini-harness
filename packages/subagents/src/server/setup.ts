@@ -52,7 +52,7 @@ export function setup(ctx: Context) {
           action: Type.Union([Type.Literal('status'), Type.Literal('wait'), Type.Literal('cancel')]),
           taskId: Type.String({ minLength: 1, maxLength: 128 }),
         }),
-        isConcurrencySafe: () => true,
+        isConcurrencySafe: ({ action }) => action !== 'wait',
         async execute(_callId, { action, taskId }, signal, _update, context) {
           let task = tasks.get(taskId);
           if (!task) throw new Error('Task not found: ' + taskId);

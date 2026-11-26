@@ -99,7 +99,10 @@ test('ownership, not creation, controls cancellation and deletion', async () => 
     signal.throwIfAborted();
   });
   await entered.promise;
+  const childEntered = gate();
   const child = runtime.start({ owner: 'task:' + parent.id, creator: parent.id }, async ({ signal }) => {
+    childEntered.release();
+    signal.throwIfAborted();
     await new Promise<void>((_, reject) => {
       signal.addEventListener('abort', () => reject(signal.reason), { once: true });
     });
@@ -108,7 +111,7 @@ test('ownership, not creation, controls cancellation and deletion', async () => 
     await released.promise;
     return 'independent';
   });
-  await runtime.wait(child.id, ({ state }) => state === 'running');
+  await childEntered.promise;
   parent.cancel();
   released.release();
   await assert.rejects(parent.result);
@@ -134,49 +137,21 @@ test('a durable projection fault cannot acknowledge a successful task', async ()
   assert.equal(runtime.get(task.id)?.state, 'failed');
 });
 
-test('overlapping suspensions resume together, including caught wait failures', async () => {
+test('a caught whole-task wait error reacquires admission', async () => {
   const runtime = new TaskRuntime();
-  const first = gate();
-  const second = gate();
-  const waiting = gate();
   let held = 0;
-  const task = runtime.start(
-    {
-      owner: 'session:one',
-      acquire: async () => {
-        held++;
-        return () => held--;
-      },
-    },
-    async (context) => {
-      const a = context
-        .suspend(async () => {
-          await first.promise;
-          throw new Error('wait failed');
-        })
-        .catch((error) => {
-          assert.equal(held, 1);
-          assert.match(String(error), /wait failed/);
-        });
-      const b = context
-        .suspend(async () => {
-          await second.promise;
-          return 1;
-        })
-        .then((value) => {
-          assert.equal(held, 1);
-          return value;
-        });
-      waiting.release();
-      await Promise.all([a, b]);
-    },
-  );
-  await waiting.promise;
-  first.release();
-  await Promise.resolve();
-  assert.equal(held, 0);
-  assert.equal(runtime.get(task.id)?.state, 'waiting');
-  second.release();
+  const task = runtime.start({
+    owner: 'one',
+    acquire: async () => { held++; return () => held--; },
+  }, async (context) => {
+    await assert.rejects(context.suspend(async () => {
+      assert.equal(held, 0);
+      await assert.rejects(context.suspend(async () => {}), /whole-task/);
+      throw new Error('wait failed');
+    }), /wait failed/);
+    assert.equal(held, 1);
+    assert.equal(runtime.get(context.id)?.state, 'running');
+  });
   await task.result;
   assert.equal(held, 0);
 });
@@ -229,4 +204,28 @@ test('output uses UTF-8 byte offsets and preserves channel and Unicode boundarie
   assert.ok(!output.chunks[0].text.includes('�'));
   assert.equal(output.chunks.at(-1)?.channel, 'stderr');
   assert.equal(runtime.readOutput(handle.id, 1200000)?.chunks[0].text, '完');
+});
+
+test('terminal waiters settle before observers can cancel their wait', async () => {
+  const runtime = new TaskRuntime();
+  const cancel = new AbortController();
+  const gatekeeper = gate();
+  const task = runtime.start({ owner: 'one' }, async () => { await gatekeeper.promise; });
+  runtime.subscribe(({ task: snapshot }) => {
+    if (snapshot.id === task.id && snapshot.state === 'completed') cancel.abort();
+  });
+  const result = runtime.wait(task.id, undefined, cancel.signal);
+  gatekeeper.release();
+  assert.equal((await result).state, 'completed');
+});
+
+test('forgetting an ephemeral parent also removes retained descendants', async () => {
+  const runtime = new TaskRuntime();
+  const parent = runtime.start({ owner: 'one', retain: false }, async ({ id }) => {
+    const child = runtime.start({ owner: 'task:' + id }, async () => 'done');
+    await child.result;
+    assert.ok(runtime.get(child.id));
+  });
+  await parent.result;
+  assert.equal(runtime.list().length, 0);
 });

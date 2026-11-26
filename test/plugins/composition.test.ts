@@ -708,6 +708,7 @@ export const apply = (ctx) => {
   const children = app.runtime.plugins.ctx.harnessSessions
     .list()
     .filter(({ parentId }) => parentId === parent.id);
+  await Promise.all(children.map(({ id }) => app.runtime.plugins.ctx.harnessRuns.completion(id)));
   assert.equal(children.length, 2);
   const inherited = children.find(({ title }) => title === 'Inherited child task');
   const explicit = children.find(({ title }) => title === 'Explicit child task');

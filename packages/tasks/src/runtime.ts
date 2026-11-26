@@ -14,7 +14,7 @@ import { TaskOutputRing } from './output.ts';
 
 interface Entry {
   snapshot: TaskSnapshot;
-  handle: TaskHandle;
+  handle?: TaskHandle;
   output: TaskOutputRing;
   finishing: boolean;
 }
@@ -26,7 +26,8 @@ const taskOwner = (id: string) => 'task:' + id;
 export class TaskRuntime implements TaskPort {
   private readonly entries = new Map<string, Entry>();
   private readonly listeners = new Set<(event: TaskEvent) => void>();
-  private readonly closedOwners = new Map<string, Promise<void>>();
+  private readonly removing = new Map<string, Promise<void>>();
+  private readonly waiters = new Map<string, Set<(task: TaskSnapshot) => void>>();
   private closing = false;
 
   service(): TaskPort {
@@ -70,12 +71,12 @@ export class TaskRuntime implements TaskPort {
       projectResult,
       ...metadata
     } = options;
-    if (this.closedOwners.has(options.owner)) throw new Error('Task owner has been removed');
+    if (this.removing.has(options.owner)) throw new Error('Task owner has been removed');
     const parent = options.owner.startsWith('task:') ? this.entries.get(options.owner.slice(5)) : undefined;
     if (options.owner.startsWith('task:') && (!parent || parent.finishing || terminal(parent.snapshot.state)))
       throw new Error('Task owner has ended');
     const controller = new AbortController();
-    const signals = [controller.signal, lifetime, provider?.fiber.signal, parent?.handle.signal].filter(
+    const signals = [controller.signal, lifetime, provider?.fiber.signal, parent?.handle?.signal].filter(
       (signal): signal is AbortSignal => signal !== undefined,
     );
     const signal = AbortSignal.any(signals);
@@ -99,7 +100,7 @@ export class TaskRuntime implements TaskPort {
     const update = (patch: Partial<TaskSnapshot>, type: TaskEvent['type'] = 'updated') => {
       if (terminal(snapshot.state)) return;
       Object.assign(snapshot, clone(patch));
-      this.publish(type, snapshot);
+      this.notify(type, snapshot);
     };
     const transition = (patch: Partial<TaskSnapshot>) => {
       record?.(clone({ ...snapshot, ...patch }));
@@ -111,14 +112,7 @@ export class TaskRuntime implements TaskPort {
       signal.throwIfAborted();
       transition({ state: 'running', startedAt: snapshot.startedAt ?? new Date().toISOString() });
     };
-    let suspension:
-      | {
-          pending: number;
-          ready: Promise<void>;
-          resolve: () => void;
-          reject: (error: unknown) => void;
-        }
-      | undefined;
+    let admissionFailure: { error: unknown } | undefined;
     const context: TaskContext = {
       id: snapshot.id,
       signal,
@@ -130,48 +124,27 @@ export class TaskRuntime implements TaskPort {
       },
       suspend: async (wait) => {
         signal.throwIfAborted();
-        if (entry.finishing || (snapshot.state !== 'running' && snapshot.state !== 'waiting'))
-          throw new Error('Only an executing task can suspend');
-        if (!suspension) {
-          let resolve!: () => void;
-          let reject!: (error: unknown) => void;
-          const ready = new Promise<void>((ok, fail) => {
-            resolve = ok;
-            reject = fail;
-          });
-          void ready.catch(() => {});
-          suspension = { pending: 0, ready, resolve, reject };
-          relinquish();
-          transition({ state: 'waiting' });
-        }
-        const round = suspension;
-        round.pending++;
-        let result: Awaited<ReturnType<typeof wait>>;
-        let failure: { error: unknown } | undefined;
+        if (entry.finishing || snapshot.state !== 'running')
+          throw new Error('Suspend requires a single whole-task wait point');
+        // Commit waiting before relinquishing the slot, so a record fault cannot leave
+        // an executor running without admission.
+        transition({ state: 'waiting' });
+        relinquish();
         try {
-          result = await wait(signal);
-        } catch (error) {
-          failure = { error };
+          return await wait(signal);
         } finally {
-          if (--round.pending === 0) {
-            try {
-              signal.throwIfAborted();
-              if (entry.finishing) throw new Error('Task ended with an unawaited suspension');
-              transition({ state: 'queued' });
-              await enter();
-              round.resolve();
-            } catch (error) {
-              relinquish();
-              controller.abort(error);
-              round.reject(error);
-            } finally {
-              suspension = undefined;
-            }
+          signal.throwIfAborted();
+          try {
+            if (entry.finishing) throw new Error('Task ended with an unawaited suspension');
+            transition({ state: 'queued' });
+            await enter();
+          } catch (error) {
+            relinquish();
+            admissionFailure = { error };
+            controller.abort(error);
+            throw error;
           }
-          await round.ready;
         }
-        if (failure) throw failure.error;
-        return result!;
       },
     };
     const cancelled = () => update({ cancellationRequested: true });
@@ -196,11 +169,12 @@ export class TaskRuntime implements TaskPort {
         taskOwner(snapshot.id),
         signal.aborted ? signal.reason : new Error('Task owner ended'),
       );
+      failure = admissionFailure ?? failure;
       if (!failure && signal.aborted) failure = { error: signal.reason };
       signal.removeEventListener('abort', cancelled);
       const error = failure?.error;
       const aborted =
-        signal.aborted &&
+        !admissionFailure && signal.aborted &&
         (error === signal.reason ||
           (error instanceof Error && (error.name === 'AbortError' || error.cause === signal.reason)));
       const reason = aborted ? signal.reason : error;
@@ -212,7 +186,8 @@ export class TaskRuntime implements TaskPort {
           : 'failed'
         : 'completed';
       const finishedAt = new Date().toISOString();
-      entry.output.shrink(128 * 1024);
+      // Keep the bounded output available to readers; release execution resources at settlement.
+      entry.handle = undefined;
       try {
         transition(
           failure ? { state, error: describe(reason), finishedAt } : { state, result: projected, finishedAt },
@@ -221,7 +196,8 @@ export class TaskRuntime implements TaskPort {
         update({ state: 'failed', error: describe(error), finishedAt });
         throw error;
       } finally {
-        if (!retain) this.forget(entry);
+        if (!retain) this.forgetTree(entry);
+        else this.prune();
       }
       if (failure) throw reason;
       return value!;
@@ -241,7 +217,7 @@ export class TaskRuntime implements TaskPort {
     signal.addEventListener('abort', cancelled, { once: true });
     void result.catch(() => {});
     if (provider) void provider.fiber.run(() => result).catch(() => {});
-    this.publish('created', snapshot);
+    this.notify('created', snapshot);
     return handle;
   }
 
@@ -257,16 +233,19 @@ export class TaskRuntime implements TaskPort {
   }
 
   cancel(id: string, reason?: unknown) {
-    return this.entries.get(id)?.handle.cancel(reason) ?? false;
+    return this.entries.get(id)?.handle?.cancel(reason) ?? false;
   }
 
   wait(id: string, predicate = (task: TaskSnapshot) => terminal(task.state), signal?: AbortSignal) {
     return new Promise<TaskSnapshot>((resolve, reject) => {
       const current = this.get(id);
       if (!current) return reject(new Error('Task not found: ' + id));
-      if (signal?.aborted) return reject(signal.reason);
+      if (signal?.aborted && !terminal(current.state)) return reject(signal.reason);
+      const group = this.waiters.get(id) ?? new Set<(task: TaskSnapshot) => void>();
+      this.waiters.set(id, group);
       const cleanup = () => {
-        unsubscribe();
+        group.delete(check);
+        if (!group.size && this.waiters.get(id) === group) this.waiters.delete(id);
         signal?.removeEventListener('abort', cancel);
       };
       const cancel = () => {
@@ -274,17 +253,17 @@ export class TaskRuntime implements TaskPort {
         reject(signal?.reason);
       };
       const check = (task: TaskSnapshot) => {
-        if (task.id !== id) return;
         try {
-          if (!predicate(task) && !terminal(task.state)) return;
+          const view = clone(task);
+          if (!terminal(view.state) && !predicate(view)) return;
           cleanup();
-          resolve(task);
+          resolve(view);
         } catch (error) {
           cleanup();
           reject(error);
         }
       };
-      const unsubscribe = this.subscribe(({ task }) => check(task));
+      group.add(check);
       signal?.addEventListener('abort', cancel, { once: true });
       check(current);
     });
@@ -297,7 +276,10 @@ export class TaskRuntime implements TaskPort {
     };
   }
 
-  private publish(type: TaskEvent['type'], snapshot: TaskSnapshot) {
+  private notify(type: TaskEvent['type'], snapshot: TaskSnapshot) {
+    if (type !== 'deleted') {
+      for (const waiter of [...(this.waiters.get(snapshot.id) ?? [])]) waiter(snapshot);
+    }
     for (const listener of [...this.listeners]) {
       try {
         listener({ type, task: clone(snapshot) });
@@ -316,26 +298,31 @@ export class TaskRuntime implements TaskPort {
   }
 
   private async drainOwned(owner: string, reason?: unknown) {
-    const active = this.owned(owner).filter(({ snapshot }) => !terminal(snapshot.state));
-    for (const { handle } of active) handle.cancel(reason);
-    await Promise.allSettled(active.map(({ handle }) => handle.result));
+    const handles = this.owned(owner).flatMap(({ handle }) => handle ? [handle] : []);
+    for (const handle of handles) handle.cancel(reason);
+    await Promise.allSettled(handles.map(({ result }) => result));
   }
 
-  private forget(entry: Entry) {
-    if (this.entries.delete(entry.snapshot.id)) this.publish('deleted', entry.snapshot);
+  private forgetTree(entry: Entry) {
+    // All descendants have settled before an owning task can reach terminal state.
+    for (const child of this.owned(taskOwner(entry.snapshot.id))) this.forgetTree(child);
+    if (this.entries.delete(entry.snapshot.id)) this.notify('deleted', entry.snapshot);
+  }
+
+  private prune() {
+    const history = [...this.entries.values()].filter(({ snapshot }) => terminal(snapshot.state));
+    // Only retained snapshots/output remain here, not execution promises. Long-term history is domain-owned.
+    for (const entry of history.slice(0, Math.max(0, history.length - 256))) this.forgetTree(entry);
   }
 
   removeOwner(owner: string): Promise<void> {
-    const existing = this.closedOwners.get(owner);
+    const existing = this.removing.get(owner);
     if (existing) return existing;
     const operation = Promise.resolve().then(async () => {
       await this.drainOwned(owner);
-      for (const entry of this.owned(owner)) {
-        await this.removeOwner(taskOwner(entry.snapshot.id));
-        this.forget(entry);
-      }
-    });
-    this.closedOwners.set(owner, operation);
+      for (const entry of this.owned(owner)) this.forgetTree(entry);
+    }).finally(() => this.removing.delete(owner));
+    this.removing.set(owner, operation);
     return operation;
   }
 
@@ -345,8 +332,8 @@ export class TaskRuntime implements TaskPort {
 
   async stop() {
     this.seal();
-    const entries = [...this.entries.values()];
-    for (const { handle } of entries) handle.cancel(new TaskInterrupted());
-    await Promise.allSettled(entries.map(({ handle }) => handle.result));
+    const handles = [...this.entries.values()].flatMap(({ handle }) => handle ? [handle] : []);
+    for (const handle of handles) handle.cancel(new TaskInterrupted());
+    await Promise.allSettled(handles.map(({ result }) => result));
   }
 }

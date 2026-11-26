@@ -218,6 +218,7 @@ export class Runs implements RunPort {
         },
       );
       activity.task = task;
+      let started = false;
       const unsubscribe = this.tasks.subscribe(({ type, task: snapshot }) => {
         if (type === 'deleted') return;
         if (snapshot.id !== task.id || snapshot.state === info.state) return;
@@ -228,8 +229,10 @@ export class Runs implements RunPort {
           const next = project(snapshot);
           Object.assign(info, next, { sequence: info.sequence });
           publish({ type: 'run', run: next });
-          if (snapshot.state === 'running')
+          if (snapshot.state === 'running' && !started) {
+            started = true;
             this.observe({ type: 'run-started', sessionId: id, run: next }, task.signal);
+          }
           if (ended) this.observe({ type: 'run-ended', sessionId: id, run: next });
         } finally {
           if (ended) {
@@ -466,7 +469,7 @@ export class Runs implements RunPort {
     await this.scopes.prepare(key, signal);
     signal.throwIfAborted();
     const scope = this.scopes.context(key);
-    const fiber = tagScope(scope.extend(), this.registry.runScope(id)!).inject(['harnessAgent'], () => {});
+    const fiber = tagScope(scope.extend(), this.registry.runScope(id)!).inject(['harnessAgent', 'harnessTasks'], () => {});
     try {
       await fiber;
       if (!fiber.ctx.get('harnessAgent'))

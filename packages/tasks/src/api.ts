@@ -75,7 +75,7 @@ export interface TaskContext {
   readonly signal: AbortSignal;
   update(progress: TaskData): void;
   write(output: string, channel?: string): void;
-  /** Overlapping waits share one released slot and resume together after reacquisition, even on wait errors. */
+  /** Call only at a whole-task wait point; reacquires admission before returning or throwing. */
   suspend<T>(wait: (signal: AbortSignal) => Promise<T>): Promise<T>;
 }
 
@@ -100,7 +100,7 @@ export interface TaskPort {
   wait(id: string, predicate?: (task: TaskSnapshot) => boolean, signal?: AbortSignal): Promise<TaskSnapshot>;
   subscribe(listener: (event: TaskEvent) => void): () => void;
   readOutput(id: string, after?: number): TaskOutput | undefined;
-  /** Permanently close the owner, drain its tasks and delete their history. Idempotent. */
+  /** Exclude new work during removal, drain tasks and delete their history. The domain owns resource existence. */
   removeOwner(owner: string): Promise<void>;
 }
 
