@@ -250,7 +250,9 @@ test('a cancellation during running observation prevents invocation of executor 
   runtime.subscribe(({ task }) => {
     if (task.state === 'running') runtime.cancel(task.id);
   });
-  const handle = runtime.start({ owner: 'one' }, async () => { executed = true; });
+  const handle = runtime.start({ owner: 'one' }, async () => {
+    executed = true;
+  });
   await assert.rejects(handle.result, /cancelled/);
   assert.equal(executed, false);
   assert.equal(runtime.get(handle.id)?.state, 'cancelled');

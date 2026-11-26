@@ -157,7 +157,8 @@ export class Runs implements RunPort {
           if (error) publish({ type: 'error', error });
           Object.assign(info, next, { sequence: info.sequence });
           publish({ type: 'run', run: next });
-          if (firstAdmission) this.observe({ type: 'run-started', sessionId: id, run: next }, activity.task?.signal);
+          if (firstAdmission)
+            this.observe({ type: 'run-started', sessionId: id, run: next }, activity.task?.signal);
           if (ended) this.observe({ type: 'run-ended', sessionId: id, run: next });
         } finally {
           if (ended) {
@@ -240,13 +241,16 @@ export class Runs implements RunPort {
       );
       activity.task = task;
       // Only a failed durable commit bypasses the normal postcommit projection.
-      void task.result.catch((error) => {
-        if (terminal(info.state)) return;
-        const snapshot = this.tasks.get(task.id);
-        if (!snapshot) return;
-        const message = this.registry.logError(id) ?? (error instanceof Error ? error.message : String(error));
-        apply(project(snapshot, 1), message);
-      }).catch(() => {});
+      void task.result
+        .catch((error) => {
+          if (terminal(info.state)) return;
+          const snapshot = this.tasks.get(task.id);
+          if (!snapshot) return;
+          const message =
+            this.registry.logError(id) ?? (error instanceof Error ? error.message : String(error));
+          apply(project(snapshot, 1), message);
+        })
+        .catch(() => {});
       this.changed(id);
       return { info: info!, task };
     } catch (error) {

@@ -113,14 +113,21 @@ export class TaskRuntime implements TaskPort {
       release = undefined;
       held?.();
     };
-    const update = (patch: Partial<TaskSnapshot>, type: TaskEvent['type'] = 'updated', committed?: void | (() => void)) => {
+    const update = (
+      patch: Partial<TaskSnapshot>,
+      type: TaskEvent['type'] = 'updated',
+      committed?: void | (() => void),
+    ) => {
       if (terminal(snapshot.state)) return;
       Object.assign(snapshot, clone(patch));
       this.notify(type, snapshot, committed);
     };
     const transition = (patch: Partial<TaskSnapshot>) => {
       const next = { ...snapshot, ...patch };
-      const committed = persist(next, terminal(next.state) && next.outputCursor ? entry.output.read() : undefined);
+      const committed = persist(
+        next,
+        terminal(next.state) && next.outputCursor ? entry.output.read() : undefined,
+      );
       update(patch, 'updated', committed);
     };
     const enter = async () => {
@@ -219,7 +226,8 @@ export class TaskRuntime implements TaskPort {
       } finally {
         if (!retain) this.forgetTree(entry);
         else {
-          entry.retainedBytes = Buffer.byteLength(JSON.stringify(snapshot)) + Math.min(snapshot.outputCursor, 1024 * 1024);
+          entry.retainedBytes =
+            Buffer.byteLength(JSON.stringify(snapshot)) + Math.min(snapshot.outputCursor, 1024 * 1024);
           this.prune();
         }
       }
@@ -251,7 +259,13 @@ export class TaskRuntime implements TaskPort {
     const historical = this.domain.history?.(id)?.task;
     if (!historical) return;
     // A durable record without an executor cannot represent live work.
-    return terminal(historical.state) ? clone(historical) : { ...clone(historical), state: 'interrupted' as const, error: 'No live executor remains for this task' };
+    return terminal(historical.state)
+      ? clone(historical)
+      : {
+          ...clone(historical),
+          state: 'interrupted' as const,
+          error: 'No live executor remains for this task',
+        };
   }
 
   list(owner?: string) {
@@ -308,7 +322,11 @@ export class TaskRuntime implements TaskPort {
     if (type !== 'deleted') {
       for (const waiter of [...(this.waiters.get(snapshot.id) ?? [])]) waiter(snapshot);
     }
-    try { committed?.(); } catch { /* The transition is already committed. */ }
+    try {
+      committed?.();
+    } catch {
+      /* The transition is already committed. */
+    }
     for (const listener of [...this.listeners]) {
       try {
         listener({ type, task: clone(snapshot) });
