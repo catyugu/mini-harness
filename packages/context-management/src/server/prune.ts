@@ -12,7 +12,11 @@ function shortened(text: string, size: number) {
   return text.slice(0, head) + '\n[… middle omitted …]\n' + text.slice(-(size - head));
 }
 
-function pruneText(text: string, size: number, customize?: (text: string, size: number) => string | undefined) {
+function pruneText(
+  text: string,
+  size: number,
+  customize?: (text: string, size: number) => string | undefined,
+) {
   const excerpt = customize?.(text, size);
   if (excerpt !== undefined) {
     if (typeof excerpt !== 'string' || excerpt.length > size) throw new Error('Invalid tool result excerpt');

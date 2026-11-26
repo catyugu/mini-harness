@@ -44,7 +44,11 @@ export function setup(ctx: Context) {
           .join('\n')
           .slice(0, Math.floor(maxCharacters * 0.6));
         const rest = Math.floor((maxCharacters - diagnostics.length - 2) / 2);
-        return [diagnostics, rest > 0 ? output.stderr.slice(-rest) : '', rest > 0 ? output.stdout.slice(-rest) : '']
+        return [
+          diagnostics,
+          rest > 0 ? output.stderr.slice(-rest) : '',
+          rest > 0 ? output.stdout.slice(-rest) : '',
+        ]
           .filter(Boolean)
           .join('\n');
       },

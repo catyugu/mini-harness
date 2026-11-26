@@ -100,7 +100,13 @@ export async function checkpoint(
   const { signal } = request;
   const { model } = selectModel(models, { explicit: settings.summaryModel ?? request.model });
   const capability = models.capabilities(model);
-  const maxTokens = Math.floor(Math.min(capability?.maxTokens ?? desiredOutput, desiredOutput, capability?.contextWindow ? capability.contextWindow * settings.retainRatio : desiredOutput));
+  const maxTokens = Math.floor(
+    Math.min(
+      capability?.maxTokens ?? desiredOutput,
+      desiredOutput,
+      capability?.contextWindow ? capability.contextWindow * settings.retainRatio : desiredOutput,
+    ),
+  );
   if (maxTokens <= 0)
     throw new DomainError('unavailable', 'There is no output budget for a continuation checkpoint');
   const base = {

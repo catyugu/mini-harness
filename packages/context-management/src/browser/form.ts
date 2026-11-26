@@ -90,7 +90,13 @@ export function settingsForm(
     node,
     update(next: ContextSettings, enabled = true, nextScope?: string) {
       fields.disabled = busy || !enabled;
-      if (current && editable === enabled && scope === nextScope && JSON.stringify(current) === JSON.stringify(next)) return;
+      if (
+        current &&
+        editable === enabled &&
+        scope === nextScope &&
+        JSON.stringify(current) === JSON.stringify(next)
+      )
+        return;
       editable = enabled;
       scope = nextScope;
       current = next;

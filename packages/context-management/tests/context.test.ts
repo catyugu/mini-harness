@@ -86,7 +86,9 @@ test('a single user turn supports repeated token-budget compaction while tools e
     1,
   );
   assert.ok(log.entries().filter(({ type }) => type === 'context-replace').length >= 2);
-  const submitted = log.projection().timeline.find((entry) => entry.type === 'message' && entry.role === 'user');
+  const submitted = log
+    .projection()
+    .timeline.find((entry) => entry.type === 'message' && entry.role === 'user');
   assert.ok(submitted && log.context().contextEntryIds.includes(submitted.id));
   assertPaired(log, mock);
 
