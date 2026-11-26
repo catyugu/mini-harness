@@ -42,7 +42,7 @@ The shipped `core:sessions` entry requires Profile scopes, Profile configuration
 
 `scope(id)` identifies the resource's standing composition; `runScope(id)` is its child identity used for execution contributions and observations. Callers should obtain these keys from Sessions rather than constructing an independent identity for the same conversation.
 
-The separate `core:tool-policy` entry in [permission-policy.ts](src/permission-policy.ts) provides `harnessToolPolicy`. A `readOnly` conversation or ancestor restricts its descendants to tools tagged `readOnly`. Process isolation and approvals remain the responsibility of [Sandbox](../sandbox/README.md), [Process Execution](../process-execution/README.md) and [Approvals](../approvals/README.md).
+The separate `core:tool-policy` entry in [permission-policy.ts](src/permission-policy.ts) provides `harnessToolPolicy`. A `readOnly` conversation or ancestor restricts its descendants to tools tagged `readOnly`. Process lifetime and optional plugin confirmations belong to [Process Execution](../process-execution/README.md) and [Approvals](../approvals/README.md).
 
 Optional Tasks integration registers durable history and a deletion participant that removes and drains every affected session owner. Other providers can register `beforeDelete` participants to quiesce their work. Workspace removal uses the same recursive conversation-deletion path.
 

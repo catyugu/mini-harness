@@ -23,7 +23,7 @@ The browser entry registers a workspace-owned directory tab and composer path co
 
 Server activation requires File Access, application paths, Workspaces, Sessions, Tools, projection changes and Profile scopes. Each tool factory resolves the conversation's workspace and looks up `harnessFileAccess` through the caller's scoped Context. Missing workspaces hide the tools; a missing selected provider produces an unavailable error.
 
-The feature opens a confined view that excludes the application's private state directory. Links are governed by [File Access](../file-access/README.md). Search respects `.gitignore`, skips link traversal and uses bounded traversal and output; direct reads and edits are explicit path operations. UTF-8 text validation, supported image detection, truncation and search budgets live in [tools.ts](src/server/tools.ts) and [search.ts](src/server/search.ts).
+The feature opens a workspace view that excludes the application's private state directory. Links are governed by [File Access](../file-access/README.md). Search respects `.gitignore`, skips link traversal and uses bounded traversal and output; direct reads and edits are explicit path operations. UTF-8 text validation, supported image detection, truncation and search budgets live in [tools.ts](src/server/tools.ts) and [search.ts](src/server/search.ts).
 
 Optional HTTP registrations expose `/api/workspaces/:id/files/tree` and `/api/workspaces/:id/files/search`. They use the same prepared workspace/session scope and File Access provider as other workspace views. Successful writes invalidate the `files` projection and return a workspace-relative `changedPath` for consumers.
 

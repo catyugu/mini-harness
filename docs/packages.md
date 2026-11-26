@@ -28,10 +28,9 @@ These private source packages are built into a single npm package. Locate the ow
 ## System capabilities
 
 - [process-execution](../packages/process-execution/README.md): Executable process and stream lifetime.
-- [sandbox](../packages/sandbox/README.md): Command isolation preparation.
-- [file-access](../packages/file-access/README.md): Native and confined directory access.
+- [file-access](../packages/file-access/README.md): Native and workspace directory access.
 - [files](../packages/files/README.md): Workspace file tools and browsing.
-- [shell](../packages/shell/README.md): Shell tool, approval coordination and output.
+- [shell](../packages/shell/README.md): Native command construction, timeout and output.
 - [approvals](../packages/approvals/README.md): User confirmation lifecycle.
 - [skills](../packages/skills/README.md): Skill discovery, loading and prompt contributions.
 

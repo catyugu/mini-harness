@@ -61,10 +61,10 @@ Choose permissions from the left side of the composer:
 | Permission  | Behavior                                                                                                                   |
 | ----------- | -------------------------------------------------------------------------------------------------------------------------- |
 | Read-only   | Select tools that declare read-only access; descendants inherit the restriction                                            |
-| Standard    | Apply normal tool policy and per-command Shell approval                                                                    |
-| Full access | Bypass Shell approval, including pending requests, while keeping inherited read-only restrictions and configured isolation |
+| Standard | Run enabled tools with normal plugin policies. |
+| Full access | Release pending plugin confirmations that opt into Full access, while retaining inherited read-only restrictions. |
 
-Permission changes apply to work that has not started and persist per conversation. They do not enable disabled plugins. Shell starts disabled. Its isolated mode requires supported Linux isolation facilities; trusted host mode runs with your user permissions. Review the [security model](../../SECURITY.md) and [Shell configuration](../../packages/shell/README.md) before enabling command execution.
+Permission changes apply to work that has not started and persist per conversation. They do not enable disabled plugins. Shell starts disabled. Enabling it authorizes native command execution with your user permissions, without per-command confirmation. Its plugin settings control the default timeout and per-stream output limit. Review the [security model](../../SECURITY.md) and [Shell configuration](../../packages/shell/README.md) before enabling command execution.
 
 ## Load skills and instructions
 

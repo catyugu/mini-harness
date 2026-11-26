@@ -1,6 +1,6 @@
 # Process Execution
 
-Process Execution owns subprocess creation, streaming stdio and termination. Callers choose the executable, arguments, environment and working directory. [Shell](../shell/README.md) owns command policy, timeouts and output aggregation; [Sandbox](../sandbox/README.md) can prepare an isolated command before launch.
+Process Execution owns subprocess creation, streaming stdio and termination. Callers choose the executable, arguments, environment and working directory. [Shell](../shell/README.md) owns command construction, timeouts and output capture.
 
 ## Public API and usage
 
@@ -31,4 +31,4 @@ The base Profile mounts `core:process`; this provider has no plugin configuratio
 
 ## Verification
 
-[Process tests](tests/sandbox.test.ts) exercise concurrent streams, cancellation, timeouts and isolation composition. See [execution](../../docs/subsystems/execution.md), [scoped providers](../../docs/scoped-providers.md) and the [package index](../../docs/packages.md).
+[Process tests](tests/execution.test.ts) exercise concurrent streams, cancellation, timeouts and output overflow. See [execution](../../docs/subsystems/execution.md), [scoped providers](../../docs/scoped-providers.md) and the [package index](../../docs/packages.md).

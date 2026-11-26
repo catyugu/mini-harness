@@ -11,7 +11,6 @@ Platform contains small operating-system and filesystem mechanisms shared by the
 | [json.ts](src/json.ts)                   | `readJson` returns a clone of the fallback only when a file is absent. Malformed JSON and other read failures propagate. `writeText` and `writeJson` write a private temporary file, sync it and rename it into place.      |
 | [errors.ts](src/errors.ts)               | `DomainError` carries an operational error code and a client-suitable message. Boundary owners translate it to their transport or UI representation.                                                                        |
 | [local-secret.ts](src/local-secret.ts)   | `protectLocal` invokes Windows CurrentUser data protection. Secret owners choose where to store the result and handle non-Windows storage policy.                                                                           |
-| [isolation.ts](src/isolation.ts)         | `supportsIsolation` probes the Linux tools required by the shipped process sandbox. Availability is not a guarantee about any particular command.                                                                           |
 | [wait.ts](src/wait.ts)                   | `waitFor` cancels a caller's wait when its signal aborts while allowing the owner of the underlying operation to finish settlement.                                                                                         |
 
 For example, an internal persistence owner uses `writeJson` after validating its domain record. It must not treat `readJson<T>` as a validator: the generic type describes the caller's expected data, and parsed data still needs the owner's validation.
@@ -20,8 +19,8 @@ For example, an internal persistence owner uses `writeJson` after validating its
 
 The default application directory is `~/.mini-harness`; `MINI_HARNESS_HOME` changes it. Per-workspace path derivation is a storage-location mechanism. [Workspaces](../workspaces/README.md) owns canonical workspace identities, and [Sessions](../sessions/README.md) owns conversation storage and recovery.
 
-Atomic file replacement does not provide a multi-file transaction, a domain lock or session-log durability. Those guarantees belong to the caller. Native filesystem access has the host process's permissions; consumers that accept relative file paths use [File Access](../file-access/README.md) for a confined view. Process policy belongs to [Sandbox](../sandbox/README.md) and [Process Execution](../process-execution/README.md).
+Atomic file replacement does not provide a multi-file transaction, a domain lock or session-log durability. Those guarantees belong to the caller. Native filesystem access has the host process's permissions; consumers that accept relative file paths use [File Access](../file-access/README.md) for a confined view. Process creation and lifetime belong to [Process Execution](../process-execution/README.md).
 
 ## Testing
 
-These mechanisms are exercised through their consumers: [Profile tests](../../test/system/profiles.test.ts), [workspace API tests](../../test/system/workspace-api.test.ts), [file-policy tests](../files/tests/policy.test.ts), and [process sandbox tests](../process-execution/tests/sandbox.test.ts). Use the [development guide](../../docs/development.md) for focused checks and installed-package verification.
+These mechanisms are exercised through their consumers: [Profile tests](../../test/system/profiles.test.ts), [workspace API tests](../../test/system/workspace-api.test.ts), [file-policy tests](../files/tests/policy.test.ts), and [process tests](../process-execution/tests/execution.test.ts). Use the [development guide](../../docs/development.md) for focused checks and installed-package verification.
