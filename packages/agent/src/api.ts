@@ -2,7 +2,6 @@ import type { Context } from 'mini-harness/cordis';
 import type {
   LlmRequest,
   ModelAttemptMetrics,
-  ModelErrorKind,
   NativeAssistantMessage,
   NativeToolMessage,
 } from '@mini-harness/llm/api';
@@ -43,12 +42,8 @@ export type AgentRun = {
 } & (
   | { request: Request; tools?: readonly ToolDefinition[] }
   | {
-      prepare(turn: number): AgentTurn | Promise<AgentTurn>;
-      recover?(
-        turn: number,
-        error: Extract<ModelErrorKind, 'context-overflow' | 'image-limit'>,
-        message: string,
-      ): AgentTurn | undefined | Promise<AgentTurn | undefined>;
+      /** Rebuild the step after a failed request; decline errors the caller cannot repair. */
+      prepare(turn: number, failure?: ModelFailure): AgentTurn | undefined | Promise<AgentTurn | undefined>;
       afterTurn?(
         calls: readonly ToolCallPart[],
       ): 'continue' | 'restart' | void | Promise<'continue' | 'restart' | void>;

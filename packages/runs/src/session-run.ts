@@ -4,7 +4,7 @@ import { conversationTools } from './tool-selection.ts';
 import type { Context } from 'mini-harness/cordis';
 import type { TaskContext } from '@mini-harness/tasks/api';
 import { scopeTarget } from '@mini-harness/plugin-api/scopes';
-import type { InputContext, ModelFailure, RequestRecovery, StepContext } from '@mini-harness/agent/events';
+import type { InputContext, StepContext } from '@mini-harness/agent/events';
 import { DomainError } from '@mini-harness/platform/errors';
 import { isDeepStrictEqual } from 'node:util';
 import type { SessionCatalog, SessionLifecycle, SessionStore } from '@mini-harness/sessions/records';
@@ -32,21 +32,12 @@ import {
   selectModel,
   assertImageInput,
 } from '@mini-harness/models/selection';
-import type { AgentTurn } from '@mini-harness/agent/api';
+import { modelRetry } from '@mini-harness/agent/model-request';
 
 function requireService<K extends keyof Context & string>(ctx: Context, name: K): NonNullable<Context[K]> {
   const value = ctx.get(name);
   if (value == null) throw new DomainError('unavailable', 'Required service is unavailable: ' + name);
   return value;
-}
-
-async function retryModel(ctx: Context, failure: ModelFailure & { sessionId: string }) {
-  const { signal, ...input } = failure;
-  for (const { context, callback } of ctx.events.listeners('agent/model-retry', scopeTarget(ctx))) {
-    const retry = await context.fiber.run((signal) => callback({ ...input, signal }), signal);
-    if (retry === undefined) continue;
-    return retry;
-  }
 }
 
 const textOf = (message: NativeAssistantMessage) =>
@@ -249,12 +240,10 @@ export class SessionRun {
     let requestId: string | undefined;
     let attemptsRecorded = false;
     let modelStep = 0;
-    let repairs = 0;
-    let prepareTurn: ((repair?: RequestRecovery) => Promise<AgentTurn>) | undefined;
     const answer = await requireService(ctx, 'harnessAgent')
       .run(ctx, {
         signal,
-        retry: (failure) => retryModel(ctx, { ...failure, sessionId: id }),
+        retry: modelRetry(ctx, id),
         onEvent: (event) => {
           if (event.type === 'phase') {
             if (event.phase === 'model') modelStep = event.turn;
@@ -275,8 +264,6 @@ export class SessionRun {
               step: modelStep,
               ...event.metrics,
             });
-            for (const { callback } of ctx.events.listeners('agent/request-attempt', scopeTarget(ctx)))
-              callback(id, requestId, event.metrics);
             attemptsRecorded = true;
             return;
           }
@@ -299,28 +286,24 @@ export class SessionRun {
         afterTurn: async () => {
           if (await deliver(['steer'])) return 'continue';
         },
-        recover: (_turn, kind, message) => prepareTurn?.({ kind, message, attempt: ++repairs }),
-        prepare: async (turn) => {
-          repairs = 0;
+        prepare: async (turn, failure) => {
           const current = log.context();
           const model = current.model;
           if (!model) throw new Error('Configure a model before sending a message');
           const cwd = this.sessions.workspacePath(id);
-          const step: StepContext = { sessionId: id, turn, phase: 'turn', cwd, model, signal };
+          const step: StepContext = { sessionId: id, turn, cwd, model, signal };
           const executor = requireService(ctx, 'harnessToolExecutor');
           const { tools: advertisedTools, assemble } = await this.requestBuilder(ctx, step, log);
           const prepareHooks = ctx.events.listeners('agent/prepare-request', scopeTarget(ctx));
-          prepareTurn = async (repair) => {
-            const request = await applyTransforms(
-              prepareHooks,
-              await assemble(log.context().contextMessages),
-              {
-                ...step,
-                runId: submissionId,
-                recovery: repair,
-                rebuild: assemble,
-              },
-            );
+          if (failure && !prepareHooks.length) return;
+          const initial = await assemble(log.context().contextMessages);
+          const request = await applyTransforms(prepareHooks, initial, {
+            ...step,
+            runId: submissionId,
+            failure,
+            rebuild: assemble,
+          });
+          if (failure && request === initial) return;
             const hooks = ctx.events.listeners('agent/tool-result', scopeTarget(ctx));
             return {
               request,
@@ -400,10 +383,7 @@ export class SessionRun {
                 if (transformError) throw transformError;
               },
             };
-          };
-          const prepared = await prepareTurn();
-          if (!prepareHooks.length) prepareTurn = undefined;
-          return prepared;
+
         },
       })
       .catch((error) => {

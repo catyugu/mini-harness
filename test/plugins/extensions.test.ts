@@ -225,7 +225,7 @@ export const apply = (ctx) => {
 export const inject = ["harnessTools"];
 export const apply = (ctx) => {
     ctx.on("agent/model-request", (request) => ({ ...request, systemPrompt: request.systemPrompt + '[second]' }));
-    ctx.on("agent/model-request", (request, { turn, phase }) => phase === 'turn' && turn === 1 ? ({
+    ctx.on("agent/model-request", (request, { turn }) => turn === 1 ? ({
       ...request, systemPrompt: request.systemPrompt + '[first]',
       messages: [...request.messages, { role: 'user', content: 'Temporary context', timestamp: Date.now() }]
     }) : undefined, { prepend: true });
