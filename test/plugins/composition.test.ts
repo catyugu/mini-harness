@@ -10,7 +10,7 @@ import { createHash } from 'node:crypto';
 import { writePlugin } from '../support/plugin-fixture.ts';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { fixture, waitUntil } from '../support/api-fixture.ts';
+import { fixture } from '../support/api-fixture.ts';
 
 const examples = fileURLToPath(new URL('../../docs/examples/', import.meta.url));
 function copyExample(directory: string, id: string) {
