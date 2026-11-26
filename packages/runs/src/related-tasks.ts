@@ -19,8 +19,8 @@ function childrenOf(ctx: Context, id: string) {
   );
 }
 
-export function relatedTasks(ctx: Context, id: string) {
-  const children = childrenOf(ctx, id);
+export function relatedTasks(ctx: Context, id: string, includeChildren = true) {
+  const children = includeChildren ? childrenOf(ctx, id) : new Set<string>();
   const owners = ['session:' + id, ...children];
   const tasks = new Map<string, TaskSnapshot>();
   for (const owner of owners) {

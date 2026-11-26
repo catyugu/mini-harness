@@ -912,30 +912,6 @@ button.file-card:hover {
   flex: 1;
   min-width: 0;
 }
-.parent-conversations {
-  display: flex;
-  min-width: 0;
-  overflow: auto;
-  gap: 2px;
-  align-items: center;
-}
-.parent-conversations span {
-  display: inline-flex;
-  align-items: center;
-  min-width: 0;
-}
-.parent-conversations .link-button {
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-  padding: 0 4px;
-  font-size: 11px;
-}
-.parent-conversations svg {
-  flex: 0 0 11px;
-  height: 11px;
-  color: var(--muted);
-}
 .run-summary {
   display: flex;
   justify-content: flex-end;
@@ -954,11 +930,6 @@ button.file-card:hover {
 }
 .run-summary:is([data-state='failed'], [data-state='interrupted']) span {
   color: var(--danger);
-}
-@media (max-width: 860px) {
-  .parent-conversations .link-button {
-    min-height: 32px;
-  }
 }
 .model-picker:popover-open {
   animation: popup-in var(--motion-popup) ease-out;

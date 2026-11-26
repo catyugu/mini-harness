@@ -2,7 +2,7 @@ import type { Context } from 'mini-harness/cordis';
 import type { TaskData, TaskOutput, TaskSnapshot } from '@mini-harness/tasks/api';
 import { browserRequest } from '@mini-harness/ui-runtime/http';
 import { icon } from '@mini-harness/ui-primitives/icons';
-import { button, fromMarkup, required } from '@mini-harness/ui-primitives/primitives';
+import { bindHeaderPopover, button, fromMarkup, required } from '@mini-harness/ui-primitives/primitives';
 
 const live = ({ state }: TaskSnapshot) => ['queued', 'running', 'waiting'].includes(state);
 const object = (value?: TaskData): Record<string, TaskData> =>
@@ -69,15 +69,13 @@ function reconcile(parent: HTMLElement, children: HTMLElement[]) {
 }
 
 function setup(ctx: Context) {
-  const services = ctx.harnessBrowser;
   const control = ctx.miniConversation;
   const signal = ctx.fiber.signal;
   const events = new EventTarget();
   const container = fromMarkup(`<div class="background-tasks" hidden>
-    <button type="button" class="link-button" aria-label="Tasks" aria-expanded="false" popovertarget="backgroundTasks"><span class="task-count"></span></button>
-    <div id="backgroundTasks" class="background-task-list" popover="auto" role="region" aria-label="Tasks">
+    <button type="button" class="link-button ui-header-trigger" aria-label="Tasks" aria-expanded="false" aria-controls="backgroundTasks" popovertarget="backgroundTasks"><span class="task-count"></span></button>
+    <div id="backgroundTasks" class="background-task-list ui-header-popover" popover="auto" role="region" aria-label="Tasks">
       <p class="task-notice" role="status"></p>
-      <section class="task-group" hidden><h3>Subagents</h3><div class="task-rows"></div></section>
       <section class="task-group" hidden><h3>Running <span></span></h3><div class="task-rows"></div></section>
       <section class="task-group" hidden><div class="task-group-header">
         <button type="button" class="task-group-toggle" aria-expanded="false"><span></span></button>
@@ -90,8 +88,7 @@ function setup(ctx: Context) {
   toggle.append(icon('chevron'));
   const panel = required(container.querySelector<HTMLElement>('#backgroundTasks'));
   const notice = required(panel.querySelector<HTMLElement>('.task-notice'));
-  const [children, running, finished] = [...panel.querySelectorAll<HTMLElement>('.task-group')];
-  const childRows = required(children.querySelector<HTMLElement>('.task-rows'));
+  const [running, finished] = [...panel.querySelectorAll<HTMLElement>('.task-group')];
   const runningRows = required(running.querySelector<HTMLElement>('.task-rows'));
   const finishedRows = required(finished.querySelector<HTMLElement>('.task-rows'));
   const finishedToggle = required(finished.querySelector<HTMLButtonElement>('.task-group-toggle'));
@@ -110,8 +107,6 @@ function setup(ctx: Context) {
   let expanded: ReturnType<typeof createOutput> | undefined;
 
   function label(task: TaskSnapshot) {
-    if (task.type === 'agent-run')
-      return services.session(task.owner.slice('session:'.length))?.title ?? 'Subagent';
     return task.metadata?.tool === 'sandbox_shell'
       ? input(task) || task.name || 'Shell'
       : (task.name ?? 'Task');
@@ -232,21 +227,15 @@ function setup(ctx: Context) {
     cancel.classList.add('task-cancel');
     cancel.append(icon('stop'));
     line.append(cancel);
-    const child = task.type === 'agent-run';
     let current = task;
-    row.onclick = () => {
-      if (child) {
-        panel.hidePopover();
-        services.openConversation(current.owner.slice('session:'.length));
-      } else showOutput(current);
-    };
+    row.onclick = () => showOutput(current);
     cancel.onclick = async () => {
       if (!active || !live(current) || current.cancellationRequested) return;
       cancel.disabled = true;
       try {
         await browserRequest(ctx, path(active) + '/' + encodeURIComponent(task.id), { method: 'DELETE' });
       } catch (error) {
-        control.report(error);
+        control.report(error instanceof Error ? error : new Error(String(error)));
       } finally {
         cancel.disabled = current.cancellationRequested || !live(current);
       }
@@ -258,7 +247,7 @@ function setup(ctx: Context) {
       current = next;
       const title = label(next);
       name.textContent = title;
-      kind.textContent = child ? '' : next.name === title ? '' : (next.name ?? '');
+      kind.textContent = next.name === title ? '' : (next.name ?? '');
       kind.hidden = !kind.textContent;
       state.textContent = status(next);
       node.dataset.state = next.state;
@@ -269,12 +258,9 @@ function setup(ctx: Context) {
             ? 'cancelled'
             : next.state;
       row.title = title + ' · ' + state.textContent;
-      row.setAttribute(
-        'aria-label',
-        child ? 'Open conversation: ' + title : title + ' · ' + state.textContent,
-      );
-      if (!child) row.setAttribute('aria-expanded', String(expanded?.id === next.id));
-      chevron.classList.toggle('task-chevron-open', !child && expanded?.id === next.id);
+      row.setAttribute('aria-label', title + ' · ' + state.textContent);
+      row.setAttribute('aria-expanded', String(expanded?.id === next.id));
+      chevron.classList.toggle('task-chevron-open', expanded?.id === next.id);
       cancel.hidden = !live(next);
       cancel.disabled = next.cancellationRequested;
       cancel.title = 'Cancel task';
@@ -289,18 +275,10 @@ function setup(ctx: Context) {
   }
 
   function render() {
-    const childrenByOwner = new Map<string, TaskSnapshot>();
-    for (const task of tasks) {
-      if (task.type !== 'agent-run') continue;
-      const previous = childrenByOwner.get(task.owner);
-      if (!previous || (!live(previous) && live(task))) childrenByOwner.set(task.owner, task);
-    }
-    const agents = [...childrenByOwner.values()];
-    const jobs = tasks.filter((task) => task.type !== 'agent-run');
-    const pending = jobs.filter(live);
-    const settled = jobs.filter((task) => !live(task) && !dismissed.has(task.id));
+    const pending = tasks.filter(live);
+    const settled = tasks.filter((task) => !live(task) && !dismissed.has(task.id));
     const finishedExpanded = finishedOpen ?? pending.length === 0;
-    const visible = [...agents, ...pending, ...(finishedExpanded ? settled : [])];
+    const visible = [...pending, ...(finishedExpanded ? settled : [])];
     const displayed = new Set(visible.map(({ id }) => id));
     if (expanded && !displayed.has(expanded.id)) closeOutput();
     for (const [id, row] of rows) {
@@ -320,18 +298,16 @@ function setup(ctx: Context) {
       });
       reconcile(parent, nodes);
     };
-    mount(childRows, agents);
     mount(runningRows, pending);
     mount(finishedRows, finishedExpanded ? settled : []);
-    children.hidden = !agents.length;
     running.hidden = !pending.length;
     finished.hidden = !settled.length;
     finishedRows.hidden = !finishedExpanded;
     required(running.querySelector('h3 span')).textContent = String(pending.length);
     finishedCount.textContent = 'Finished ' + settled.length;
     finishedToggle.setAttribute('aria-expanded', String(finishedExpanded));
-    const total = agents.length + pending.length + settled.length;
-    const liveCount = agents.filter(live).length + pending.length;
+    const total = pending.length + settled.length;
+    const liveCount = pending.length;
     count.textContent = total + (total === 1 ? ' task' : ' tasks');
     toggle.dataset.running = String(liveCount > 0);
     toggle.title = liveCount + ' running · ' + (total - liveCount) + ' finished';
@@ -343,7 +319,7 @@ function setup(ctx: Context) {
     render();
   };
   clear.onclick = () => {
-    for (const task of tasks) if (task.type !== 'agent-run' && !live(task)) dismissed.add(task.id);
+    for (const task of tasks) if (!live(task)) dismissed.add(task.id);
     finishedOpen = undefined;
     render();
   };
@@ -392,30 +368,15 @@ function setup(ctx: Context) {
     signal,
   );
   signal.addEventListener('abort', closeOutput, { once: true });
-  const position = () => {
-    const bounds = toggle.getBoundingClientRect();
-    panel.style.left = Math.max(8, Math.min(bounds.left, innerWidth - panel.offsetWidth - 8)) + 'px';
-    panel.style.top = bounds.bottom + 6 + 'px';
-    panel.style.maxHeight = Math.max(0, Math.min(520, innerHeight - bounds.bottom - 14)) + 'px';
-  };
+  bindHeaderPopover(toggle, panel, signal);
   panel.addEventListener(
     'toggle',
     () => {
-      toggle.setAttribute('aria-expanded', String(open()));
-      if (open()) {
-        position();
-        void refresh();
-      } else {
+      if (open()) void refresh();
+      else {
         closeOutput();
         render();
       }
-    },
-    { signal },
-  );
-  window.addEventListener(
-    'resize',
-    () => {
-      if (open()) position();
     },
     { signal },
   );
@@ -423,25 +384,23 @@ function setup(ctx: Context) {
     if (open()) for (const row of rows.values()) row.tick();
   }, 1000);
   ctx.effect(() => () => clearInterval(interval));
-  const receipt = ({ taskId, name }: { taskId?: string; name: string }, signal: AbortSignal) => {
+  const receipt = ({ taskId }: { taskId?: string }, signal: AbortSignal) => {
     if (!taskId) return;
     const node = document.createElement('div');
     node.className = 'task-receipt';
     const text = document.createElement('span');
     node.append(text);
-    if (name === 'start_background') {
-      const view = button('View task', 'quiet');
-      view.onclick = () => {
-        const task = tasks.find(({ id }) => id === taskId);
-        if (!task) return;
-        dismissed.delete(taskId);
-        if (!live(task)) finishedOpen = true;
-        render();
-        if (!open()) panel.showPopover();
-        if (expanded?.id !== taskId) showOutput(task);
-      };
-      node.append(view);
-    }
+    const view = button('View task', 'quiet');
+    view.onclick = () => {
+      const task = tasks.find(({ id }) => id === taskId);
+      if (!task) return;
+      dismissed.delete(taskId);
+      if (!live(task)) finishedOpen = true;
+      render();
+      if (!open()) panel.showPopover();
+      if (expanded?.id !== taskId) showOutput(task);
+    };
+    node.append(view);
     const update = () => {
       const task = tasks.find(({ id }) => id === taskId);
       text.textContent = task ? label(task) + ' · ' + status(task) : 'Accepted';
@@ -450,12 +409,11 @@ function setup(ctx: Context) {
     update();
     return node;
   };
-  for (const name of ['start_background', 'delegate'])
-    ctx.effect(() => ctx.miniMessages.registerTool(name, receipt));
+  ctx.effect(() => ctx.miniMessages.registerTool('start_background', receipt));
   void refresh();
 }
 
 export default {
-  inject: ['harnessBrowser', 'miniConversation', 'miniSlots', 'miniProjections', 'miniMessages'],
+  inject: ['miniConversation', 'miniSlots', 'miniProjections', 'miniMessages'],
   apply: setup,
 };

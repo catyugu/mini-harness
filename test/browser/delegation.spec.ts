@@ -104,14 +104,16 @@ test('plugin schema controls, recursive tree navigation, batch export and perman
       .first();
     await expect(notification.locator('summary')).toBeVisible();
     await expect(notification.locator('article')).toBeHidden();
-    await page.locator('.background-tasks').getByRole('button', { name: 'Tasks', exact: true }).click();
-    const tasks = page.locator('.background-task-list');
-    await expect(tasks.getByRole('heading', { name: 'Subagents', exact: true })).toBeVisible();
+    await page.locator('.subagent-tasks').getByRole('button', { name: 'Subagents', exact: true }).click();
+    const tasks = page.locator('.subagent-list');
+    await expect(tasks).toBeVisible();
+    await expect(page.locator('.background-tasks')).toBeHidden();
+    await expect(page.locator('.subagent-tasks > button')).toHaveText('1 subagent');
     await expect(
       tasks.getByRole('button', { name: 'Open conversation: Child task', exact: true }),
     ).toHaveCount(1);
     await expect(tasks.locator('.task-output')).toHaveCount(0);
-    await page.locator('.background-tasks').getByRole('button', { name: 'Tasks', exact: true }).click();
+    await page.locator('.subagent-tasks').getByRole('button', { name: 'Subagents', exact: true }).click();
     await page.getByRole('button', { name: 'Expand Parent task', exact: true }).click();
     await page.getByRole('button', { name: 'Expand Child task', exact: true }).click();
     await page.getByRole('button', { name: 'Leaf task', exact: true }).click();
@@ -136,7 +138,7 @@ test('plugin schema controls, recursive tree navigation, batch export and perman
       .toBe(true);
     await ancestors.getByRole('button', { name: 'Child task', exact: true }).click();
     await expect(page.locator('#conversationTitle')).toHaveText('Child task');
-    await page.locator('.background-tasks').getByRole('button', { name: 'Tasks', exact: true }).click();
+    await page.locator('.subagent-tasks').getByRole('button', { name: 'Subagents', exact: true }).click();
     await tasks.getByRole('button', { name: 'Open conversation: Leaf task', exact: true }).click();
     await expect(page.locator('#conversationTitle')).toHaveText('Leaf task');
     await page.reload();

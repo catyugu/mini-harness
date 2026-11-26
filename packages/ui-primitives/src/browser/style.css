@@ -386,3 +386,53 @@ textarea::placeholder {
   border: 0;
   background: transparent;
 }
+
+/* Compact header disclosures share only presentation and positioning. */
+.ui-header-trigger {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+  font-size: 12px;
+  color: var(--muted);
+}
+.ui-header-trigger svg {
+  width: 12px;
+  height: 12px;
+  flex: none;
+  transform: rotate(90deg);
+}
+.ui-header-trigger[aria-expanded='true'] svg {
+  transform: rotate(-90deg);
+}
+.ui-header-trigger[data-running='true']::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  flex: none;
+  border-radius: 50%;
+  background: #4d83df;
+}
+.ui-header-popover {
+  position: fixed;
+  inset: auto;
+  margin: 0;
+  max-height: min(65dvh, 520px);
+  box-sizing: border-box;
+  overflow: auto;
+  overscroll-behavior: contain;
+  background: var(--surface);
+  color: var(--ink);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 6px;
+  white-space: normal;
+  font-size: 12px;
+}
+@media (max-width: 860px) {
+  .ui-header-trigger {
+    min-height: 32px;
+    padding-inline: 4px;
+  }
+}

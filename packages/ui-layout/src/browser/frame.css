@@ -100,12 +100,9 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  flex: 0 0 auto;
+  flex: 0 1 auto;
   min-width: 0;
   max-width: 100%;
-}
-#workspaceHeader:not([hidden]) + #conversationExtensions {
-  max-width: 60%;
 }
 #conversationExtensions:not(:has(> :not([hidden]))) {
   display: none;
