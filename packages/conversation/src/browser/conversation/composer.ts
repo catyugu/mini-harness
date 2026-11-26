@@ -185,13 +185,15 @@ export function createComposer(
     if (!match) return;
     const name = match[1].toLowerCase();
     return model.matchCommands(name).find((command) =>
-      command.run && [command.name, ...(command.aliases ?? [])].some((key) => key.toLowerCase() === name),
+      command.run
+        ? [command.name, ...(command.aliases ?? [])].some((key) => key.toLowerCase() === name)
+        : command.name === match[1],
     );
   }
 
   function submitCommand() {
     const command = submittedCommand();
-    if (!command) return false;
+    if (!command?.run) return false;
     useCommand(command, { start: 0, end: editor.value.length });
     return true;
   }
