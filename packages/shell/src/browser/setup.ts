@@ -22,6 +22,6 @@ function renderResult(tool: ToolView) {
 }
 
 const setup = (ctx: Context) => {
-  ctx.effect(() => ctx.miniMessages.registerTool('sandbox_shell', renderResult));
+  ctx.effect(() => ctx.miniMessages.registerTool('shell', renderResult));
 };
 export default { inject: ['miniMessages'], provide: [], apply: setup };

@@ -39,21 +39,10 @@ jobs:
           node-version: ${{ matrix.node }}
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - name: Set up Linux workspace isolation
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y bubblewrap
-          if [ -e /proc/sys/kernel/apparmor_restrict_unprivileged_userns ]; then
-            sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
-          fi
-          bwrap --unshare-all --ro-bind / / -- /usr/bin/prlimit -- /bin/true
       - name: Build with strict TypeScript
         run: pnpm run build
       - name: Run Node tests
         run: pnpm run test:node
-        env:
-          MINI_HARNESS_REQUIRE_ISOLATION: ${{ runner.os == 'Linux' && '1' || '0' }}
 
   browser-linux:
     needs: format

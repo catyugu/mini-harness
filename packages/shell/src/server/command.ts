@@ -5,25 +5,25 @@ import type { ProcessCommand, ProcessExecutionPort } from '@mini-harness/process
 export async function runShellCommand(
   execution: ProcessExecutionPort,
   command: ProcessCommand,
-  timeoutSeconds: number,
+  timeoutMs: number,
+  maxOutputBytes: number,
   signal?: AbortSignal,
   write?: (text: string, channel: 'stdout' | 'stderr') => void,
 ) {
   signal?.throwIfAborted();
   const controller = new AbortController();
-  let reason: 'timeout' | 'cancelled' | 'output-limit' | undefined;
+  let reason: 'timeout' | 'cancelled' | undefined;
   function terminate(cause: NonNullable<typeof reason>) {
     reason ??= cause;
     controller.abort();
   }
   const child = execution.start(command, controller.signal);
-  const timeout = setTimeout(() => terminate('timeout'), timeoutSeconds * 1000);
+  const timeout = setTimeout(() => terminate('timeout'), timeoutMs);
   const cancel = () => terminate('cancelled');
   signal?.addEventListener('abort', cancel, { once: true });
   if (signal?.aborted) cancel();
 
-  let bytes = 0;
-  const limit = 1024 * 1024;
+  let truncated = false;
   const stdout: Buffer[] = [];
   const stderr: Buffer[] = [];
   const channels = [
@@ -32,16 +32,17 @@ export async function runShellCommand(
   ];
   child.stdin.end();
   for (const { name, stream, output, decoder } of channels) {
+    let bytes = 0;
     stream.on('data', (value: Buffer | string) => {
       const chunk = typeof value === 'string' ? Buffer.from(value) : value;
-      const allowed = Math.min(limit - bytes, chunk.length);
+      const allowed = Math.min(maxOutputBytes - bytes, chunk.length);
       if (allowed > 0) {
         const accepted = chunk.subarray(0, allowed);
         output.push(accepted);
-        write?.(decoder.write(accepted), name);
       }
       bytes += allowed;
-      if (allowed < chunk.length) terminate('output-limit');
+      if (allowed < chunk.length) truncated = true;
+      write?.(decoder.write(chunk), name);
     });
     stream.once('end', () => write?.(decoder.end(), name));
   }
@@ -56,7 +57,7 @@ export async function runShellCommand(
       reason,
       stdout: Buffer.concat(stdout).toString('utf8'),
       stderr: Buffer.concat(stderr).toString('utf8'),
-      truncated: reason === 'output-limit',
+      truncated,
     };
   } finally {
     clearTimeout(timeout);

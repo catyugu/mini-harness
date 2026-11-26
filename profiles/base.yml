@@ -52,8 +52,6 @@ plugins:
     name: '@mini-harness/session-helper'
   - id: core:approvals
     name: '@mini-harness/approvals'
-  - id: core:sandbox
-    name: '@mini-harness/sandbox'
   - id: core:process
     name: '@mini-harness/process-execution'
   - id: core:tools

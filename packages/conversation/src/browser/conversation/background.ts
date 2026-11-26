@@ -38,7 +38,7 @@ function duration(task: TaskSnapshot) {
 
 function input(task: TaskSnapshot) {
   const args = task.metadata?.arguments;
-  if (task.metadata?.tool === 'sandbox_shell' && typeof object(args).command === 'string')
+  if (task.metadata?.tool === 'shell' && typeof object(args).command === 'string')
     return String(object(args).command);
   return args === undefined ? '' : JSON.stringify(args, null, 2);
 }
@@ -107,7 +107,7 @@ function setup(ctx: Context) {
   let expanded: ReturnType<typeof createOutput> | undefined;
 
   function label(task: TaskSnapshot) {
-    return task.metadata?.tool === 'sandbox_shell'
+    return task.metadata?.tool === 'shell'
       ? input(task) || task.name || 'Shell'
       : (task.name ?? 'Task');
   }

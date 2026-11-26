@@ -180,10 +180,6 @@
       "types": "./dist/types/packages/process-execution/src/api.d.ts",
       "default": "./dist/packages/process-execution/src/api.js"
     },
-    "./sandbox": {
-      "types": "./dist/types/packages/sandbox/src/api.d.ts",
-      "default": "./dist/packages/sandbox/src/api.js"
-    },
     "./scopes": {
       "types": "./dist/types/packages/plugin-api/src/scopes.d.ts",
       "default": "./dist/packages/plugin-api/src/scopes.js"

@@ -66,9 +66,6 @@ importers:
       '@mini-harness/runs':
         specifier: workspace:*
         version: link:packages/runs
-      '@mini-harness/sandbox':
-        specifier: workspace:*
-        version: link:packages/sandbox
       '@mini-harness/sessions':
         specifier: workspace:*
         version: link:packages/sessions
@@ -375,18 +372,6 @@ importers:
         specifier: workspace:*
         version: link:../transport
 
-  packages/sandbox:
-    dependencies:
-      '@mini-harness/platform':
-        specifier: workspace:*
-        version: link:../platform
-      '@mini-harness/plugin-api':
-        specifier: workspace:*
-        version: link:../plugin-api
-      '@mini-harness/process-execution':
-        specifier: workspace:*
-        version: link:../process-execution
-
   packages/session-helper:
     dependencies:
       '@mini-harness/plugin-api':
@@ -434,9 +419,6 @@ importers:
 
   packages/shell:
     dependencies:
-      '@mini-harness/approvals':
-        specifier: workspace:*
-        version: link:../approvals
       '@mini-harness/conversation':
         specifier: workspace:*
         version: link:../conversation
