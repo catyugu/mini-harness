@@ -887,7 +887,18 @@ test('native compaction reduces context and preserves message identities and his
     .projection()
     .timeline.filter(isViewMessage);
   const compacted = await compact();
-  assert.equal(compacted.status, 200, JSON.stringify(compacted.body) + ' ' + JSON.stringify(log.entries().filter((entry) => entry.type === 'task').at(-1)));
+  assert.equal(
+    compacted.status,
+    200,
+    JSON.stringify(compacted.body) +
+      ' ' +
+      JSON.stringify(
+        log
+          .entries()
+          .filter((entry) => entry.type === 'task')
+          .at(-1),
+      ),
+  );
   assert.equal(mock.requests.length, 7);
   assert.match(JSON.stringify(mock.requests.at(-1)), /Image 1 offloaded/);
   assert.doesNotMatch(JSON.stringify(mock.requests.at(-1)), /iVBORw0KGgo=/);
