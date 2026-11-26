@@ -1,5 +1,5 @@
 import { userContent } from './user-content.ts';
-import type { SessionDisplayRecord } from './shared/display-record.ts';
+import type { ContextCheckpoint, SessionDisplayRecord } from './shared/display-record.ts';
 import { isRunning, type RunInfo } from './shared/run-state.ts';
 import { toolResultState } from '@mini-harness/tools/api';
 import type { NativeMessage, NativeToolMessage } from '@mini-harness/llm/api';
@@ -78,9 +78,19 @@ export function displayMessage(
 }
 
 export function displayRecord(
-  entry: Extract<SessionEntry, { type: 'plugin-record' }>,
-): SessionDisplayRecord | undefined {
-  if (entry.display)
+  entry: SessionEntry,
+): SessionDisplayRecord | ContextCheckpoint | undefined {
+  if (entry.type === 'context-replace' && entry.measurement)
+    return {
+      type: 'checkpoint',
+      id: entry.id,
+      summary: entry.replacements
+        .flatMap(({ insert }) => insert.flatMap(({ content }) =>
+          typeof content === 'string' ? [content] : content.flatMap((part) => part.type === 'text' ? [part.text] : []),
+        ))
+        .join('\n\n'),
+    };
+  if (entry.type === 'plugin-record' && entry.display)
     return {
       type: 'record',
       id: entry.id,
@@ -170,10 +180,8 @@ export function projectLog(
   }
   for (const entry of branch) {
     projectRuns(entry.seq);
-    if (entry.type === 'plugin-record') {
-      const record = displayRecord(entry);
-      if (record) state.timeline.push(record);
-    }
+    const record = displayRecord(entry);
+    if (record) state.timeline.push(record);
     const message = messageOf(entry);
     if (!message) continue;
     if (message.role === 'assistant')
