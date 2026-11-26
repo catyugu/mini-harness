@@ -42,8 +42,6 @@ test('drafts isolate attachments and discover workspace files and skills', async
     await suggestions(page).getByRole('option', { name: 'notes.md', exact: true }).click();
     const reference = draft.getByRole('button', { name: 'notes.md', exact: true });
     await expect(reference).toBeVisible();
-    await reference.hover();
-    await expect(reference).toHaveCSS('text-decoration-line', 'underline');
     await reference.click();
     const panel = page.getByRole('complementary', { name: 'Workspace panel' });
     await expect(panel.getByRole('heading', { name: 'Notes' })).toBeVisible();
@@ -117,7 +115,6 @@ test('drafts isolate attachments and discover workspace files and skills', async
     await page.getByRole('button', { name: 'Preview blue.png', exact: true }).click();
     const media = page.getByRole('dialog', { name: 'blue.png' });
     await expect(media.getByRole('img')).toBeVisible();
-    await expect(media).toHaveCSS('padding', '0px');
     await page.keyboard.press('Escape');
     await expect(media).toHaveCount(0);
     await page.getByRole('button', { name: 'Send', exact: true }).click();

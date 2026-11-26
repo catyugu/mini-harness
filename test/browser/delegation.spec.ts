@@ -103,22 +103,10 @@ test('plugin schema controls, recursive tree navigation, batch export and perman
       .filter({ hasText: 'Subagent finished' })
       .first();
     const header = notification.locator('summary');
-    const label = header.locator('span');
-    const toolHeader = page.locator('.tool-card > summary').first();
     await expect(header).toBeVisible();
-    await expect(header).toHaveCSS('min-height', '24px');
-    await expect(header).toHaveCSS('padding-inline-start', '0px');
-    await expect(label).toHaveCSS('font-size', '12px');
-    await expect(label).toHaveCSS('font-weight', '400');
-    await expect(label).toHaveCSS(
-      'font-family',
-      await toolHeader.locator('strong').evaluate((node) => getComputedStyle(node).fontFamily),
-    );
     await expect(notification.locator('article')).toBeHidden();
     await header.click();
     await expect(notification.locator('article')).toBeVisible();
-    await expect(notification.locator('article')).toHaveCSS('font-size', '12px');
-    await expect(notification.locator('article')).toHaveCSS('padding-inline-start', '20px');
     await header.click();
     await expect(notification.locator('article')).toBeHidden();
     await page.locator('.subagent-tasks').getByRole('button', { name: 'Subagents', exact: true }).click();

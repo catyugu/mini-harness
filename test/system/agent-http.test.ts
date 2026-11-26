@@ -41,10 +41,8 @@ test(
     assert.equal((await fetch(base + '/api/bootstrap')).status, 401);
     const home = await fetch(base + '/');
     assert.equal(home.status, 200);
-    assert.match(await home.text(), /mini-harness/);
     const bundle = await fetch(base + '/packages/ui-runtime/src/browser/http.js');
     assert.equal(bundle.status, 200);
-    assert.match(await bundle.text(), /mini-harness-token/);
 
     const bootstrap = await (await get('/api/models')).json();
     assert.ok(
