@@ -1,3 +1,4 @@
+import { isViewMessage } from '@mini-harness/sessions/message';
 import { waitFor } from '@mini-harness/platform/wait';
 import type { ConversationView } from '../shared/api.ts';
 import { isRunning } from '@mini-harness/sessions/run-state';
@@ -79,7 +80,9 @@ export function registerSessionRoutes(ctx: Context, read: (id: string) => Conver
       let hit = find(id, 'title', title);
       if (!hit) {
         const messages =
-          ctx.harnessSessions.inspectLog(id, (log) => log.projection().messages.slice(-500)) ?? [];
+          ctx.harnessSessions.inspectLog(id, (log) =>
+            log.projection().timeline.filter(isViewMessage).slice(-500),
+          ) ?? [];
         for (const message of messages.reverse()) {
           if (message.role === 'toolResult') continue;
           const content =
@@ -152,17 +155,14 @@ export function registerSessionRoutes(ctx: Context, read: (id: string) => Conver
         if (event.type === 'snapshot') {
           stream.send({
             ...event,
-            messages: projectHistory(ctx, id, event.messages),
+            timeline: projectHistory(ctx, id, event.timeline),
             tools: event.tools?.map((tool) => projectToolEvent(ctx, id, tool)),
           });
         } else if (event.type === 'user' && event.revised) {
-          const { messages, records, terminations, leafId, model, thinkingLevel, partial, tools, run } =
-            read(id);
+          const { timeline, leafId, model, thinkingLevel, partial, tools, run } = read(id);
           stream.send({
             type: 'snapshot',
-            messages,
-            records,
-            terminations,
+            timeline,
             leafId,
             model,
             thinkingLevel,

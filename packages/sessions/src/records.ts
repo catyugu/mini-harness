@@ -1,6 +1,6 @@
 import type { ScopeKey } from '@mini-harness/plugin-api/scopes';
 import type { ModelChoice } from '@mini-harness/llm/vocabulary';
-import type { ViewMessage } from './shared/message.ts';
+import type { HistoryEntry } from './shared/message.ts';
 import type { ConversationPermission, SessionRecord } from './shared/identity.ts';
 import type { SessionLogPort } from './log-api.ts';
 export type { SessionLogPort, SessionEntry, SessionEvent, SessionProjection } from './log-api.ts';
@@ -78,7 +78,7 @@ export interface SessionLifecycle {
 
 /** The native persistence provider owns writers and their deletion transaction. */
 export interface SessionStore extends SessionCatalog, SessionHistory, SessionLifecycle {
-  history(id: string): { messages: ViewMessage[]; leafId: string | null; model?: ModelChoice };
+  history(id: string): { timeline: HistoryEntry[]; leafId: string | null; model?: ModelChoice };
   records<Data = unknown>(id: string, owner: RecordOwner): SessionRecords<Data>;
   log(id: string): SessionLogPort;
   prepareInput(

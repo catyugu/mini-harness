@@ -10,12 +10,24 @@ export interface ToolView {
   arguments?: unknown;
   sessionId?: string;
 }
+export type MessageActionTarget =
+  | {
+      readonly type: 'user-message';
+      readonly message: Extract<ViewMessage, { role: 'user' }>;
+      readonly rawText: string;
+    }
+  | {
+      readonly type: 'assistant-turn';
+      readonly id: string;
+      readonly messages: readonly ViewMessage[];
+      readonly rawText: string;
+    };
+
 export interface MessageActionContext {
   readonly signal: AbortSignal;
-  readonly sessionId?: string;
+  readonly sessionId: string;
   readonly leafId?: string | null;
-  readonly message: ViewMessage;
-  readonly rawText: string;
+  readonly target: MessageActionTarget;
 }
 export interface MessageAction {
   id: string;

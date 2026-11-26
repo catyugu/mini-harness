@@ -1,6 +1,6 @@
 import { DomainError } from '@mini-harness/platform/errors';
 import { randomUUID } from 'node:crypto';
-import { constants } from 'node:fs';
+import { constants, type BigIntStats, type Stats } from 'node:fs';
 import {
   link,
   lstat,
@@ -40,6 +40,16 @@ function samePath(a: string, b: string) {
 }
 const denied = () => new DomainError('forbidden', 'Path is outside the permitted root or is a link');
 const missing = (error: unknown) => (error as NodeJS.ErrnoException).code === 'ENOENT';
+
+function checkType(info: Stats | BigIntStats, allowDirectory = false) {
+  if (info.isSymbolicLink()) throw denied();
+  if (info.isDirectory()) {
+    if (allowDirectory) return;
+    throw new FileTypeError('directory');
+  }
+  if (!info.isFile()) throw new FileTypeError('unsupported');
+  if (info.nlink !== 1 && info.nlink !== 1n) throw denied();
+}
 
 export class RootedFiles implements RootedFileAccess {
   constructor(
@@ -123,10 +133,8 @@ export class RootedFiles implements RootedFileAccess {
       const target = resolve(dir, name);
       // Check before opening so devices and FIFOs never act as regular files.
       const before = await lstat(target, { bigint: true });
-      if (before.isSymbolicLink() || (!linux && !samePath(await realpath(target), target))) throw denied();
-      if (before.isDirectory()) throw new FileTypeError('directory');
-      if (!before.isFile()) throw new FileTypeError('unsupported');
-      if (before.nlink !== 1n) throw denied();
+      checkType(before);
+      if (!linux && !samePath(await realpath(target), target)) throw denied();
       const handle = await open(target, constants.O_RDONLY | noFollow);
       try {
         const actual = await handle.stat({ bigint: true });
@@ -196,10 +204,8 @@ export class RootedFiles implements RootedFileAccess {
       const target = resolve(dir, basename(path));
       const identify = async () => {
         const info = await lstat(target, { bigint: true });
-        if (info.isSymbolicLink() || !samePath(await realpath(target), path)) throw denied();
-        if (info.isDirectory()) throw new FileTypeError('directory');
-        if (!info.isFile()) throw new FileTypeError('unsupported');
-        if (info.nlink !== 1n) throw denied();
+        checkType(info);
+        if (!samePath(await realpath(target), path)) throw denied();
         return info;
       };
       const before = await identify().catch((error: unknown) => {
@@ -265,13 +271,8 @@ export class RootedFiles implements RootedFileAccess {
     return this.directory(dirname(path), false, async (dir) => {
       const target = resolve(dir, basename(path));
       const info = await lstat(target);
-      if (
-        info.isSymbolicLink() ||
-        (info.isFile() && info.nlink !== 1) ||
-        (!linux && !samePath(await realpath(target), target))
-      )
-        throw denied();
-      if (!info.isDirectory() && !info.isFile()) throw new FileTypeError('unsupported');
+      checkType(info, true);
+      if (!linux && !samePath(await realpath(target), target)) throw denied();
       return info;
     });
   }

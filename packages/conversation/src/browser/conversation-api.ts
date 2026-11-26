@@ -1,11 +1,10 @@
 import type { Conversation, ConversationView } from '../shared/api.ts';
 import type { ConversationPermission } from '@mini-harness/sessions/identity';
-import type { StreamEvent } from '@mini-harness/runs/stream';
+import type { ToolProgress } from '@mini-harness/runs/stream';
 import type { ModelChoice, ThinkingLevel } from '@mini-harness/llm/vocabulary';
 import type { Attachment } from '@mini-harness/input/message';
-import type { ViewMessage } from '@mini-harness/sessions/message';
-import type { RunInfo, RunTermination } from '@mini-harness/sessions/run-state';
-import type { SessionDisplayRecord } from '@mini-harness/sessions/display-record';
+import type { HistoryEntry } from '@mini-harness/sessions/message';
+import type { RunInfo } from '@mini-harness/sessions/run-state';
 
 export interface ConversationRevision {
   sourceEntryId: string;
@@ -31,15 +30,13 @@ export interface ConversationSubmission {
 
 export interface ConversationState {
   session?: Omit<Conversation, 'run'> & { thinkingLevel?: ThinkingLevel };
-  history: {
-    readonly messages: readonly ViewMessage[];
-    readonly records: readonly SessionDisplayRecord[];
-    readonly terminations: readonly RunTermination[];
+  history?: {
+    readonly timeline: readonly HistoryEntry[];
     leafId: string | null;
   };
   run?: RunInfo;
   partial: string;
-  tools: readonly Extract<StreamEvent, { type: 'tool' }>[];
+  tools: readonly ToolProgress[];
   queue: readonly ConversationView['queue'][number][];
   interaction: {
     operation?: 'open' | 'submit' | 'queue' | 'compact';

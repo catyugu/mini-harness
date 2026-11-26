@@ -19,7 +19,6 @@ export type ToolResultState = 'finished' | 'error' | 'skipped' | 'denied';
 
 export function toolResultState(result: NativeToolMessage): ToolResultState {
   if (result.outcome) return result.outcome;
-  if (result.details?.approvalDenied === true) return 'denied'; // Historical shell results.
   return result.isError ? 'error' : 'finished';
 }
 

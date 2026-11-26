@@ -1,6 +1,6 @@
 import type { ThinkingLevel, ModelChoice } from '@mini-harness/llm/vocabulary';
 import type { Attachment, InputSource } from '@mini-harness/input/message';
-import type { RunEvent, StreamEvent } from './stream.ts';
+import type { RunEvent, StreamEvent, ToolProgress } from './stream.ts';
 import type { QueueEntry } from '@mini-harness/sessions/queue';
 import type { ExecutionHandle, ExecutionInput } from './execution.ts';
 import type { RunInfo } from '@mini-harness/sessions/run-state';
@@ -10,7 +10,7 @@ export interface RunPort {
   readonly events: EventTarget;
   active(id: string): boolean;
   completion(id: string): Promise<unknown> | undefined;
-  activity(id: string): { partial?: string; tools: Extract<StreamEvent, { type: 'tool' }>[] };
+  activity(id: string): { partial?: string; tools: ToolProgress[] };
   signal(id: string, signal?: AbortSignal): AbortSignal | undefined;
   send(
     id: string,

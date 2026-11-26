@@ -1,3 +1,5 @@
+import type { RecordAppend } from '@mini-harness/sessions/display-record';
+import { userContent } from '@mini-harness/sessions/user-content';
 import type { Context } from 'mini-harness/cordis';
 import { tagScope, scopeTarget } from '@mini-harness/plugin-api/scopes';
 import type { ThinkingLevel, ModelChoice } from '@mini-harness/llm/vocabulary';
@@ -82,11 +84,10 @@ export class Runs implements RunPort {
     return owner && signal ? AbortSignal.any([owner, signal]) : (owner ?? signal);
   }
 
-  branchChanged(id: string) {
+  branchChanged(id: string, record: RecordAppend) {
     const events = this.work.get(id)?.events;
     if (!events || !isRunning(events.info)) return;
-    const { records, leafId } = this.registry.log(id).projection();
-    events.publish({ type: 'branch', records, leafId });
+    events.publish({ type: 'branch', ...record });
   }
 
   private reserve(id: string): Activity {
@@ -383,17 +384,15 @@ export class Runs implements RunPort {
       if (input?.type !== 'message' || input.message.role !== 'user') return;
       const { message, presentation, selection } = input;
       const parts = typeof message.content === 'string' ? [] : message.content;
-      const images = [...(presentation?.images ?? parts.filter((part) => part.type === 'image'))];
       const attachments: Attachment[] = [],
         missing: string[] = [];
-      for (const { name, mimeType, id: attachmentId } of presentation?.attachments ?? []) {
-        const image = imageMimeType.test(mimeType) ? images.shift() : undefined;
+      for (const { name, mimeType, id: attachmentId, data } of userContent(message.content, presentation)
+        .attachments) {
         const bytes = attachmentId && this.registry.readAttachment(id, attachmentId);
         if (bytes) attachments.push({ name, mimeType, data: bytes.toString('base64') });
-        else if (image) attachments.push({ name, mimeType, data: image.data });
+        else if (data) attachments.push({ name, mimeType, data });
         else missing.push(name);
       }
-      if (images.length) missing.push('the original images');
       const text =
         typeof message.content === 'string'
           ? message.content
@@ -423,9 +422,7 @@ export class Runs implements RunPort {
     const history = () => {
       const projection = this.registry.inspectLog(id, (log) => log.projection(), true);
       return {
-        messages: projection?.messages ?? [],
-        records: projection?.records ?? [],
-        terminations: projection?.terminations ?? [],
+        timeline: projection?.timeline ?? [],
         leafId: projection?.leafId ?? null,
         model: projection?.model,
         thinkingLevel: projection?.thinkingLevel,

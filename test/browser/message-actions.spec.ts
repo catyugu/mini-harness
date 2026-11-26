@@ -68,7 +68,7 @@ export const apply = (ctx) => {
           const update = () => {
             const { session, history } = miniConversation.get();
             document.body.dataset.recordSession = session?.id ?? '';
-            document.body.dataset.recordLeaf = history.leafId ?? '';
+            document.body.dataset.recordLeaf = history?.leafId ?? '';
           };
           miniConversation.subscribe(['session', 'history'], update, signal);
           update();

@@ -9,6 +9,7 @@
     "./log-api": "./src/log-api.ts",
     "./manifest": "./src/manifest.ts",
     "./message": "./src/shared/message.ts",
+    "./user-content": "./src/user-content.ts",
     "./queue": "./src/shared/queue.ts",
     "./records": "./src/records.ts",
     "./registry": "./src/registry.ts",

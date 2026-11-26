@@ -1,3 +1,4 @@
+import { isViewMessage } from '@mini-harness/sessions/message';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { rmSync, writeFileSync } from 'node:fs';
@@ -77,7 +78,8 @@ test(
     const failure = app.runtime.plugins.ctx.harnessSessions
       .log(check.id)
       .projection()
-      .messages.find((message) => message.role === 'toolResult');
+      .timeline.filter(isViewMessage)
+      .find((message) => message.role === 'toolResult');
     assert.ok(failure);
     assert.equal(failure.isError, true);
     assert.match(JSON.stringify(failure.content), /permitted root/);

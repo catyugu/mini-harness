@@ -225,7 +225,8 @@ export function validateNativeMessage(message: NativeMessage) {
     (typeof message.toolCallId !== 'string' ||
       typeof message.toolName !== 'string' ||
       typeof message.isError !== 'boolean' ||
-      (message.outcome !== undefined && message.outcome !== 'skipped' && message.outcome !== 'denied'))
+      (message.outcome !== undefined &&
+        (!message.isError || (message.outcome !== 'skipped' && message.outcome !== 'denied'))))
   )
     throw new Error('Invalid tool result');
 }

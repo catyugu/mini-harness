@@ -1,11 +1,11 @@
 import { isRunning, type RunInfo } from '@mini-harness/sessions/run-state';
-import type { RunEvent, StreamEvent } from './stream.ts';
+import type { RunEvent, StreamEvent, ToolProgress } from './stream.ts';
 
 export class RunEvents {
   private events: RunEvent[] = [];
   private bytes = 0;
   private listeners = new Map<(event: RunEvent) => void, () => void>();
-  private tools = new Map<string, Extract<StreamEvent, { type: 'tool' }>>();
+  private tools = new Map<string, ToolProgress>();
   partial = '';
 
   constructor(readonly info: RunInfo) {}
@@ -46,7 +46,7 @@ export class RunEvents {
     emit: (event: RunEvent) => void,
     history: () => Pick<
       Extract<StreamEvent, { type: 'snapshot' }>,
-      'messages' | 'records' | 'terminations' | 'model' | 'thinkingLevel' | 'leafId'
+      'timeline' | 'model' | 'thinkingLevel' | 'leafId'
     >,
     end = () => {},
   ) {

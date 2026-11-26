@@ -1,6 +1,5 @@
 import type { PluginRecord } from './records.ts';
 import type { LogEntry } from './record-log.ts';
-import type { SessionDisplayRecord } from './shared/display-record.ts';
 import type { QueueEntry } from './shared/queue.ts';
 import type { ContentDelta } from './content-delta.ts';
 import type { ThinkingLevel, ModelChoice, ToolSchema } from '@mini-harness/llm/vocabulary';
@@ -11,8 +10,8 @@ import type {
   NativeMessage,
   NativeToolMessage,
 } from '@mini-harness/llm/api';
-import type { ViewMessage } from './shared/message.ts';
-import type { RunInfo, RunTermination } from './shared/run-state.ts';
+import type { HistoryEntry } from './shared/message.ts';
+import type { RunInfo } from './shared/run-state.ts';
 
 export interface InboxItem {
   id: string;
@@ -74,9 +73,7 @@ export type SessionEntry<Data = unknown> = LogEntry<SessionEvent<Data>>;
 
 export interface SessionProjection {
   leafId: string | null;
-  messages: ViewMessage[];
-  records: SessionDisplayRecord[];
-  terminations: RunTermination[];
+  timeline: HistoryEntry[];
   /** Selected branch after the latest compaction, including its summary. */
   contextMessages: NativeMessage[];
   /** Stable source identity parallel to contextMessages; summaries use their compaction event ID. */

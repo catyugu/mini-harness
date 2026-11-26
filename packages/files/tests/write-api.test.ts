@@ -18,7 +18,7 @@ test('successful file writes retain arguments and this-turn paths after reopenin
   assert.equal(readFileSync(join(paths.cwd, 'result.txt'), 'utf8'), 'Result for inspection\n');
   const history = (await request('/sessions/' + session.id)).body;
   assert.deepEqual(history.run.changedFiles, ['result.txt']);
-  assert.deepEqual(history.messages.find((m: { toolName?: string }) => m.toolName === 'write')?.arguments, {
+  assert.deepEqual(history.timeline.find((m: { toolName?: string }) => m.toolName === 'write')?.arguments, {
     path: 'result.txt',
     content: 'Result for inspection\n',
   });

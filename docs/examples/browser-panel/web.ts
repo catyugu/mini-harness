@@ -59,8 +59,8 @@ export function apply(ctx: Context, config: { replaceComposer: boolean }) {
       id: 'example-use-message',
       label: 'Use message in draft',
       icon: 'copy',
-      visible: ({ message }) => message.role === 'assistant',
-      run: ({ rawText }) => miniComposer.insert(rawText),
+      visible: ({ target }) => target.type === 'assistant-turn' && Boolean(target.rawText),
+      run: ({ target }) => miniComposer.insert(target.rawText),
     } satisfies MessageAction),
   );
 }

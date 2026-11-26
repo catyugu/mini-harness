@@ -78,7 +78,7 @@ export const executeTools: ToolExecutorPort['execute'] = async (calls, tools, ex
     }
     const run = async () => {
       const rejection = execution.start?.(call);
-      if (rejection) return { ...failedTool(call, rejection.reason), outcome: rejection.outcome };
+      if (rejection) return toolFailure(call, rejection.reason, rejection.outcome);
       return executeTool(call, tool, execution, batchSignal, invalid);
     };
     if (parallel) {
@@ -94,12 +94,17 @@ export const executeTools: ToolExecutorPort['execute'] = async (calls, tools, ex
   if (failure) throw failure.error;
 };
 
-export const failedTool = (call: ToolCallPart, reason: string): NativeToolMessage => ({
+export const toolFailure = (
+  call: ToolCallPart,
+  reason: string,
+  outcome?: NativeToolMessage['outcome'],
+): NativeToolMessage => ({
   role: 'toolResult',
   toolCallId: call.id,
   toolName: call.name,
   content: [{ type: 'text', text: reason }],
   isError: true,
+  outcome,
   timestamp: Date.now(),
 });
 
@@ -124,13 +129,13 @@ async function executeTool(
       role: 'toolResult',
       toolCallId: call.id,
       toolName: call.name,
-      isError: result.isError ?? false,
+      isError: result.outcome ? true : (result.isError ?? false),
       timestamp: Date.now(),
       elapsedMs: result.elapsedMs ?? performance.now() - start,
     };
   } catch (error) {
     return {
-      ...failedTool(call, error instanceof Error ? error.message : String(error)),
+      ...toolFailure(call, error instanceof Error ? error.message : String(error)),
       elapsedMs: performance.now() - start,
     };
   }

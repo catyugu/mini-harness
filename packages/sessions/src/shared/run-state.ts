@@ -12,8 +12,8 @@ export interface RunInfo {
 }
 
 export interface RunTermination {
+  type: 'termination';
   id: string;
-  afterEntryId: string | null;
   state: 'failed' | 'cancelled' | 'interrupted';
   startedAt: string;
   finishedAt?: string;

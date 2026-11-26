@@ -40,16 +40,21 @@ export const apply = (ctx) => {
   assert.deepEqual((await request(notes)).body, [value.note]);
   assert.equal((await toggle(false)).status, 200);
   assert.equal((await request(route + '?id=' + session.id)).status, 404);
-  assert.deepEqual((await request('/sessions/' + session.id)).body.records, [
-    {
-      id: added.body,
-      plugin: 'records',
-      instanceId: 'records',
-      afterMessageId: beforePluginRecords,
-      title: 'Progress',
-      content: 'Browser summary',
-    },
-  ]);
+  assert.deepEqual(
+    (await request('/sessions/' + session.id)).body.timeline.filter(
+      ({ type }: { type: string }) => type === 'record',
+    ),
+    [
+      {
+        id: added.body,
+        plugin: 'records',
+        instanceId: 'records',
+        type: 'record',
+        title: 'Progress',
+        content: 'Browser summary',
+      },
+    ],
+  );
 
   assert.equal((await toggle(true)).status, 200);
   const { body: entries } = await request(route + '?id=' + session.id);
@@ -73,7 +78,7 @@ export const apply = (ctx) => {
   );
   const fetched = (await request('/sessions/' + session.id)).body;
   assert.equal(
-    fetched.messages.some((message: { content: unknown }) => JSON.stringify(message).includes(value.note)),
+    fetched.timeline.some((message: { content: unknown }) => JSON.stringify(message).includes(value.note)),
     false,
   );
   const log = app.runtime.plugins.ctx.harnessSessions.log(session.id);
@@ -83,6 +88,11 @@ export const apply = (ctx) => {
     log.projection().leafId,
   );
   assert.deepEqual((await request(notes)).body, []);
-  assert.deepEqual((await request('/sessions/' + session.id)).body.records, []);
+  assert.deepEqual(
+    (await request('/sessions/' + session.id)).body.timeline.filter(
+      ({ type }: { type: string }) => type === 'record',
+    ),
+    [],
+  );
   assert.ok(log.entries().some(({ id }) => id === added.body));
 });

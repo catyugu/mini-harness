@@ -89,7 +89,17 @@ export class SessionLog extends RecordLog<SessionEvent> implements SessionLogPor
   }
 
   protected decodeRecord(record: Record<string, unknown>): SessionEntry {
-    return storedEntry(record as StoredEntry);
+    const entry = storedEntry(record as StoredEntry);
+    if (
+      entry.type === 'message' &&
+      entry.message.role === 'toolResult' &&
+      entry.message.details?.approvalDenied === true &&
+      !entry.message.outcome
+    ) {
+      const { approvalDenied: _, ...details } = entry.message.details;
+      entry.message = { ...entry.message, outcome: 'denied', details };
+    }
+    return entry;
   }
 
   protected advancesBranch(entry: SessionEntry) {

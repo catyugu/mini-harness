@@ -1,25 +1,22 @@
 import type { Context } from 'mini-harness/cordis';
 import type { SessionDisplayRecord } from '@mini-harness/sessions/display-record';
-import type { MessageContent, ViewMessage } from '@mini-harness/sessions/message';
+import type { HistoryEntry, MessageContent, ViewMessage } from '@mini-harness/sessions/message';
 import type { RunInfo, RunTermination } from '@mini-harness/sessions/run-state';
-import type { StreamEvent } from '@mini-harness/runs/stream';
-import type { ToolView, MessageAction, MessageActionContext } from '../history-api.ts';
+import type { MessageAction, MessageActionContext, MessageActionTarget } from '../history-api.ts';
 import { icon } from '@mini-harness/ui-primitives/icons';
 import { renderMarkdown } from '@mini-harness/ui-primitives/markdown';
 import { imageMime } from './attachment-card.ts';
 import { attachmentView } from './attachment-view.ts';
 import { renderReferences } from './file-references.ts';
+import type { MessageExtensions } from './message-extensions.ts';
+import { groupHistory, textOf } from './timeline.ts';
 
 export function createMessageView(
   ctx: Context,
   signal: AbortSignal,
   viewport: HTMLElement,
   messages: HTMLElement,
-  extensions: {
-    render(tool: ToolView, signal: AbortSignal, action?: boolean): HTMLElement | undefined;
-    messageActions(): MessageAction[];
-    report(error: unknown): void;
-  },
+  extensions: MessageExtensions,
   current: () => { workspaceId?: string; sessionId?: string; leafId?: string | null },
   retryLast: () => void,
 ) {
@@ -35,9 +32,7 @@ export function createMessageView(
   );
   const actionContext = new WeakMap<HTMLElement, Omit<MessageActionContext, 'signal'>>();
   const actionOwners = new WeakMap<HTMLButtonElement, MessageAction>();
-  const saved = new Map<string, { node: HTMLElement; source: ViewMessage }>();
-  const turns = new Map<string, HTMLElement>();
-  const markdown = new WeakMap<HTMLElement, string>();
+  const nodes = new Map<string, { node: HTMLElement; source: unknown }>();
   const preview = document.createElement('div');
   preview.className = 'message assistant';
   let following = true;
@@ -57,18 +52,6 @@ export function createMessageView(
   resize.observe(viewport);
   resize.observe(messages);
   signal.addEventListener('abort', () => resize.disconnect(), { once: true });
-  const liveTools = new Map<string, HTMLDetailsElement>();
-
-  function textOf(value?: MessageContent) {
-    if (typeof value === 'string') return value;
-    return (
-      value
-        ?.filter((block) => block.type === 'text')
-        .map((block) => block.text ?? '')
-        .join('\n') ?? ''
-    );
-  }
-
   function updateTimestamp(time: HTMLTimeElement, timestamp: number) {
     const date = new Date(timestamp);
     if (!Number.isFinite(date.getTime()) || time.dateTime === date.toISOString()) return;
@@ -81,8 +64,9 @@ export function createMessageView(
     });
   }
 
-  function messageActions(wrapper: HTMLElement, message: ViewMessage, rawText: string) {
-    actionContext.set(wrapper, { ...current(), message, rawText });
+  function messageActions(wrapper: HTMLElement, target: MessageActionTarget, timestamp: number) {
+    const { sessionId, leafId } = current();
+    if (sessionId) actionContext.set(wrapper, { sessionId, leafId, target });
     let group = wrapper.querySelector<HTMLElement>(':scope > .message-actions');
     if (!group) {
       group = document.createElement('div');
@@ -96,7 +80,7 @@ export function createMessageView(
       time.className = 'message-time';
       group.append(time);
     }
-    updateTimestamp(time, message.timestamp);
+    updateTimestamp(time, timestamp);
     return group;
   }
 
@@ -110,8 +94,8 @@ export function createMessageView(
         button,
       ]),
     );
-    const at = { ...context, ...current() };
-    for (const extension of extensions.messageActions()) {
+    const at = { ...context, leafId: current().leafId };
+    for (const extension of extensions.actionsForMessage()) {
       const existing = available.get(extension.id);
       if (existing && actionOwners.get(existing) !== extension) remove(existing);
       const button =
@@ -144,7 +128,11 @@ export function createMessageView(
         void Promise.resolve()
           .then(() => {
             signal.throwIfAborted();
-            return extension.run({ ...(actionContext.get(wrapper) ?? context), ...current(), signal });
+            return extension.run({
+              ...(actionContext.get(wrapper) ?? context),
+              leafId: current().leafId,
+              signal,
+            });
           })
           .then(() => {
             if (!signal.aborted && extension.successLabel) {
@@ -188,7 +176,7 @@ export function createMessageView(
   ) {
     const item = card ?? document.createElement('details');
     const previous = toolItems.get(item);
-    if (!refresh && previous && JSON.stringify(previous) === JSON.stringify(data)) return item;
+    if (!refresh && previous === data) return item;
     toolItems.set(item, data);
     item.className = 'tool-card';
     item.dataset.state = data.state;
@@ -207,8 +195,6 @@ export function createMessageView(
       error: 'Failed',
     };
     status.textContent = labels[data.state] ?? data.state;
-    // Errors are visible in the summary, but details stay collapsed unless the user opens them.
-    item.dataset.renderedState = data.state;
     summary.append(icon('chevron'), name);
     const elapsed = data.elapsedMs;
     if (elapsed !== undefined && Number.isFinite(elapsed)) {
@@ -240,7 +226,6 @@ export function createMessageView(
     const resource = new AbortController();
     resources.set(item, resource);
     const custom = extensions.render(data, resource.signal);
-    if (custom) custom.dataset.toolExtension = 'true';
     if (custom) body.append(custom);
     const output = custom ? '' : textOf(data.content);
     if (output) {
@@ -258,55 +243,22 @@ export function createMessageView(
     }
     const action = extensions.render(data, resource.signal, true);
     if (action) {
-      action.dataset.toolExtension = 'true';
       body.append(action);
     }
     const oldSummary = item.firstElementChild;
     const oldBody = item.lastElementChild;
     if (oldSummary && oldBody) {
-      reconcileChildren(oldSummary, summary);
-      reconcileChildren(oldBody, body);
+      oldSummary.replaceChildren(...summary.children);
+      oldBody.replaceWith(body);
     } else item.append(summary, body);
     return item;
   }
 
-  function reconcileChildren(current: Element, updated: Element) {
-    const existing = [...current.children],
-      desired = [...updated.children];
-    for (const [index, fresh] of desired.entries()) {
-      const old = existing[index];
-      if (!old) current.append(fresh);
-      else if (!old.isEqualNode(fresh) || fresh.hasAttribute('data-tool-extension')) old.replaceWith(fresh);
-    }
-    for (const extra of existing.slice(desired.length)) extra.remove();
-  }
-
-  function renderEntry(message: ViewMessage, node?: HTMLElement) {
-    if (message.role === 'toolResult') {
-      return toolCard(
-        {
-          name: message.toolName ?? 'Tool',
-          state: message.toolState ?? 'finished',
-          id: message.toolCallId,
-          content: message.content,
-          arguments: message.arguments,
-          sessionId: message.sessionId,
-          elapsedMs: message.elapsedMs,
-          approvalMs: message.approvalMs,
-          exitCode: message.exitCode,
-        },
-        node as HTMLDetailsElement | undefined,
-      );
-    }
+  function renderUser(message: Extract<ViewMessage, { role: 'user' }>) {
     const entry = document.createElement('div');
     entry.className = 'message-row user';
     const text = textOf(message.content);
-    const blocks = typeof message.content === 'string' ? [] : message.content;
-    const images = blocks.filter(
-      (block) => block.type === 'image' && imageMime.test(block.mimeType ?? '') && block.data,
-    );
     const attachments = message.attachments ?? [];
-    if (!text && !images.length && !attachments.length) return entry;
     const bubble = document.createElement('article');
     bubble.className = 'message user';
     const list = document.createElement('div');
@@ -314,37 +266,22 @@ export function createMessageView(
     list.setAttribute('role', 'group');
     list.setAttribute('aria-label', 'Attachments');
     const { workspaceId, sessionId } = current();
-    const remaining = [...images];
-    const resource = new AbortController();
-    resources.set(entry, resource);
-    const signal = resource.signal;
-    const memory = (image: (typeof images)[number], name: string, mimeType: string, key: string) =>
-      workspaceId && image.data
-        ? { kind: 'memory' as const, workspaceId, sessionId, key, name, mimeType, data: image.data, signal }
-        : undefined;
-
     for (const [index, file] of attachments.entries()) {
-      const image = imageMime.test(file.mimeType) ? remaining.shift() : undefined;
-      const stored =
-        file.id && workspaceId && sessionId
-          ? { ...file, kind: 'attachment' as const, id: file.id, workspaceId, sessionId }
-          : undefined;
-      list.append(
-        attachmentView(
-          ctx,
-          file,
-          stored ?? (image && memory(image, file.name, file.mimeType, 'image:' + index)),
-          signal,
-          image?.data,
-        ),
-      );
-    }
-    for (const [index, image] of remaining.entries()) {
-      const name = 'Attached image ' + (index + 1);
-      const mimeType = image.mimeType!;
-      list.append(
-        attachmentView(ctx, { name, mimeType }, memory(image, name, mimeType, 'inline:' + index), signal),
-      );
+      const { id, data, name, mimeType } = file;
+      const resource = !workspaceId
+        ? undefined
+        : id && sessionId
+          ? { kind: 'attachment' as const, workspaceId, sessionId, id, name, mimeType }
+          : data && {
+              kind: 'memory' as const,
+              workspaceId,
+              key: message.id + ':' + index,
+              data,
+              name,
+              mimeType,
+              signal,
+            };
+      list.append(attachmentView(ctx, file, resource || undefined));
     }
     if (list.childElementCount) bubble.append(list);
     if (text) {
@@ -356,7 +293,10 @@ export function createMessageView(
       });
       bubble.append(body);
     }
-    entry.append(bubble, messageActions(entry, message, text));
+    entry.append(
+      bubble,
+      messageActions(entry, { type: 'user-message', message, rawText: text }, message.timestamp),
+    );
     renderMessageActions(entry);
     return entry;
   }
@@ -402,207 +342,155 @@ export function createMessageView(
       button.textContent = 'Retry';
       button.onclick = retryLast;
       node.append(button);
-      node.dataset.retry = '';
     }
     return node;
   }
 
+  function reset() {
+    for (const node of resources.keys()) remove(node);
+    messages.replaceChildren();
+    nodes.clear();
+    follow();
+  }
+
+  function follow() {
+    following = true;
+    scrollToEnd();
+  }
+
   function history(
-    entries: readonly ViewMessage[],
-    records: readonly { record: SessionDisplayRecord; node: HTMLElement }[],
-    terminations: readonly RunTermination[],
+    entries: readonly HistoryEntry[],
     run: RunInfo | undefined,
     partial: string,
-    tools: readonly Extract<StreamEvent, { type: 'tool' }>[],
-    reset: boolean,
+    tools: Parameters<typeof groupHistory>[3],
   ) {
-    if (reset) {
-      following = true;
-      for (const node of resources.keys()) remove(node);
-      messages.replaceChildren();
-      saved.clear();
-      turns.clear();
-      liveTools.clear();
-    }
-    const desired: HTMLElement[] = [];
-    const activeMessages = new Set<string>();
-    const activeTurns = new Set<string>();
-    const anchors = new Map<string | null, (typeof records)[number][]>();
-    const endings = new Map<string | null, RunTermination[]>();
-    const failures = new Set(terminations.filter((item) => item.state === 'failed').map(({ id }) => id));
-    const previousEndings = new Map(
-      [...messages.querySelectorAll<HTMLElement>('[data-run-termination]')].map((node) => [
-        node.dataset.runTermination,
-        node,
-      ]),
-    );
-    for (const item of records) {
-      const key = item.record.afterMessageId ?? null;
-      const list = anchors.get(key) ?? [];
-      list.push(item);
-      anchors.set(key, list);
-    }
-    for (const item of terminations) {
-      const list = endings.get(item.afterEntryId) ?? [];
-      list.push(item);
-      endings.set(item.afterEntryId, list);
+    const pending = new Set(nodes.keys());
+    function retain<T extends HTMLElement>(key: string, source: unknown, render: (prior?: T) => T) {
+      pending.delete(key);
+      const prior = nodes.get(key);
+      if (prior && prior.source === source) return prior.node as T;
+      const node = render(prior?.node as T | undefined);
+      nodes.set(key, { node, source });
+      return node;
     }
 
-    type Block = { key: string; text: string; type: 'text' | 'thinking' } | HTMLElement;
-    type Turn = { key: string; runId?: string; blocks: Block[]; latest?: ViewMessage; copy: string[] };
-    let turn: Turn | undefined;
-    let boundary = '';
-    const finish = () => {
-      if (!turn) return;
-      const { key, blocks, latest, copy } = turn;
-      turn = undefined;
-      if (!blocks.length) return;
-      let wrapper = turns.get(key);
-      if (!wrapper) {
-        wrapper = document.createElement('div');
-        wrapper.className = 'message-row assistant assistant-turn';
-        turns.set(key, wrapper);
-      }
-      const prior = new Map(
-        [...wrapper.children].map((child) => [
-          (child as HTMLElement).dataset.assistantBlock,
-          child as HTMLElement,
-        ]),
-      );
-      const children = blocks.map((block) => {
-        if (block instanceof HTMLElement) return block;
-        let node = prior.get(block.key);
-        if (!node) {
-          node = document.createElement(block.type === 'thinking' ? 'details' : 'div');
-          node.dataset.assistantBlock = block.key;
-          if (block.type === 'thinking') {
-            node.className = 'assistant-reasoning';
-            const summary = document.createElement('summary');
-            summary.textContent = 'Reasoning';
-            node.append(summary, document.createElement('p'));
-          } else node.className = 'message assistant';
-        }
-        if (markdown.get(node) !== block.text) {
-          if (block.type === 'thinking') node.lastElementChild!.textContent = block.text;
-          else renderMarkdown(node, block.text);
-          markdown.set(node, block.text);
+    function record(entry: SessionDisplayRecord) {
+      const render = extensions.recordRenderer(entry.plugin);
+      return retain('record:' + entry.id, render, (previous) => {
+        if (previous) remove(previous);
+        const lifetime = new AbortController();
+        const node = document.createElement('div');
+        node.className = 'conversation-record';
+        node.dataset.conversationRecord = entry.id;
+        resources.set(node, lifetime);
+        const shown = extensions.renderRecord(render, entry, {
+          sessionId: current().sessionId!,
+          signal: lifetime.signal,
+        });
+        if (shown) node.append(shown);
+        else {
+          const label = document.createElement('p');
+          label.className = 'hint';
+          label.textContent = entry.title;
+          node.append(label);
         }
         return node;
       });
-      if (latest) children.push(messageActions(wrapper, latest, copy.join('\n\n')));
-      reconcile(wrapper, children);
-      if (latest) renderMessageActions(wrapper);
-      desired.push(wrapper);
-      activeTurns.add(key);
-    };
-    const assistant = (runId?: string) => {
-      if (turn && turn.runId !== runId) finish();
-      return (turn ??= { key: JSON.stringify([boundary, runId]), runId, blocks: [], copy: [] });
-    };
-    const placeEndings = (id: string | null) => {
-      for (const item of endings.get(id) ?? []) {
-        finish();
-        const retry = run?.id === item.id && run.state === 'failed';
-        const prior = previousEndings.get(item.id);
-        const node = prior && prior.hasAttribute('data-retry') === retry ? prior : terminalNode(item, retry);
-        node.dataset.runTermination = item.id;
-        desired.push(node);
-        boundary = item.id;
+    }
+
+    function renderPart(
+      part: Extract<ReturnType<typeof groupHistory>[number], { type: 'turn' }>['parts'][number],
+    ) {
+      switch (part.type) {
+        case 'record':
+          return record(part);
+        case 'message':
+          return retain('tool:' + part.toolCallId, part, (node?: HTMLDetailsElement) =>
+            toolCard(
+              {
+                name: part.toolName,
+                state: part.toolState,
+                id: part.toolCallId,
+                content: part.content,
+                arguments: part.arguments,
+                sessionId: part.sessionId,
+                elapsedMs: part.elapsedMs,
+                approvalMs: part.approvalMs,
+                exitCode: part.exitCode,
+              },
+              node,
+            ),
+          );
+        case 'tool':
+          return retain('tool:' + part.id, part, (node?: HTMLDetailsElement) => toolCard(part, node));
+        case 'partial':
+          preview.textContent = partial;
+          return preview;
+        case 'thinking':
+          return retain('thinking:' + part.id, part.text, () => {
+            const details = document.createElement('details');
+            details.className = 'assistant-reasoning';
+            const summary = document.createElement('summary');
+            summary.textContent = 'Reasoning';
+            const body = document.createElement('p');
+            body.textContent = part.text;
+            details.append(summary, body);
+            return details;
+          });
+        default:
+          return retain(part.type + ':' + part.id, part.text, (previous) => {
+            const node = previous ?? document.createElement('div');
+            node.className = part.type === 'error' ? 'message error' : 'message assistant';
+            if (part.type === 'error') node.textContent = part.text;
+            else renderMarkdown(node, part.text);
+            return node;
+          });
       }
-    };
-    const place = (id: string | null) => {
-      placeEndings(id);
-      for (const { record, node } of anchors.get(id) ?? []) {
-        (turn?.blocks ?? desired).push(node);
-        placeEndings(record.id);
-      }
-      anchors.delete(id);
-    };
-    place(null);
-    for (const [index, message] of entries.entries()) {
-      const key = message.id ?? message.role + ':' + index;
-      const prior = saved.get(key);
-      if (message.role === 'user') {
-        finish();
-        boundary = key;
-        const same =
-          prior && (prior.source === message || JSON.stringify(prior.source) === JSON.stringify(message));
-        const node = same ? prior.node : renderEntry(message);
-        if (node.childElementCount) desired.push(node);
-        saved.set(key, { node, source: message });
-        activeMessages.add(key);
-      } else if (message.role === 'toolResult') {
-        const tool = message.toolCallId && liveTools.get(message.toolCallId);
-        const node = renderEntry(message, prior?.node ?? (tool || undefined));
-        if (message.toolCallId) liveTools.delete(message.toolCallId);
-        saved.set(key, { node, source: message });
-        activeMessages.add(key);
-        assistant(message.runId).blocks.push(node);
-      } else {
-        const group = assistant(message.runId);
-        const parts =
-          typeof message.content === 'string' ? [{ type: 'text', text: message.content }] : message.content;
-        let previous = group.blocks.at(-1);
-        let canMerge = true;
-        for (const [partIndex, part] of parts.entries()) {
-          if (part.type === 'text' && part.text) {
-            if (canMerge && previous && !(previous instanceof HTMLElement) && previous.type === 'text')
-              previous.text += (partIndex === 0 ? '\n\n' : '') + part.text;
-            else {
-              previous = { key: key + ':' + partIndex, text: part.text, type: 'text' };
-              group.blocks.push(previous);
-            }
-            canMerge = true;
-          } else if (part.type === 'thinking' && part.thinking && !part.redacted) {
-            group.blocks.push({ key: key + ':' + partIndex, text: part.thinking, type: 'thinking' });
-            canMerge = false;
-          } else canMerge = false;
+    }
+
+    const desired = groupHistory(entries, run?.id, partial, tools).map((row) => {
+      switch (row.type) {
+        case 'record':
+          return record(row);
+        case 'termination': {
+          const retry = run?.id === row.id && run.state === 'failed';
+          return retain('run:' + row.id, retry, () => terminalNode(row, retry));
         }
-        const body = textOf(message.content);
-        if (body) group.copy.push(body);
-        group.latest = message;
-        if (message.error && !failures.has(message.runId ?? '')) {
-          const error = document.createElement('div');
-          error.className = 'message error';
-          error.textContent = message.error;
-          group.blocks.push(error);
+        case 'message':
+          return retain('user:' + row.id, row.id, () => renderUser(row));
+        case 'turn': {
+          const wrapper = retain('turn:' + row.id, undefined, () => {
+            const node = document.createElement('div');
+            node.className = 'message-row assistant assistant-turn';
+            return node;
+          });
+          const children = row.parts.map(renderPart);
+          if (row.target)
+            children.push(messageActions(wrapper, row.target, row.target.messages.at(-1)!.timestamp));
+          reconcile(wrapper, children);
+          return wrapper;
         }
       }
-      if (message.id) place(message.id);
-    }
-    if (partial) {
-      preview.textContent = partial;
-      assistant(run?.id).blocks.push(preview);
-    }
-    const activeTools = new Set(tools.map(({ id }) => id));
-    for (const id of liveTools.keys()) if (!activeTools.has(id)) liveTools.delete(id);
-    for (const tool of tools) {
-      const card = toolCard(tool, liveTools.get(tool.id));
-      liveTools.set(tool.id, card);
-      assistant(run?.id).blocks.push(card);
-    }
-    for (const id of anchors.keys()) place(id);
-    finish();
-    for (const key of saved.keys()) if (!activeMessages.has(key)) saved.delete(key);
-    for (const key of turns.keys()) if (!activeTurns.has(key)) turns.delete(key);
+    });
+
+    for (const key of pending) nodes.delete(key);
     reconcile(messages, desired);
     for (const node of resources.keys()) if (!messages.contains(node)) remove(node);
+    refreshActions();
     scrollToEnd();
   }
 
   return {
     history,
+    reset,
+    follow,
+    refreshTools,
+    refreshActions,
     partial(text: string) {
       if (!text || !messages.contains(preview)) return false;
       preview.textContent = text;
       scrollToEnd();
       return true;
     },
-    follow() {
-      following = true;
-      scrollToEnd();
-    },
-    refreshTools,
-    refreshActions,
   };
 }

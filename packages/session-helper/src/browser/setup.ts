@@ -10,10 +10,9 @@ const setup = (ctx: Context) => {
       successLabel: 'Copied',
       icon: 'copy',
       order: 10,
-      visible: ({ message, rawText }) =>
-        Boolean(rawText) && (message.role === 'user' || message.role === 'assistant'),
-      async run({ rawText }) {
-        await navigator.clipboard.writeText(rawText);
+      visible: ({ target }) => Boolean(target.rawText),
+      async run({ target }) {
+        await navigator.clipboard.writeText(target.rawText);
       },
     }),
   );
@@ -23,10 +22,10 @@ const setup = (ctx: Context) => {
       label: 'Edit message',
       icon: 'edit',
       order: 20,
-      visible: ({ message, sessionId, leafId }) =>
-        message.role === 'user' && !!sessionId && !!message.id && leafId !== undefined,
-      async run({ message, sessionId, leafId, rawText, signal }) {
-        if (!message.id || leafId === undefined || !sessionId) return;
+      visible: ({ target, leafId }) => target.type === 'user-message' && leafId !== undefined,
+      async run({ target, sessionId, leafId, signal }) {
+        if (target.type !== 'user-message' || leafId === undefined) return;
+        const { message, rawText } = target;
         const sourceEntryId = message.id;
         const expectedLeafId = leafId;
         const files = message.attachments ?? [];
@@ -45,21 +44,11 @@ const setup = (ctx: Context) => {
               return { name, mimeType, data: upload.data };
             }),
         );
-        if (signal.aborted || signal.aborted) return;
+        if (signal.aborted) return;
         const missing = textFiles.filter(({ id }) => !id);
-        const images =
-          typeof message.content === 'string'
-            ? []
-            : message.content
-                .filter(
-                  (part): part is typeof part & { mimeType: string; data: string } =>
-                    part.type === 'image' && !!part.mimeType && !!part.data,
-                )
-                .map(({ mimeType, data }, index) => ({
-                  name: imageFiles[index]?.name ?? 'Image ' + (index + 1),
-                  mimeType,
-                  data,
-                }));
+        const images = imageFiles.flatMap(({ name, mimeType, data }) =>
+          data ? [{ name, mimeType, data }] : [],
+        );
         ctx.effect(() =>
           ctx.miniComposer.beginDraftMode({
             title: missing.length

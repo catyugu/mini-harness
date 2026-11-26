@@ -1,3 +1,4 @@
+import { isViewMessage } from '@mini-harness/sessions/message';
 import { expectPresent } from '../support/required.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -158,10 +159,13 @@ export const apply = (ctx) => {
     ).reason ?? '',
     /fixture input denied/,
   );
-  const messages = log.projection().messages.filter(({ role }) => role === 'user');
+  const messages = log
+    .projection()
+    .timeline.filter(isViewMessage)
+    .filter(({ role }) => role === 'user');
   assert.deepEqual(
     messages.map(({ content }) => content),
-    [[{ type: 'text', text: 'Recovered' }], [{ type: 'text', text: 'Manual' }]],
+    ['Recovered', 'Manual'],
   );
 
   const edit = await plugins.ctx.harnessRuns.reviseAndStart(session.id, {
@@ -174,7 +178,7 @@ export const apply = (ctx) => {
   const before = mock.requests.length;
   await assert.rejects(plugins.ctx.harnessRuns.send(session.id, 'Blocked'), /fixture input denied/);
   assert.equal(mock.requests.length, before);
-  assert.doesNotMatch(JSON.stringify(log.projection().messages), /Blocked|lost|Manual/);
+  assert.doesNotMatch(JSON.stringify(log.projection().timeline.filter(isViewMessage)), /Blocked|lost|Manual/);
 });
 
 test('an application plugin registers an LLM adapter and composes execution hooks without rewriting history', async (t) => {
@@ -257,7 +261,7 @@ export const apply = (ctx) => {
   assert.equal(log.contextMessages.filter(({ role }) => role === 'user').length, 1);
   const sessionLog = app.runtime.plugins.ctx.harnessSessions.log(session.id);
   const visible = await request('/sessions/' + session.id);
-  assert.match(JSON.stringify(visible.body.messages), /Display value/);
+  assert.match(JSON.stringify(visible.body.timeline), /Display value/);
   assert.doesNotMatch(JSON.stringify(log), /Display value/);
   const run = expectPresent(app.runtime.plugins.ctx.harnessRuns.info(session.id), 'completed run');
   const replay = await fetch(base + '/api/sessions/' + session.id + '/events?run=' + run.id, { headers });

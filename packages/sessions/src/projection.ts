@@ -1,3 +1,5 @@
+import { userContent } from './user-content.ts';
+import type { SessionDisplayRecord } from './shared/display-record.ts';
 import { isRunning } from './shared/run-state.ts';
 import { toolResultState } from '@mini-harness/tools/api';
 import type { NativeMessage, NativeToolMessage } from '@mini-harness/llm/api';
@@ -21,6 +23,20 @@ export function projectMessage(
   return { ...result, content };
 }
 
+export function displayRecord(
+  entry: Extract<SessionEntry, { type: 'plugin-record' }>,
+): SessionDisplayRecord | undefined {
+  if (entry.display)
+    return {
+      type: 'record',
+      id: entry.id,
+      plugin: entry.owner.pluginId,
+      instanceId: entry.owner.instanceId,
+      title: entry.display.title,
+      content: entry.display.content,
+    };
+}
+
 /** Read projections are pure and never write synthetic history back into the transcript. */
 export function projectLog(
   branch: SessionEntry[],
@@ -29,9 +45,7 @@ export function projectLog(
 ): SessionProjection {
   const state: SessionProjection = {
     leafId: branch.at(-1)?.id ?? null,
-    messages: [],
-    records: [],
-    terminations: [],
+    timeline: [],
     contextMessages: [],
     contextEntryIds: [],
   };
@@ -44,18 +58,19 @@ export function projectLog(
   const ancestry = new Set(branch.map(({ id }) => id));
   let runIndex = 0;
   let runId: string | undefined;
-  let afterEntryId: string | null = null;
   function projectRuns(before: number) {
     for (; runs[runIndex] && runs[runIndex].seq < before; runIndex++) {
       const { parentId, run } = runs[runIndex];
+      // A revision can start on one branch and commit its new input on another.
+      // Sequence bounds identify the producing run. Only its end is anchored to the branch.
       runId = isRunning(run) ? run.id : undefined;
       if (parentId !== null && !ancestry.has(parentId)) continue;
       const { id, state: outcome, error, startedAt, finishedAt } = run;
       if (outcome === 'failed' || outcome === 'cancelled' || outcome === 'interrupted')
-        state.terminations.push({
+        state.timeline.push({
+          type: 'termination',
           id,
           state: outcome,
-          afterEntryId,
           startedAt,
           finishedAt,
           error,
@@ -72,54 +87,45 @@ export function projectLog(
     }
     if (entry.type === 'compaction') compaction = entry;
     if (entry.type === 'context-edit') edits.set(entry.targetId, entry.replacement);
-    if (entry.type === 'plugin-record' && entry.display) {
-      afterEntryId = entry.id;
-      state.records.push({
-        id: entry.id,
-        plugin: entry.owner.pluginId,
-        instanceId: entry.owner.instanceId,
-        afterMessageId: state.messages.at(-1)?.id ?? null,
-        title: entry.display.title,
-        content: entry.display.content,
-      });
+    if (entry.type === 'plugin-record') {
+      const record = displayRecord(entry);
+      if (record) state.timeline.push(record);
     }
     const message = messageOf(entry);
     if (!message) continue;
     if (message.role === 'assistant')
       for (const block of message.content)
         if (block.type === 'toolCall') calls.set(block.id, block.arguments);
-    const view: ViewMessage = {
+    const fields = {
+      type: 'message' as const,
       id: entry.id,
       parentId: entry.parentId,
       runId,
-      role: message.role,
       content: message.content as MessageContent,
       timestamp: message.timestamp,
     };
+    const view: ViewMessage =
+      message.role === 'toolResult'
+        ? {
+            ...fields,
+            role: message.role,
+            toolName: message.toolName,
+            toolCallId: message.toolCallId,
+            toolState: toolResultState(message),
+          }
+        : message.role === 'user'
+          ? { ...fields, role: 'user' }
+          : { ...fields, role: 'assistant' };
     if (entry.type === 'message') {
       if (entry.submissionId) view.submissionId = entry.submissionId;
       if (entry.inboxId) view.inboxId = entry.inboxId;
     }
-    if (entry.type === 'message' && message.role === 'user' && entry.presentation) {
-      view.attachments = entry.presentation.attachments;
-      const { userText, images } = entry.presentation;
-      view.content =
-        typeof message.content === 'string' && !images?.length
-          ? userText
-          : [
-              ...(userText ? [{ type: 'text', text: userText }] : []),
-              ...(images ??
-                (typeof message.content === 'string'
-                  ? []
-                  : message.content.filter((block) => block.type === 'image'))),
-            ];
-    }
-    if (message.role === 'assistant' && message.stopReason !== 'aborted') view.error = message.errorMessage;
+    if (entry.type === 'message' && message.role === 'user')
+      Object.assign(view, userContent(message.content, entry.presentation));
+    if (message.role === 'assistant' && !runId && message.stopReason !== 'aborted')
+      view.error = message.errorMessage;
     if (message.role === 'toolResult') {
-      view.toolName = message.toolName;
-      view.toolCallId = message.toolCallId;
       view.isError = message.isError;
-      view.toolState = toolResultState(message);
       if (typeof message.details?.approvalMs === 'number') view.approvalMs = message.details.approvalMs;
       view.arguments = calls.get(message.toolCallId);
       view.elapsedMs = (entry.type === 'message' ? entry.elapsedMs : undefined) ?? message.elapsedMs;
@@ -127,8 +133,7 @@ export function projectLog(
       if (typeof message.details?.exitCode === 'number' && Number.isInteger(message.details.exitCode))
         view.exitCode = message.details.exitCode;
     }
-    state.messages.push(view);
-    afterEntryId = entry.id;
+    state.timeline.push(view);
   }
   projectRuns(Infinity);
   let context = branch;

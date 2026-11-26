@@ -611,9 +611,6 @@ button.file-card:hover {
   .composer-footer {
     justify-content: flex-end;
   }
-  .composer .cm-placeholder {
-    color: var(--muted);
-  }
   .composer .cm-content {
     font-size: 16px;
   }
@@ -1003,8 +1000,4 @@ button.file-card:hover {
 }
 .attachment .file-card {
   min-width: 0;
-}
-.thumbnail-unavailable {
-  min-width: 2.2rem;
-  min-height: 2.2rem;
 }

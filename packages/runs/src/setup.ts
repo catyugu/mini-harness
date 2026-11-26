@@ -21,7 +21,8 @@ export function setup(ctx: Context) {
   );
   ctx.effect(() => {
     const changed = (event: Event) => {
-      if (event instanceof CustomEvent && event.detail.records) runs.branchChanged(event.detail.id);
+      if (event instanceof CustomEvent && event.detail.record)
+        runs.branchChanged(event.detail.id, event.detail.record);
     };
     catalog.events.addEventListener('change', changed);
     return () => catalog.events.removeEventListener('change', changed);

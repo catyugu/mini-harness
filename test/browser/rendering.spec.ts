@@ -43,7 +43,13 @@ test('renders Markdown and tool results, and stops a pending reply', async ({ pa
     'bad-renderer',
     {},
     `
+export const inject = ["harnessSessions"];
 export const apply = (ctx) => {
+      ctx.on("agent/tool-result", async (_content, { sessionId, tool }) => {
+        if (tool === 'ls') await ctx.harnessSessions.records(sessionId, {
+          pluginId: 'bad-renderer', instanceId: 'bad-renderer'
+        }).append({}, { title: 'Tool progress record' });
+      });
       ctx.on("agent/prepare-input", async (_content, { original, signal }) => {
         if (original.userText !== 'Stop before acceptance') return;
         signal.throwIfAborted();
@@ -58,6 +64,16 @@ export const apply = (ctx) => {
 export const inject = ["miniMessages"];
 
 export const apply = (ctx) => {
+      ctx.effect(() => ctx.miniMessages.registerAction({
+        id: 'review-turn', label: 'Review turn', icon: 'copy',
+        visible: ({ target }) => target.type === 'assistant-turn' && target.messages.length > 1,
+        run: ({ target, sessionId }) => {
+          document.body.dataset.turn = JSON.stringify({
+            id: target.id, first: target.messages[0].id, last: target.messages.at(-1).id,
+            sessionId, rawText: target.rawText
+          });
+        }
+      }));
       ctx.effect(() => ctx.miniMessages.registerTool('ls', (_tool, signal) => {
         document.body.dataset.activeFailedRenderers = String(Number(document.body.dataset.activeFailedRenderers ?? 0) + 1);
         signal.addEventListener('abort', () => {
@@ -91,22 +107,33 @@ export const apply = (ctx) => {
       page.locator('.code-block').getByRole('button', { name: 'Copy', exact: true }),
     ).toBeVisible();
     await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
-    await page.locator('.message-row.assistant .message-actions button').click();
-    await expect(page.locator('.message-row.assistant .message-actions button')).toHaveAttribute(
+    const turn = page.locator('.assistant-turn');
+    await turn.getByRole('button', { name: 'Copy message', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Copied', exact: true })).toHaveAttribute(
       'aria-label',
       'Copied',
     );
     const copied = (await page.evaluate(() => navigator.clipboard.readText())).replace(/\r\n?/g, '\n');
     expect(copied).toMatch(/^Checking the workspace/);
     expect(copied).not.toContain('(empty directory)');
-    const turn = page.locator('.assistant-turn');
     await expect(turn).toHaveCount(1);
-    await expect(turn.locator(':scope > .message, :scope > .tool-card')).toHaveText([
+    await expect(
+      turn.locator(':scope > .message, :scope > .conversation-record, :scope > .tool-card'),
+    ).toHaveText([
       'Checking the workspace',
+      'Tool progress record',
       /ls.*Done/s,
       /Workspace.*Example.*A tool note/s,
     ]);
     await expect(turn.locator('.message-actions time')).toHaveCount(1);
+    await turn.getByRole('button', { name: 'Review turn' }).click();
+    const target = JSON.parse(
+      expectPresent(await page.locator('body').getAttribute('data-turn'), 'plugin action target'),
+    );
+    expect(target.id).toBe(target.first);
+    expect(target.id).not.toBe(target.last);
+    expect(target.sessionId).toMatch(/^[a-f0-9-]+$/);
+    expect(target.rawText).toBe(copied);
     expect(copied).toMatch(/```text[ \t]*\nExample[ \t]*\n```/);
     await expect(page.locator('.message img, .message .overlay')).toHaveCount(0);
     await expect(page.getByText('A tool note')).toBeVisible();
@@ -202,7 +229,7 @@ export const apply = (ctx) => {
     const { miniConversation } = ctx;
     const signal = ctx.fiber.signal;
       miniConversation.subscribe(['history'], () => {
-        if (miniConversation.get().history.messages.length) throw new Error('broken history subscriber');
+        if (miniConversation.get()?.history?.timeline.length ?? 0) throw new Error('broken history subscriber');
       }, signal);
       const remove = ctx.effect(() => ctx.miniSlots.register('conversation.history', (signal) => {
         const node = document.createElement('div');
@@ -210,7 +237,7 @@ export const apply = (ctx) => {
         const update = () => {
           const state = miniConversation.get();
           node.textContent = state.partial;
-          node.dataset.messages = String(state.history.messages.length);
+          node.dataset.messages = String(state?.history?.timeline.length ?? 0);
           node.dataset.events = String(Object.hasOwn(state, 'events'));
         };
         miniConversation.subscribe(['partial', 'history'], update, signal);

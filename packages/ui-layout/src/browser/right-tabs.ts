@@ -36,6 +36,7 @@ export function createRightTabs(
   const workspaceChanges = new EventTarget();
   let scope: TabScope | undefined;
   let nextId = 0;
+  let shown: Tab | undefined;
   const inspector = Symbol('inspector');
 
   const state = (id: string) => {
@@ -122,6 +123,7 @@ export function createRightTabs(
           tab.view.scroll = undefined;
         }
       }
+    revealActive();
     if (focus)
       (active
         ? document.getElementById(active.id + '-select')
@@ -129,11 +131,17 @@ export function createRightTabs(
       )?.focus();
   }
 
+  function revealActive() {
+    const active = layout.panelOpen() ? current()?.active : undefined;
+    if (shown === active) return;
+    shown = active;
+    active?.view?.node.dispatchEvent(new Event('tab-activate'));
+  }
+
   function activate(tab: Tab) {
     const workspace = current();
     if (workspace) workspace.active = tab;
     render(true);
-    tab.view?.node.dispatchEvent(new Event('tab-activate'));
   }
 
   function selectWorkspace(workspaceId?: string) {
@@ -153,8 +161,8 @@ export function createRightTabs(
     scope = workspaceId ? { workspaceId } : undefined;
     if (workspaceId && openedBeforeSelection) state(workspaceId).open = true;
     workspaceChanges.dispatchEvent(new Event('change'));
-    render();
     layout.setPanel(current()?.open ?? false);
+    render();
   }
 
   function mount(tab: Tab, scope: TabScope) {
@@ -236,7 +244,8 @@ export function createRightTabs(
   view.toggle.onclick = () => {
     const opening = !layout.panelOpen();
     layout.setPanel(opening, true);
-    if (opening) current()?.active?.view?.node.dispatchEvent(new Event('tab-activate'));
+    shown = undefined;
+    revealActive();
   };
   view.bar.addEventListener(
     'keydown',

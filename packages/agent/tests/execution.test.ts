@@ -1,3 +1,4 @@
+import { isViewMessage } from '@mini-harness/sessions/message';
 import { Context } from 'mini-harness/cordis';
 import { fixture as httpFixture } from '../../../test/support/api-fixture.ts';
 import { prepareInput } from '@mini-harness/input/prepare';
@@ -257,7 +258,8 @@ test('tool execution uses the advertised registration and does not execute a hot
     sessions
       .log(record.id)
       .projection()
-      .messages.find((message) => message.role === 'toolResult')?.isError,
+      .timeline.filter(isViewMessage)
+      .find((message) => message.role === 'toolResult')?.isError,
     true,
   );
 });
@@ -299,7 +301,8 @@ test('malformed tool arguments become durable error results without invoking the
     sessions
       .log(record.id)
       .projection()
-      .messages.filter((message) => message.role === 'toolResult').length,
+      .timeline.filter(isViewMessage)
+      .filter((message) => message.role === 'toolResult').length,
     1,
   );
 });
@@ -344,7 +347,8 @@ test('cancellation closes the whole tool batch durably and never executes later 
   const results = sessions
     .log(record.id)
     .projection()
-    .messages.filter((message) => message.role === 'toolResult');
+    .timeline.filter(isViewMessage)
+    .filter((message) => message.role === 'toolResult');
   assert.equal(ranFirst, 1);
   assert.equal(ranSecond, 0);
   assert.deepEqual(
@@ -426,7 +430,8 @@ test('identical queued text preserves each attachment identity and is delivered 
   const users = sessions
     .log(record.id)
     .projection()
-    .messages.filter((message) => message.role === 'user');
+    .timeline.filter(isViewMessage)
+    .filter((message) => message.role === 'user');
   assert.equal(requests, 3);
   assert.equal(users.length, 3);
   assert.deepEqual(
@@ -539,7 +544,10 @@ test('steering accepts off, skips deterministic failures and resets incompatible
     ['skipped'],
   );
   assert.equal(
-    log.projection().messages.find(({ toolCallId }) => toolCallId === 'steered-call')?.toolState,
+    log
+      .projection()
+      .timeline.filter(isViewMessage)
+      .find(({ toolCallId }) => toolCallId === 'steered-call')?.toolState,
     'skipped',
   );
   assert.deepEqual(log.inbox(), []);
@@ -772,7 +780,7 @@ test('text models see historical placeholders in the request and audit snapshot,
   );
   assert.doesNotMatch(JSON.stringify(log.requestSnapshot(request.id)), /iVBORw0KGgo=/);
   assert.match(JSON.stringify(log.requestSnapshot(request.id)), /Image unavailable/);
-  assert.match(JSON.stringify(log.projection().messages), /iVBORw0KGgo=/);
+  assert.match(JSON.stringify(log.projection().timeline.filter(isViewMessage)), /iVBORw0KGgo=/);
   const previous = log.projection();
   await assert.rejects(
     agent.prompt(ctx, record, 'New image', () => {}, { signal, choice, images: [image] }),
@@ -799,14 +807,20 @@ test('native compaction reduces context and preserves message identities and his
       session.id,
       'Turn ' + turn + ' ' + 'more context '.repeat(100),
     );
-  const before = app.runtime.plugins.ctx.harnessSessions.log(session.id).projection().messages;
+  const before = app.runtime.plugins.ctx.harnessSessions
+    .log(session.id)
+    .projection()
+    .timeline.filter(isViewMessage);
   const compacted = await compact();
   assert.equal(compacted.status, 200, JSON.stringify(compacted.body));
   assert.equal(mock.requests.length, 7);
   assert.match(JSON.stringify(mock.requests.at(-1)), /Image unavailable/);
   assert.doesNotMatch(JSON.stringify(mock.requests.at(-1)), /iVBORw0KGgo=/);
   assert.ok(log.entries().some((entry) => entry.type === 'compaction'));
-  assert.deepEqual(app.runtime.plugins.ctx.harnessSessions.log(session.id).projection().messages, before);
+  assert.deepEqual(
+    app.runtime.plugins.ctx.harnessSessions.log(session.id).projection().timeline.filter(isViewMessage),
+    before,
+  );
   assert.equal(log.projection().contextMessages.length, 5);
   assert.match(JSON.stringify(log.projection().contextMessages[0]), /Summary of earlier conversation/);
 });

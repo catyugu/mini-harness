@@ -235,6 +235,7 @@ async function checkPackage() {
       import type { SlotRenderer } from 'mini-harness/ui-slots';
       import type { ComposerModel } from 'mini-harness/conversation/composer';
       import type { ConversationController } from 'mini-harness/conversation/controller';
+      import type { MessageAction } from 'mini-harness/conversation/history';
       import type { SettingsContribution } from 'mini-harness/ui-settings';
       import type { BrowserPrimitives } from 'mini-harness/ui-primitives';
       import type { RightTabsPort } from 'mini-harness/ui-layout';
@@ -254,6 +255,11 @@ async function checkPackage() {
         const primitives: BrowserPrimitives = ctx.miniPrimitives;
         const tabs: RightTabsPort = ctx.miniTabs;
         tabs.onWorkspaceChange(() => {}, signal);
+        ctx.effect(() => ctx.miniMessages.registerAction({
+          id: 'verify-target', label: 'Verify target', icon: 'copy',
+          visible: ({ target }) => target.type === 'assistant-turn' && target.messages[0].id === target.id,
+          run: ({ target }) => model.insert(target.rawText),
+        } satisfies MessageAction));
         model.setText('Write a review');
         model.choose({ provider: 'local', id: 'example-model' });
         model.chooseThinking(null);
@@ -466,10 +472,12 @@ async function checkPackage() {
     assert.equal(status.run.state, 'completed');
     const conversation = await (await fetch(url, { headers })).json();
     assert.deepEqual(
-      conversation.records.map(({ title, content }: { title: string; content: string }) => ({
-        title,
-        content,
-      })),
+      conversation.timeline
+        .filter(({ type }: { type: string }) => type === 'record')
+        .map(({ title, content }: { title: string; content: string }) => ({
+          title,
+          content,
+        })),
       [{ title: 'Progress update', content: 'Installed SDK recorded progress' }],
     );
     const followUp = write('/api/extensions/task-notes/follow-up', 'POST', {
@@ -521,7 +529,7 @@ async function checkPackage() {
     assert.match(JSON.stringify(mock.requests.at(-1)), /scoped_greeting/);
     const scopedHistory = await (await get('/api/sessions/' + child.childId)).json();
     assert.ok(
-      scopedHistory.messages.some(
+      scopedHistory.timeline.some(
         (message: { role: string; content: unknown }) =>
           message.role === 'toolResult' && JSON.stringify(message.content).includes('Greeting returned.'),
       ),
@@ -573,7 +581,12 @@ async function checkPackage() {
     assert.equal((await get('/api/extensions/task-notes/smoke')).status, 404);
     const withoutPlugin = (await (await get('/api/bootstrap')).json()) as typeof bootstrap;
     assert.ok(!withoutPlugin.ui.some(({ id }) => id === 'task-notes'));
-    assert.deepEqual((await (await get('/api/sessions/' + item.id)).json()).records, conversation.records);
+    assert.deepEqual(
+      (await (await get('/api/sessions/' + item.id)).json()).timeline.filter(
+        ({ type }: { type: string }) => type === 'record',
+      ),
+      conversation.timeline.filter(({ type }: { type: string }) => type === 'record'),
+    );
 
     assert.match((await cli('status')).stdout, /is running/);
     assert.match((await cli('stop')).stdout, /stopped/);

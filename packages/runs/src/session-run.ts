@@ -1,3 +1,4 @@
+import { userContent } from '@mini-harness/sessions/user-content';
 import { conversationTools } from './tool-selection.ts';
 import type { Context } from 'mini-harness/cordis';
 import { scopeTarget } from '@mini-harness/plugin-api/scopes';
@@ -21,7 +22,7 @@ import type { SessionLogPort, InboxItem } from '@mini-harness/sessions/log-api';
 import { Inbox } from './inbox.ts';
 import { isToolContent, toolResultState } from '@mini-harness/tools/api';
 import { applyTransforms } from './transforms.ts';
-import { failedTool } from '@mini-harness/tools/execution';
+import { toolFailure } from '@mini-harness/tools/execution';
 import {
   prepareModelMessages,
   resolveThinking,
@@ -94,7 +95,7 @@ export class SessionRun {
     for (const call of pending.values())
       log.append({
         type: 'message',
-        message: failedTool(
+        message: toolFailure(
           call,
           executed.has(call.id)
             ? 'The tool completed without a recorded model-visible result. The tool was not retried.'
@@ -201,7 +202,6 @@ export class SessionRun {
         inboxId,
       } as const;
       const entry = edit ? log.revise(event, edit.parentId, edit.expectedLeafId) : log.append(event);
-      const { userText, attachments } = prepared.presentation;
       await emit({
         type: 'user',
         source: inboxId ? 'user' : source,
@@ -212,8 +212,7 @@ export class SessionRun {
         submissionId,
         inboxId,
         timestamp: event.message.timestamp,
-        content: userText ? [{ type: 'text', text: userText }, ...item.images] : item.images,
-        attachments,
+        ...userContent(prepared.content, { ...prepared.presentation, images: item.images }),
       });
     };
     const deliver = (mode: InboxItem['mode']) =>
@@ -230,7 +229,10 @@ export class SessionRun {
       beginSubmission?.();
       const previous = log.projection(revision?.parentId);
       await commit(manual, await prepare(manual, selection(manual, previous), source));
-      if (record.titleSource === 'auto' && !previous.messages.some((item) => item.role === 'user'))
+      if (
+        record.titleSource === 'auto' &&
+        !previous.timeline.some((item) => item.type === 'message' && item.role === 'user')
+      )
         this.sessions.rename(
           id,
           (input.userText || input.attachments[0]?.name || prompt).slice(0, 72),
@@ -258,12 +260,12 @@ export class SessionRun {
         emit({
           type: 'assistant-end',
           message: {
+            type: 'message',
             id: assistant.id,
             parentId: assistant.parentId,
             role: 'assistant',
             content: result.content,
             timestamp: result.timestamp,
-            error: result.stopReason === 'aborted' ? undefined : result.errorMessage,
           },
         });
       },
@@ -362,7 +364,7 @@ export class SessionRun {
                 output = { ...output, content };
               } catch (error) {
                 output = {
-                  ...failedTool(
+                  ...toolFailure(
                     call,
                     'Tool execution completed, but the model-visible result transformation failed.',
                   ),

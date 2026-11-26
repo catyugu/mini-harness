@@ -177,7 +177,10 @@ test('drafts isolate attachments and discover workspace files and skills', async
     await expect(page.locator('.message.user')).toHaveText('Different conversation notes.md');
     await historyReference.click();
     await expect(panel.getByRole('heading', { name: 'Notes' })).toBeVisible();
-    await expect(panel.getByRole('tab', { name: 'task.txt', exact: true })).toHaveCount(0);
+    const savedAttachment = panel.getByRole('tab', { name: 'task.txt', exact: true });
+    await savedAttachment.click();
+    await expect(panel.locator('.file-preview:visible')).toHaveText('ATTACHED TASK');
+    await panel.getByRole('tab', { name: 'notes.md', exact: true }).click();
     await panel.getByRole('button', { name: 'Close workspace panel' }).click();
     await page.getByRole('button', { name: title, exact: true }).click();
     await expect(draft).toHaveText('Keep this draft');
@@ -211,6 +214,10 @@ test('drafts isolate attachments and discover workspace files and skills', async
       'aria-selected',
       'true',
     );
+    await expect(panel.getByRole('heading', { name: 'Notes' })).toBeVisible();
+    await savedAttachment.click();
+    await expect(panel.getByRole('tabpanel', { name: 'task.txt' })).toContainText('Conversation not found');
+    await panel.getByRole('tab', { name: 'notes.md', exact: true }).click();
     await expect(panel.getByRole('heading', { name: 'Notes' })).toBeVisible();
   } finally {
     await page.close();

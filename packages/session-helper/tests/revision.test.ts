@@ -27,7 +27,7 @@ test('conversation edits branch the native session instead of appending and enfo
           .filter((block: any) => block.type === 'text')
           .map((block: any) => block.text)
           .join('\n');
-  const first = before.messages.find(
+  const first = before.timeline.find(
     (message: { role: string; content: unknown; id?: string }) =>
       message.role === 'user' && textOf(message) === 'Original first',
   );
@@ -57,10 +57,18 @@ test('conversation edits branch the native session instead of appending and enfo
       beforeProjection.leafId,
       'Rejected input must not move the selected branch',
     );
-    assert.deepEqual(unchanged.messages, beforeProjection.messages);
+    assert.deepEqual(
+      unchanged.timeline.filter((entry) => entry.type !== 'termination'),
+      beforeProjection.timeline,
+    );
+    if (result.status === 200) assert.equal(unchanged.timeline.at(-1)?.type, 'termination');
     assert.deepEqual(unchanged.model, beforeProjection.model);
     assert.equal(unchanged.thinkingLevel, beforeProjection.thinkingLevel);
   }
+  const log = app.runtime.plugins.ctx.harnessSessions.log(session.id);
+  const priorRun = before.run;
+  log.append({ type: 'run', run: { ...priorRun, id: 'discarded-run', state: 'cancelled' } });
+  assert.equal(log.projection(before.leafId).timeline.at(-1)?.id, 'discarded-run');
   const revision = await request('/sessions/' + session.id + '/revise', 'POST', {
     sourceEntryId: first.id,
     expectedLeafId: before.leafId,
@@ -71,26 +79,35 @@ test('conversation edits branch the native session instead of appending and enfo
   assert.equal(finished.body.run.state, 'completed');
   const after = (await request('/sessions/' + session.id)).body;
   assert.ok(
-    after.messages.some(
+    after.timeline.some(
       (message: { role: string; content: unknown }) =>
         message.role === 'user' && textOf(message) === 'Revised first',
     ),
   );
   assert.equal(
-    after.messages.some(
+    after.timeline.some(
       (message: { role: string; content: unknown }) =>
         message.role === 'user' && textOf(message) === 'Original first',
     ),
     false,
   );
   assert.equal(
-    after.messages.some(
+    after.timeline.some(
       (message: { role: string; content: unknown }) =>
         message.role === 'user' && textOf(message) === 'Original second',
     ),
     false,
   );
   assert.notEqual(after.leafId, before.leafId);
+  assert.equal(
+    after.timeline.some(({ type }: { type: string }) => type === 'termination'),
+    false,
+  );
+  assert.deepEqual(
+    after.timeline.map(({ runId }: { runId: string }) => runId),
+    [after.run.id, after.run.id],
+  );
+  assert.equal(log.projection(before.leafId).timeline.at(-1)?.id, 'discarded-run');
   const exportFile = app.runtime.plugins.ctx.harnessSessions.export([session.id])[0].log;
   for (const message of ['Original first', 'Original second', 'Revised first'])
     assert.ok(exportFile.includes(message));

@@ -1,5 +1,4 @@
 import type { Context } from 'mini-harness/cordis';
-import type { SessionDisplayRecord } from '@mini-harness/sessions/display-record';
 import type { MessageExtensions } from './message-extensions.ts';
 import { createMessageView } from './messages.ts';
 
@@ -17,108 +16,43 @@ export function mountHistory(ctx: Context, extensions: MessageExtensions, signal
     signal,
     viewport,
     messages,
-    {
-      render: (tool, lifetime, action) => extensions.render(tool, lifetime, action),
-      messageActions: () => extensions.actionsForMessage(),
-      report: extensions.report,
+    extensions,
+    () => {
+      const { session, history } = control.get();
+      return {
+        workspaceId: session?.workspaceId ?? undefined,
+        sessionId: session?.id,
+        leafId: history?.leafId,
+      };
     },
-    () => ({
-      workspaceId: control.get().session?.workspaceId ?? undefined,
-      sessionId: control.get().session?.id,
-      leafId: control.get().history.leafId,
-    }),
     () => void ctx.miniComposer.retry().catch(control.report),
   );
-  const records = new Map<
-    string,
-    {
-      record: SessionDisplayRecord;
-      render?: ReturnType<typeof extensions.recordRenderer>;
-      node: HTMLElement;
-      lifetime: AbortController;
-    }
-  >();
-  signal.addEventListener(
-    'abort',
-    () => {
-      for (const item of records.values()) item.lifetime.abort();
-      records.clear();
-    },
-    { once: true },
-  );
-  let previous: ReturnType<typeof control.get> | undefined;
-  let loadedSession: string | undefined;
+
+  let selected: string | undefined;
   function render() {
-    const state = control.get();
-    const { session, history, run, partial, tools } = state;
-    const sessionId = session?.id;
-    const reset = sessionId !== previous?.session?.id;
-    if (reset) loadedSession = undefined;
-    const onlyPartial =
-      previous?.history === history &&
-      previous.session === session &&
-      previous.tools === tools &&
-      previous.run === run &&
-      previous.partial !== partial;
-    const firstHistory =
-      sessionId !== undefined &&
-      loadedSession !== sessionId &&
-      (history.leafId !== null || history.terminations.length > 0 || state.interaction.operation !== 'open');
-    if (firstHistory) {
-      loadedSession = sessionId;
-      view.follow();
-    }
-    previous = state;
-    if (onlyPartial && view.partial(partial)) return;
-    const active = new Set(history.records.map(({ id }) => id));
-    for (const [id, item] of records)
-      if (reset || !active.has(id)) {
-        item.lifetime.abort();
-        records.delete(id);
-      }
-    const nodes = sessionId
-      ? history.records.map((record) => {
-          const render = extensions.recordRenderer(record.plugin);
-          const prior = records.get(record.id);
-          if (
-            prior &&
-            prior.render === render &&
-            (prior.record === record || JSON.stringify(prior.record) === JSON.stringify(record))
-          )
-            return prior;
-          prior?.lifetime.abort();
-          const lifetime = new AbortController();
-          const node = document.createElement('div');
-          node.className = 'conversation-record';
-          node.dataset.conversationRecord = record.id;
-          const rendered = extensions.renderRecord(render, record, {
-            sessionId: sessionId!,
-            signal: lifetime.signal,
-          });
-          if (rendered) node.append(rendered);
-          else {
-            const fallback = document.createElement('p');
-            fallback.className = 'hint';
-            fallback.textContent = record.title;
-            node.append(fallback);
-          }
-          const item = { record, render, node, lifetime };
-          records.set(record.id, item);
-          return item;
-        })
-      : [];
-    view.history(history.messages, nodes, history.terminations, run, partial, tools, reset);
+    const { session, history, run, partial, tools } = control.get();
+    if (!history || selected !== session?.id) view.reset();
+    selected = session?.id;
+    if (history) view.history(history.timeline, run, partial, tools);
   }
   extensions.subscribe(view.refreshActions, signal);
   extensions.subscribeToTools(view.refreshTools, signal);
   extensions.subscribeToRecords(render, signal);
-  control.subscribe(['session', 'history', 'run', 'partial', 'tools'], render, signal);
+  control.subscribe(['session', 'history', 'run', 'tools'], render, signal);
+  control.subscribe(
+    ['partial'],
+    () => {
+      const { partial } = control.get();
+      if (!view.partial(partial)) render();
+    },
+    signal,
+  );
   let operation = control.get().interaction.operation;
   control.subscribe(
     ['interaction'],
     () => {
       const next = control.get().interaction.operation;
-      if (next !== operation && (next === 'submit' || next === 'queue')) view.follow();
+      if (operation !== next && (next === 'submit' || next === 'queue')) view.follow();
       operation = next;
     },
     signal,

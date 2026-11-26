@@ -23,7 +23,6 @@ export function createComposer(
     suggestions = element('suggestions');
   let completion: AbortController;
   let files: { file: Attachment; controller: AbortController; key: string }[] = [];
-  let attachmentViews: AbortController | undefined;
   let previousScope = '';
   let nextAttachment = 0;
   const same = (left: Attachment, right: Attachment) =>
@@ -31,7 +30,6 @@ export function createComposer(
   signal.addEventListener(
     'abort',
     () => {
-      attachmentViews?.abort();
       files.forEach(({ controller }) => controller.abort());
     },
     { once: true },
@@ -60,9 +58,6 @@ export function createComposer(
       return { file, controller: new AbortController(), key: 'draft:' + ++nextAttachment };
     });
     previous.forEach(({ controller }) => controller.abort());
-    const thumbnails = new AbortController();
-    attachmentViews?.abort();
-    attachmentViews = thumbnails;
     attachmentList.replaceChildren(
       ...files.map(({ file, controller, key }, index) => {
         const size = decodedSize(file.data);
@@ -78,14 +73,7 @@ export function createComposer(
           : undefined;
         const wrapper = document.createElement('div');
         wrapper.className = 'attachment';
-        const card = attachmentView(
-          ctx,
-          { ...file, size },
-          resource,
-          thumbnails.signal,
-          undefined,
-          controller.signal,
-        );
+        const card = attachmentView(ctx, { ...file, size }, resource);
         const remove = document.createElement('button');
         remove.type = 'button';
         remove.className = 'icon-button';
