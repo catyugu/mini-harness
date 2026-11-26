@@ -54,7 +54,9 @@ function checkCycles(graph: Map<string, Set<string>>) {
 }
 
 function references(file: string) {
-  return moduleReferences(ts.createSourceFile(file, readFileSync(file, 'utf8'), ts.ScriptTarget.Latest, true));
+  return moduleReferences(
+    ts.createSourceFile(file, readFileSync(file, 'utf8'), ts.ScriptTarget.Latest, true),
+  );
 }
 
 function workspaceTarget(specifier: string, file: string) {
@@ -62,7 +64,10 @@ function workspaceTarget(specifier: string, file: string) {
   const entry = manifests.get(owner)?.exports?.['./' + parts.join('/')];
   const directory = join(packages, owner);
   const target = entry && resolve(directory, entry);
-  assert.ok(target && target.startsWith(directory + sep) && existsSync(target), file + ' references ' + specifier);
+  assert.ok(
+    target && target.startsWith(directory + sep) && existsSync(target),
+    file + ' references ' + specifier,
+  );
   return { owner, target };
 }
 
@@ -73,7 +78,9 @@ test('workspace boundaries include tests and build scripts', () => {
     ...['test', 'scripts', 'bin'].map((name) => [join(root, name), '']),
   ]) {
     for (const file of sources(directory)) {
-      for (const { literal: { text: specifier } } of references(file)) {
+      for (const {
+        literal: { text: specifier },
+      } of references(file)) {
         const reason = file + ' references ' + specifier;
         assert.ok(!/^(?:#|@\/|~\/)/.test(specifier), reason);
         if (isBuiltin(specifier)) assert.ok(specifier.startsWith('node:'), reason);

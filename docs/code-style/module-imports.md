@@ -2,13 +2,13 @@
 
 Workspace packages are ownership and dependency boundaries. The installed SDK is a single npm package.
 
-| Context | Import |
-| --- | --- |
-| Within the same workspace | Relative path, such as `./state.ts` |
-| Between workspace packages | Declared export, such as `@mini-harness/runs/api` |
+| Context                           | Import                                             |
+| --------------------------------- | -------------------------------------------------- |
+| Within the same workspace         | Relative path, such as `./state.ts`                |
+| Between workspace packages        | Declared export, such as `@mini-harness/runs/api`  |
 | External plugins and SDK examples | Installed root export, such as `mini-harness/runs` |
-| Cordis | `mini-harness/cordis` |
-| Node built-ins | `node:` prefix, such as `node:fs` |
+| Cordis                            | `mini-harness/cordis`                              |
+| Node built-ins                    | `node:` prefix, such as `node:fs`                  |
 
 Use explicit `.ts` extensions for TypeScript source references and `import type` for type-only imports. Actual JavaScript assets use their actual extension. The existing build rewrites source imports for distribution; do not introduce aliases, alternative resolvers, or new barrels just to shorten paths.
 

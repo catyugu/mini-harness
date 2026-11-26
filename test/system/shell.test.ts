@@ -59,7 +59,9 @@ test('Shell preserves native workspace and environment', async (t) => {
   });
   const { id } = ctx.harnessSessions.create();
   const tool = expectPresent(
-    ctx.harnessTools.list({ resourceId: id, scope: ctx.harnessSessions.runScope(id) }).find(({ name }) => name === 'shell'),
+    ctx.harnessTools
+      .list({ resourceId: id, scope: ctx.harnessSessions.runScope(id) })
+      .find(({ name }) => name === 'shell'),
     'shell',
   );
   const result = await runTool(tool, 'native-environment', {

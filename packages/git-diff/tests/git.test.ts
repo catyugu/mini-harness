@@ -23,7 +23,10 @@ test('Git inspection includes staged, unstaged and untracked files and rejects o
   writeFileSync(join(paths.cwd, 'file.txt'), 'after\n');
   writeFileSync(join(paths.cwd, 'new.txt'), 'new\n');
   const cwd = realpathSync.native(paths.cwd);
-  const inspection = new GitInspection(cwd, access.open(cwd, { exclude: (path) => containsPath(paths.home, path) }));
+  const inspection = new GitInspection(
+    cwd,
+    access.open(cwd, { exclude: (path) => containsPath(paths.home, path) }),
+  );
   const changes = await inspection.changes();
   assert.equal(
     changes.available,
@@ -38,8 +41,12 @@ test('Git inspection includes staged, unstaged and untracked files and rejects o
   const alias = join(root, 'workspace-alias');
   symlinkSync(paths.cwd, alias, process.platform === 'win32' ? 'junction' : 'dir');
   assert.equal(
-    (await new GitInspection(alias, access.open(cwd, { exclude: (path) => containsPath(paths.home, path) })).changes())
-      .available,
+    (
+      await new GitInspection(
+        alias,
+        access.open(cwd, { exclude: (path) => containsPath(paths.home, path) }),
+      ).changes()
+    ).available,
     true,
     'Directory aliases must resolve to the same repository root',
   );

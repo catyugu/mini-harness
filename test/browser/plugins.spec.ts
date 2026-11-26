@@ -434,20 +434,20 @@ test('the Web plugin manager excludes entries declared only in scoped Profile co
     const [workspace] = await workspaces.json();
     const key = 'workspace:' + workspace.id;
     await service.stop();
-  const initial = {
-    scopes: {
-      [key]: {
-        entries: {
-          'workspace-example': {
-            name: '../../plugins/workspace-example',
-            disabled: false,
-            config: { value: 'invalid' },
+    const initial = {
+      scopes: {
+        [key]: {
+          entries: {
+            'workspace-example': {
+              name: '../../plugins/workspace-example',
+              disabled: false,
+              config: { value: 'invalid' },
+            },
           },
         },
       },
-    },
-  };
-  writeJson(join(paths.home, 'profiles', 'web', 'cordis.patch.yml'), initial);
+    };
+    writeJson(join(paths.home, 'profiles', 'web', 'cordis.patch.yml'), initial);
     service = await startIsolatedHost(paths);
     await page.goto(service.url + '/#token=' + service.token);
     await page.getByRole('button', { name: 'Browse plugins' }).click();

@@ -299,7 +299,8 @@ export const apply = (ctx) => {
   const registry = plugins.ctx.harnessSessions;
   const parent = registry.create({ permission: 'readOnly' });
   const child = registry.create({ parentId: parent.id, permission: 'fullAccess' });
-  const list = (id: string) => plugins.ctx.harnessTools.list({ resourceId: id, scope: registry.runScope(id) });
+  const list = (id: string) =>
+    plugins.ctx.harnessTools.list({ resourceId: id, scope: registry.runScope(id) });
   const original = expectPresent(
     list(child.id).find(({ name }) => name === 'read'),
     'inherited read tool',

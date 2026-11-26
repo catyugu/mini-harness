@@ -22,7 +22,9 @@ test('workspace tools share one policy for reads, searches and writes', async (t
   symlinkSync(privateDir, join(cwd, 'linked'), 'junction');
   writeFileSync(join(cwd, '.gitignore'), 'hidden.txt\n');
   writeFileSync(join(cwd, 'hidden.txt'), 'marked text');
-  const workspace = app.runtime.plugins.ctx.harnessFileAccess.open(cwd, { exclude: (path) => containsPath(state, path) });
+  const workspace = app.runtime.plugins.ctx.harnessFileAccess.open(cwd, {
+    exclude: (path) => containsPath(state, path),
+  });
   const execute = async (name: string, value: object) =>
     runTool(
       expectPresent(
