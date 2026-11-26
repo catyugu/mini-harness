@@ -132,14 +132,14 @@ Keep lookup at the boundary that owns resource identity and lifetime. Do not rep
 
 ## 5. Optional chaining, fallbacks, and assertions
 
-| Expression          | Legitimate use                                | Contract defect                          |
-| ------------------- | --------------------------------------------- | ---------------------------------------- |
-| `x?.foo()`          | Genuinely optional object or capability       | Calling a required service               |
-| `x ?? defaultValue` | An explicit meaning for a missing value       | Masking missing internal data            |
+| Expression            | Legitimate use                                | Contract defect                          |
+| --------------------- | --------------------------------------------- | ---------------------------------------- |
+| `x?.foo()`            | Genuinely optional object or capability       | Calling a required service               |
+| `x ?? defaultValue`   | An explicit meaning for a missing value       | Masking missing internal data            |
 | `x \|\| defaultValue` | Intentionally treating all falsy values alike | Confusing zero or false with absence     |
-| `if (!x) return`    | A legitimate no-op branch                     | Silently ignoring an invalid state       |
-| `x!`                | Rare invariant the compiler cannot establish  | Forcing a value through the type checker |
-| `x as T`            | A justified type conversion or refinement     | Inventing a guarantee without evidence   |
+| `if (!x) return`      | A legitimate no-op branch                     | Silently ignoring an invalid state       |
+| `x!`                  | Rare invariant the compiler cannot establish  | Forcing a value through the type checker |
+| `x as T`              | A justified type conversion or refinement     | Inventing a guarantee without evidence   |
 
 For example, `await runtime?.execute(request)` silently drops a request when a required service is missing. Use `await runtime.execute(request)` with a non-null dependency contract and guarantee its existence during construction or injection.
 
@@ -150,9 +150,9 @@ Do not introduce empty objects, dummy values, defaults, optional chains, or sile
 | Type or contract               | Meaning                                                           |
 | ------------------------------ | ----------------------------------------------------------------- |
 | `T`                            | A required, valid value.                                          |
-| `T \| undefined`                | Legitimate absence or omission.                                   |
-| `T \| null`                     | An explicit empty value, such as intentional clearing.            |
-| `T \| null \| undefined`         | Only when omission and explicit emptiness have distinct meanings. |
+| `T \| undefined`               | Legitimate absence or omission.                                   |
+| `T \| null`                    | An explicit empty value, such as intentional clearing.            |
+| `T \| null \| undefined`       | Only when omission and explicit emptiness have distinct meanings. |
 | `T[]`                          | A collection, which may be empty.                                 |
 | `Result<T, E>` or an exception | Operation failure with a defined error contract.                  |
 | `unknown`                      | Data not yet validated.                                           |
