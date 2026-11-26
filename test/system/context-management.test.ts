@@ -259,7 +259,7 @@ test('context overflow repairs the current request and leaves raw tool results r
 });
 
 test('session overrides inherit defaults, reject invalid ratios and accept unstructured checkpoints', async (t) => {
-  const { app, request, paths, mock } = await fixture(t, ({ messages }) =>
+  const { app, request, paths } = await fixture(t, ({ messages }) =>
     summary(messages.at(-1)?.content) ? 'Continue the earlier task.' : 'Answer to the task',
   );
   const ctx = app.runtime.plugins.ctx;
@@ -290,7 +290,9 @@ test('session overrides inherit defaults, reject invalid ratios and accept unstr
     ),
   );
   assert.ok(sessionLog.context().contextMessages.length < before.contextMessages.length);
-  assert.equal(mock.requests.at(-1)?.max_tokens, 1024);
+  const checkpoint = sessionLog.entries().find((entry) => entry.type === 'model-request' && entry.request.purpose === 'summary');
+  assert.ok(checkpoint);
+  assert.equal(sessionLog.requestSnapshot(checkpoint.id).maxTokens, 1024);
   const compactedContext = sessionLog.context();
   assert.ok(sessionLog.entries().some(({ type }) => type === 'model-attempt'));
   await app.close();
