@@ -98,13 +98,18 @@ test('plugin schema controls, recursive tree navigation, batch export and perman
     await page.getByRole('button', { name: 'Send', exact: true }).click();
     await expect(page.getByText('Delegation complete', { exact: true })).toBeVisible();
     await expect(page.getByText('Child report received', { exact: true }).first()).toBeVisible();
-    const notification = page.locator('details.async-message').filter({ hasText: 'Subagent finished' }).first();
+    const notification = page
+      .locator('details.async-message')
+      .filter({ hasText: 'Subagent finished' })
+      .first();
     await expect(notification.locator('summary')).toBeVisible();
     await expect(notification.locator('article')).toBeHidden();
     await page.locator('.background-tasks').getByRole('button', { name: 'Tasks', exact: true }).click();
     const tasks = page.locator('.background-task-list');
     await expect(tasks.getByRole('heading', { name: 'Subagents', exact: true })).toBeVisible();
-    await expect(tasks.getByRole('button', { name: 'Open conversation: Child task', exact: true })).toHaveCount(1);
+    await expect(
+      tasks.getByRole('button', { name: 'Open conversation: Child task', exact: true }),
+    ).toHaveCount(1);
     await expect(tasks.locator('.task-output')).toHaveCount(0);
     await page.locator('.background-tasks').getByRole('button', { name: 'Tasks', exact: true }).click();
     await page.getByRole('button', { name: 'Expand Parent task', exact: true }).click();

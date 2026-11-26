@@ -181,7 +181,9 @@
   margin: 0;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
-  font: 12px/1.55 ui-monospace, monospace;
+  font:
+    12px/1.55 ui-monospace,
+    monospace;
 }
 .task-output-heading {
   align-items: center;

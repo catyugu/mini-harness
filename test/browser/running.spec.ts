@@ -533,7 +533,9 @@ export const apply = (ctx) => {
     await expect(panel.getByRole('button', { name: 'Fixture job · Cancelled', exact: true })).toBeVisible();
     await expect(panel.getByRole('button', { name: 'Finished 1', exact: true })).toBeVisible();
     await toggle.click();
-    const notification = page.locator('details.async-message').filter({ hasText: 'Background task finished' });
+    const notification = page
+      .locator('details.async-message')
+      .filter({ hasText: 'Background task finished' });
     await expect(notification.locator('summary')).toBeVisible();
     await expect(notification).not.toHaveAttribute('open', '');
     await expect(notification.locator('article')).toBeHidden();

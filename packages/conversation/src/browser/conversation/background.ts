@@ -23,10 +23,16 @@ function status(task: TaskSnapshot) {
 }
 
 function duration(task: TaskSnapshot) {
-  const seconds = Math.max(0, Math.floor((Date.parse(task.finishedAt ?? new Date().toISOString()) -
-    Date.parse(task.startedAt ?? task.createdAt)) / 1000));
-  if (seconds >= 3600) return Math.floor(seconds / 3600) + ' h ' + Math.floor(seconds / 60) % 60 + ' min';
-  if (seconds >= 60) return Math.floor(seconds / 60) + ' min ' + seconds % 60 + ' s';
+  const seconds = Math.max(
+    0,
+    Math.floor(
+      (Date.parse(task.finishedAt ?? new Date().toISOString()) -
+        Date.parse(task.startedAt ?? task.createdAt)) /
+        1000,
+    ),
+  );
+  if (seconds >= 3600) return Math.floor(seconds / 3600) + ' h ' + (Math.floor(seconds / 60) % 60) + ' min';
+  if (seconds >= 60) return Math.floor(seconds / 60) + ' min ' + (seconds % 60) + ' s';
   return seconds + ' s';
 }
 
@@ -40,11 +46,13 @@ function input(task: TaskSnapshot) {
 function resultText(value?: TaskData) {
   const content = object(value).content;
   if (!Array.isArray(content)) return typeof value === 'string' ? value : '';
-  return content.flatMap((part) => {
-    if (typeof part === 'string') return [part];
-    const block = object(part);
-    return block.type === 'text' && typeof block.text === 'string' ? [block.text] : [];
-  }).join('\n');
+  return content
+    .flatMap((part) => {
+      if (typeof part === 'string') return [part];
+      const block = object(part);
+      return block.type === 'text' && typeof block.text === 'string' ? [block.text] : [];
+    })
+    .join('\n');
 }
 
 function reconcile(parent: HTMLElement, children: HTMLElement[]) {
@@ -104,7 +112,9 @@ function setup(ctx: Context) {
   function label(task: TaskSnapshot) {
     if (task.type === 'agent-run')
       return services.session(task.owner.slice('session:'.length))?.title ?? 'Subagent';
-    return task.metadata?.tool === 'sandbox_shell' ? input(task) || task.name || 'Shell' : task.name ?? 'Task';
+    return task.metadata?.tool === 'sandbox_shell'
+      ? input(task) || task.name || 'Shell'
+      : (task.name ?? 'Task');
   }
 
   function closeOutput() {
@@ -135,7 +145,9 @@ function setup(ctx: Context) {
     command.append(copy(() => commandText, 'Copy command'));
     const output = required(node.querySelector<HTMLElement>('.task-output'));
     const warning = required(node.querySelector<HTMLElement>('.task-notice'));
-    required(node.querySelector('.task-output-heading')).append(copy(() => output.textContent ?? '', 'Copy output'));
+    required(node.querySelector('.task-output-heading')).append(
+      copy(() => output.textContent ?? '', 'Copy output'),
+    );
     let cursor = 0;
     let fetching = false;
     let text = '';
@@ -149,7 +161,9 @@ function setup(ctx: Context) {
         output.textContent = shown;
         if (following) output.scrollTop = output.scrollHeight;
       }
-      warning.textContent = [truncated ? 'Earlier output was truncated' : '', failure || next.error || ''].filter(Boolean).join(' · ');
+      warning.textContent = [truncated ? 'Earlier output was truncated' : '', failure || next.error || '']
+        .filter(Boolean)
+        .join(' · ');
     }
     async function update(next: TaskSnapshot) {
       show(next);
@@ -157,9 +171,11 @@ function setup(ctx: Context) {
       fetching = true;
       const requestedCursor = cursor;
       try {
-        const data = await browserRequest<TaskOutput>(ctx,
+        const data = await browserRequest<TaskOutput>(
+          ctx,
           path(sessionId) + '/' + encodeURIComponent(task.id) + '/output?after=' + cursor,
-          { signal: lifetime.signal });
+          { signal: lifetime.signal },
+        );
         if (lifetime.signal.aborted) return;
         if (data.truncated) {
           truncated = true;
@@ -242,14 +258,21 @@ function setup(ctx: Context) {
       current = next;
       const title = label(next);
       name.textContent = title;
-      kind.textContent = child ? '' : next.name === title ? '' : next.name ?? '';
+      kind.textContent = child ? '' : next.name === title ? '' : (next.name ?? '');
       kind.hidden = !kind.textContent;
       state.textContent = status(next);
       node.dataset.state = next.state;
-      node.dataset.tone = next.state === 'completed' && object(next.result).isError ? 'failed'
-        : next.cancellationRequested && live(next) ? 'cancelled' : next.state;
+      node.dataset.tone =
+        next.state === 'completed' && object(next.result).isError
+          ? 'failed'
+          : next.cancellationRequested && live(next)
+            ? 'cancelled'
+            : next.state;
       row.title = title + ' · ' + state.textContent;
-      row.setAttribute('aria-label', child ? 'Open conversation: ' + title : title + ' · ' + state.textContent);
+      row.setAttribute(
+        'aria-label',
+        child ? 'Open conversation: ' + title : title + ' · ' + state.textContent,
+      );
       if (!child) row.setAttribute('aria-expanded', String(expanded?.id === next.id));
       chevron.classList.toggle('task-chevron-open', !child && expanded?.id === next.id);
       cancel.hidden = !live(next);
@@ -354,14 +377,20 @@ function setup(ctx: Context) {
   }
 
   ctx.effect(() => ctx.miniSlots.register('conversation.header', container));
-  ctx.effect(() => ctx.miniProjections.register('tasks', {
-    sync(_revision, reconnect, id) {
-      if (!id || reconnect || id === active) return refresh();
+  ctx.effect(() =>
+    ctx.miniProjections.register('tasks', {
+      sync(_revision, reconnect, id) {
+        if (!id || reconnect || id === active) return refresh();
+      },
+    }),
+  );
+  control.subscribe(
+    ['session'],
+    () => {
+      if (control.get().session?.id !== active) void refresh();
     },
-  }));
-  control.subscribe(['session'], () => {
-    if (control.get().session?.id !== active) void refresh();
-  }, signal);
+    signal,
+  );
   signal.addEventListener('abort', closeOutput, { once: true });
   const position = () => {
     const bounds = toggle.getBoundingClientRect();
@@ -369,19 +398,27 @@ function setup(ctx: Context) {
     panel.style.top = bounds.bottom + 6 + 'px';
     panel.style.maxHeight = Math.max(0, Math.min(520, innerHeight - bounds.bottom - 14)) + 'px';
   };
-  panel.addEventListener('toggle', () => {
-    toggle.setAttribute('aria-expanded', String(open()));
-    if (open()) {
-      position();
-      void refresh();
-    } else {
-      closeOutput();
-      render();
-    }
-  }, { signal });
-  window.addEventListener('resize', () => {
-    if (open()) position();
-  }, { signal });
+  panel.addEventListener(
+    'toggle',
+    () => {
+      toggle.setAttribute('aria-expanded', String(open()));
+      if (open()) {
+        position();
+        void refresh();
+      } else {
+        closeOutput();
+        render();
+      }
+    },
+    { signal },
+  );
+  window.addEventListener(
+    'resize',
+    () => {
+      if (open()) position();
+    },
+    { signal },
+  );
   const interval = setInterval(() => {
     if (open()) for (const row of rows.values()) row.tick();
   }, 1000);

@@ -34,7 +34,10 @@ export function relatedTasks(ctx: Context, id: string) {
   const ordered = [...tasks.values()]
     .map((task) => ctx.harnessTasks.get(task.id) ?? task)
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-  return [...ordered.filter((task) => !terminal(task.state)), ...ordered.filter((task) => terminal(task.state)).slice(0, 50)];
+  return [
+    ...ordered.filter((task) => !terminal(task.state)),
+    ...ordered.filter((task) => terminal(task.state)).slice(0, 50),
+  ];
 }
 
 export function relatedTask(ctx: Context, id: string, taskId: string) {
