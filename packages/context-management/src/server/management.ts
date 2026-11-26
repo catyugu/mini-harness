@@ -14,7 +14,7 @@ import type { ContextSettings } from '../shared/state.ts';
 import { checkpoint, splitPoint } from './compaction.ts';
 import { validateSettings } from './config.ts';
 import { measure, messageTokens, textTokens, totalTokens, type MeasuredRequest } from './meter.ts';
-import { offloadImages, prune } from './prune.ts';
+import { offloadImages, offloadMessage, prune } from './prune.ts';
 
 export const owner = 'context-management';
 
@@ -107,7 +107,7 @@ export class ContextManagement {
       summaryRequest,
       capability,
       adapter,
-      messages.slice(0, cut),
+      messages.slice(0, cut).map((message, index) => offloadMessage(message, contextEntryIds[index])),
       async (outgoing) => {
         validateRequestSnapshot(outgoing);
         const { id: requestId } = log.recordRequest(outgoing, 'summary');
@@ -154,13 +154,12 @@ export class ContextManagement {
     if (pressure() || failure) {
       const images = offloadImages(log.context(), failure?.kind === 'image-limit');
       if (images.length) current = await this.measure(await this.replace(log, current, rebuild, images));
-      if (failure?.kind === 'image-limit') {
-        if (!images.length) throw new DomainError('unavailable', 'No further images can be offloaded');
-        return current;
-      }
+      if (failure?.kind === 'image-limit' && !images.length)
+        throw new DomainError('unavailable', 'No further images can be offloaded');
     }
-    if (failure && !settings.autoCompact) throw new DomainError('unavailable', 'Automatic compaction is off');
-    if (settings.autoCompact && (failure || pressure()))
+    const overflow = failure?.kind === 'context-overflow';
+    if (overflow && !settings.autoCompact) throw new DomainError('unavailable', 'Automatic compaction is off');
+    if (settings.autoCompact && (overflow || pressure()))
       return this.compact(log, current, rebuild, settings, taskId);
     if (totalTokens(current.inputMeasurement) > current.inputMeasurement.budget)
       throw new DomainError('unavailable', 'The prepared request exceeds its input budget');

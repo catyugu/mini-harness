@@ -1,3 +1,4 @@
+import type { NativeMessage } from '@mini-harness/llm/api';
 import type { ContextReplacement, SessionContext } from '@mini-harness/sessions/log-api';
 
 const toolLimit = 8000;
@@ -50,6 +51,18 @@ export function prune({ contextMessages, contextEntryIds }: SessionContext): Con
     .reverse();
 }
 
+/** Preserve original part positions so read_context can restore the image. */
+export function offloadMessage(message: NativeMessage, id: string): NativeMessage {
+  if (message.role === 'assistant' || typeof message.content === 'string') return message;
+  const parts = message.content;
+  const content = parts.map((part, index) =>
+    part.type === 'image'
+      ? { type: 'text' as const, text: reference(id, 'Image ' + (index + 1) + ' offloaded') }
+      : part,
+  );
+  return content.every((part, index) => part === parts[index]) ? message : { ...message, content };
+}
+
 /** Under pressure offload historical images; after image rejection offload the oldest remaining group. */
 export function offloadImages(
   { contextMessages, contextEntryIds }: SessionContext,
@@ -58,23 +71,10 @@ export function offloadImages(
   const latest = contextMessages.reduce((index, message, i) => (message.role === 'user' ? i : index), -1);
   const result: ContextReplacement[] = [];
   for (const [start, message] of contextMessages.entries()) {
-    if (
-      message.role === 'assistant' ||
-      typeof message.content === 'string' ||
-      (!includeLatest && start >= latest)
-    )
-      continue;
-    const parts = message.content;
-    const content = parts.map((part, index) =>
-      part.type === 'image'
-        ? {
-            type: 'text' as const,
-            text: reference(contextEntryIds[start], 'Image ' + (index + 1) + ' offloaded'),
-          }
-        : part,
-    );
-    if (content.every((part, index) => part === parts[index])) continue;
-    result.push({ start, deleteCount: 1, preserveSource: true, insert: [{ ...message, content }] });
+    if (!includeLatest && start >= latest) break;
+    const replacement = offloadMessage(message, contextEntryIds[start]);
+    if (replacement === message) continue;
+    result.push({ start, deleteCount: 1, preserveSource: true, insert: [replacement] });
     if (includeLatest) break;
   }
   return result.reverse();
