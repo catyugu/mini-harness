@@ -1,3 +1,5 @@
+import { sendRun } from '../../../test/support/runs.ts';
+import { startTool } from '@mini-harness/tools/execution';
 import { isViewMessage } from '@mini-harness/sessions/message';
 import { conversationTools } from '@mini-harness/runs/tool-selection';
 import { expectPresent } from '../../../test/support/required.ts';
@@ -216,7 +218,7 @@ test(
     });
     const shell = app.runtime.plugins.ctx.harnessSessions.create();
     const other = app.runtime.plugins.ctx.harnessSessions.create();
-    const pending = app.runtime.plugins.ctx.harnessRuns.send(other.id, 'Unrelated task');
+    const pending = sendRun(app.runtime.plugins.ctx.harnessRuns, other.id, 'Unrelated task');
     try {
       await running;
       await request('/sessions/' + shell.id + '/runs', 'POST', { message: 'Run Shell' });
@@ -229,7 +231,7 @@ test(
         200,
       );
       assert.deepEqual((await request('/approvals')).body, []);
-      assert.ok(app.runtime.plugins.ctx.harnessRuns.active(other.id));
+      assert.ok(app.runtime.plugins.ctx.harnessRuns.current(other.id));
       assert.equal((await finish(shell.id)).body.run.state, 'completed');
       const tool = expectPresent(
         app.runtime.plugins.ctx.harnessSessions
@@ -282,4 +284,40 @@ test('repeating a denied command in the same run does not open a new approval', 
       .map((message: { toolState: string }) => message.toolState === 'denied'),
     [true, true],
   );
+});
+
+test('independent shell calls use one task, retain output channels and do not duplicate process output', async (t) => {
+  const { app } = await fixture(t);
+  const ctx = app.runtime.plugins.ctx;
+  await app.runtime.configuration.update({
+    entries: { shell: { disabled: false, config: { mode: 'host' } } },
+  });
+  const session = ctx.harnessSessions.create({ permission: 'fullAccess' });
+  const tool = ctx.harnessTools
+    .list({ resourceId: session.id, scope: ctx.harnessSessions.runScope(session.id) })
+    .find(({ name }) => name === 'sandbox_shell');
+  assert.ok(tool);
+  const handle = startTool(
+    ctx.harnessTasks,
+    tool,
+    'background-shell',
+    { command: 'echo task-output' },
+    { ...ctx.harnessSessions.task(session.id), retain: true },
+  );
+  const result = await handle.result;
+  assert.equal(result.details?.exitCode, 0);
+  const task = ctx.harnessTasks.get(handle.id);
+  assert.equal(task?.state, 'completed');
+  assert.equal(ctx.harnessTasks.list('session:' + session.id).length, 1);
+  assert.match(
+    ctx.harnessTasks
+      .readOutput(handle.id)
+      ?.chunks.filter(({ channel }) => channel === 'stdout')
+      .map(({ text }) => text)
+      .join('') ?? '',
+    /task-output/,
+  );
+  assert.doesNotMatch(JSON.stringify(task?.result), /task-output/);
+  await ctx.harnessSessions.delete([session.id]);
+  assert.equal(ctx.harnessTasks.get(handle.id), undefined);
 });

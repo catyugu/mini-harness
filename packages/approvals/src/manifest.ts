@@ -33,6 +33,7 @@ const plugin: Plugin.Object = {
         ctx.harnessSessions.assertAvailable(id);
         if (!ctx.harnessSessions.get(id)) throw new DomainError('not_found', 'Conversation not found');
         const run = ctx.harnessRuns.info(id);
+        const active = ctx.harnessRuns.current(id);
         return caller.fiber.run(
           (lifetime) =>
             approvals.request(
@@ -40,7 +41,7 @@ const plugin: Plugin.Object = {
               isRunning(run) ? run?.id : undefined,
               instanceId,
               prompt,
-              ctx.harnessRuns.signal(id, lifetime) ?? lifetime,
+              active ? AbortSignal.any([active.signal, lifetime]) : lifetime,
             ),
           signal,
         );
@@ -59,7 +60,7 @@ const plugin: Plugin.Object = {
       const changed = (event: Event) => {
         if (!(event instanceof CustomEvent)) return;
         const run = runs.info(event.detail.id);
-        if (run && run.state !== 'queued' && run.state !== 'running') approvals.finishRun(run.id);
+        if (run && !isRunning(run)) approvals.finishRun(run.id);
       };
       runs.events.addEventListener('change', changed);
       return () => {

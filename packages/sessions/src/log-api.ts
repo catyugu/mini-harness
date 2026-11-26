@@ -1,4 +1,5 @@
 import type { PluginRecord } from './records.ts';
+import type { TaskHistoryRecord } from '@mini-harness/tasks/api';
 import type { LogEntry } from './record-log.ts';
 import type { QueueEntry } from './shared/queue.ts';
 import type { ContentDelta } from './content-delta.ts';
@@ -11,7 +12,7 @@ import type {
   NativeToolMessage,
 } from '@mini-harness/llm/api';
 import type { HistoryEntry } from './shared/message.ts';
-import type { RunInfo } from './shared/run-state.ts';
+import { projectRun, type RunDetails, type RunInfo } from './shared/run-state.ts';
 
 export interface InboxItem {
   id: string;
@@ -67,9 +68,16 @@ export type SessionEvent<Data = unknown> =
   | { type: 'inbox-consumed' | 'inbox-cancelled'; ids: string[]; reason?: string }
   | { type: 'inbox-failed'; inboxId: string; reason: string }
   | { type: 'run'; run: RunInfo }
+  | ({ type: 'task'; run?: RunDetails } & TaskHistoryRecord)
   | { type: 'branch' };
 
 export type SessionEntry<Data = unknown> = LogEntry<SessionEvent<Data>>;
+
+/** Historical run envelopes remain readable; new writes have one canonical task lifecycle. */
+export function runFromEntry(sessionId: string, entry: SessionEntry): RunInfo | undefined {
+  if (entry.type === 'run') return entry.run;
+  if (entry.type === 'task' && entry.run) return projectRun(sessionId, entry.task, entry.run);
+}
 
 export interface SessionProjection {
   leafId: string | null;

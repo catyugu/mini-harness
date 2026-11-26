@@ -1,3 +1,4 @@
+import { sendRun } from '../support/runs.ts';
 import { isViewMessage } from '@mini-harness/sessions/message';
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -33,7 +34,7 @@ test('appearance, parallelism and child defaults update without interrupting a r
   });
   await runtime.start();
   const item = runtime.plugins.ctx.harnessSessions.create();
-  const pending = runtime.plugins.ctx.harnessRuns.send(item.id, 'Hold');
+  const pending = sendRun(runtime.plugins.ctx.harnessRuns, item.id, 'Hold');
   await waiting;
   const original = runtime.plugins.ctx.harnessSessions.log(item.id);
   await runtime.configuration.update({
@@ -42,7 +43,7 @@ test('appearance, parallelism and child defaults update without interrupting a r
   assert.equal(runtime.settings.entries['core:theme']?.config?.appearance, 'dark');
   assert.strictEqual(runtime.plugins.ctx.harnessSessions.log(item.id), original);
   assert.equal(runtime.settings.entries.subagents?.config?.maxParallel, 2);
-  assert.equal(runtime.plugins.ctx.harnessRuns.active(item.id), true);
+  assert.equal(Boolean(runtime.plugins.ctx.harnessRuns.current(item.id)), true);
   await assert.rejects(
     runtime.configuration.update({
       entries: { subagents: { config: { model: { provider: 'missing', id: 'unavailable' } } } },
@@ -59,7 +60,7 @@ test('appearance, parallelism and child defaults update without interrupting a r
   assert.equal(runtime.settings.entries.subagents?.config?.maxParallel, 2);
   await runtime.configuration.update({ entries: { files: { disabled: true } } });
   assert.equal(runtime.settings.entries.files?.disabled, true);
-  assert.equal(runtime.plugins.ctx.harnessRuns.active(item.id), true);
+  assert.equal(Boolean(runtime.plugins.ctx.harnessRuns.current(item.id)), true);
   release();
   assert.equal(await pending, 'Done');
   const firstMessage = runtime.plugins.ctx.harnessSessions
@@ -69,7 +70,7 @@ test('appearance, parallelism and child defaults update without interrupting a r
   await runtime.configuration.update({
     entries: { files: { disabled: true }, 'session-helper': { disabled: true } },
   });
-  await runtime.plugins.ctx.harnessRuns.send(item.id, 'After the policy changes');
+  await sendRun(runtime.plugins.ctx.harnessRuns, item.id, 'After the policy changes');
   assert.equal(
     runtime.plugins.ctx.harnessSessions.log(item.id).projection().timeline.filter(isViewMessage)[0].id,
     firstMessage,
@@ -145,9 +146,9 @@ test(
     let deletion: Promise<string[]>;
     try {
       await entered;
-      targetRun = runtime.plugins.ctx.harnessRuns.send(target.id, 'Wait for the new composition');
+      targetRun = sendRun(runtime.plugins.ctx.harnessRuns, target.id, 'Wait for the new composition');
       assert.equal(runtime.plugins.ctx.harnessRuns.info(target.id)?.state, 'queued');
-      sibling = runtime.plugins.ctx.harnessRuns.send(other.id, 'Unaffected workspace');
+      sibling = sendRun(runtime.plugins.ctx.harnessRuns, other.id, 'Unaffected workspace');
       deletion = runtime.plugins.ctx.harnessSessions.delete([obsolete.id]);
     } finally {
       release();

@@ -1,31 +1,14 @@
 # @mini-harness/tools
 
-Owns tool registration, validation and invocation leases.
+Registers and resolves scoped tool definitions, validates arguments and dispatches actual invocations through Task Runtime.
 
-## Responsibilities
+`harnessTools.register` accepts a definition or a resource-specific factory. `harnessTools.list({ scope, resourceId })` selects the effective registrations. `defineTool` infers argument types from the schema. Invoke any selected or standalone definition through `startTool(tasks, tool, callId, args, options)` and await its handle for inline work. Independent work supplies its own resource owner and retention policy; a consumer can also bind an explicit task commit function for durable history. Resource IDs are opaque: for session-owned standalone work pass `harnessSessions.task(id)` explicitly. Tool implementations receive `execute(args, context)`. The returned handle belongs to the single actual tool-call task; no wrapper task is created.
 
-Resolves tool registrations through opaque runtime scope layers shared with Prompt. A selected definition holds a lease that expires when its registration is replaced or unloaded.
+A registration is no longer available once replaced or removed. Removal cancels and drains its active Task invocations. The registering provider fiber owns executing code. For independent factory calls, a consumer may explicitly supply its long-lived composition context instead of retaining a short-lived run context.
 
-## Structure
+`mini-harness/tools/execution` supplies the executor contract, `executeTools` and `startTool`. The native executor declares serial/parallel policy, validates calls and delivers exactly one result per call. Task Runtime executes the batch. An optional consumer policy can acknowledge a background task without waiting for completion. Tools that suspend their owning run must be serial.
 
-`src/api.ts` defines tool inputs and results. `execution.ts` defines the shared executor contract, default strategy and tool-call pipeline; `registry.ts` owns leases.
+The optional `@mini-harness/task-control` plugin registers `task_control` independently of
+Subagents. It only uses the Task Runtime contract.
 
-## API
-
-`harnessTools.register` accepts a definition or a resource-specific factory. `harnessTools.list()` selects plain registrations. Pass `{ scope, resourceId }` to resolve scoped or resource-specific registrations. `defineTool` infers argument types from the schema.
-
-## Dependencies
-
-Uses Cordis fibers for plugin-owned calls and session ancestry for tool visibility. Agent consumes tool definitions and invocation leases. `mini-harness/tools/execution` exports `ToolExecutorPort`, `executeTools` and the native strategy for any consumer.
-
-## Lifecycle
-
-`core:tools` and `core:tool-executor` mount independently at application scope. Unmount revokes contributed definitions and waits for active invocations to drain.
-
-## Configuration
-
-Sessions supplies an optional `harnessToolPolicy`, interpreting the inherited conversation mode and the declared read-only property. Tools runs without this provider or any session service.
-
-## Testing
-
-`tests/registry.test.ts` covers visibility and leases. [Agent tests](../agent/tests/) cover dispatch and scheduling.
+Sessions may supply a tool policy, but registration and execution require no Session service.

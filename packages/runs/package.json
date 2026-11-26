@@ -7,14 +7,12 @@
     "./api": "./src/api.ts",
     "./manifest": "./src/manifest.ts",
     "./stream": "./src/stream.ts",
-    "./execution": "./src/execution.ts",
     "./tool-selection": "./src/tool-selection.ts"
   },
   "miniHarness": {
     "api": [
       "./api",
-      "./stream",
-      "./execution"
+      "./stream"
     ],
     "profileModules": {
       "@mini-harness/runs": "./src/manifest.ts"
@@ -28,7 +26,8 @@
     "@mini-harness/platform": "workspace:*",
     "@mini-harness/plugin-api": "workspace:*",
     "@mini-harness/sessions": "workspace:*",
-    "@mini-harness/transport": "workspace:*",
-    "@mini-harness/tools": "workspace:*"
+    "@mini-harness/tasks": "workspace:*",
+    "@mini-harness/tools": "workspace:*",
+    "@mini-harness/transport": "workspace:*"
   }
 }

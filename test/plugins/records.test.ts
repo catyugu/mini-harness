@@ -1,3 +1,4 @@
+import { sendRun, activeRunCount } from '../support/runs.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdirSync, writeFileSync } from 'node:fs';
@@ -30,7 +31,7 @@ export const apply = (ctx) => {
     });
   assert.equal((await toggle(true)).status, 200);
   const { body: session } = await request('/sessions', 'POST', {});
-  await app.runtime.plugins.ctx.harnessRuns.send(session.id, 'Persist this conversation');
+  await sendRun(app.runtime.plugins.ctx.harnessRuns, session.id, 'Persist this conversation');
   const route = '/extensions/records/entries';
   const value = { note: 'stored by the plugin' };
   const beforePluginRecords = app.runtime.plugins.ctx.harnessSessions.log(session.id).projection().leafId;
@@ -62,7 +63,7 @@ export const apply = (ctx) => {
     entries.map(({ id, data }: { id: string; data: unknown }) => ({ id, data })),
     [{ id: added.body, data: value }],
   );
-  assert.equal(app.runtime.plugins.ctx.harnessRuns.size, 0);
+  assert.equal(activeRunCount(app.runtime.plugins.ctx), 0);
   const saved = app.runtime.plugins.ctx.harnessSessions.export([session.id])[0].log;
   assert.ok(
     saved

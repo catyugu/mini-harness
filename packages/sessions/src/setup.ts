@@ -1,4 +1,5 @@
 import { observe } from '@mini-harness/plugin-api/observations';
+import { terminal } from '@mini-harness/tasks/api';
 import type { Context } from 'mini-harness/cordis';
 import { SessionRegistry } from './registry.ts';
 
@@ -39,6 +40,18 @@ export function setup(ctx: Context) {
     workspace.effect(() => () => registry.bindWorkspaces());
     workspace.effect(() =>
       workspace.harnessWorkspaces.beforeRemove((id) => registry.removeWorkspaceSessions(id)),
+    );
+  });
+  ctx.inject(['harnessTasks'], (scope) => {
+    const tasks = scope.harnessTasks;
+    scope.effect(() => tasks.registerHistory((id) => registry.taskHistory(id)));
+    scope.effect(() =>
+      registry.beforeDelete({
+        busy: (id) => tasks.list('session:' + id).some((task) => !terminal(task.state)),
+        async quiesce(ids) {
+          await Promise.all(ids.map((id) => tasks.removeOwner('session:' + id)));
+        },
+      }),
     );
   });
   ctx.on('harness/ready', () => registry.recoverDeletion());

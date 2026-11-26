@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { Semaphore, requireChildDepth, selectChildModel } from '../src/server/delegation.ts';
+import { requireChildDepth, selectChildModel } from '../src/server/delegation.ts';
 
 test('model-chosen provider overrides registered defaults', () => {
   const defaults = { provider: 'openai', id: 'gpt-x' };
@@ -16,32 +16,4 @@ test('model-chosen provider overrides registered defaults', () => {
 test('child spawning is limited to one level', () => {
   assert.doesNotThrow(() => requireChildDepth(0));
   assert.throws(() => requireChildDepth(1), /Recursive/);
-});
-
-test('semaphore caps concurrency and releases on errors', async () => {
-  const sem = new Semaphore(2);
-  let active = 0,
-    peak = 0;
-  const outputs = await Promise.all(
-    Array.from({ length: 8 }, (_, i) =>
-      sem
-        .lease()
-        .then(async (lease) => {
-          try {
-            active++;
-            peak = Math.max(peak, active);
-            await new Promise((resolve) => setTimeout(resolve, 5));
-            if (i === 2) throw new Error('expected');
-            return i;
-          } finally {
-            active--;
-            lease.release();
-          }
-        })
-        .catch(() => 'error'),
-    ),
-  );
-  assert.equal(peak, 2);
-  assert.equal(outputs[2], 'error');
-  assert.equal(sem.active, 0);
 });

@@ -1,6 +1,8 @@
 import { isThinkingLevel, type ToolSchema } from '@mini-harness/llm/vocabulary';
 import { pluginIdPattern, isScopeAddress } from '@mini-harness/plugin-api/selection';
-import { isRunning } from './shared/run-state.ts';
+import { isRunning, type RunInfo } from './shared/run-state.ts';
+import { terminal } from '@mini-harness/tasks/api';
+import { runFromEntry } from './log-api.ts';
 import { isDeepStrictEqual } from 'node:util';
 import {
   RequestMessages,
@@ -57,7 +59,7 @@ export class SessionLog extends RecordLog<SessionEvent> implements SessionLogPor
   private readonly inboxIds = new Set<string>();
   private readonly pendingInbox = new Map<string, InboxItem>();
   private readonly inboxFailures: QueueEntry[] = [];
-  private readonly runEvents: Extract<SessionEntry, { type: 'run' }>[] = [];
+  private readonly runEvents: { seq: number; parentId: string | null; run: RunInfo }[] = [];
   private cachedProjection?: SessionProjection;
   private recovery = { leaf: null as string | null, checker: new RequestMessages() };
 
@@ -142,6 +144,8 @@ export class SessionLog extends RecordLog<SessionEvent> implements SessionLogPor
       throw new Error('Inbox input is not pending');
     if (entry.type === 'run' && entry.run.sessionId !== this.sessionId)
       throw new Error('Session run belongs to another conversation');
+    if (entry.type === 'task' && entry.task.owner !== 'session:' + this.sessionId)
+      throw new Error('Task belongs to another conversation');
     if (
       entry.type === 'compaction' &&
       entry.keepFromId !== null &&
@@ -162,8 +166,9 @@ export class SessionLog extends RecordLog<SessionEvent> implements SessionLogPor
   }
 
   protected recordAdded(entry: SessionEntry) {
-    if (!operational(entry) || entry.type === 'run') this.cachedProjection = undefined;
-    if (entry.type === 'run') this.runEvents.push(entry);
+    const run = runFromEntry(this.sessionId, entry);
+    if (!operational(entry) || run) this.cachedProjection = undefined;
+    if (run) this.runEvents.push({ seq: entry.seq, parentId: entry.parentId, run });
     if (entry.type === 'tool-schema') this.schemas.set(entry.hash, entry.tools);
     if (entry.type === 'inbox-enqueued') {
       this.inboxIds.add(entry.item.id);
@@ -316,8 +321,8 @@ export class SessionLog extends RecordLog<SessionEvent> implements SessionLogPor
 
   /** Opening an existing log resolves interrupted work before it becomes writable. */
   recover() {
-    const run = this.latestRun;
-    if (run && isRunning(run)) {
+    const previous = this.latestRun;
+    if (isRunning(previous)) {
       for (const item of this.pendingInbox.values()) {
         if (item.mode === 'steer')
           this.append({
@@ -326,6 +331,25 @@ export class SessionLog extends RecordLog<SessionEvent> implements SessionLogPor
             reason: 'The target run was interrupted before delivery',
           });
       }
+    }
+    const tasks = new Map<string, Extract<SessionEntry, { type: 'task' }>>();
+    for (const entry of this.records) if (entry.type === 'task') tasks.set(entry.task.id, entry);
+    for (const { task, output, run } of tasks.values()) {
+      if (!terminal(task.state))
+        this.append({
+          type: 'task',
+          task: {
+            ...task,
+            state: 'interrupted',
+            finishedAt: new Date().toISOString(),
+            error: 'Task interrupted before a terminal state was recorded',
+          },
+          output,
+          run,
+        });
+    }
+    const run = this.latestRun;
+    if (run && isRunning(run)) {
       this.append({
         type: 'run',
         run: {
@@ -451,12 +475,37 @@ function validateEvent(event: SessionEvent) {
       )
         throw new Error('Invalid inbox failure');
       return;
+    case 'task':
+      if (
+        !event.task ||
+        typeof event.task.id !== 'string' ||
+        typeof event.task.owner !== 'string' ||
+        !event.task.retained ||
+        !['queued', 'running', 'waiting', 'completed', 'failed', 'cancelled', 'interrupted'].includes(
+          event.task.state,
+        ) ||
+        !Number.isFinite(Date.parse(event.task.createdAt)) ||
+        !Number.isSafeInteger(event.task.outputCursor) ||
+        event.task.outputCursor < 0 ||
+        (event.run !== undefined &&
+          (!event.run ||
+            !Number.isSafeInteger(event.run.sequence) ||
+            event.run.sequence < 0 ||
+            (event.run.inputEntryId != null && !entryId.test(event.run.inputEntryId)) ||
+            (event.run.changedFiles !== undefined &&
+              (!Array.isArray(event.run.changedFiles) ||
+                event.run.changedFiles.some((path) => typeof path !== 'string')))))
+      )
+        throw new Error('Invalid task record');
+      return;
     case 'run':
       if (
         !event.run ||
         typeof event.run.id !== 'string' ||
         typeof event.run.sessionId !== 'string' ||
-        !['queued', 'running', 'completed', 'failed', 'cancelled', 'interrupted'].includes(event.run.state) ||
+        !['queued', 'running', 'waiting', 'completed', 'failed', 'cancelled', 'interrupted'].includes(
+          event.run.state,
+        ) ||
         !Number.isFinite(Date.parse(event.run.startedAt)) ||
         !Number.isInteger(event.run.sequence) ||
         event.run.sequence < 0 ||
@@ -512,6 +561,7 @@ function storedEntry(entry: StoredEntry): SessionEntry {
 function operational(entry: SessionEvent) {
   return (
     entry.type === 'run' ||
+    entry.type === 'task' ||
     entry.type === 'model-request' ||
     entry.type === 'tool-schema' ||
     entry.type === 'tool-execution' ||

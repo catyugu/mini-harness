@@ -27,12 +27,6 @@ export interface ToolProgress {
 
 export type RunEvent = StreamEvent & { runId: string; runSessionId: string; sequence: number };
 
-export class RunInterrupted extends Error {
-  constructor() {
-    super('The service stopped before the run finished');
-  }
-}
-
 export type AgentEvent =
   | { type: 'assistant-start' }
   | { type: 'assistant-end'; message: Extract<ViewMessage, { role: 'assistant' }> }

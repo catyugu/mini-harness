@@ -13,7 +13,7 @@ export class AgentLoop implements AgentPort {
   constructor(private readonly limit: () => number) {}
 
   async run(ctx: Context, input: AgentRun) {
-    const { signal } = input;
+    const { signal, task } = input;
     const llm = ctx.get('harnessLlm');
     if (!llm) throw new Error('Required service is unavailable: harnessLlm');
     const maxTurns = this.limit();
@@ -45,6 +45,7 @@ export class AgentLoop implements AgentPort {
       const { request, executor, execution, deliver } = step;
       const requestCalls = validateRequestSnapshot(request);
       for (const id of requestCalls ?? []) knownCalls.add(id);
+      task.update({ phase: 'model', turn });
       input.onEvent?.({ type: 'request', request });
       input.onEvent?.({ type: 'assistant-start' });
       const original = await requestModel(
@@ -86,10 +87,13 @@ export class AgentLoop implements AgentPort {
       signal.throwIfAborted();
 
       if (calls.length) {
+        task.update({ phase: 'tools', turn });
         const pending = new Map(calls.map((call) => [call.id, call]));
         await executor.execute(calls, step.tools, {
           ...execution,
           signal,
+          tasks: ctx.harnessTasks,
+          parentTask: task,
           async deliver(result, workSignal) {
             const call = pending.get(result.toolCallId);
             if (!call || call.name !== result.toolName)

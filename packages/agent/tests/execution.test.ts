@@ -1,3 +1,4 @@
+import { sendRun } from '../../../test/support/runs.ts';
 import { isViewMessage } from '@mini-harness/sessions/message';
 import { Context } from 'mini-harness/cordis';
 import { fixture as httpFixture } from '../../../test/support/api-fixture.ts';
@@ -19,6 +20,7 @@ import { basicCompaction } from '../src/compaction.ts';
 import { SessionRegistry } from '@mini-harness/sessions/registry';
 import { WorkspaceCatalog } from '@mini-harness/workspaces/catalog';
 import { ToolRegistry } from '@mini-harness/tools/registry';
+import { TaskRuntime } from '@mini-harness/tasks/runtime';
 import { defineTool, toolResultState } from '@mini-harness/tools/api';
 import type { LlmPort, NativeAssistantMessage, ToolCallPart } from '@mini-harness/llm/api';
 import type { ModelRetry } from '../src/events.ts';
@@ -64,8 +66,10 @@ function fixture(
     sessions.dispose();
     rmSync(root, { recursive: true, force: true });
   });
-  const tools = new ToolRegistry();
+  const runtime = new TaskRuntime();
+  const tools = new ToolRegistry(runtime);
   const ctx = new Context();
+  ctx.provide('harnessTasks', runtime.service());
   ctx.provide('harnessTools', tools.service());
   ctx.provide('harnessModels', {
     list: () => [],
@@ -88,8 +92,22 @@ function fixture(
   ctx.provide('harnessPrompt', { build: async () => 'Fixture', register: () => () => {} });
   if (retryModel) ctx.on('agent/model-retry', retryModel);
   ctx.provide('harnessAgent', new AgentLoop(() => 8));
-  const agent = new SessionRun(sessions);
+  const sessionRun = new SessionRun(sessions);
   const record = sessions.create();
+  type Prompt = Parameters<SessionRun['prompt']>;
+  const agent = {
+    async prompt(
+      ctx: Prompt[0],
+      record: Prompt[1],
+      text: Prompt[2],
+      emit: Prompt[3],
+      options: Omit<Prompt[4], 'task'>,
+    ) {
+      return runtime.start({ owner: 'session:' + record.id, signal: options.signal, retain: false }, (task) =>
+        sessionRun.prompt(ctx, record, text, emit, { ...options, signal: task.signal, task }),
+      ).result;
+    },
+  };
   return { agent, ctx, sessions, tools, record };
 }
 
@@ -321,7 +339,7 @@ test('cancellation closes the whole tool batch durably and never executes later 
       name: 'first',
       description: 'First',
       parameters: Type.Object({}),
-      async execute(_id, _args, signal) {
+      async execute(_args, { signal }) {
         ranFirst++;
         controller.abort(new Error('Stopped by test'));
         signal?.throwIfAborted();
@@ -387,6 +405,7 @@ test('a concurrent cancellation does not hide a genuine tool failure', async () 
   const states: string[] = [];
   await nativeExecutor.execute([call('one', 'fail'), call('two', 'fail')], new Map([[tool.name, tool]]), {
     signal: controller.signal,
+    tasks: new TaskRuntime(),
     async deliver(result) {
       states.push(toolResultState(result));
     },
@@ -632,7 +651,7 @@ test(
         description: 'Parallel',
         parameters: Type.Object({ wait: Type.Boolean() }),
         isConcurrencySafe: ({ wait }) => typeof wait === 'boolean',
-        async execute(id, { wait }, signal) {
+        async execute({ wait }, { callId: id, signal }) {
           started.push(id);
           if (wait) {
             await Promise.race([
@@ -651,7 +670,7 @@ test(
         name: 'serial',
         description: 'Serial',
         parameters: Type.Object({}),
-        async execute(id) {
+        async execute(_args, { callId: id }) {
           started.push(id);
           return { content: [] };
         },
@@ -730,6 +749,7 @@ test('a fatal pipeline failure stops dispatch and drains active calls', async ()
   await assert.rejects(
     nativeExecutor.execute(calls, tools, {
       signal: new AbortController().signal,
+      tasks: new TaskRuntime(),
       start(call) {
         started.push(call.id);
         return undefined;
@@ -837,7 +857,8 @@ test('native compaction reduces context and preserves message identities and his
   const image = { type: 'image' as const, mimeType: 'image/png', data: 'iVBORw0KGgo=' };
   log.append({ type: 'message', message: { role: 'user', content: [image], timestamp: 1 } });
   for (let turn = 0; turn < 6; turn++)
-    await app.runtime.plugins.ctx.harnessRuns.send(
+    await sendRun(
+      app.runtime.plugins.ctx.harnessRuns,
       session.id,
       'Turn ' + turn + ' ' + 'more context '.repeat(100),
     );
@@ -894,4 +915,40 @@ test('attachments enforce encoding, format and byte limits without creating file
   assert.match(binary.text, /Uploaded file: "b.pdf"/);
   assert.deepEqual(binary.files[0].bytes, Buffer.from([0, 1, 2]));
   assert.throws(() => prepareInput('a', new Array(9).fill({})), /eight/);
+});
+
+test('background tool execution delivers only one receipt and survives its submitting run', async () => {
+  const tasks = new TaskRuntime();
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const tool = defineTool({
+    name: 'background',
+    description: 'Work independently',
+    parameters: Type.Object({}),
+    async execute() {
+      await gate;
+      return { content: [{ type: 'text', text: 'complete' }] };
+    },
+  });
+  const results: import('@mini-harness/llm/api').NativeToolMessage[] = [];
+  const controller = new AbortController();
+  await nativeExecutor.execute([call('bg', tool.name)], new Map([[tool.name, tool]]), {
+    tasks,
+    signal: controller.signal,
+    background: () => ({ owner: 'session:one' }),
+    async deliver(result) {
+      results.push(result);
+    },
+  });
+  assert.equal(results.length, 1);
+  const id = String(results[0].details?.taskId);
+  assert.equal(tasks.get(id)?.owner, 'session:one');
+  controller.abort();
+  release();
+  const finished = await tasks.wait(id);
+  assert.equal(finished.state, 'completed');
+  assert.equal(results.length, 1);
+  assert.deepEqual(finished.result, { content: [{ type: 'text', text: 'complete' }] });
 });

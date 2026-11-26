@@ -1,6 +1,8 @@
 import type { Context } from 'mini-harness/cordis';
-import { isToolContent, type ToolDefinition, type ToolUpdate } from './api.ts';
-import { Check } from 'typebox/value';
+import { type ToolDefinition, type ToolInvocation, type ToolResult, type ToolUpdate } from './api.ts';
+import type { TaskContext, TaskHandle, TaskPort } from '@mini-harness/tasks/api';
+import { invokeTool, prepareTool } from './invocation.ts';
+export { startTool, toolAvailable } from './invocation.ts';
 import type {
   LlmRequest,
   ModelRequestContent,
@@ -18,6 +20,11 @@ export interface ToolTurn {
 
 export interface ToolExecution {
   readonly signal: AbortSignal;
+  readonly tasks: TaskPort;
+  readonly parentTask?: TaskContext;
+  readonly resourceId?: string;
+  /** Optional consumer policy: accept the call now and retain its independent task for later. */
+  background?(call: ToolCallPart): (ToolInvocation & { owner: string }) | undefined;
   /** Decides whether to start the call. A rejection still produces a model-visible result. */
   start?(call: ToolCallPart): { outcome: 'skipped' | 'denied'; reason: string } | undefined;
   update?(call: ToolCallPart, result: ToolUpdate): void;
@@ -43,53 +50,39 @@ const parallelLimit = 16;
 
 export const executeTools: ToolExecutorPort['execute'] = async (calls, tools, execution) => {
   const { signal } = execution;
-  const controller = new AbortController();
-  const batchSignal = AbortSignal.any([signal, controller.signal]);
-  const active = new Set<Promise<void>>();
-  let failure: { error: unknown } | undefined;
-  const start = (run: () => Promise<NativeToolMessage>) => {
-    const task = Promise.resolve()
-      .then(run)
-      .then((result) => execution.deliver(result, batchSignal))
-      .catch((error) => {
-        if (!failure) {
-          failure = { error };
-          controller.abort(error);
+  function* jobs() {
+    for (const call of calls) {
+      const tool = tools.get(call.name);
+      let invalid = call.argumentsError && 'Invalid arguments for ' + call.name + ': ' + call.argumentsError;
+      let prepared: ReturnType<typeof prepareTool> | undefined;
+      if (!invalid && tool) {
+        try {
+          prepared = prepareTool(tool, call.arguments);
+        } catch (error) {
+          invalid = error instanceof Error ? error.message : String(error);
         }
-      })
-      .finally(() => active.delete(task));
-    active.add(task);
-    return task;
-  };
-  for (const call of calls) {
-    if (failure) break;
-    const tool = tools.get(call.name);
-    let invalid = call.argumentsError;
-    if (!invalid && tool && !Check(tool.parameters, call.arguments)) invalid = 'Schema mismatch';
-    let parallel = false;
-    if (!invalid && tool?.isConcurrencySafe) {
-      try {
-        parallel = tool.isConcurrencySafe(call.arguments);
-      } catch {
-        // A scheduling hint that fails leaves the call serial.
       }
-    }
-    const run = async () => {
-      const rejection = execution.start?.(call);
-      if (rejection) return toolFailure(call, rejection.reason, rejection.outcome);
-      return executeTool(call, tool, execution, batchSignal, invalid);
-    };
-    if (parallel) {
-      start(run);
-      if (active.size === parallelLimit) await Promise.race(active);
-    } else {
-      await Promise.all(active);
-      if (failure) break;
-      await start(run);
+      let parallel = false;
+      if (!invalid && tool?.isConcurrencySafe) {
+        try {
+          parallel = tool.isConcurrencySafe(call.arguments);
+        } catch {
+          // A scheduling hint that fails leaves the call serial.
+        }
+      }
+      yield {
+        parallel,
+        async run(batchSignal: AbortSignal) {
+          const rejection = execution.start?.(call);
+          const result = rejection
+            ? toolFailure(call, rejection.reason, rejection.outcome)
+            : await executeTool(call, tool, prepared, execution, batchSignal, invalid);
+          await execution.deliver(result, batchSignal);
+        },
+      };
     }
   }
-  await Promise.all(active);
-  if (failure) throw failure.error;
+  await execution.tasks.batch(jobs(), { signal, limit: parallelLimit });
 };
 
 export const toolFailure = (
@@ -109,6 +102,7 @@ export const toolFailure = (
 async function executeTool(
   call: ToolCallPart,
   tool: ToolDefinition | undefined,
+  prepared: ReturnType<typeof prepareTool> | undefined,
   execution: Parameters<ToolExecutorPort['execute']>[2],
   signal: AbortSignal,
   invalid?: string,
@@ -120,13 +114,47 @@ async function executeTool(
       'skipped',
     );
   const start = performance.now();
+  let task: TaskHandle<ToolResult> | undefined;
   try {
     if (!tool) throw new Error('Tool is no longer available: ' + call.name);
-    if (invalid) throw new Error('Invalid arguments for ' + call.name + ': ' + invalid);
-    const result = await tool.execute(call.id, call.arguments, signal, (update) =>
-      execution.update?.(call, update),
+    if (invalid) throw new Error(invalid);
+    const background = execution.background?.(call);
+    task = invokeTool(
+      execution.tasks,
+      background?.context ? prepareTool(tool, call.arguments, background.context) : prepared!,
+      call.id,
+      background
+        ? {
+            ...background,
+            parentTask: undefined,
+            metadata: {
+              ...background.metadata,
+              ...(execution.parentTask && { creator: execution.parentTask.id }),
+            },
+            resourceId: background.resourceId ?? execution.resourceId,
+            retain: true,
+          }
+        : {
+            signal,
+            parentTask: execution.parentTask,
+            resourceId: execution.resourceId,
+            onUpdate: (update) => execution.update?.(call, update),
+          },
     );
-    if (!result || !isToolContent(result.content)) throw new Error('Invalid result from tool: ' + call.name);
+    if (background) {
+      const accepted = { taskId: task.id, state: 'queued' };
+      return {
+        role: 'toolResult',
+        toolCallId: call.id,
+        toolName: call.name,
+        content: [{ type: 'text', text: JSON.stringify(accepted) }],
+        details: accepted,
+        isError: false,
+        timestamp: Date.now(),
+        elapsedMs: performance.now() - start,
+      };
+    }
+    const result = await task.result;
     return {
       ...result,
       role: 'toolResult',
@@ -137,10 +165,7 @@ async function executeTool(
       elapsedMs: result.elapsedMs ?? performance.now() - start,
     };
   } catch (error) {
-    const cancelled =
-      signal.aborted &&
-      (error === signal.reason ||
-        (error instanceof Error && (error.name === 'AbortError' || error.cause === signal.reason)));
+    const cancelled = task ? task.state === 'cancelled' || task.state === 'interrupted' : signal.aborted;
     return {
       ...toolFailure(
         call,

@@ -67,6 +67,7 @@
     "@mini-harness/sandbox": "workspace:*",
     "@mini-harness/sessions": "workspace:*",
     "@mini-harness/settings": "workspace:*",
+    "@mini-harness/tasks": "workspace:*",
     "@mini-harness/tools": "workspace:*",
     "@mini-harness/ui-runtime": "workspace:*",
     "@mini-harness/workspaces": "workspace:*",
@@ -130,10 +131,6 @@
     "./conversation/navigation": {
       "types": "./dist/types/packages/conversation/src/browser/navigation-api.d.ts",
       "default": "./dist/packages/conversation/src/browser/navigation-api.js"
-    },
-    "./execution": {
-      "types": "./dist/types/packages/runs/src/execution.d.ts",
-      "default": "./dist/packages/runs/src/execution.js"
     },
     "./file-access": {
       "types": "./dist/types/packages/file-access/src/api.d.ts",
@@ -254,6 +251,14 @@
     "./models/selection": {
       "types": "./dist/types/packages/models/src/server/selection.d.ts",
       "default": "./dist/packages/models/src/server/selection.js"
+    },
+    "./tasks": {
+      "types": "./dist/types/packages/tasks/src/api.d.ts",
+      "default": "./dist/packages/tasks/src/api.js"
+    },
+    "./runs": {
+      "types": "./dist/types/packages/runs/src/api.d.ts",
+      "default": "./dist/packages/runs/src/api.js"
     }
   },
   "packageManager": "pnpm@10.34.9"

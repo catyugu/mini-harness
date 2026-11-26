@@ -16,11 +16,13 @@
     ],
     "profileModules": {
       "@mini-harness/tools": "./src/manifest.ts",
-      "@mini-harness/tool-executor": "./src/execution.ts#executor"
+      "@mini-harness/tool-executor": "./src/execution.ts#executor",
+      "@mini-harness/task-control": "./src/task-control.ts"
     }
   },
   "dependencies": {
     "@mini-harness/llm": "workspace:*",
-    "@mini-harness/plugin-api": "workspace:*"
+    "@mini-harness/plugin-api": "workspace:*",
+    "@mini-harness/tasks": "workspace:*"
   }
 }

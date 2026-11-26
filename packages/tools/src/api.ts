@@ -1,4 +1,5 @@
 import type { Context } from 'mini-harness/cordis';
+import type { TaskContext, TaskData, TaskOptions, TaskSnapshot } from '@mini-harness/tasks/api';
 import type { ScopeKey } from '@mini-harness/plugin-api/scopes';
 import type { Static, TSchema } from 'typebox';
 import type { TextPart, ImagePart, NativeToolMessage } from '@mini-harness/llm/api';
@@ -30,12 +31,9 @@ export interface ToolDefinition<Arguments = Record<string, any>> extends ToolSch
   metadata?: Record<string, unknown>;
   /** Calls are serial unless this returns true for the validated arguments. */
   isConcurrencySafe?(args: Arguments): boolean;
-  execute(
-    callId: string,
-    args: Arguments,
-    signal?: AbortSignal,
-    onUpdate?: (update: ToolUpdate) => void,
-  ): Promise<ToolResult>;
+  /** Optional compact serializable projection for retained calls. */
+  projectResult?(result: ToolResult): TaskData;
+  execute(args: Arguments, context: ToolContext): Promise<ToolResult>;
 }
 
 export interface ToolFactory {
@@ -49,13 +47,27 @@ export interface ToolSelection {
   resourceId?: string;
 }
 
-export interface RegisteredTool extends ToolDefinition {
-  available(): boolean;
+export interface ToolContext {
+  callId: string;
+  task: TaskContext;
+  signal: AbortSignal;
+  update(update: ToolUpdate): void;
+  /** For a serial tool, wait on behalf of the enclosing scheduling task. */
+  waitFor(id: string): Promise<TaskSnapshot>;
+}
+
+export interface ToolInvocation
+  extends Partial<Pick<TaskOptions, 'owner' | 'signal' | 'retain' | 'metadata' | 'commit'>> {
+  resourceId?: string;
+  parentTask?: TaskContext;
+  /** Resolve a factory against a long-lived composition when starting independent work. */
+  context?: Context;
+  onUpdate?(update: ToolUpdate): void;
 }
 
 export interface ToolPort {
   register(tool: ToolDefinition | ToolFactory): () => Promise<void>;
-  list(selection?: ToolSelection): RegisteredTool[];
+  list(selection?: ToolSelection): ToolDefinition[];
 }
 
 export function isToolContent(value: unknown): value is ToolResult['content'] {

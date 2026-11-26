@@ -1,4 +1,5 @@
 import { finished } from 'node:stream/promises';
+import { StringDecoder } from 'node:string_decoder';
 import type { ProcessCommand, ProcessExecutionPort } from '@mini-harness/process-execution/api';
 
 export async function runShellCommand(
@@ -6,6 +7,7 @@ export async function runShellCommand(
   command: ProcessCommand,
   timeoutSeconds: number,
   signal?: AbortSignal,
+  write?: (text: string, channel: 'stdout' | 'stderr') => void,
 ) {
   signal?.throwIfAborted();
   const controller = new AbortController();
@@ -22,21 +24,27 @@ export async function runShellCommand(
 
   let bytes = 0;
   const limit = 1024 * 1024;
-  function collect(output: Buffer[], chunk: Buffer) {
-    const allowed = Math.min(limit - bytes, chunk.length);
-    if (allowed > 0) output.push(chunk.subarray(0, allowed));
-    bytes += allowed;
-    if (allowed < chunk.length) terminate('output-limit');
-  }
   const stdout: Buffer[] = [];
   const stderr: Buffer[] = [];
+  const channels = [
+    { name: 'stdout' as const, stream: child.stdout, output: stdout, decoder: new StringDecoder('utf8') },
+    { name: 'stderr' as const, stream: child.stderr, output: stderr, decoder: new StringDecoder('utf8') },
+  ];
   child.stdin.end();
-  child.stdout.on('data', (chunk: Buffer | string) =>
-    collect(stdout, typeof chunk === 'string' ? Buffer.from(chunk) : chunk),
-  );
-  child.stderr.on('data', (chunk: Buffer | string) =>
-    collect(stderr, typeof chunk === 'string' ? Buffer.from(chunk) : chunk),
-  );
+  for (const { name, stream, output, decoder } of channels) {
+    stream.on('data', (value: Buffer | string) => {
+      const chunk = typeof value === 'string' ? Buffer.from(value) : value;
+      const allowed = Math.min(limit - bytes, chunk.length);
+      if (allowed > 0) {
+        const accepted = chunk.subarray(0, allowed);
+        output.push(accepted);
+        write?.(decoder.write(accepted), name);
+      }
+      bytes += allowed;
+      if (allowed < chunk.length) terminate('output-limit');
+    });
+    stream.once('end', () => write?.(decoder.end(), name));
+  }
   try {
     const [status] = await Promise.all([
       child.finished,

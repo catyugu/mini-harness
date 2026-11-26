@@ -9,6 +9,8 @@ plugins:
     name: '@mini-harness/tool-policy'
   - id: core:sessions
     name: '@mini-harness/sessions'
+  - id: core:tasks
+    name: '@mini-harness/tasks'
   - id: core:agent
     name: '@mini-harness/agent'
   - id: core:tool-executor
@@ -38,6 +40,8 @@ plugins:
     name: '@mini-harness/files'
   - id: skills
     name: '@mini-harness/skills'
+  - id: task-control
+    name: '@mini-harness/task-control'
   - id: subagents
     name: '@mini-harness/subagents'
     live: true

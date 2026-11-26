@@ -12,6 +12,7 @@
     "@mini-harness/plugin-api": "workspace:*",
     "@mini-harness/runs": "workspace:*",
     "@mini-harness/sessions": "workspace:*",
+    "@mini-harness/tasks": "workspace:*",
     "@mini-harness/tools": "workspace:*",
     "@mini-harness/ui-primitives": "workspace:*"
   },

@@ -1,3 +1,5 @@
+import { sendRun } from '../support/runs.ts';
+import { startTool } from '@mini-harness/tools/execution';
 import { request as httpRequest } from 'node:http';
 import { randomUUID } from 'node:crypto';
 import { tmpdir } from 'node:os';
@@ -165,15 +167,26 @@ export const apply = (ctx, config) => {
       .find(({ name }) => name === 'example_count'),
     'example count tool',
   );
-  assert.equal((await tool.execute('test', {})).content[0].type, 'text');
-  assert.match(JSON.stringify(await tool.execute('test', {})), /Total: 1/);
+  assert.equal(
+    (await startTool(runtime.plugins.ctx.harnessTasks, tool, 'test', {}).result).content[0].type,
+    'text',
+  );
+  assert.match(
+    JSON.stringify(await startTool(runtime.plugins.ctx.harnessTasks, tool, 'test', {}).result),
+    /Total: 1/,
+  );
   await assert.rejects(
     runtime.configuration.update({ entries: { example: { config: { prefix: 12 } } } }),
     /Invalid configuration/,
   );
   assert.equal(runtime.settings.entries.example?.config?.prefix, 'Total');
   await runtime.plugins.prepare(`session:${item.id}`);
-  assert.match(JSON.stringify(await tool.execute('after-invalid-config', {})), /Total: 1/);
+  assert.match(
+    JSON.stringify(
+      await startTool(runtime.plugins.ctx.harnessTasks, tool, 'after-invalid-config', {}).result,
+    ),
+    /Total: 1/,
+  );
   assert.equal(activeNames().filter((name) => name === 'example_count').length, 1);
   await runtime.configuration.update({ entries: { shell: { disabled: false } } });
   assert.throws(
@@ -186,7 +199,10 @@ export const apply = (ctx, config) => {
   });
   assert.equal(readFileSync(log, 'utf8'), 'dispose\n');
   assert.ok(!activeNames().includes('example_count'));
-  await assert.rejects(tool.execute('after-unload', {}), /no longer available/);
+  assert.throws(
+    () => startTool(runtime.plugins.ctx.harnessTasks, tool, 'after-unload', {}),
+    /no longer available/,
+  );
   await runtime.configuration.update({
     entries: { example: { name: '../../plugins/example', disabled: false } },
   });
@@ -340,7 +356,7 @@ export const apply = (ctx) => {
     const changes = [];
     ctx.harnessPluginSettings.subscribe('count', (value) => changes.push(value));
     ctx.effect(() => ctx.harnessTools.register({ name: 'schema_value', description: 'Fixture', parameters: { type: 'object', properties: {} },
-      async execute(_id, changesToSave) {
+      async execute(changesToSave) {
         if (Object.keys(changesToSave).length) await ctx.harnessPluginSettings.patch(changesToSave);
         return { content: [{ type: 'text', text: ctx.harnessPluginSettings.get('count') + ':' +
           ctx.harnessPluginSettings.get('options').enabled + ':' + changes.join(',') }] };
@@ -360,34 +376,51 @@ export const apply = (ctx) => {
       .find(({ name }) => name === 'schema_value'),
     'schema tool',
   );
-  assert.match(JSON.stringify(await tool.execute('test', {})), /3:true/);
+  assert.match(
+    JSON.stringify(await startTool(runtime.plugins.ctx.harnessTasks, tool, 'test', {}).result),
+    /3:true/,
+  );
   await Promise.all([
-    tool.execute('set-count', { count: 7 }),
-    tool.execute('set-options', { options: { enabled: false } }),
+    startTool(runtime.plugins.ctx.harnessTasks, tool, 'set-count', { count: 7 }).result,
+    startTool(runtime.plugins.ctx.harnessTasks, tool, 'set-options', { options: { enabled: false } }).result,
   ]);
   assert.deepEqual((await storedProfile(paths)).entries.schema?.config, {
     count: 7,
     options: { enabled: false },
   });
-  await assert.rejects(tool.execute('rejected-semantics', { count: 5 }), /Five is reserved/);
+  await assert.rejects(
+    startTool(runtime.plugins.ctx.harnessTasks, tool, 'rejected-semantics', { count: 5 }).result,
+    /Five is reserved/,
+  );
   assert.deepEqual((await storedProfile(paths)).entries.schema?.config, {
     count: 7,
     options: { enabled: false },
   });
-  await assert.rejects(tool.execute('invalid-count', { count: 0 }), /Invalid configuration/);
-  assert.match(JSON.stringify(await tool.execute('committed', {})), /7:false:7/);
+  await assert.rejects(
+    startTool(runtime.plugins.ctx.harnessTasks, tool, 'invalid-count', { count: 0 }).result,
+    /Invalid configuration/,
+  );
+  assert.match(
+    JSON.stringify(await startTool(runtime.plugins.ctx.harnessTasks, tool, 'committed', {}).result),
+    /7:false:7/,
+  );
   await assert.rejects(
     runtime.configuration.update({ entries: { schema: { config: { count: 0 } } } }),
     /Invalid configuration/,
   );
   assert.deepEqual(
-    await tool.execute('test', {}),
-    await expectPresent(
-      runtime.plugins.ctx.harnessTools
-        .list({ resourceId: item.id, scope: runtime.plugins.ctx.harnessSessions.runScope(item.id) })
-        .find(({ name }) => name === 'schema_value'),
-      'registered schema tool',
-    ).execute('test', {}),
+    await startTool(runtime.plugins.ctx.harnessTasks, tool, 'test', {}).result,
+    await startTool(
+      runtime.plugins.ctx.harnessTasks,
+      expectPresent(
+        runtime.plugins.ctx.harnessTools
+          .list({ resourceId: item.id, scope: runtime.plugins.ctx.harnessSessions.runScope(item.id) })
+          .find(({ name }) => name === 'schema_value'),
+        'registered schema tool',
+      ),
+      'test',
+      {},
+    ).result,
   );
 });
 
@@ -464,7 +497,10 @@ export const apply = (ctx, config) => {
       .find(({ name }) => name === 'base_tool'),
     'restored tool',
   );
-  assert.match(JSON.stringify(await restored.execute('test', {})), /original/);
+  assert.match(
+    JSON.stringify(await startTool(runtime.plugins.ctx.harnessTasks, restored, 'test', {}).result),
+    /original/,
+  );
   assert.ok(
     runtime.plugins.ctx.harnessTools
       .list({ resourceId: item.id, scope: runtime.plugins.ctx.harnessSessions.runScope(item.id) })
@@ -566,7 +602,7 @@ test('disabled optional builtins cannot block boot or reload because their confi
   await restored.configuration.update({ entries: { 'core:theme': { config: { appearance: 'dark' } } } });
   const conversation = restored.plugins.ctx.harnessSessions.create();
   assert.equal(
-    await restored.plugins.ctx.harnessRuns.send(conversation.id, 'Main agent still works'),
+    await sendRun(restored.plugins.ctx.harnessRuns, conversation.id, 'Main agent still works'),
     'Mock response',
   );
   await restored.configuration.update({

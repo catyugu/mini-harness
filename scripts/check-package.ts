@@ -153,7 +153,8 @@ async function checkPackage() {
       import type { PluginData, PluginSecrets } from 'mini-harness/plugin-data';
       import type { SessionRecords, SessionEvent, SessionLogPort } from 'mini-harness/sessions';
       import { selectModel } from 'mini-harness/models/selection';
-      import type { Execution } from 'mini-harness/execution';
+      import type { RunPort } from 'mini-harness/runs';
+      import type { TaskPort } from 'mini-harness/tasks';
       import type { InputContext } from 'mini-harness/agent/events';
       import type { PromptPort } from 'mini-harness/agent/prompt';
       import type { CapabilityObservation } from 'mini-harness/observations';
@@ -180,12 +181,13 @@ async function checkPackage() {
         apply(ctx) { ctx.provide('example', { greet: (name: string) => name.toUpperCase() }); }
       };
       ctx.example.greet('world');
-      // @ts-expect-error The run scheduler is private.
-      ctx.harnessRuns;
+      const runs: RunPort = ctx.harnessRuns;
+      void runs;
       ctx.harnessSessions.history('session');
       const pluginData: PluginData = ctx.harnessPluginData;
       const pluginSecrets: PluginSecrets = ctx.harnessPluginSecrets;
-      const execution: Execution = ctx.harnessExecution;
+      const tasks: TaskPort = ctx.harnessTasks;
+      void tasks.start({ owner: 'session:example' }, async () => 'done').result;
       const records: SessionRecords<{ note: string }> = ctx.harnessSessions.records('session', { pluginId: 'fixture', instanceId: 'fixture' });
       const log: SessionLogPort = ctx.harnessSessions.log('session');
       const event: SessionEvent<{ note: string }> = { type: 'plugin-record', owner: { pluginId: 'fixture', instanceId: 'fixture' }, data: { note: 'hello' } };

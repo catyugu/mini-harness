@@ -5,46 +5,37 @@ import { tagScope, scopeTarget } from '@mini-harness/plugin-api/scopes';
 import type { ThinkingLevel, ModelChoice } from '@mini-harness/llm/vocabulary';
 import type { ProfileScopes } from '@mini-harness/plugin-api/configuration';
 import { DomainError } from '@mini-harness/platform/errors';
-import { randomUUID } from 'node:crypto';
+import { terminal, type TaskEvent, type TaskPort, type TaskHistoryRecord } from '@mini-harness/tasks/api';
 import { imageMimeType } from '@mini-harness/input/prepare';
 import { validateModelOptions } from '@mini-harness/llm/options';
-import type { Attachment, InputSource } from '@mini-harness/input/message';
+import type { Attachment } from '@mini-harness/input/message';
 import type { CapabilityObservation } from '@mini-harness/plugin-api/observations';
 import { Inbox } from './inbox.ts';
 import { SessionRun } from './session-run.ts';
-import { RunInterrupted } from './stream.ts';
 import type { StreamEvent, RunEvent } from './stream.ts';
-import { isRunning, type RunInfo } from '@mini-harness/sessions/run-state';
+import { isRunning, projectRun, type RunDetails, type RunInfo } from '@mini-harness/sessions/run-state';
+import { runFromEntry } from '@mini-harness/sessions/log-api';
 import { RunEvents } from './events.ts';
-import type { ExecutionInput } from './execution.ts';
-import type { RunPort } from './api.ts';
+import type { RunInput, RunPort, RunSubmission } from './api.ts';
 import type { SessionStore } from '@mini-harness/sessions/records';
 
-interface RunOptions {
-  signal?: AbortSignal;
-  source?: InputSource;
-  model?: ModelChoice;
-  attachments?: Attachment[];
-  thinkingLevel?: ThinkingLevel | null;
-  acquire?: (signal: AbortSignal) => Promise<() => void>;
+interface RunOptions extends RunSubmission, Omit<RunInput, 'message'> {
   revision?: { parentId: string | null; expectedLeafId: string | null };
 }
 
 interface Activity {
-  controller: AbortController;
-  done?: Promise<unknown>;
   events?: RunEvents;
-  inputSignal?: AbortSignal;
   context?: Context;
+  emit?: (event: StreamEvent) => void;
 }
 
 export class Runs implements RunPort {
   readonly events = new EventTarget();
-  private closing = false;
-  private readonly work = new Map<string, Activity>();
+  private readonly streams = new Map<string, Activity>();
 
   constructor(
     private readonly registry: SessionStore,
+    private readonly tasks: TaskPort,
     private readonly scopes: ProfileScopes,
     private readonly observe: (event: CapabilityObservation, signal?: AbortSignal) => void,
     private readonly recent: () => ModelChoice | undefined,
@@ -55,252 +46,198 @@ export class Runs implements RunPort {
     this.events.dispatchEvent(new CustomEvent('change', { detail: { id } }));
   }
 
-  get size() {
-    return this.work.size;
+  current(id: string) {
+    return this.tasks.active(this.lane(id));
   }
 
-  active(id: string) {
-    return this.work.has(id);
-  }
-
-  seal() {
-    this.closing = true;
+  private lane(id: string) {
+    return 'conversation:' + id;
   }
 
   private assertOpen() {
-    if (this.closing) throw new DomainError('unavailable', 'Runs are closing');
-  }
-  completion(id: string) {
-    return this.work.get(id)?.done;
+    if (this.tasks.sealed) throw new DomainError('unavailable', 'Runs are closing');
   }
 
   activity(id: string) {
-    const events = this.work.get(id)?.events;
+    const events = this.streams.get(id)?.events;
     return { partial: events?.partial, tools: events?.activeTools ?? [] };
   }
 
-  signal(id: string, signal?: AbortSignal) {
-    const owner = this.work.get(id)?.controller.signal;
-    return owner && signal ? AbortSignal.any([owner, signal]) : (owner ?? signal);
-  }
-
   branchChanged(id: string, record: RecordAppend) {
-    const events = this.work.get(id)?.events;
+    const events = this.streams.get(id)?.events;
     if (!events || !isRunning(events.info)) return;
     events.publish({ type: 'branch', ...record });
   }
 
-  private reserve(id: string): Activity {
+  private assertIdle(id: string) {
     this.registry.assertAvailable(id);
     this.assertOpen();
-    if (this.active(id)) throw new DomainError('conflict', 'Conversation is already running');
-    const activity: Activity = { controller: new AbortController() };
-    this.work.set(id, activity);
-    return activity;
+    if (this.current(id)) throw new DomainError('conflict', 'Conversation is already running');
+  }
+
+  private publish(activity: Activity, event: StreamEvent) {
+    const item = activity.events!.publish(event);
+    try {
+      activity.emit?.(item);
+    } catch {
+      /* An observer cannot terminate the run. */
+    }
+  }
+
+  /** The run owns its domain-specific commit, including inbox settlement. */
+  private commitRun(id: string, activity: Activity, { task, output }: TaskHistoryRecord) {
+    const info = activity.events?.info;
+    const run: RunDetails = info
+      ? {
+          inputEntryId: info.inputEntryId,
+          changedFiles: info.changedFiles,
+          sequence: info.sequence + 1 + Number(task.state === 'failed' && Boolean(task.error)),
+        }
+      : { sequence: 0, inputEntryId: null };
+    if (terminal(task.state)) {
+      const inbox = new Inbox(this.registry.log(id));
+      if (task.state === 'cancelled') inbox.cancel('Run cancelled');
+      else
+        inbox.failPending(
+          'steer',
+          task.state === 'interrupted'
+            ? 'The target run was interrupted before delivery'
+            : 'The target run ended before delivery',
+        );
+    }
+    this.registry.log(id).append({ type: 'task', task: { ...task, result: undefined }, output, run });
+  }
+
+  private taskChanged(id: string, activity: Activity, { type, task }: TaskEvent) {
+    if (type === 'created') {
+      if (activity.events) return;
+      activity.events = new RunEvents(projectRun(id, task, { sequence: 0, inputEntryId: null }));
+      return;
+    }
+    if (type !== 'transition') return;
+    const events = activity.events;
+    if (!events || events.info.id !== task.id) return;
+    const info = events.info;
+    const firstAdmission = !info.executedAt && task.state === 'running';
+    const ended = terminal(task.state);
+    try {
+      if (task.state === 'failed' && task.error) this.publish(activity, { type: 'error', error: task.error });
+      const next = projectRun(id, task, {
+        inputEntryId: info.inputEntryId,
+        changedFiles: info.changedFiles,
+        sequence: info.sequence + 1,
+      });
+      Object.assign(info, next, { sequence: info.sequence });
+      this.publish(activity, { type: 'run', run: next });
+      if (firstAdmission)
+        this.observe({ type: 'run-started', sessionId: id, run: next }, this.current(id)?.signal);
+      if (ended) this.observe({ type: 'run-ended', sessionId: id, run: next });
+    } finally {
+      if (ended) {
+        if (this.streams.get(id) === activity) this.streams.delete(id);
+        events.close();
+      }
+      this.changed(id);
+    }
   }
 
   private launch(
     id: string,
     prompt: string,
-    emit: ((event: StreamEvent) => void) | undefined,
-    { signal, source, model, attachments, thinkingLevel, revision, acquire }: RunOptions,
-    preparedScope?: Activity,
-  ) {
-    validateModelOptions(model, thinkingLevel);
-    const fallback = this.recent();
-    const record = this.registry.get(id);
-    if (!record) throw new DomainError('not_found', 'Conversation not found');
-    signal?.throwIfAborted();
-    const activity = preparedScope ?? this.reserve(id);
-    const { controller } = activity;
-    const cancellation = signal ? AbortSignal.any([controller.signal, signal]) : controller.signal;
-    const info: RunInfo = {
-      id: randomUUID(),
-      sessionId: id,
-      state: 'queued',
-      startedAt: new Date().toISOString(),
-      sequence: 0,
-      inputEntryId: null,
-    };
-    const events = (activity.events = new RunEvents(info));
-    let log: ReturnType<SessionStore['log']>;
-    let prepared: ReturnType<SessionStore['prepareInput']>;
-    try {
-      cancellation.throwIfAborted();
-      prepared = this.registry.prepareInput(id, prompt, attachments);
-      log = this.registry.log(id);
-      log.append({ type: 'run', run: info });
-    } catch (error) {
-      this.work.delete(id);
-      throw error;
-    }
-    const publish = (event: StreamEvent) => {
-      if (event.type === 'user') info.inputEntryId = event.message.id;
-      const item = events.publish(event);
-      try {
-        emit?.(item);
-      } catch {
-        /* An observer cannot terminate the run. */
-      }
-      if (event.type === 'user') {
-        this.observe({
-          type: 'input-accepted',
-          sessionId: id,
-          parentId: record.parentId,
-          source: event.source,
-          runSource: source ?? 'user',
-          model: event.model,
-        });
-      }
-    };
-    const promptSession = async () => {
-      cancellation.throwIfAborted();
-      const running = { ...info, state: 'running' as const, sequence: info.sequence + 1 };
-      log.append({ type: 'run', run: running });
-      info.state = running.state;
-      this.changed(id);
-      publish({ type: 'run', run: running });
-      this.observe({ type: 'run-started', sessionId: id, run: running }, cancellation);
-      return this.withAgentContext(
-        id,
-        activity,
-        cancellation,
-        async (ctx, signal) => {
-          activity.inputSignal = signal;
-          try {
-            return await this.sessionRun.prompt(ctx, record, prepared.text, publish, {
-              fallback,
-              beginSubmission: () => {
-                info.inputEntryId = null;
-              },
-              signal,
-              source,
-              submissionId: info.id,
-              choice: model,
-              images: prepared.images,
-              input: prepared.input,
-              thinkingLevel,
-              revision,
-              changed: (path) => {
-                info.changedFiles = [...new Set([...(info.changedFiles ?? []), path])];
-              },
-            });
-          } finally {
-            activity.inputSignal = undefined;
-          }
-        },
-        Boolean(preparedScope),
-      );
-    };
-    const finish = (state: RunInfo['state'], error?: string) => {
-      const inbox = new Inbox(log);
-      if (state === 'cancelled') inbox.cancel('Run cancelled');
-      else
-        inbox.failPending(
-          'steer',
-          state === 'interrupted'
-            ? 'The target run was interrupted before delivery'
-            : 'The target run ended before delivery',
-        );
-      const terminal = {
-        ...info,
-        state,
-        error,
-        finishedAt: new Date().toISOString(),
-        sequence: info.sequence + 1,
-      };
-      log.append({ type: 'run', run: terminal });
-      Object.assign(info, terminal, { sequence: info.sequence });
-      publish({ type: 'run', run: terminal });
-      this.observe({ type: 'run-ended', sessionId: id, run: terminal });
-    };
-    const done = Promise.resolve()
-      .then(async () => {
-        const release = await acquire?.(cancellation);
-        try {
-          return await promptSession();
-        } finally {
-          release?.();
-        }
-      })
-      .then(
-        (text) => {
-          finish('completed');
-          return text;
-        },
-        (error) => {
-          const state =
-            cancellation.reason instanceof RunInterrupted
-              ? 'interrupted'
-              : cancellation.aborted
-                ? 'cancelled'
-                : 'failed';
-          const reason = cancellation.aborted
-            ? (cancellation.reason?.message ?? 'Agent run cancelled')
-            : error instanceof Error
-              ? error.message
-              : String(error);
-          if (this.registry.logError(id)) throw error;
-          if (state === 'failed') publish({ type: 'error', error: reason });
-          finish(state, reason);
-          throw new Error(reason, { cause: error });
-        },
-      )
-      .catch((error) => {
-        const fault = this.registry.logError(id);
-        if (fault) publish({ type: 'error', error: fault });
-        throw error;
-      })
-      .finally(() => {
-        this.work.delete(id);
-        events.close();
-        this.changed(id);
-      });
-    // Server-owned runs may outlive every observer.
-    activity.done = done;
-    this.changed(id);
-    void done.catch(() => {});
-    return {
-      info,
-      done,
-      cancel: () => {
-        if (this.work.get(id) !== activity || cancellation.aborted) return false;
-        controller.abort(new Error('Agent run cancelled'));
-        return true;
-      },
-    };
-  }
-
-  submit(
-    id: string,
-    { message, model, attachments, thinkingLevel }: ExecutionInput,
-    signal: AbortSignal,
-    acquire?: RunOptions['acquire'],
-  ) {
-    const { info, done, cancel } = this.launch(id, message, undefined, {
+    {
+      signal,
+      source,
+      emit,
       model,
       attachments,
       thinkingLevel,
-      source: 'plugin',
-      signal,
-      acquire,
-    });
-    return { id: info.id, result: done, cancel };
-  }
-
-  async send(id: string, prompt: string, emit?: (event: StreamEvent) => void, options: RunOptions = {}) {
-    return this.launch(id, prompt, emit, options).done;
-  }
-
-  startRun(
-    id: string,
-    prompt: string,
-    { model, attachments, thinkingLevel }: Pick<RunOptions, 'model' | 'attachments' | 'thinkingLevel'> = {},
+      revision,
+      pool,
+      metadata,
+      provider,
+    }: RunOptions,
   ) {
-    return { ...this.launch(id, prompt, undefined, { model, attachments, thinkingLevel }).info };
+    this.assertIdle(id);
+    const activity: Activity = { emit };
+    try {
+      validateModelOptions(model, thinkingLevel);
+      const fallback = this.recent();
+      const record = this.registry.get(id);
+      if (!record) throw new DomainError('not_found', 'Conversation not found');
+      signal?.throwIfAborted();
+      const prepared = this.registry.prepareInput(id, prompt, attachments);
+      const { owner } = this.registry.task(id);
+      this.streams.set(id, activity);
+      const publish = (event: StreamEvent) => {
+        if (event.type === 'user') activity.events!.info.inputEntryId = event.message.id;
+        this.publish(activity, event);
+        if (event.type === 'user') {
+          this.observe({
+            type: 'input-accepted',
+            sessionId: id,
+            parentId: record.parentId,
+            source: event.source,
+            runSource: source ?? 'user',
+            model: event.model,
+          });
+        }
+      };
+      const task = this.tasks.start<string>(
+        {
+          owner,
+          commit: (record) => this.commitRun(id, activity, record),
+          onEvent: (event) => this.taskChanged(id, activity, event),
+          project: (answer) => answer,
+          type: 'agent-run',
+          lane: this.lane(id),
+          metadata,
+          provider,
+          signal,
+          pool,
+        },
+        async (task) => {
+          try {
+            const answer = await this.withAgentContext(id, activity, task.signal, (ctx, signal) =>
+              this.sessionRun.prompt(ctx, record, prepared.text, publish, {
+                fallback,
+                beginSubmission: () => {
+                  activity.events!.info.inputEntryId = null;
+                },
+                signal,
+                source,
+                task,
+                submissionId: task.id,
+                choice: model,
+                images: prepared.images,
+                input: prepared.input,
+                thinkingLevel,
+                revision,
+                changed: (path) => {
+                  const info = activity.events!.info;
+                  info.changedFiles = [...new Set([...(info.changedFiles ?? []), path])];
+                },
+              }),
+            );
+            return answer;
+          } catch (error) {
+            task.signal.throwIfAborted();
+            throw error;
+          }
+        },
+      );
+      this.changed(id);
+      return { info: activity.events!.info, task };
+    } catch (error) {
+      if (this.streams.get(id) === activity) this.streams.delete(id);
+      throw error;
+    }
   }
 
-  /** A run reservation protects branch navigation from concurrent submissions. */
+  submit(id: string, { message, model, attachments, thinkingLevel }: RunInput, options: RunSubmission = {}) {
+    return this.launch(id, message, { source: 'plugin', ...options, model, attachments, thinkingLevel }).task;
+  }
+
+  /** Revision preparation and task admission happen in one synchronous turn. */
   async reviseAndStart(
     id: string,
     input: {
@@ -313,49 +250,34 @@ export class Runs implements RunPort {
       thinkingLevel?: ThinkingLevel | null;
     },
   ) {
-    const reservation = this.reserve(id);
-    const { signal } = reservation.controller;
-    const prepare = this.scopes.prepare(`session:${id}`, signal);
-    reservation.done = prepare;
-    try {
-      await prepare;
-      const target = this.registry.revisionTarget(id, input.sourceEntryId, input.expectedLeafId);
-      const removed = input.removedImages ?? [];
-      if (
-        !Array.isArray(removed) ||
-        removed.some((index) => !Number.isInteger(index) || index < 0 || index >= target.images.length)
-      )
-        throw new DomainError('invalid_input', 'Invalid original image selection');
-      const attached = input.attachments ?? [];
-      if (!Array.isArray(attached)) throw new DomainError('invalid_input', 'Invalid attachments');
-      const missing = target.textFiles.filter(
-        (name) =>
-          !attached.some(
-            (file) =>
-              file?.name === name && typeof file.mimeType === 'string' && !imageMimeType.test(file.mimeType),
-          ),
-      );
-      if (missing.length)
-        throw new DomainError('invalid_input', 'Reattach the original text files: ' + missing.join(', '));
-      const attachments = [...target.images.filter((_, index) => !removed.includes(index)), ...attached];
-      return {
-        ...this.launch(
-          id,
-          input.message,
-          undefined,
-          {
-            attachments,
-            model: input.model,
-            thinkingLevel: input.thinkingLevel,
-            revision: { parentId: target.parentId, expectedLeafId: input.expectedLeafId },
-          },
-          reservation,
-        ).info,
-      };
-    } catch (error) {
-      this.work.delete(id);
-      throw error;
-    }
+    this.assertIdle(id);
+    const target = this.registry.revisionTarget(id, input.sourceEntryId, input.expectedLeafId);
+    const removed = input.removedImages ?? [];
+    if (
+      !Array.isArray(removed) ||
+      removed.some((index) => !Number.isInteger(index) || index < 0 || index >= target.images.length)
+    )
+      throw new DomainError('invalid_input', 'Invalid original image selection');
+    const attached = input.attachments ?? [];
+    if (!Array.isArray(attached)) throw new DomainError('invalid_input', 'Invalid attachments');
+    const missing = target.textFiles.filter(
+      (name) =>
+        !attached.some(
+          (file) =>
+            file?.name === name && typeof file.mimeType === 'string' && !imageMimeType.test(file.mimeType),
+        ),
+    );
+    if (missing.length)
+      throw new DomainError('invalid_input', 'Reattach the original text files: ' + missing.join(', '));
+    const attachments = [...target.images.filter((_, index) => !removed.includes(index)), ...attached];
+    return {
+      ...this.launch(id, input.message, {
+        attachments,
+        model: input.model,
+        thinkingLevel: input.thinkingLevel,
+        revision: { parentId: target.parentId, expectedLeafId: input.expectedLeafId },
+      }).info,
+    };
   }
 
   retryInput(id: string, runId: string) {
@@ -364,13 +286,12 @@ export class Runs implements RunPort {
       throw new DomainError('conflict', 'This run is no longer the failed conversation run');
     return this.registry.inspectLog(id, (log) => {
       const entries = log.entries();
-      const start = entries.findIndex(
-        (entry) => entry.type === 'run' && entry.run.id === runId && entry.run.state === 'queued',
-      );
-      const end = entries.findIndex(
-        (entry, index) =>
-          index > start && entry.type === 'run' && entry.run.id === runId && entry.run.state === 'failed',
-      );
+      const matches = (entry: (typeof entries)[number], state: RunInfo['state']) => {
+        const item = runFromEntry(id, entry);
+        return item?.id === runId && item.state === state;
+      };
+      const start = entries.findIndex((entry) => matches(entry, 'queued'));
+      const end = entries.findIndex((entry, index) => index > start && matches(entry, 'failed'));
       if (start < 0 || end < 0) return;
       const delivered = entries
         .slice(start + 1, end)
@@ -408,12 +329,12 @@ export class Runs implements RunPort {
   }
 
   info(id: string): RunInfo | undefined {
-    const info = this.work.get(id)?.events?.info ?? this.registry.runSummary(id);
+    const info = this.streams.get(id)?.events?.info ?? this.registry.runSummary(id);
     return info && structuredClone(info);
   }
 
   watch(id: string, runId: string, after: number, emit: (event: RunEvent) => void, end?: () => void) {
-    const events = this.work.get(id)?.events;
+    const events = this.streams.get(id)?.events;
     const info = this.info(id);
     if (!info || info.id !== runId) throw new DomainError('not_found', 'Run not found');
     // A restarted run has no volatile delta cursor; its durable interrupted snapshot is authoritative.
@@ -446,9 +367,9 @@ export class Runs implements RunPort {
     { message, mode, attachments, model, thinkingLevel }: Parameters<RunPort['queueInput']>[1],
   ) {
     this.assertOpen();
-    const activity = this.work.get(id);
-    const signal = activity?.inputSignal;
-    if (!activity?.context || !signal || signal.aborted)
+    const activity = this.streams.get(id);
+    const signal = this.current(id)?.signal;
+    if (!activity?.context || !signal || signal.aborted || activity.context.fiber.signal.aborted)
       throw new DomainError('conflict', 'The agent is not streaming; send a new message');
     this.registry.assertAvailable(id);
     const models = activity.context.get('harnessModels');
@@ -468,62 +389,50 @@ export class Runs implements RunPort {
     return new Inbox(this.registry.log(id)).cancel('User cancelled', itemId);
   }
 
-  cancel(id: string) {
-    let cancelled = false;
-    for (const child of this.registry.descendants([id])) {
-      const activity = this.work.get(child);
-      if (!activity) continue;
-      cancelled = true;
-      activity.controller.abort(new Error(activity.events ? 'Agent run cancelled' : 'Compaction cancelled'));
-    }
-    return cancelled;
-  }
-
   async compact(id: string) {
-    const activity = this.reserve(id);
-    const { signal } = activity.controller;
-    const done = (activity.done = this.withAgentContext(id, activity, signal, (ctx, signal) =>
-      this.sessionRun.compact(ctx, id, signal),
-    ));
+    this.assertIdle(id);
+    const task = this.tasks.start(
+      { ...this.registry.task(id), type: 'compaction', lane: this.lane(id) },
+      ({ signal }) =>
+        this.withAgentContext(id, undefined, signal, (ctx, signal) =>
+          this.sessionRun.compact(ctx, id, signal),
+        ),
+    );
+    this.changed(id);
     try {
-      await done;
+      await task.result;
     } finally {
-      this.work.delete(id);
+      this.changed(id);
     }
   }
 
   private async withAgentContext<T>(
     id: string,
-    activity: Activity,
+    activity: Activity | undefined,
     signal: AbortSignal,
     work: (ctx: Context, signal: AbortSignal) => Promise<T>,
-    prepared = false,
   ) {
     const key = `session:${id}` as const;
-    if (!prepared) await this.scopes.prepare(key, signal);
+    await this.scopes.prepare(key, signal);
     signal.throwIfAborted();
     const scope = this.scopes.context(key);
-    const fiber = tagScope(scope.extend(), this.registry.runScope(id)!).inject(['harnessAgent'], () => {});
+    const fiber = tagScope(scope.extend(), this.registry.runScope(id)!).inject(
+      ['harnessAgent', 'harnessTasks'],
+      () => {},
+    );
     try {
       await fiber;
       if (!fiber.ctx.get('harnessAgent'))
         throw new DomainError('unavailable', 'Required service is unavailable: harnessAgent');
-      activity.context = fiber.ctx;
+      if (activity) activity.context = fiber.ctx;
       return await fiber.run(async (signal) => {
         for (const { context, callback } of fiber.ctx.events.listeners('agent/setup', scopeTarget(fiber.ctx)))
           await context.fiber.run((signal) => callback(fiber.ctx, id, signal), signal);
         return work(fiber.ctx, signal);
       }, signal);
     } finally {
-      activity.context = undefined;
+      if (activity) activity.context = undefined;
       await fiber.dispose();
     }
-  }
-
-  async stop() {
-    this.seal();
-    const active = [...this.work.values()];
-    for (const { controller } of active) controller.abort(new RunInterrupted());
-    await Promise.allSettled(active.map(({ done }) => done));
   }
 }

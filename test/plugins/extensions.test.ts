@@ -1,3 +1,4 @@
+import { sendRun } from '../support/runs.ts';
 import { isViewMessage } from '@mini-harness/sessions/message';
 import { expectPresent } from '../support/required.ts';
 import test from 'node:test';
@@ -49,7 +50,7 @@ export const apply = (ctx) => {
   const child = app.runtime.plugins.ctx.harnessSessions.create({ parentId: parent.id });
   const sibling = app.runtime.plugins.ctx.harnessSessions.create();
   async function prompt(id: string) {
-    await app.runtime.plugins.ctx.harnessRuns.send(id, 'Continue');
+    await sendRun(app.runtime.plugins.ctx.harnessRuns, id, 'Continue');
     const request = expectPresent(mock.requests.at(-1), 'recorded model request');
     const system = (request.messages as { role: string; content: string }[]).find(
       ({ role }) => role === 'system',
@@ -143,7 +144,7 @@ export const apply = (ctx) => {
     type: 'inbox-enqueued',
     item: { id: 'recovered', mode: 'followUp', text: 'Recovered', images: [] },
   });
-  await plugins.ctx.harnessRuns.send(session.id, 'Manual');
+  await sendRun(plugins.ctx.harnessRuns, session.id, 'Manual');
   assert.deepEqual(readFileSync(trace, 'utf8').trimEnd().split('\n'), [
     'prepare Blocked',
     'prepare Recovered',
@@ -173,10 +174,10 @@ export const apply = (ctx) => {
     expectedLeafId: log.projection().leafId,
     message: 'Edited',
   });
-  await plugins.ctx.harnessRuns.completion(edit.sessionId);
+  await plugins.ctx.harnessRuns.current(edit.sessionId)?.result;
   assert.match(readFileSync(trace, 'utf8'), /prepare Edited\nmodel Edited\[z\]\[a\]\n$/);
   const before = mock.requests.length;
-  await assert.rejects(plugins.ctx.harnessRuns.send(session.id, 'Blocked'), /fixture input denied/);
+  await assert.rejects(sendRun(plugins.ctx.harnessRuns, session.id, 'Blocked'), /fixture input denied/);
   assert.equal(mock.requests.length, before);
   assert.doesNotMatch(JSON.stringify(log.projection().timeline.filter(isViewMessage)), /Blocked|lost|Manual/);
 });
@@ -229,7 +230,7 @@ export const apply = (ctx) => {
     }) : undefined, { prepend: true });
     ctx.on("agent/model-retry", ({ error, attempt }) => error === 'transient transport failure' && attempt === 1 ? {} : undefined);
     ctx.effect(() => ctx.harnessTools.register({ name: 'check', description: 'Check mode', parameters: { type: 'object' },
-      async execute(_id, { mode }) {
+      async execute({ mode }) {
         if (mode !== 'allowed') throw new Error('denied input');
         return { content: [{ type: 'text', text: 'Value' }] };
       }
@@ -254,7 +255,7 @@ export const apply = (ctx) => {
   assert.equal(app.runtime.plugins.ctx.harnessModelStore, store);
   const session = app.runtime.plugins.ctx.harnessSessions.create();
   assert.equal(
-    await app.runtime.plugins.ctx.harnessRuns.send(session.id, 'Use the alternate LLM'),
+    await sendRun(app.runtime.plugins.ctx.harnessRuns, session.id, 'Use the alternate LLM'),
     'Alternate response',
   );
   const log = app.runtime.plugins.ctx.harnessSessions.log(session.id).projection();
@@ -316,7 +317,7 @@ export const apply = (ctx) => {
   });
   assert.equal(removed.status, 200);
   assert.equal(
-    await app.runtime.plugins.ctx.harnessRuns.send(session.id, 'Restore the built-in LLM'),
+    await sendRun(app.runtime.plugins.ctx.harnessRuns, session.id, 'Restore the built-in LLM'),
     'Mock response',
   );
 });
@@ -331,7 +332,7 @@ test('a failed model-visible transform preserves the execution and never sends t
 export const inject = ["harnessTools"];
 export const apply = (ctx) => {
     ctx.effect(() => ctx.harnessTools.register({ name: 'sensitive', description: 'Read value', parameters: { type: 'object' },
-      async execute(_id, _args, _signal, update) {
+      async execute(_args, { update }) {
         update({ content: [{ type: 'text', text: 'private progress' }] });
         return { content: [{ type: 'text', text: 'private value' }] };
       }
@@ -354,7 +355,7 @@ export const apply = (ctx) => {
   const session = app.runtime.plugins.ctx.harnessSessions.create();
   const events: unknown[] = [];
   await assert.rejects(
-    app.runtime.plugins.ctx.harnessRuns.send(session.id, 'Use the tool', (event) => events.push(event)),
+    sendRun(app.runtime.plugins.ctx.harnessRuns, session.id, 'Use the tool', (event) => events.push(event)),
     /Could not transform/,
   );
   const log = app.runtime.plugins.ctx.harnessSessions.log(session.id);
@@ -391,7 +392,7 @@ export const apply = (ctx) => {
   );
   const session = app.runtime.plugins.ctx.harnessSessions.create();
   await assert.rejects(
-    app.runtime.plugins.ctx.harnessRuns.send(session.id, 'Use this request'),
+    sendRun(app.runtime.plugins.ctx.harnessRuns, session.id, 'Use this request'),
     /Unmatched model request tool result/,
   );
   assert.equal(mock.requests.length, 0);
@@ -458,7 +459,7 @@ export const apply = (ctx) => {
   );
   const session = app.runtime.plugins.ctx.harnessSessions.create();
   const run = assert.rejects(
-    app.runtime.plugins.ctx.harnessRuns.send(session.id, 'Unload the active hook'),
+    sendRun(app.runtime.plugins.ctx.harnessRuns, session.id, 'Unload the active hook'),
     /slow-transform could not prepare transformed data/,
   );
   await started;
@@ -517,7 +518,7 @@ export function apply(ctx) {
   assert.ok(models.body.models.some((model: { provider: string }) => model.provider === 'local-fixture'));
   const session = app.runtime.plugins.ctx.harnessSessions.create({ workspaceId: null });
   assert.equal(
-    await app.runtime.plugins.ctx.harnessRuns.send(session.id, 'Use a dynamic model', undefined, {
+    await sendRun(app.runtime.plugins.ctx.harnessRuns, session.id, 'Use a dynamic model', undefined, {
       model: { provider: 'local-fixture', id: 'dynamic' },
     }),
     'Independent response',
@@ -567,11 +568,14 @@ export function apply(ctx) {
   await toggle('model-low', false);
   assert.equal(list()[0]?.name, 'model-low');
   assert.deepEqual(ctx.harnessModels.capabilities(model)?.input, ['text']);
-  assert.equal(await ctx.harnessRuns.send(session.id, 'Low priority', undefined, { model }), 'model-low');
+  assert.equal(await sendRun(ctx.harnessRuns, session.id, 'Low priority', undefined, { model }), 'model-low');
   await toggle('model-high', false);
   assert.equal(list()[0]?.name, 'model-high');
   assert.deepEqual(ctx.harnessModels.capabilities(model)?.input, ['text', 'image']);
-  assert.equal(await ctx.harnessRuns.send(session.id, 'High priority', undefined, { model }), 'model-high');
+  assert.equal(
+    await sendRun(ctx.harnessRuns, session.id, 'High priority', undefined, { model }),
+    'model-high',
+  );
   await toggle('model-tie', false);
   assert.deepEqual(list(), []);
   assert.equal(ctx.harnessModels.resolve(model), undefined);
@@ -591,5 +595,8 @@ export function apply(ctx) {
   await toggle('model-high', true);
   assert.equal(list()[0]?.name, 'model-low');
   await toggle('model-low', true);
-  assert.equal(await ctx.harnessRuns.send(session.id, 'Restore Pi', undefined, { model }), 'Mock response');
+  assert.equal(
+    await sendRun(ctx.harnessRuns, session.id, 'Restore Pi', undefined, { model }),
+    'Mock response',
+  );
 });

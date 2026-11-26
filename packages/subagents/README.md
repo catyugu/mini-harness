@@ -1,31 +1,15 @@
 # @mini-harness/subagents
 
-Schedules child agents and exposes delegated conversations.
+Owns delegation, child model selection, recursion depth and the limit of a shared Task Runtime pool.
 
-## Responsibilities
+The `delegate` tool creates a normal child conversation and submits a normal Agent Run Task. It
+returns the child Session ID and Task ID immediately, including when the child is queued. Stop affects
+the selected run, not independently owned child conversations. Child sessions remain available for
+subsequent runs. Deleting a session recursively drains and deletes its descendants.
 
-Owns the delegate tool, depth and concurrency policy, inherited model choices and child-run scheduling.
+`task_control` inspects, waits for or cancels a Task by ID. Waiting is a serial tool call and releases
+the current Agent Task's pool capacity while waiting. The optional task-control plugin supplies this tool independently of delegation. Historical child
+answers are recovered by Sessions, not by the tool.
 
-## Structure
-
-`src/server/delegation.ts` implements scheduling. `src/server/setup.ts` wires the delegate tool. `src/browser/setup.ts` contributes delegated links.
-
-## API
-
-Contributes the `delegate` tool and a Conversation tool-rendering extension.
-
-## Dependencies
-
-Uses [Sessions](../sessions/README.md) for ancestry and [Runs](../runs/README.md) for child executions through the same scoped extensions offered to third-party plugins.
-
-## Lifecycle
-
-The `subagents` application plugin releases its leases on cancellation. Waiting parents yield execution slots while descendants run.
-
-## Configuration
-
-The manifest defines live `maxDepth`, `maxParallel` and model defaults. The tool can select a provider and model for a child.
-
-## Testing
-
-`tests/` covers queue limits, recursive execution, cancellation and inherited model visibility.
+The browser contributes a child conversation link to the delegation receipt and a parent navigation
+trail. Configuration retains live `maxDepth`, `maxParallel` and child model defaults.

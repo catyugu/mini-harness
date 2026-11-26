@@ -1,3 +1,4 @@
+import type { TaskOptions } from '@mini-harness/tasks/api';
 import type { ScopeKey } from '@mini-harness/plugin-api/scopes';
 import type { ModelChoice } from '@mini-harness/llm/vocabulary';
 import type { HistoryEntry } from './shared/message.ts';
@@ -81,6 +82,8 @@ export interface SessionStore extends SessionCatalog, SessionHistory, SessionLif
   history(id: string): { timeline: HistoryEntry[]; leafId: string | null; model?: ModelChoice };
   records<Data = unknown>(id: string, owner: RecordOwner): SessionRecords<Data>;
   log(id: string): SessionLogPort;
+  /** Bind independent work to this session's lifetime and durable log. */
+  task(id: string): Pick<TaskOptions, 'owner' | 'commit'>;
   prepareInput(
     id: string,
     text: unknown,

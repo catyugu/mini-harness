@@ -21,7 +21,19 @@ export function setup(ctx: Context) {
       description:
         'Run a shell command in the workspace. Standard requires approval; Full access skips the approval prompt.',
       parameters: Type.Object({ command: Type.String({ minLength: 1, maxLength: 16000 }) }),
-      execute: async (_id, args, signal, update): Promise<ToolResult> => {
+      projectResult(result) {
+        if (result.details?.exitCode === undefined) return JSON.parse(JSON.stringify(result));
+        const { stdout: _stdout, stderr: _stderr, ...details } = result.details;
+        return JSON.parse(
+          JSON.stringify({
+            details,
+            isError: result.isError,
+            outcome: result.outcome,
+            elapsedMs: result.elapsedMs,
+          }),
+        );
+      },
+      execute: async (args, { signal, update, task }): Promise<ToolResult> => {
         const cwd = workspace.workspacePath(sessionId);
         if (!cwd) throw new DomainError('unavailable', 'Shell requires a workspace');
         const allowed = () => caller.get('harnessToolPolicy')?.(sessionId, { name: 'sandbox_shell' }) ?? true;
@@ -111,7 +123,7 @@ export function setup(ctx: Context) {
         try {
           if (!allowed()) throw new Error('Tool denied by conversation policy: sandbox_shell');
           const startedAt = performance.now();
-          const output = await runShellCommand(execution, command, timeoutSeconds, signal);
+          const output = await runShellCommand(execution, command, timeoutSeconds, signal, task.write);
           const cancelled = output.reason === 'cancelled';
           return {
             content: [{ type: 'text', text: JSON.stringify(output) }],

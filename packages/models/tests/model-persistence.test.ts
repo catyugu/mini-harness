@@ -1,5 +1,7 @@
+import { sendRun } from '../../../test/support/runs.ts';
 import { expectPresent } from '../../../test/support/required.ts';
 import test from 'node:test';
+import { startTool } from '@mini-harness/tools/execution';
 import assert from 'node:assert/strict';
 import { mkdirSync, renameSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
@@ -25,7 +27,7 @@ test('recent main model survives child overrides and a restart through the nativ
   await runtime.start();
   const old = runtime.plugins.ctx.harnessSessions.create();
   const other = runtime.plugins.ctx.harnessSessions.create();
-  await runtime.plugins.ctx.harnessRuns.send(old.id, 'First');
+  await sendRun(runtime.plugins.ctx.harnessRuns, old.id, 'First');
   const original = runtime.plugins.ctx.harnessSessions.log(old.id).projection();
   await runtime.configuration.update({
     entries: { 'core:models': { config: { model: { provider: 'local-mock', id: 'second-model' } } } },
@@ -33,7 +35,7 @@ test('recent main model survives child overrides and a restart through the nativ
   assert.equal(runtime.plugins.ctx.harnessModelPreference.recent().id, 'second-model');
   assert.deepEqual(runtime.plugins.ctx.harnessSessions.log(old.id).projection().timeline, original.timeline);
   assert.deepEqual(runtime.plugins.ctx.harnessSessions.log(old.id).projection().model, original.model);
-  await runtime.plugins.ctx.harnessRuns.send(old.id, 'Switch the recent model');
+  await sendRun(runtime.plugins.ctx.harnessRuns, old.id, 'Switch the recent model');
   assert.equal(mock.requests.at(-1)?.model, 'second-model');
   const delegate = expectPresent(
     runtime.plugins.ctx.harnessTools
@@ -41,7 +43,12 @@ test('recent main model survives child overrides and a restart through the nativ
       .find(({ name }) => name === 'delegate'),
     'delegate tool',
   );
-  await delegate.execute('override', { task: 'Child override', provider: 'local-mock', model: 'mock-model' });
+  const child = await startTool(runtime.plugins.ctx.harnessTasks, delegate, 'override', {
+    task: 'Child override',
+    provider: 'local-mock',
+    model: 'mock-model',
+  }).result;
+  await runtime.plugins.ctx.harnessRuns.current(String(child.details?.sessionId))?.result;
   assert.equal(runtime.plugins.ctx.harnessModelPreference.recent().id, 'second-model');
   runtime.plugins.ctx.harnessSessions.log(other.id).append({
     type: 'inbox-enqueued',
@@ -53,16 +60,16 @@ test('recent main model survives child overrides and a restart through the nativ
       model: { provider: 'local-mock', id: 'mock-model' },
     },
   });
-  await runtime.plugins.ctx.harnessRuns.send(other.id, 'Scheduled work', undefined, { source: 'plugin' });
+  await sendRun(runtime.plugins.ctx.harnessRuns, other.id, 'Scheduled work', undefined, { source: 'plugin' });
   assert.equal(mock.requests.at(-1)?.model, 'mock-model');
   assert.equal(runtime.plugins.ctx.harnessModelPreference.recent().id, 'second-model');
-  await runtime.plugins.ctx.harnessRuns.send(other.id, 'Other conversation');
+  await sendRun(runtime.plugins.ctx.harnessRuns, other.id, 'Other conversation');
   assert.equal(mock.requests.at(-1)?.model, 'second-model');
   await runtime.stop();
   runtime = new MiniHarnessRuntime(paths);
   await runtime.start();
   assert.equal(runtime.plugins.ctx.harnessModelPreference.recent().id, 'second-model');
-  await runtime.plugins.ctx.harnessRuns.send(old.id, 'After restart');
+  await sendRun(runtime.plugins.ctx.harnessRuns, old.id, 'After restart');
   assert.equal(mock.requests.at(-1)?.model, 'second-model');
 });
 
@@ -91,13 +98,18 @@ test('a failed recent-model write does not delay accepted input or terminate exe
   renameSync(config, old);
   mkdirSync(config);
   try {
-    const run = runs.startRun(session.id, 'Accept this despite the unwritable setting', {
-      model: { provider: 'local-mock', id: 'second-model' },
-    });
+    const run = runs.submit(
+      session.id,
+      {
+        message: 'Accept this despite the unwritable setting',
+        model: { provider: 'local-mock', id: 'second-model' },
+      },
+      { source: 'user' },
+    );
     assert.equal(run.state, 'queued');
-    await runs.completion(session.id);
+    await runs.current(session.id)?.result;
     assert.equal(runtime.plugins.ctx.harnessModelPreference.recent().id, 'second-model');
-    await runs.send(registry.create().id, 'Use the current preference despite the failed write');
+    await sendRun(runs, registry.create().id, 'Use the current preference despite the failed write');
     assert.equal(runs.info(session.id)?.state, 'completed');
     assert.equal(mock.requests.at(-1)?.model, 'second-model');
     await runtime.stop();
@@ -122,6 +134,6 @@ test('explicit and stored models work without the recent-model plugin', async (t
   const ctx = runtime.plugins.ctx;
   const session = ctx.harnessSessions.create();
   const model = { provider: 'local-mock', id: 'mock-model' };
-  assert.equal(await ctx.harnessRuns.send(session.id, 'Explicit', undefined, { model }), 'Mock response');
-  assert.equal(await ctx.harnessRuns.send(session.id, 'Stored'), 'Mock response');
+  assert.equal(await sendRun(ctx.harnessRuns, session.id, 'Explicit', undefined, { model }), 'Mock response');
+  assert.equal(await sendRun(ctx.harnessRuns, session.id, 'Stored'), 'Mock response');
 });

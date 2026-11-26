@@ -35,7 +35,7 @@ export function setup(ctx: Context) {
             async execute(...args: Parameters<typeof tool.execute>) {
               const result = await tool.execute(...args);
               if (!writes) return result;
-              const path = (args[1] as { path?: unknown })?.path;
+              const path = (args[0] as { path?: unknown })?.path;
               if (typeof path !== 'string') return result;
               changes.invalidate('files', session.workspaceId ?? undefined);
               const changedPath = relative(root, resolve(root, path)).split(sep).join('/');
