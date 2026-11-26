@@ -20,9 +20,6 @@ export function setup(ctx: Context) {
     catalog.events.addEventListener('membership', changed);
     return () => catalog.events.removeEventListener('membership', changed);
   });
-  ctx.on('settings/scopes', (options) => {
-    for (const { id, name } of catalog.list()) options.push({ key: `workspace:${id}`, name });
-  });
   const changes = ctx.harnessChanges;
   ctx.effect(() => changes.register('workspaces'));
   ctx.effect(() => {

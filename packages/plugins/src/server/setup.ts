@@ -1,5 +1,4 @@
 import type { Context } from 'mini-harness/cordis';
-import type { ScopeOption } from '../shared/metadata.ts';
 
 /** Publish catalog and configuration. */
 export function setup(ctx: Context) {
@@ -12,11 +11,13 @@ export function setup(ctx: Context) {
     await ctx.harnessPluginCatalog.writeBrowserConfig(params.id, patch, signal);
     return { ok: true };
   });
-  add('GET', '/api/plugins/scopes', () => {
-    const options: ScopeOption[] = [];
-    ctx.emit('settings/scopes', options);
-    return options;
-  });
   add('GET', '/api/plugins/diagnostics', () => ctx.harnessPluginCatalog.diagnostics());
-  add('GET', '/api/plugins', () => ctx.harnessPluginCatalog.metadata());
+  add('GET', '/api/plugins', () =>
+    ctx.harnessPluginCatalog.metadata().flatMap(({ instances, ...plugin }) => {
+      const entry = instances.find(({ scope }) => scope === 'application');
+      return entry
+        ? [{ ...plugin, state: entry.state, error: entry.error, configSchema: entry.configSchema }]
+        : [];
+    }),
+  );
 }

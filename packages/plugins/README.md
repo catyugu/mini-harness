@@ -33,7 +33,7 @@ The public service types come from [Plugin API](../plugin-api/README.md). `Plugi
 
 Configuration writes during plugin setup and reentrant updates during graph reconciliation are rejected. The runtime cannot replace its own active transaction owner through that transaction. Loaded entries receive `internal/update`; the default behavior restarts non-live entries and accepts live entries in place. A listener can handle an update or reject a change that requires a Profile restart.
 
-Domain owners register resource resolvers and publish their scope choices through `settings/scopes`. Dynamic configuration choices use `settings/options`. These events let the manager remain independent of Sessions, Workspaces and Models. [Scoped providers](../../docs/scoped-providers.md) owns the hierarchy and replacement rules. Configured scopes mount when their resource is available; historical resources do not each require a permanently mounted graph.
+Domain owners register resource resolvers. Dynamic configuration choices use `settings/options`, keeping the manager independent of Sessions, Workspaces and Models. The Web catalog edits only top-level Profile entries; scoped composition is configured through Profile YAML. The main Plugins page exposes Subagents, Agent and Shell configuration and local plugins. Settings → Built-in plugins lists the bundled entries without detailed configuration, with switches for optional (non-`core:`) entries. [Scoped providers](../../docs/scoped-providers.md) owns the hierarchy and replacement rules. Configured scopes mount when their resource is available; historical resources do not each require a permanently mounted graph.
 
 ## Private data and browser publication
 

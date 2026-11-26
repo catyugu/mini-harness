@@ -32,9 +32,6 @@ export function setup(ctx: Context) {
     registry.events.addEventListener('membership', changed);
     return () => registry.events.removeEventListener('membership', changed);
   });
-  ctx.on('settings/scopes', (options) => {
-    for (const { id, title } of registry.list()) options.push({ key: `session:${id}`, name: title });
-  });
   ctx.inject(['harnessWorkspaces'], (workspace) => {
     registry.bindWorkspaces(workspace.harnessWorkspaces);
     workspace.effect(() => () => registry.bindWorkspaces());

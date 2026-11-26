@@ -151,21 +151,19 @@ export function apply(ctx) {
     await expect(page.getByText('Plugin model preferences')).toBeVisible();
     await settingsSection(page, 'Extensions').click();
     await expect(page.getByText('Plugin settings', { exact: true })).toBeVisible();
-    await expect(settingsSection(page, 'Plugins')).toHaveCount(0);
+    await settingsSection(page, 'Built-in plugins').click();
+    const builtins = page.locator('.builtin-plugins');
+    for (const title of ['Transport', 'Web Authentication', 'Plugin Runtime', 'Tool Executor', 'Context Compaction']) {
+      await expect(builtins.getByText(title, { exact: true })).toBeVisible();
+      await expect(builtins.getByRole('switch', { name: title, exact: true })).toHaveCount(0);
+    }
+    await expect(builtins.locator('svg')).toHaveCount(0);
+    await expect(builtins.getByText('UI example', { exact: true })).toHaveCount(0);
     await page.getByRole('button', { name: 'Close settings', exact: true }).click();
     await page.getByRole('button', { name: 'Browse plugins', exact: true }).click();
-    for (const [id, title] of [
-      ['core:transport', 'Transport'],
-      ['core:web-auth', 'Web Authentication'],
-      ['core:plugins-runtime', 'Plugin Runtime'],
-      ['core:tool-executor', 'Tool Executor'],
-      ['core:compaction', 'Context Compaction'],
-      ['ui-example', 'UI example'],
-    ]) {
-      const row = page.locator('[data-plugin-row="' + id + '"]');
-      await expect(row.locator('strong')).toHaveText(title);
-      await expect(row.locator('small')).toHaveText('Ready');
-    }
+    await expect(page.locator('.catalog-group').first().locator('strong')).toHaveText(['Subagents', 'Agent', 'Shell']);
+    await expect(page.locator('[data-plugin-row="core:transport"]')).toHaveCount(0);
+    await expect(page.locator('[data-plugin-row="ui-example"] strong')).toHaveText('UI example');
     await expect(page.locator('[data-plugin-row="ui-example"] .plugin-symbol svg path')).toHaveAttribute(
       'd',
       'M2 2h20v20H2z',
@@ -282,7 +280,16 @@ test('plugin catalog applies configuration and removes disabled browser capabili
     await page.getByRole('button', { name: 'Browse plugins' }).click();
     const catalog = page.getByRole('region', { name: 'Plugin catalog' });
     await expect(catalog.getByRole('heading', { name: 'Plugins', exact: true })).toBeVisible();
-    const files = catalog.getByRole('switch', { name: 'Workspace files', exact: true });
+    await expect(catalog.getByRole('button', { name: 'Workspace files settings' })).toHaveCount(0);
+    await expect(catalog.getByRole('switch', { name: 'Subagents', exact: true })).toHaveCount(0);
+    const openBuiltins = async () => {
+      await page.getByRole('button', { name: 'Toggle navigation' }).click();
+      await page.getByRole('button', { name: 'Settings', exact: true }).click();
+      await settingsSection(page, 'Built-in plugins').click();
+    };
+    const closeSettings = () => page.getByRole('button', { name: 'Close settings' }).click();
+    await openBuiltins();
+    const files = page.getByRole('dialog', { name: 'Settings' }).getByRole('switch', { name: 'Workspace files', exact: true });
     await expect(files).toBeChecked();
     await files.uncheck();
     await expect(files).not.toBeChecked();
@@ -292,11 +299,11 @@ test('plugin catalog applies configuration and removes disabled browser capabili
         .getByRole('button', { name: 'Workspace files', includeHidden: true }),
     ).toHaveCount(0);
     await expect(files).toBeEnabled();
+    await closeSettings();
     await page.getByRole('button', { name: 'Toggle navigation' }).click();
     await page.getByRole('button', { name: 'workspace', exact: true }).click();
     await expect(page.getByRole('textbox', { name: 'Message', exact: true })).toBeVisible();
-    await page.getByRole('button', { name: 'Toggle navigation' }).click();
-    await page.getByRole('button', { name: 'Browse plugins' }).click();
+    await openBuiltins();
     await files.check();
     await expect(files).toBeChecked();
     await expect(files).toBeEnabled();
@@ -329,8 +336,13 @@ test('plugin catalog applies configuration and removes disabled browser capabili
       release();
       await page.unroute('**/api/settings');
     }
+    await closeSettings();
+    await page.getByRole('button', { name: 'Toggle navigation' }).click();
+    await page.getByRole('button', { name: 'Browse plugins' }).click();
     await expect(catalog.getByRole('button', { name: 'Install plugin' })).toHaveCount(0);
     await catalog.getByRole('button', { name: 'Subagents settings' }).click();
+    await expect(catalog.locator('[name="plugin-scope"]')).toHaveCount(0);
+    await expect(catalog.getByRole('switch', { name: 'Enabled in this scope' })).toHaveCount(0);
     await catalog.getByRole('spinbutton', { name: 'Maximum child depth · subagents' }).fill('2');
     await catalog.getByRole('button', { name: 'Save configuration' }).click();
     await expect(catalog.getByText('Saved.', { exact: true })).toBeVisible();
@@ -350,17 +362,23 @@ test('plugin catalog applies configuration and removes disabled browser capabili
       '2',
     );
     await catalog.getByRole('button', { name: /All plugins/ }).click();
-    const models = catalog.getByRole('switch', { name: 'Models', exact: true });
-    await models.uncheck();
-    await expect(models).not.toBeChecked();
-    await expect(models).toBeEnabled();
+    const configureModels = async (disabled: boolean) => {
+      const response = await page.request.patch(service.url + '/api/settings', {
+        headers: { Authorization: 'Bearer ' + service.token },
+        data: { entries: { 'core:models': { disabled } } },
+      });
+      expect(response.ok()).toBe(true);
+      await page.reload();
+      await page.getByRole('button', { name: 'Toggle navigation' }).click();
+      await page.getByRole('button', { name: 'Browse plugins' }).click();
+    };
+    await configureModels(true);
     await catalog.getByRole('button', { name: 'Subagents settings' }).click();
     await expect(catalog.getByRole('textbox', { name: 'Child model · subagents' })).toHaveValue(
       JSON.stringify({ provider: 'local-mock', id: 'mock-model' }, null, 2),
     );
     await catalog.getByRole('button', { name: /All plugins/ }).click();
-    await models.check();
-    await expect(models).toBeEnabled();
+    await configureModels(false);
     await catalog.getByRole('button', { name: 'Subagents settings' }).click();
     await expect(catalog.getByRole('combobox', { name: 'Child model · subagents' })).toHaveValue(
       JSON.stringify({ provider: 'local-mock', id: 'mock-model' }),
@@ -375,7 +393,7 @@ test('plugin catalog applies configuration and removes disabled browser capabili
   }
 });
 
-test('the Plugins page keeps stored settings when a workspace plugin setup fails and allows repair', async ({
+test('the Web plugin manager excludes entries declared only in scoped Profile composition', async ({
   page,
 }) => {
   const mock = await createMockProvider(),
@@ -416,21 +434,19 @@ test('the Plugins page keeps stored settings when a workspace plugin setup fails
   try {
     await page.goto(service.url + '/#token=' + service.token);
     await page.getByRole('button', { name: 'Browse plugins' }).click();
-    await expect(page.getByRole('switch', { name: 'Workspace example' })).toBeChecked();
-    await page.getByRole('button', { name: 'Workspace example settings' }).click();
-    await expect(page.getByText('Invalid configuration for plugin: workspace-example')).toBeVisible();
-    const value = page.getByRole('spinbutton', { name: 'value · workspace-example' });
-    await value.fill('1');
-    await page.getByRole('button', { name: 'Save configuration' }).click();
-    await expect(
-      page.getByText(/Plugin workspace:.*\/workspace-example: Workspace setup failed/),
-    ).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Workspace example settings' })).toHaveCount(0);
+    await expect(page.getByRole('switch', { name: 'Workspace example' })).toHaveCount(0);
+    await page.getByRole('button', { name: 'Settings', exact: true }).click();
+    await settingsSection(page, 'Built-in plugins').click();
+    await expect(page.locator('.builtin-plugins').getByText('Workspace example')).toHaveCount(0);
+    const response = await page.request.get(service.url + '/api/plugins', {
+      headers: { Authorization: 'Bearer ' + service.token },
+    });
+    expect(response.ok()).toBe(true);
+    const plugins = await response.json();
+    expect(plugins.some(({ id }: { id: string }) => id === 'workspace-example')).toBe(false);
+    expect(plugins.every((plugin: object) => !('instances' in plugin))).toBe(true);
     expect(readWebProfile(paths).scopes[key].entries['workspace-example']?.config?.value).toBe('invalid');
-    await value.fill('2');
-    await page.getByRole('button', { name: 'Save configuration' }).click();
-    await expect(page.getByText('Saved.', { exact: true })).toBeVisible();
-    await page.getByRole('button', { name: 'All plugins' }).click();
-    await expect(page.getByRole('button', { name: 'Workspace example settings' })).toContainText('Ready');
   } finally {
     await page.close();
     await service.stop();

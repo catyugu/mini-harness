@@ -177,9 +177,6 @@ export const apply = (ctx, config) => {
   const outside = app.runtime.plugins.ctx.harnessSessions.create({ workspaceId: workspace.id });
   const workspaceKey = 'workspace:' + parent.workspaceId;
   const sessionKey = 'session:' + parent.id;
-  const locations = (await request('/plugins/scopes')).body;
-  assert.ok(locations.some(({ key }: { key: string }) => key === workspaceKey));
-  assert.ok(locations.some(({ key }: { key: string }) => key === sessionKey));
   const scopes = {
     [workspaceKey]: {
       isolate: ['exampleGreeting'],

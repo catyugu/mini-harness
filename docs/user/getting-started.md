@@ -54,7 +54,7 @@ Expand the conversation tree to view descendants. Use checkboxes for bulk export
 
 ## Enable tools and set permissions
 
-Use Plugins to toggle Files, Skills, Subagents, Shell, Session helper and installed extensions. Session helper supplies message copy and edit/resend actions. Tool availability updates at the next model turn. Unloading a tool revokes its outstanding invocations while unrelated work can continue.
+Use **Settings → Built-in plugins → Optional plugins** to toggle Files, Skills, Subagents, Shell, Session helper and other optional bundled capabilities. Configure Subagents, Agent and Shell from the Plugins page, which also manages local plugins. Built-in infrastructure is listed for reference in Settings. Session helper supplies message copy and edit/resend actions. Tool availability updates at the next model turn. Unloading a tool revokes its outstanding invocations while unrelated work can continue.
 
 Choose permissions from the left side of the composer:
 

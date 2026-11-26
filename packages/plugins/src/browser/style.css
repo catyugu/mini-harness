@@ -293,3 +293,40 @@
     grid-template-columns: repeat(auto-fit, minmax(min(150px, 100%), 1fr));
   }
 }
+
+.builtin-group + .builtin-group {
+  margin-top: 24px;
+}
+.builtin-group h4 {
+  margin: 0 0 8px;
+  font-size: 13px;
+}
+.builtin-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 48px;
+  padding-block: 8px;
+}
+.builtin-row > div {
+  min-width: 0;
+}
+.builtin-row strong,
+.builtin-row small {
+  display: block;
+  overflow-wrap: anywhere;
+}
+.builtin-row strong {
+  font-size: 13px;
+  font-weight: 550;
+}
+.builtin-row small {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+  margin-top: 3px;
+}
+.builtin-row > input {
+  flex-shrink: 0;
+}

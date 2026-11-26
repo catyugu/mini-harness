@@ -20,15 +20,3 @@ export interface PluginMetadata
     error?: string;
   }[];
 }
-
-/** Scope choices for the plugin configuration editor. */
-export interface ScopeOption {
-  key: ScopeAddress;
-  name: string;
-}
-
-declare module 'mini-harness/cordis' {
-  interface Events {
-    'settings/scopes'(options: ScopeOption[]): void;
-  }
-}

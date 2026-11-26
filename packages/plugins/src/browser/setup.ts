@@ -1,25 +1,21 @@
-import { browserRequest } from '@mini-harness/ui-runtime/http';
-import type { ScopeAddress } from '@mini-harness/plugin-api/configuration';
+import { browserRequest, payload } from '@mini-harness/ui-runtime/http';
+import { browserPluginId, browserPluginSettings } from '@mini-harness/ui-runtime/plugin-settings';
 import type { Context } from 'mini-harness/cordis';
 import type { ProfileConfiguration } from '@mini-harness/plugin-api/configuration';
-import type { PluginMetadata, ScopeOption } from '../shared/metadata.ts';
+import type { PluginMetadata } from '../shared/metadata.ts';
 import { RemoteStore } from '@mini-harness/ui-runtime/remote-store';
-import { payload } from '@mini-harness/ui-runtime/http';
 import { icon } from '@mini-harness/ui-primitives/icons';
-import {
-  button,
-  field,
-  fromMarkup,
-  saveToggle,
-  toggle,
-  required,
-} from '@mini-harness/ui-primitives/primitives';
+import { button, fromMarkup, saveToggle, toggle, required } from '@mini-harness/ui-primitives/primitives';
 import { readPluginValues, schemaFields } from './fields.ts';
+
+type CatalogPlugin = Omit<PluginMetadata, 'instances'>;
+const configurable = ['subagents', 'core:agent', 'shell'];
+const optional = (plugin: CatalogPlugin) => !plugin.id.startsWith('core:');
 
 const setup = async (ctx: Context) => {
   const signal = ctx.fiber.signal;
   const { miniSettingsData: settings, miniSwitch: syncPlugins, miniBrowserFailures: browserFailures } = ctx;
-  const plugins = new RemoteStore(() => browserRequest<PluginMetadata[]>(ctx, '/plugins'));
+  const plugins = new RemoteStore(() => browserRequest<CatalogPlugin[]>(ctx, '/plugins'));
   await plugins.refresh();
   ctx.effect(() => ctx.miniProjections.register('plugins', plugins));
   const refresh = async () => {
@@ -45,7 +41,7 @@ const setup = async (ctx: Context) => {
 
 function pluginCatalog(
   ctx: Context,
-  snapshot: () => { plugins: PluginMetadata[]; settings: ProfileConfiguration },
+  snapshot: () => { plugins: CatalogPlugin[]; settings: ProfileConfiguration },
   refresh: () => Promise<void>,
 ) {
   const { miniPages: pages, miniSettingsRegistry: registry } = ctx;
@@ -56,7 +52,7 @@ function pluginCatalog(
   const page =
     fromMarkup(`<section id="pluginCatalog" class="catalog-page" tabindex="-1" aria-label="Plugin catalog">
     <header class="catalog-header">
-      <div class="catalog-heading"><h1>Plugins</h1><p class="hint">Enable and configure Profile plugins.</p></div>
+      <div class="catalog-heading"><h1>Plugins</h1><p class="hint">Configure built-in capabilities and manage local plugins.</p></div>
     </header>
     <p class="hint catalog-status" role="status"></p>
     <div class="catalog-content"></div>
@@ -64,9 +60,26 @@ function pluginCatalog(
   const header = required(page.querySelector('header'));
   const content = required(page.querySelector('.catalog-content'));
   const status = required(page.querySelector<HTMLElement>('.catalog-status'));
+  const builtins = fromMarkup(`<div class="builtin-plugins">
+    <p class="hint catalog-status" role="status"></p>
+    <div class="builtin-list"></div>
+  </div>`);
+  const builtinStatus = required(builtins.querySelector<HTMLElement>('.catalog-status'));
+  const builtinList = required(builtins.querySelector('.builtin-list'));
   entry.dataset.pageLink = 'plugins';
   ctx.effect(() => ctx.miniSlots.register('sidebar.actions', entry, { order: -10 }));
   ctx.effect(() => pages.register('plugins', page));
+  ctx.effect(() =>
+    registry.register(
+      browserPluginId(ctx),
+      {
+        id: 'built-in-plugins',
+        section: { title: 'Built-in plugins', icon: 'plugin', order: 40 },
+        render: () => builtins,
+      },
+      browserPluginSettings(ctx),
+    ),
+  );
 
   let detailLifetime: AbortController | undefined;
   ctx.effect(() => () => detailLifetime?.abort());
@@ -91,7 +104,7 @@ function pluginCatalog(
     }
   }
 
-  function detail(plugin: PluginMetadata) {
+  function detail(plugin: CatalogPlugin) {
     status.textContent = '';
     header.hidden = true;
     detailLifetime?.abort();
@@ -110,163 +123,65 @@ function pluginCatalog(
     required(section.querySelector('.plugin-symbol')).append(icon(plugin.icon ?? 'plugin'));
     required(section.querySelector('h1')).textContent = plugin.title;
     required(section.querySelector('p')).textContent = plugin.description;
-    let schema = plugin.configSchema;
-    const scoped = plugin.instances.some(({ scope }) => scope !== 'application');
-    const application = plugin.instances.some(({ scope }) => scope === 'application');
     const diagnostics = document.createElement('p');
     diagnostics.className = 'hint';
     diagnostics.textContent = plugin.error ?? '';
     section.append(diagnostics);
-    const form = fromMarkup<HTMLFormElement>(
-      '<form><div class="detail-fields"></div><p class="hint" role="status"></p></form>',
-    );
-    const save = button('Save configuration', 'primary');
-    save.type = 'submit';
-    form.append(save);
-    const fields = required(form.querySelector<HTMLElement>('.detail-fields'));
-    const outcome = required(form.querySelector<HTMLElement>('[role="status"]'));
-    const scopePicker = document.createElement('select');
-    scopePicker.name = 'plugin-scope';
-    const scopedControls = document.createElement('div');
-    const enabled = toggle('Enabled in this scope', false);
-    const configFields = document.createElement('div');
-    fields.append(scopedControls, configFields);
-    const currentKey = () =>
-      scopePicker.value && scopePicker.value !== 'application'
-        ? (scopePicker.value as ScopeAddress)
-        : undefined;
-    const currentScope = () => {
-      const key = currentKey();
-      return (key && snapshot().settings.scopes[key]) || undefined;
-    };
-    const values = () => ({
-      ...(currentKey()
-        ? currentScope()?.entries?.[plugin.id]?.config
-        : snapshot().settings.entries[plugin.id]?.config),
-    });
-    function renderFields() {
-      configFields.replaceChildren();
-      if (scoped || application) {
-        const instance = snapshot()
-          .plugins.find(({ id }) => id === plugin.id)
-          ?.instances.find(({ scope }) => scope === scopePicker.value);
-        diagnostics.textContent =
-          instance?.error ?? (instance?.state === 'inactive' ? 'Waiting for this scope to activate.' : '');
-        const selected = currentKey()
-          ? currentScope()?.entries?.[plugin.id]
-          : snapshot().settings.entries[plugin.id];
-        enabled.checked = !!selected && selected.disabled !== true;
-        schema = instance?.configSchema ?? plugin.configSchema;
-      }
-      const currentSchema = schema;
-      if (!currentSchema) return;
+    const schema = plugin.configSchema;
+    if (schema) {
+      const form = fromMarkup<HTMLFormElement>(
+        '<form><div class="detail-fields"></div><p class="hint" role="status"></p></form>',
+      );
+      const save = button('Save configuration', 'primary');
+      save.type = 'submit';
+      form.append(save);
+      const fields = required(form.querySelector<HTMLElement>('.detail-fields'));
+      const outcome = required(form.querySelector<HTMLElement>('[role="status"]'));
+      const values = snapshot().settings.entries[plugin.id]?.config ?? {};
       if (plugin.configHint) {
         const note = document.createElement('p');
         note.className = 'hint';
         note.textContent = plugin.configHint;
-        configFields.append(note);
+        fields.append(note);
       }
       if (plugin.configGroups) {
         for (const group of plugin.configGroups) {
           const block = fromMarkup('<section class="ui-section"><h3></h3></section>');
           required(block.querySelector('h3')).textContent = group.title;
           const properties = Object.fromEntries(
-            group.fields
-              .filter((id) => currentSchema.properties?.[id])
-              .map((id) => [id, currentSchema.properties[id]]),
+            group.fields.filter((id) => schema.properties?.[id]).map((id) => [id, schema.properties[id]]),
           );
-          block.append(schemaFields(ctx, plugin.id, { ...currentSchema, properties }, values()));
-          configFields.append(block);
+          block.append(schemaFields(ctx, plugin.id, { ...schema, properties }, values));
+          fields.append(block);
         }
-      } else configFields.append(schemaFields(ctx, plugin.id, currentSchema, values()));
-    }
-    if (scoped || application) {
-      scopedControls.className = 'plugin-fields';
-      scopedControls.append(field('Scope', scopePicker), field('Enabled in this scope', enabled));
-      save.disabled = true;
-      scopePicker.add(new Option('Choose a scope', ''));
-      scopedControls.querySelectorAll('input').forEach((control) => {
-        control.disabled = true;
-      });
-      if (application) scopePicker.add(new Option('Application', 'application'));
-      void browserRequest<ScopeOption[]>(ctx, '/plugins/scopes', { signal: detailLifetime.signal })
-        .then((items) => {
-          for (const { key, name } of items) scopePicker.add(new Option(name, key));
-          for (const { scope } of plugin.instances)
-            if (scope !== 'application' && !items.some(({ key }) => key === scope))
-              scopePicker.add(new Option(scope, scope));
-          scopePicker.value =
-            plugin.instances.find(({ error }) => error)?.scope ??
-            (application ? 'application' : undefined) ??
-            plugin.instances[0]?.scope ??
-            items[0]?.key ??
-            '';
-          const sync = () => {
-            save.disabled = !scopePicker.value;
-            enabled.disabled = !scopePicker.value;
-            renderFields();
-          };
-          scopePicker.onchange = sync;
-          sync();
-        })
-        .catch((error: Error) => {
-          outcome.textContent = error.message;
-        });
-    } else renderFields();
-    form.onsubmit = async (event) => {
-      event.preventDefault();
-      save.disabled = true;
-      outcome.textContent = '';
-      try {
-        const config = schema ? readPluginValues(configFields) : values();
-        let patch: Partial<ProfileConfiguration> = {
-          entries: { [plugin.id]: { config, disabled: !enabled.checked } },
-        };
-        const key = currentKey();
-        if (key) {
-          const current = currentScope() ?? {};
-          patch = {
-            scopes: {
-              ...snapshot().settings.scopes,
-              [key]: {
-                ...current,
-                entries: {
-                  ...current.entries,
-                  [plugin.id]: {
-                    ...current.entries?.[plugin.id],
-                    name: current.entries?.[plugin.id]?.name ?? plugin.name,
-                    disabled: !enabled.checked,
-                    config,
-                  },
-                },
-              },
+      } else fields.append(schemaFields(ctx, plugin.id, schema, values));
+      form.onsubmit = async (event) => {
+        event.preventDefault();
+        save.disabled = true;
+        outcome.textContent = '';
+        try {
+          const config = readPluginValues(fields);
+          const saved = await mutate(
+            () => browserRequest(ctx, '/settings', payload('PATCH', { entries: { [plugin.id]: { config } } })),
+            (error) => {
+              outcome.textContent = error.message;
             },
-          };
+          );
+          if (saved && !outcome.textContent) {
+            const latest = snapshot().plugins.find(({ id }) => id === plugin.id);
+            diagnostics.textContent = latest?.error ?? '';
+            outcome.textContent = latest?.error
+              ? 'Configuration saved. Plugin failed to start: ' + latest.error
+              : 'Saved.';
+          }
+        } catch (error) {
+          outcome.textContent = error instanceof Error ? error.message : String(error);
+        } finally {
+          save.disabled = false;
         }
-        const saved = await mutate(
-          () => browserRequest(ctx, '/settings', payload('PATCH', patch)),
-          (error) => {
-            outcome.textContent = error.message;
-          },
-        );
-        if (saved && !outcome.textContent) {
-          const latest = snapshot().plugins.find(({ id }) => id === plugin.id);
-          const state = key ? latest?.instances.find(({ scope }) => scope === key) : latest;
-          diagnostics.textContent = state?.error ?? '';
-          outcome.textContent =
-            state?.error && (state.state === 'failed' || state.state === 'partial')
-              ? 'Configuration saved. Plugin failed to start: ' + state.error
-              : state?.state === 'inactive'
-                ? 'Configuration saved. Waiting for this scope to activate.'
-                : 'Saved.';
-        }
-      } catch (error) {
-        outcome.textContent = error instanceof Error ? error.message : String(error);
-      } finally {
-        save.disabled = false;
-      }
-    };
-    if (schema || scoped || application) section.append(form);
+      };
+      section.append(form);
+    }
     registry.mountPlugin(plugin.id, section, detailLifetime.signal);
     content.replaceChildren(section);
     back.focus();
@@ -275,6 +190,63 @@ function pluginCatalog(
   const rowButton = (id: string) =>
     content.querySelector<HTMLButtonElement>('[data-plugin-row="' + id + '"]');
 
+  function switchFor(plugin: CatalogPlugin, outcome: HTMLElement) {
+    const control = toggle(plugin.title, snapshot().settings.entries[plugin.id]?.disabled !== true);
+    control.dataset.pluginToggle = plugin.id;
+    saveToggle(control, async (next) => {
+      if (busy) return false;
+      savingSwitch = true;
+      outcome.textContent = '';
+      const peers = [content, builtinList]
+        .flatMap((root) => [...root.querySelectorAll<HTMLInputElement | HTMLButtonElement>('input.toggle, [data-plugin-row]')])
+        .filter((peer) => peer !== control && !peer.disabled);
+      for (const peer of peers) peer.disabled = true;
+      try {
+        const saved = await mutate(
+          () => browserRequest(ctx, '/settings', payload('PATCH', { entries: { [plugin.id]: { disabled: !next } } })),
+          (error) => {
+            outcome.textContent = error.message;
+          },
+        );
+        if (saved) {
+          const state = snapshot().plugins.find(({ id }) => id === plugin.id);
+          if (next && state?.error && !outcome.textContent)
+            outcome.textContent = 'Configuration saved. Plugin failed to start: ' + state.error;
+          if (!detailLifetime) render();
+          renderBuiltins();
+        }
+        return saved;
+      } finally {
+        savingSwitch = false;
+        for (const peer of peers) peer.disabled = false;
+      }
+    });
+    return control;
+  }
+
+  function renderBuiltins() {
+    const plugins = snapshot().plugins.filter((plugin) => !plugin.external);
+    const focused = (document.activeElement as HTMLElement)?.dataset.pluginToggle;
+    builtinList.replaceChildren(
+      ...[
+        { title: 'Core plugins', plugins: plugins.filter((plugin) => !optional(plugin)), toggle: false },
+        { title: 'Optional plugins', plugins: plugins.filter(optional), toggle: true },
+      ].map((group) => {
+        const list = fromMarkup('<div class="builtin-group"><h4></h4></div>');
+        required(list.querySelector('h4')).textContent = group.title;
+        for (const plugin of group.plugins) {
+          const row = fromMarkup('<div class="builtin-row"><div><strong></strong><small></small></div></div>');
+          required(row.querySelector('strong')).textContent = plugin.title;
+          required(row.querySelector('small')).textContent = plugin.description;
+          if (group.toggle) row.append(switchFor(plugin, builtinStatus));
+          list.append(row);
+        }
+        return list;
+      }),
+    );
+    if (focused) builtinList.querySelector<HTMLElement>('[data-plugin-toggle="' + focused + '"]')?.focus();
+  }
+
   function render() {
     const focused = document.activeElement as HTMLElement;
     const focusId = focused?.dataset.pluginRow ?? focused?.dataset.pluginToggle;
@@ -282,17 +254,19 @@ function pluginCatalog(
     detailLifetime?.abort();
     detailLifetime = undefined;
     header.hidden = false;
-    const { settings, plugins } = snapshot();
+    const { plugins } = snapshot();
     const groups = [
-      { title: 'Built-in capabilities', plugins: plugins.filter((plugin) => !plugin.external) },
+      {
+        title: 'Built-in configuration',
+        plugins: configurable.flatMap((id) => plugins.filter((plugin) => !plugin.external && plugin.id === id)),
+      },
       { title: 'Local plugins', plugins: plugins.filter((plugin) => plugin.external) },
     ];
     content.replaceChildren(
       ...groups.map((group) => {
         const list = fromMarkup('<section class="catalog-group"><h2></h2></section>');
         required(list.querySelector('h2')).textContent = group.title;
-        if (!group.plugins.length)
-          list.append(fromMarkup('<p class="hint">No external plugins available.</p>'));
+        if (!group.plugins.length) list.append(fromMarkup('<p class="hint">No plugins available.</p>'));
         for (const plugin of group.plugins) {
           const row = fromMarkup(`<article class="catalog-row">
           <button class="catalog-description ui-list-item" type="button">
@@ -306,64 +280,8 @@ function pluginCatalog(
           open.onclick = () => detail(plugin);
           required(row.querySelector('.plugin-symbol')).append(icon(plugin.icon ?? 'plugin'));
           required(row.querySelector('strong')).textContent = plugin.title;
-          const state = {
-            ready: 'Ready',
-            failed: 'Failed',
-            partial: 'Partially ready',
-            inactive: 'Inactive',
-            disabled: 'Disabled',
-          }[plugin.state];
-          const stateDetail = (plugin.error ?? plugin.description).trim();
-          required(row.querySelector('small')).textContent = stateDetail
-            ? state + ' · ' + stateDetail
-            : state;
-          const controls = required(row.querySelector('.catalog-controls'));
-          const scoped = !plugin.instances.some(({ scope }) => scope === 'application');
-          const checked = scoped
-            ? Object.values(settings.scopes).some(
-                (scope) => scope?.entries?.[plugin.id] && scope.entries[plugin.id].disabled !== true,
-              )
-            : !!settings.entries[plugin.id] && settings.entries[plugin.id].disabled !== true;
-          const control = toggle(plugin.title, checked);
-          control.dataset.pluginToggle = plugin.id;
-          if (scoped) {
-            control.disabled = true;
-            control.title = 'Open plugin settings to select a scope';
-          }
-          saveToggle(control, async (next) => {
-            if (busy) return false;
-            savingSwitch = true;
-            status.textContent = '';
-            const peers = [...content.querySelectorAll<HTMLInputElement>('input.toggle')].filter(
-              (toggle) => toggle !== control && !toggle.disabled,
-            );
-            const detailButtons = [...content.querySelectorAll<HTMLButtonElement>('[data-plugin-row]')];
-            for (const peer of [...peers, ...detailButtons]) peer.disabled = true;
-            try {
-              const saved = await mutate(
-                () =>
-                  browserRequest(
-                    ctx,
-                    '/settings',
-                    payload('PATCH', { entries: { [plugin.id]: { disabled: !next } } }),
-                  ),
-                (error) => {
-                  status.textContent = error.message;
-                },
-              );
-              if (saved) {
-                const state = snapshot().plugins.find(({ id }) => id === plugin.id);
-                if (next && state?.error && !status.textContent)
-                  status.textContent = 'Configuration saved. Plugin failed to start: ' + state.error;
-                if (!detailLifetime) render();
-              }
-              return saved;
-            } finally {
-              savingSwitch = false;
-              for (const peer of [...peers, ...detailButtons]) peer.disabled = false;
-            }
-          });
-          controls.append(control);
+          required(row.querySelector('small')).textContent = plugin.error ?? plugin.description;
+          if (plugin.external) required(row.querySelector('.catalog-controls')).append(switchFor(plugin, status));
           list.append(row);
         }
         return list;
@@ -376,16 +294,18 @@ function pluginCatalog(
       next?.focus();
     }
   }
-  function open() {
+  entry.onclick = () => {
     status.textContent = '';
     render();
     pages.open('plugins');
-  }
-  entry.onclick = open;
+  };
+  render();
+  renderBuiltins();
   return {
-    open,
     refresh: () => {
-      if (!detailLifetime && !savingSwitch) render();
+      if (savingSwitch) return;
+      if (!detailLifetime) render();
+      renderBuiltins();
     },
   };
 }
