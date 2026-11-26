@@ -103,15 +103,9 @@ through the log.
 
 ## Durable inbox
 
-Runs admits steering and follow-ups while Agent accepts input for the active run. Queued input receives a stable delivery ID. Enqueue is acknowledged only after Sessions makes the event durable. Delivering it appends one user
-message that also names the inbox ID; message creation and delivery
-acknowledgement therefore share one durable record. An already consumed delivery
-ID cannot create a second user message.
+All accepted messages are committed to the Session Log Inbox with a stable delivery ID and mode. Origin metadata identifies user input, agent and plugin messages, and task notifications. It can record the sender Session and Task. Consuming a message commits the model-visible record with the same delivery ID, so replay can reconstruct pending messages and conversation history together.
 
-An interrupted or failed run leaves undelivered input inspectable. Recovery marks steering targeted at an unfinished run as failed; pending follow-ups remain queued for a later explicit run. Failed steering requires explicit retry. Restart does not execute input by itself. Explicit
-cancellation records the cancelled delivery IDs and removes them from the pending
-projection. No content-string matching or process-local queue is needed to
-reconstruct delivery state.
+A durable pause persists Stop across restarts. The next user message clears the pause in the same acceptance record. Unpaused pending messages can start a new Run after settlement or startup. Cancelling a pending message writes an explicit acknowledgement and leaves its identity available for idempotency checks.
 
 ## Export and permanent deletion
 

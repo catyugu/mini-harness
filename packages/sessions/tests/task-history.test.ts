@@ -24,7 +24,8 @@ test('durable retained tasks recover by ID without reconstructing execution hand
     },
   );
   assert.equal(await done.result, 'finished');
-  const run = ctx.harnessRuns.submit(session.id, { message: 'A run' });
+  ctx.harnessRuns.send(session.id, { message: 'A run' });
+  const run = ctx.harnessRuns.current(session.id)!;
   await run.result;
   let entered!: () => void;
   const running = new Promise<void>((resolve) => {
@@ -49,7 +50,6 @@ test('durable retained tasks recover by ID without reconstructing execution hand
       createdAt: new Date().toISOString(),
       cancellationRequested: false,
       outputCursor: 0,
-      retained: true,
     },
   });
   await app.close();

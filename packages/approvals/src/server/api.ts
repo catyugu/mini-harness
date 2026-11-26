@@ -12,7 +12,7 @@ export interface ApprovalPrompt {
 }
 
 export interface ApprovalRequests {
-  request(id: string, prompt: ApprovalPrompt, signal?: AbortSignal): Promise<boolean>;
+  request(id: string, prompt: ApprovalPrompt, signal?: AbortSignal, executionId?: string): Promise<boolean>;
 }
 
 declare module 'mini-harness/cordis' {

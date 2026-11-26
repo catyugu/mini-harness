@@ -52,7 +52,7 @@ export function mountHistory(ctx: Context, extensions: MessageExtensions, signal
     ['interaction'],
     () => {
       const next = control.get().interaction.operation;
-      if (operation !== next && (next === 'submit' || next === 'queue')) view.follow();
+      if (operation !== next && next === 'submit') view.follow();
       operation = next;
     },
     signal,

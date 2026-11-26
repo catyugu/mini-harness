@@ -37,7 +37,6 @@ export function createComposer(
   const render = (pending: boolean) => {
     const current = model.draft();
     element<'button'>('send').disabled = current.loading || current.awaitingAcceptance || pending;
-    element<'button'>('queueSend').disabled = current.loading || current.awaitingAcceptance || pending;
     const scope = ctx.miniSelection.scope();
     const identity = JSON.stringify(scope);
     if (

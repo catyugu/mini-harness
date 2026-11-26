@@ -1,7 +1,7 @@
 import type { PluginRecord } from './records.ts';
 import type { TaskHistoryRecord } from '@mini-harness/tasks/api';
 import type { LogEntry } from './record-log.ts';
-import type { QueueEntry } from './shared/queue.ts';
+import type { MessageMode, MessageOrigin, QueueEntry } from './shared/queue.ts';
 import type { ContentDelta } from './content-delta.ts';
 import type { ThinkingLevel, ModelChoice, ToolSchema } from '@mini-harness/llm/vocabulary';
 import type { ImageInput, PreparedMessage } from '@mini-harness/input/message';
@@ -16,7 +16,9 @@ import { projectRun, type RunDetails, type RunInfo } from './shared/run-state.ts
 
 export interface InboxItem {
   id: string;
-  mode: 'steer' | 'followUp';
+  mode: MessageMode;
+  origin?: MessageOrigin;
+  resume?: true;
   text: string;
   images: ImageInput[];
   input?: PreparedMessage;
@@ -45,6 +47,7 @@ export type SessionEvent<Data = unknown> =
       elapsedMs?: number;
       submissionId?: string;
       inboxId?: string;
+      origin?: MessageOrigin;
       selection?: { model: ModelChoice; thinkingLevel?: ThinkingLevel };
     }
   /** Tool definitions are written once per distinct content and referenced by model requests. */
@@ -65,6 +68,7 @@ export type SessionEvent<Data = unknown> =
   | { type: 'compaction'; summary: string; keepFromId: string | null; tokensBefore?: number }
   | { type: 'context-edit'; targetId: string; replacement: NativeMessage['content'] | null }
   | { type: 'inbox-enqueued'; item: InboxItem }
+  | { type: 'inbox-paused' }
   | { type: 'inbox-consumed' | 'inbox-cancelled'; ids: string[]; reason?: string }
   | { type: 'inbox-failed'; inboxId: string; reason: string }
   | { type: 'run'; run: RunInfo }
@@ -95,6 +99,8 @@ export interface SessionLogPort {
   readonly sessionId: string;
   entries(): SessionEntry[];
   inbox(): InboxItem[];
+  hasInbox(id: string): boolean;
+  inboxPaused(): boolean;
   queue(): QueueEntry[];
   branch(leafId?: string | null): SessionEntry[];
   /** Returns only after the complete record has been flushed to durable storage. */

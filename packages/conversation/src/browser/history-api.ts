@@ -9,6 +9,7 @@ export interface ToolView {
   content?: MessageContent;
   arguments?: unknown;
   sessionId?: string;
+  taskId?: string;
 }
 export type MessageActionTarget =
   | {

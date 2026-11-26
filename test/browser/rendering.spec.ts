@@ -173,7 +173,9 @@ export const apply = (ctx) => {
     await expect(page.getByRole('button', { name: 'Stop response' })).toBeVisible();
     await page.getByRole('button', { name: 'Stop response' }).click();
     await expect(page.getByLabel('Latest run')).toHaveAttribute('data-state', 'cancelled');
-    await expect(prompt).toHaveText('Stop before acceptance');
+    await expect(prompt).not.toContainText('Stop before acceptance');
+    await expect(page.locator('#queuedMessages')).toContainText('Stop before acceptance');
+    await page.getByRole('button', { name: 'Cancel queued message: Stop before acceptance' }).click();
     expect(mock.requests.length).toBe(requests);
     await expect(page.getByText(/^Run cancelled/)).toHaveCount(2);
     await page.reload();
@@ -182,15 +184,15 @@ export const apply = (ctx) => {
 
     await page.getByRole('button', { name: 'Settings', exact: true }).click();
     await settingsSection(page, 'General').click();
-    const mode = page.getByRole('switch', { name: 'Add instructions' });
-    await mode.check();
+    const mode = page.getByRole('combobox', { name: 'Add instructions' });
+    await mode.selectOption('steer');
     await expect(mode).toBeEnabled();
     await page.getByRole('button', { name: 'Close settings' }).click();
     await prompt.fill('Steer this response');
     await page.getByRole('button', { name: 'Send', exact: true }).click();
     await expect(page.getByRole('button', { name: 'Stop response' })).toBeVisible();
     await prompt.fill('Change course');
-    await page.getByRole('button', { name: 'Queue', exact: true }).click();
+    await page.getByRole('button', { name: 'Send with Steer', exact: true }).click();
     await expect(page.locator('#queuedMessages')).toContainText('Change course');
     resumeSteering();
     const skipped = page.locator('.tool-card[data-state=skipped]');

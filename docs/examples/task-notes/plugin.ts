@@ -129,9 +129,14 @@ export function apply(ctx: Context) {
         throw new HttpError('invalid_input', 'Send a message to the parent conversation first');
       if (requireApproval === true) await confirm(parentId, { title: 'Start a follow-up', message }, signal);
       const child = sessions.create({ parentId, title: 'Task follow-up' });
-      const run = runs.submit(child.id, { message, model }, { signal, metadata: { origin: 'task-notes' } });
-      const text = await run.result;
-      return { childId: child.id, runId: run.id, state: tasks.get(run.id)?.state, text };
+      const { taskId } = runs.send(child.id, {
+        message,
+        model,
+        origin: { source: 'plugin', senderSessionId: parentId },
+      });
+      if (!taskId) throw new Error('The follow-up was accepted but could not start');
+      const task = await tasks.wait(taskId, signal);
+      return { childId: child.id, runId: task.id, state: task.state, text: task.result };
     }),
   );
 }

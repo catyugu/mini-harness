@@ -27,6 +27,7 @@
     "profileModules": {
       "@mini-harness/conversation": "./src/manifests/conversation.ts",
       "@mini-harness/conversation-composer": "./src/manifests/conversation.ts#composer",
+      "@mini-harness/background-tasks": "./src/manifests/conversation.ts#background",
       "@mini-harness/conversation-history": "./src/manifests/conversation.ts#history",
       "@mini-harness/conversation-navigation": "./src/manifests/navigation.ts",
       "@mini-harness/sessions-data": "./src/manifests/session-data.ts",
@@ -42,6 +43,7 @@
     "@mini-harness/plugin-api": "workspace:*",
     "@mini-harness/runs": "workspace:*",
     "@mini-harness/sessions": "workspace:*",
+    "@mini-harness/tasks": "workspace:*",
     "@mini-harness/transport": "workspace:*",
     "@mini-harness/ui-primitives": "workspace:*",
     "@mini-harness/ui-runtime": "workspace:*",

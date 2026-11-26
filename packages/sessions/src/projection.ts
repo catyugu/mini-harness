@@ -58,6 +58,7 @@ export function displayMessage(
   if (entry.type === 'message') {
     if (entry.submissionId) view.submissionId = entry.submissionId;
     if (entry.inboxId) view.inboxId = entry.inboxId;
+    if (entry.origin) view.origin = entry.origin;
   }
   if (entry.type === 'message' && message.role === 'user')
     Object.assign(view, userContent(message.content, entry.presentation));
@@ -68,6 +69,7 @@ export function displayMessage(
     if (typeof message.details?.approvalMs === 'number') view.approvalMs = message.details.approvalMs;
     view.arguments = toolArguments;
     view.elapsedMs = (entry.type === 'message' ? entry.elapsedMs : undefined) ?? message.elapsedMs;
+    if (typeof message.details?.taskId === 'string') view.taskId = message.details.taskId;
     if (typeof message.details?.sessionId === 'string') view.sessionId = message.details.sessionId;
     if (typeof message.details?.exitCode === 'number' && Number.isInteger(message.details.exitCode))
       view.exitCode = message.details.exitCode;

@@ -169,29 +169,33 @@ test('running messages can queue follow-ups and approve shell commands from the 
     await page.getByRole('option', { name: /Standard/ }).click();
     await expect(page.getByRole('button', { name: 'Permissions: Standard' })).toBeVisible();
     await page.getByRole('textbox', { name: 'Message', exact: true }).fill('First instruction');
-    await expect(page.getByRole('combobox', { name: 'While running', exact: true })).toHaveCount(0);
-    await page.getByRole('button', { name: 'Queue', exact: true }).click();
+    const mode = page.getByRole('combobox', { name: 'Message sending mode', exact: true });
+    await expect(mode).toHaveValue('interrupt');
+    await mode.selectOption('steer');
+    await page.getByRole('button', { name: 'Send with Steer', exact: true }).click();
     await page.getByRole('button', { name: 'Cancel queued message: First instruction' }).click();
     await expect(page.locator('#queuedMessages')).toBeHidden();
     await page.getByRole('textbox', { name: 'Message', exact: true }).fill('Additional instruction');
-    await page.getByRole('button', { name: 'Queue', exact: true }).click();
+    await page.getByRole('button', { name: 'Send with Steer', exact: true }).click();
     await expect(page.locator('#queuedMessages .queue-item > span')).toHaveText(
-      'Instruction: Additional instruction',
+      'Steer · Additional instruction',
     );
     await page.getByRole('textbox', { name: 'Message', exact: true }).fill('Continue');
     await page.getByRole('button', { name: 'Settings', exact: true }).click();
     const settings = page.getByRole('dialog', { name: 'Settings' });
     await settings.getByRole('button', { name: 'General', exact: true }).click();
-    const addInstructions = settings.getByRole('switch', { name: 'Add instructions' });
-    await expect(addInstructions).toBeChecked();
-    await addInstructions.uncheck();
-    await expect(addInstructions).not.toBeChecked();
+    const addInstructions = settings.getByRole('combobox', { name: 'Add instructions' });
+    await expect(addInstructions).toHaveValue('interrupt');
+    await addInstructions.selectOption('queue');
+    await expect(addInstructions).toHaveValue('queue');
     await expect(addInstructions).toBeEnabled();
     await settings.getByRole('button', { name: 'Close settings' }).click();
-    await page.getByRole('button', { name: 'Queue', exact: true }).click();
+    await expect(mode).toHaveValue('steer');
+    await mode.selectOption('queue');
+    await page.getByRole('button', { name: 'Send with Queue', exact: true }).click();
     await expect(page.locator('#queuedMessages .queue-item > span')).toHaveText([
-      'Instruction: Additional instruction',
-      'Follow up: Continue',
+      'Steer · Additional instruction',
+      'Queue · Continue',
     ]);
     release();
     await expect(page.locator('.message.assistant')).toHaveCount(3);

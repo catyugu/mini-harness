@@ -21,13 +21,16 @@ import type {
   SessionLogPort,
   SessionProjection,
 } from './log-api.ts';
-import type { QueueEntry } from './shared/queue.ts';
+import { messageModes, type QueueEntry } from './shared/queue.ts';
 import { projectLog, projectMessage } from './projection.ts';
 import { applyContentDelta, contentDelta } from './content-delta.ts';
 import { RecordLog, digest, entryId } from './record-log.ts';
 
 type StoredEntry =
   | SessionEntry
+  | (Omit<Extract<SessionEntry, { type: 'inbox-enqueued' }>, 'item'> & {
+      item: Omit<InboxItem, 'mode'> & { mode: 'followUp' };
+    })
   | (Pick<SessionEntry, 'version' | 'seq' | 'id' | 'parentId' | 'timestamp'> & {
       type: 'custom';
       namespace: unknown;
@@ -56,6 +59,7 @@ function messagePatch(base: NativeMessage[], actual: NativeMessage[]): MessagePa
 /** Session semantics layered over the generic durable record log. */
 export class SessionLog extends RecordLog<SessionEvent> implements SessionLogPort {
   private readonly schemas = new Map<string, ToolSchema[]>();
+  private paused = false;
   private readonly inboxIds = new Set<string>();
   private readonly pendingInbox = new Map<string, InboxItem>();
   private readonly inboxFailures: QueueEntry[] = [];
@@ -68,6 +72,8 @@ export class SessionLog extends RecordLog<SessionEvent> implements SessionLogPor
     sessionId: this.sessionId,
     entries: () => this.entries(),
     inbox: () => this.inbox(),
+    hasInbox: (id) => this.hasInbox(id),
+    inboxPaused: () => this.inboxPaused(),
     queue: () => this.queue(),
     branch: (leafId) => this.branch(leafId),
     append: (event, leafId) => this.append(event, leafId),
@@ -170,7 +176,9 @@ export class SessionLog extends RecordLog<SessionEvent> implements SessionLogPor
     if (!operational(entry) || run) this.cachedProjection = undefined;
     if (run) this.runEvents.push({ seq: entry.seq, parentId: entry.parentId, run });
     if (entry.type === 'tool-schema') this.schemas.set(entry.hash, entry.tools);
+    if (entry.type === 'inbox-paused') this.paused = true;
     if (entry.type === 'inbox-enqueued') {
+      if (entry.item.resume) this.paused = false;
       this.inboxIds.add(entry.item.id);
       this.pendingInbox.set(entry.item.id, entry.item);
     }
@@ -185,6 +193,14 @@ export class SessionLog extends RecordLog<SessionEvent> implements SessionLogPor
       }
     }
     if (entry.type === 'message' && entry.inboxId) this.pendingInbox.delete(entry.inboxId);
+  }
+
+  hasInbox(id: string) {
+    return this.inboxIds.has(id);
+  }
+
+  inboxPaused() {
+    return this.paused;
   }
 
   inbox() {
@@ -321,17 +337,6 @@ export class SessionLog extends RecordLog<SessionEvent> implements SessionLogPor
 
   /** Opening an existing log resolves interrupted work before it becomes writable. */
   recover() {
-    const previous = this.latestRun;
-    if (isRunning(previous)) {
-      for (const item of this.pendingInbox.values()) {
-        if (item.mode === 'steer')
-          this.append({
-            type: 'inbox-failed',
-            inboxId: item.id,
-            reason: 'The target run was interrupted before delivery',
-          });
-      }
-    }
     const tasks = new Map<string, Extract<SessionEntry, { type: 'task' }>>();
     for (const entry of this.records) if (entry.type === 'task') tasks.set(entry.task.id, entry);
     for (const { task, output, run } of tasks.values()) {
@@ -367,6 +372,7 @@ function queueEntry(item: InboxItem): QueueEntry {
   return {
     id: item.id,
     mode: item.mode,
+    origin: item.origin,
     state: 'pending',
     summary: (item.input?.userText || item.input?.attachments[0]?.name || item.text).slice(0, 180),
   };
@@ -455,11 +461,13 @@ function validateEvent(event: SessionEvent) {
       if (
         typeof event.item?.id !== 'string' ||
         !event.item.id ||
-        !['steer', 'followUp'].includes(event.item.mode) ||
+        !messageModes.includes(event.item.mode) ||
         typeof event.item.text !== 'string' ||
         !Array.isArray(event.item.images)
       )
         throw new Error('Invalid session inbox item');
+      return;
+    case 'inbox-paused':
       return;
     case 'inbox-consumed':
     case 'inbox-cancelled':
@@ -480,7 +488,6 @@ function validateEvent(event: SessionEvent) {
         !event.task ||
         typeof event.task.id !== 'string' ||
         typeof event.task.owner !== 'string' ||
-        !event.task.retained ||
         !['queued', 'running', 'waiting', 'completed', 'failed', 'cancelled', 'interrupted'].includes(
           event.task.state,
         ) ||
@@ -528,7 +535,9 @@ function ownsRecord(pluginId: string, instanceId: string) {
 
 /** Normalize historical record envelopes only after validating the original checksum. */
 function storedEntry(entry: StoredEntry): SessionEntry {
-  if (entry.type !== 'custom') return entry;
+  if (entry.type === 'inbox-enqueued' && entry.item.mode === 'followUp')
+    return { ...entry, item: { ...entry.item, mode: 'queue' } };
+  if (entry.type !== 'custom') return entry as SessionEntry;
   const { type: _type, namespace, data, ...identity } = entry;
   if (typeof namespace !== 'string' || !namespace) throw new Error('Invalid historical record namespace');
   if (namespace === 'agent.invalid-tool-calls')

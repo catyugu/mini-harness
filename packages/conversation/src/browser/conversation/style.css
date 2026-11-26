@@ -813,8 +813,15 @@ button.file-card:hover {
   max-height: 30vh;
   overflow: auto;
 }
-#queueSend {
+#messageMode {
   margin: 0;
+  max-width: 105px;
+}
+.message-row.async-message {
+  justify-content: flex-start;
+}
+.async-message .message {
+  border: 1px solid var(--border);
 }
 @media (max-width: 560px) {
   .composer-footer {

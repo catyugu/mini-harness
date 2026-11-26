@@ -1,8 +1,6 @@
 import { ScopedLayers, scopeOf, type ScopeKey } from '@mini-harness/plugin-api/scopes';
 import { toolNamePattern } from '@mini-harness/llm/vocabulary';
 import { Service, type Context } from 'mini-harness/cordis';
-import { randomUUID } from 'node:crypto';
-import { terminal, type TaskPort } from '@mini-harness/tasks/api';
 import { bindTool } from './invocation.ts';
 import { type ToolDefinition, type ToolPort, type ToolFactory, type ToolSelection } from './api.ts';
 interface ToolRegistration {
@@ -14,7 +12,6 @@ interface ToolRegistration {
 export class ToolRegistry {
   private readonly tools = new ScopedLayers<ToolRegistration>();
 
-  constructor(private readonly tasks: TaskPort) {}
   service(): ToolPort {
     const registry = this;
     return Service.track<ToolPort>({
@@ -36,11 +33,11 @@ export class ToolRegistry {
     const { name } = definition;
     const factory = 'resolve' in definition ? definition : undefined;
     if (!toolNamePattern.test(name)) throw new Error('Invalid tool name: ' + name);
-    const registration = randomUUID();
+    const lifetime = new AbortController();
+    const active = new Set<Promise<unknown>>();
     const registry = this;
     const unavailable = () => new Error('Tool is no longer available: ' + name);
-    let removed = false;
-    const expired = () => removed || owner?.fiber.signal.aborted === true;
+    const expired = () => lifetime.signal.aborted || owner?.fiber.signal.aborted === true;
     const entry: ToolRegistration = {
       name,
       visible: (resourceId) =>
@@ -55,8 +52,12 @@ export class ToolRegistry {
         };
         return bindTool(resolve(), {
           provider: owner,
-          registration,
-          resourceId: selection.resourceId,
+          signal: lifetime.signal,
+          track(work) {
+            active.add(work);
+            const done = () => active.delete(work);
+            void work.then(done, done);
+          },
           available: () => registry.selected(name, selection) === entry,
           resolve,
         });
@@ -64,14 +65,9 @@ export class ToolRegistry {
     };
     const remove = this.tools.add(scope, name, entry);
     return async () => {
-      removed = true;
       remove();
-      const active = registry.tasks
-        .list()
-        .filter((task) => task.metadata?.registration === registration && !terminal(task.state));
-      const settled = active.map((task) => registry.tasks.wait(task.id));
-      for (const task of active) registry.tasks.cancel(task.id, unavailable());
-      await Promise.allSettled(settled);
+      lifetime.abort(new DOMException(unavailable().message, 'AbortError'));
+      await Promise.allSettled(active);
     };
   }
 

@@ -1,8 +1,6 @@
 import type { Context } from 'mini-harness/cordis';
 import type { TaskPool } from './pool.ts';
-import type { TaskJob } from './batch.ts';
-export type { TaskJob } from './batch.ts';
-export type { TaskPool } from './pool.ts';
+export { TaskPool } from './pool.ts';
 
 export type TaskState =
   | 'queued'
@@ -22,8 +20,6 @@ export type TaskData = null | boolean | number | string | TaskData[] | { [key: s
 export interface TaskOptions<T = unknown> {
   /** Opaque resource lifetime key. */
   owner: string;
-  /** An inline child is drained before its parent settles. */
-  parentId?: string;
   name?: string;
   type?: string;
   metadata?: Readonly<Record<string, TaskData>>;
@@ -34,11 +30,9 @@ export interface TaskOptions<T = unknown> {
   pool?: TaskPool;
   /** Exclusive admission from submission to settlement, including waits. */
   lane?: string;
-  /** Inline callers can discard runtime history after terminal observation and result delivery. */
-  retain?: boolean;
-  /** Project the returned value into a serializable observation, only when retained. */
+  /** Project the returned value into a serializable observation. */
   project?(value: T): TaskData | undefined;
-  /** Synchronously commit a retained task transition before notifying observers. */
+  /** Synchronously commit a task transition before notifying observers. */
   commit?(record: TaskHistoryRecord): void;
   /** Observe this execution through settlement, without retaining the observer afterwards. */
   onEvent?(event: TaskEvent): void;
@@ -48,7 +42,6 @@ export interface TaskSnapshot {
   id: string;
   owner: string;
   lane?: string;
-  parentId?: string;
   name?: string;
   type?: string;
   metadata?: Readonly<Record<string, TaskData>>;
@@ -61,7 +54,6 @@ export interface TaskSnapshot {
   outputCursor: number;
   result?: TaskData;
   error?: string;
-  retained: boolean;
 }
 
 export type TaskEvent = {
@@ -83,8 +75,6 @@ export interface TaskContext {
   readonly signal: AbortSignal;
   update(progress: TaskData): void;
   write(output: string, channel?: string): void;
-  /** Call only at a whole-task wait point; reacquires admission before returning or throwing. */
-  suspend<T>(wait: (signal: AbortSignal) => Promise<T>): Promise<T>;
   /** Wait at a whole-task boundary, releasing pool capacity. */
   waitFor(id: string, signal?: AbortSignal): Promise<TaskSnapshot>;
 }
@@ -113,8 +103,6 @@ export type TaskHistoryReader = (id: string) => TaskHistoryRecord | undefined;
 export interface TaskPort {
   readonly sealed: boolean;
   active(lane: string): TaskHandle | undefined;
-  pool(limit: number): TaskPool;
-  batch(jobs: Iterable<TaskJob>, options: { signal: AbortSignal; limit: number }): Promise<void>;
   start<T>(options: TaskOptions<T>, execute: (context: TaskContext) => Promise<T>): TaskHandle<T>;
   get(id: string): TaskSnapshot | undefined;
   /** Active tasks and bounded recent history; older durable records remain queryable by ID. */

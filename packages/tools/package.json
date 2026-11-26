@@ -6,6 +6,7 @@
   "exports": {
     "./api": "./src/api.ts",
     "./execution": "./src/execution.ts",
+    "./invocation": "./src/invocation.ts",
     "./manifest": "./src/manifest.ts",
     "./registry": "./src/registry.ts"
   },
@@ -16,13 +17,11 @@
     ],
     "profileModules": {
       "@mini-harness/tools": "./src/manifest.ts",
-      "@mini-harness/tool-executor": "./src/execution.ts#executor",
-      "@mini-harness/task-control": "./src/task-control.ts"
+      "@mini-harness/tool-executor": "./src/execution.ts#executor"
     }
   },
   "dependencies": {
     "@mini-harness/llm": "workspace:*",
-    "@mini-harness/plugin-api": "workspace:*",
-    "@mini-harness/tasks": "workspace:*"
+    "@mini-harness/plugin-api": "workspace:*"
   }
 }

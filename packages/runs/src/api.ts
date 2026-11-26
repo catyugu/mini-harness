@@ -1,7 +1,9 @@
 import type { ThinkingLevel, ModelChoice } from '@mini-harness/llm/vocabulary';
 import type { Attachment, InputSource } from '@mini-harness/input/message';
-import type { RunEvent, StreamEvent, ToolProgress } from './stream.ts';
-import type { QueueEntry } from '@mini-harness/sessions/queue';
+import type { RunEvent, ToolProgress } from './stream.ts';
+export { defaultMessageMode, messageModes } from '@mini-harness/sessions/queue';
+export type { MessageMode, MessageOrigin } from '@mini-harness/sessions/queue';
+import type { MessageMode, MessageOrigin, QueueEntry } from '@mini-harness/sessions/queue';
 import type { TaskHandle, TaskOptions } from '@mini-harness/tasks/api';
 import type { RunInfo } from '@mini-harness/sessions/run-state';
 
@@ -12,16 +14,27 @@ export interface RunInput {
   attachments?: Attachment[];
 }
 
-export interface RunSubmission extends Pick<TaskOptions, 'signal' | 'pool' | 'metadata' | 'provider'> {
-  source?: InputSource;
-  emit?(event: StreamEvent): void;
+export interface RunSubmission extends RunInput {
+  mode?: MessageMode;
+  origin?: MessageOrigin;
+  messageId?: string;
 }
+
+export interface SendReceipt {
+  messageId: string;
+  taskId?: string;
+  run?: RunInfo;
+  queue: QueueEntry[];
+}
+
+export type RunPolicy = Pick<TaskOptions, 'pool' | 'provider' | 'metadata'>;
 
 export interface RunPort {
   readonly events: EventTarget;
   current(id: string): TaskHandle | undefined;
   activity(id: string): { partial?: string; tools: ToolProgress[] };
-  submit(id: string, input: RunInput, options?: RunSubmission): TaskHandle<string>;
+  send(id: string, input: RunSubmission): SendReceipt;
+  stop(id: string): boolean;
   reviseAndStart(
     id: string,
     input: {
@@ -54,16 +67,6 @@ export interface RunPort {
     emit: (event: RunEvent) => void,
     end?: () => void,
   ): () => void;
-  queueInput(
-    id: string,
-    input: {
-      message: string;
-      mode: 'steer' | 'followUp';
-      model?: ModelChoice;
-      attachments?: Attachment[];
-      thinkingLevel?: ThinkingLevel | null;
-    },
-  ): QueueEntry[];
   cancelQueue(id: string, itemId?: string, signal?: AbortSignal): Promise<QueueEntry[]>;
   compact(id: string): Promise<void>;
 }
@@ -71,6 +74,9 @@ export interface RunPort {
 declare module 'mini-harness/cordis' {
   interface Context {
     harnessRuns: RunPort;
+  }
+  interface Events {
+    'runs/policy'(sessionId: string): RunPolicy | undefined;
   }
 }
 

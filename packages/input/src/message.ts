@@ -24,4 +24,4 @@ export interface PreparedMessage {
   images?: ImageInput[];
 }
 
-export type InputSource = 'user' | 'agent' | 'plugin';
+export type InputSource = 'user' | 'agent' | 'plugin' | 'task';

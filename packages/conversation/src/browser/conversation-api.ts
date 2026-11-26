@@ -1,5 +1,7 @@
 import type { Conversation, ConversationView } from '../shared/api.ts';
 import type { ConversationPermission } from '@mini-harness/sessions/identity';
+import type { MessageMode } from '@mini-harness/sessions/queue';
+import type { SendReceipt } from '@mini-harness/runs/api';
 import type { ToolProgress } from '@mini-harness/runs/stream';
 import type { ModelChoice, ThinkingLevel } from '@mini-harness/llm/vocabulary';
 import type { Attachment } from '@mini-harness/input/message';
@@ -37,9 +39,10 @@ export interface ConversationState {
   run?: RunInfo;
   partial: string;
   tools: readonly ToolProgress[];
+  mode: MessageMode;
   queue: readonly ConversationView['queue'][number][];
   interaction: {
-    operation?: 'open' | 'submit' | 'queue' | 'compact';
+    operation?: 'open' | 'submit' | 'compact';
     cancelling?: boolean;
     status: string;
     error?: boolean;
@@ -52,12 +55,12 @@ export interface ConversationController {
   activate(id: string, revealWorkspace?: boolean): Promise<boolean>;
   clear(): void;
   report(error: Error): void;
-  submit(input: ConversationSubmission, created?: (sessionId: string) => void): Promise<RunInfo>;
+  submit(
+    input: ConversationSubmission,
+    created?: (sessionId: string) => void,
+  ): Promise<Pick<SendReceipt, 'run' | 'messageId'> | { run: RunInfo }>;
+  chooseMode(mode: MessageMode): void;
   retryInput(): Promise<RetryInput | null>;
-  queue(
-    input: Omit<ConversationSubmission, 'revision' | 'permission'>,
-    mode?: 'steer' | 'followUp',
-  ): Promise<void>;
   cancel(): Promise<void>;
   cancelQueue(id?: string): Promise<void>;
   setPermission(permission: ConversationPermission): Promise<void>;

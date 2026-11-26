@@ -1,7 +1,9 @@
 import { browserPluginId, browserPluginSettings } from '@mini-harness/ui-runtime/plugin-settings';
 import type { Context } from 'mini-harness/cordis';
+import { messageModes, type MessageMode } from '@mini-harness/sessions/queue';
+import { modeLabel } from './queue-view.ts';
 import { createConversationController } from './controller.ts';
-import { fromMarkup, required, toggle } from '@mini-harness/ui-primitives/primitives';
+import { fromMarkup, required } from '@mini-harness/ui-primitives/primitives';
 import { mountApprovals } from './approval-panel.ts';
 import { mountConversationLayout } from './view.ts';
 
@@ -18,20 +20,22 @@ const setup = (ctx: Context) => {
     ctx.miniSettingsRegistry.register(
       browserPluginId(ctx),
       {
-        id: 'queue-mode',
+        id: 'message-mode',
         section: { title: 'General', icon: 'settings', order: 20 },
         render({ bind }) {
           const content = fromMarkup(
-            '<div class="settings-preference"><label class="switch-line"><span><strong>Add instructions</strong><small>When a response is running, queued messages steer the current task. Turn off to send them after the response as follow-ups.</small></span></label></div>',
+            '<div class="settings-preference"><label class="switch-line"><span><strong>Add instructions</strong><small>Default sending mode for conversations without a selection.</small></span></label></div>',
           );
-          const control = toggle('Add instructions', false);
+          const control = document.createElement('select');
+          control.setAttribute('aria-label', 'Add instructions');
+          for (const mode of messageModes) control.add(new Option(modeLabel[mode], mode));
           required(content.querySelector('label')).append(control);
           content.append(
-            bind<'steer' | 'followUp'>(control, 'queueMode', {
+            bind<MessageMode>(control, 'messageMode', {
               read: (value) => {
-                control.checked = value === 'steer';
+                control.value = value;
               },
-              write: () => (control.checked ? 'steer' : 'followUp'),
+              write: () => control.value as MessageMode,
             }),
           );
           return content;

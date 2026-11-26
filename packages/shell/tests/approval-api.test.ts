@@ -1,5 +1,5 @@
 import { sendRun } from '../../../test/support/runs.ts';
-import { startTool } from '@mini-harness/tools/execution';
+import { runTool } from '@mini-harness/tools/execution';
 import { isViewMessage } from '@mini-harness/sessions/message';
 import { conversationTools } from '@mini-harness/runs/tool-selection';
 import { expectPresent } from '../../../test/support/required.ts';
@@ -293,31 +293,87 @@ test('independent shell calls use one task, retain output channels and do not du
     entries: { shell: { disabled: false, config: { mode: 'host' } } },
   });
   const session = ctx.harnessSessions.create({ permission: 'fullAccess' });
+  ctx.harnessRuns.stop(session.id);
   const tool = ctx.harnessTools
     .list({ resourceId: session.id, scope: ctx.harnessSessions.runScope(session.id) })
-    .find(({ name }) => name === 'sandbox_shell');
+    .find(({ name }) => name === 'start_background');
   assert.ok(tool);
-  const handle = startTool(
-    ctx.harnessTasks,
-    tool,
-    'background-shell',
-    { command: 'echo task-output' },
-    { ...ctx.harnessSessions.task(session.id), retain: true },
-  );
-  const result = await handle.result;
-  assert.equal(result.details?.exitCode, 0);
-  const task = ctx.harnessTasks.get(handle.id);
-  assert.equal(task?.state, 'completed');
+  const receipt = await runTool(tool, 'background-shell', {
+    tool: 'sandbox_shell',
+    arguments: { command: 'echo task-output' },
+  });
+  const id = String(receipt.details?.taskId);
+  const task = await ctx.harnessTasks.wait(id);
+  assert.equal(task.state, 'completed');
+  assert.equal((task.result as { details: { exitCode: number } }).details.exitCode, 0);
   assert.equal(ctx.harnessTasks.list('session:' + session.id).length, 1);
   assert.match(
     ctx.harnessTasks
-      .readOutput(handle.id)
+      .readOutput(id)
       ?.chunks.filter(({ channel }) => channel === 'stdout')
       .map(({ text }) => text)
       .join('') ?? '',
     /task-output/,
   );
-  assert.doesNotMatch(JSON.stringify(task?.result), /task-output/);
+  assert.doesNotMatch(JSON.stringify(task.result), /task-output/);
   await ctx.harnessSessions.delete([session.id]);
-  assert.equal(ctx.harnessTasks.get(handle.id), undefined);
+  assert.equal(ctx.harnessTasks.get(id), undefined);
 });
+
+test(
+  'stopping a conversation leaves the independent shell approval pending',
+  { timeout: 15000 },
+  async (t) => {
+    let release!: () => void;
+    let started!: () => void;
+    const hold = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const entered = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    t.after(() => release());
+    const { app, request } = await fixture(t, async ({ messages }) => {
+      if (messages.at(-1)?.content === 'Hold foreground') {
+        started();
+        await hold;
+      }
+      return 'Done';
+    });
+    const ctx = app.runtime.plugins.ctx;
+    await app.runtime.configuration.update({
+      entries: { shell: { disabled: false, config: { mode: 'host' } } },
+    });
+    const { id } = ctx.harnessSessions.create();
+    const foreground = sendRun(ctx.harnessRuns, id, 'Hold foreground');
+    const cancelled = assert.rejects(foreground, /Stopped by the user/);
+    await entered;
+    const background = expectPresent(
+      conversationTools(ctx, id).find(({ name }) => name === 'start_background'),
+      'background entry',
+    );
+    const receipt = await runTool(background, 'independent-approval', {
+      tool: 'sandbox_shell',
+      arguments: { command: 'echo independently-approved' },
+    });
+    const taskId = String(receipt.details?.taskId);
+    const approvals = ctx.harnessApprovals;
+    const requestId = (
+      await waitUntil(
+        () => approvals.list(),
+        (list) => list.length === 1,
+      )
+    )[0].id;
+    assert.equal(ctx.harnessRuns.stop(id), true);
+    await cancelled;
+    assert.equal(approvals.list().at(0)?.id, requestId);
+    assert.equal((await request('/approvals', 'POST', { id: requestId, allow: true })).status, 200);
+    assert.equal((await ctx.harnessTasks.wait(taskId)).state, 'completed');
+    await waitUntil(
+      () => ctx.harnessSessions.log(id).inbox(),
+      (items) => items.some(({ origin }) => origin?.taskId === taskId),
+    );
+    assert.equal(ctx.harnessRuns.current(id), undefined);
+    release();
+  },
+);

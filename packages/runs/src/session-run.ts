@@ -8,7 +8,7 @@ import type { InputContext, ModelFailure, StepContext } from '@mini-harness/agen
 import { DomainError } from '@mini-harness/platform/errors';
 import { isDeepStrictEqual } from 'node:util';
 import type { SessionCatalog, SessionLifecycle, SessionStore } from '@mini-harness/sessions/records';
-import type { ModelChoice, ThinkingLevel } from '@mini-harness/llm/vocabulary';
+import type { ModelChoice } from '@mini-harness/llm/vocabulary';
 import type { SessionRecord } from '@mini-harness/sessions/identity';
 import {
   validateNativeMessage,
@@ -19,7 +19,7 @@ import {
   type ToolCallPart,
 } from '@mini-harness/llm/api';
 import type { AgentEvent } from './stream.ts';
-import type { ImageInput, InputSource, PreparedMessage } from '@mini-harness/input/message';
+import type { MessageOrigin, MessageMode } from '@mini-harness/sessions/queue';
 import type { SessionLogPort, InboxItem } from '@mini-harness/sessions/log-api';
 import { Inbox } from './inbox.ts';
 import { isToolContent, toolResultState } from '@mini-harness/tools/api';
@@ -57,16 +57,12 @@ const textOf = (message: NativeAssistantMessage) =>
 interface SessionPrompt {
   signal: AbortSignal;
   task: TaskContext;
-  source?: InputSource;
-  submissionId?: string;
-  choice?: ModelChoice;
-  images?: ImageInput[];
-  input?: PreparedMessage;
   fallback?: ModelChoice;
-  beginSubmission?(): void;
-  thinkingLevel?: ThinkingLevel | null;
   changed?: (path: string) => void;
-  revision?: { parentId: string | null; expectedLeafId: string | null };
+  revision?: Pick<InboxItem, 'text' | 'images' | 'input' | 'model' | 'thinkingLevel'> & {
+    parentId: string | null;
+    expectedLeafId: string | null;
+  };
 }
 
 export class SessionRun {
@@ -77,7 +73,7 @@ export class SessionRun {
   ) {}
 
   /** Never retry an unknown tool outcome after restart or provider failure. */
-  private closeUnfinishedTools(log: SessionLogPort) {
+  private closeUnfinishedTools(log: SessionLogPort, cancelled = false) {
     const pending = new Map<string, ToolCallPart>();
     for (const message of log.projection().contextMessages) {
       if (message.role === 'assistant')
@@ -86,89 +82,85 @@ export class SessionRun {
     }
     if (!pending.size) return;
     const branch = new Set(log.branch().map(({ id }) => id));
-    const executed = new Set(
+    const executed = new Map(
       log
         .entries()
         .flatMap((entry) =>
           entry.type === 'tool-execution' && entry.parentId !== null && branch.has(entry.parentId)
-            ? [entry.result.toolCallId]
+            ? [[entry.result.toolCallId, entry] as const]
             : [],
         ),
     );
-    for (const call of pending.values())
-      log.append({
-        type: 'message',
-        message: toolFailure(
-          call,
-          executed.has(call.id)
-            ? 'The tool completed without a recorded model-visible result. The tool was not retried.'
-            : 'Execution was interrupted before a durable result was recorded. The tool was not retried.',
-        ),
-      });
+    for (const call of pending.values()) {
+      const execution = executed.get(call.id);
+      if (execution) log.acceptToolResult(execution.id, execution.result.content);
+      else
+        log.append({
+          type: 'message',
+          message: toolFailure(
+            call,
+            cancelled ? 'Tool call interrupted' : 'Execution stopped before a durable result was recorded.',
+            'cancelled',
+          ),
+        });
+    }
   }
 
   async prompt(
     ctx: Context,
     record: SessionRecord,
-    prompt: string,
     emit: (event: AgentEvent) => void | Promise<void>,
     options: SessionPrompt,
   ): Promise<string> {
-    const { id } = record,
-      {
-        signal,
-        choice,
-        images = [],
-        input = { userText: prompt, attachments: [] },
-        source = 'user',
-        thinkingLevel,
-        revision,
-        changed,
-        submissionId,
-        fallback,
-        beginSubmission,
-      } = options;
+    const { id } = record;
+    const { signal, task, revision, changed, fallback } = options;
+    const submissionId = task.id;
     signal.throwIfAborted();
     const log = this.sessions.log(id);
     if (!revision) this.closeUnfinishedTools(log);
     const inbox = new Inbox(log);
     type Input = Pick<InboxItem, 'text' | 'images' | 'input' | 'model' | 'thinkingLevel'>;
-    const manual: Input = { text: prompt, images, input, model: choice, thinkingLevel };
 
-    const selection = (item: Input, previous = log.projection(), queued = false) => {
+    const selection = (item: Input, previous = log.projection(), preferStored = true) => {
       const models = requireService(ctx, 'harnessModels');
       const selected = selectModel(models, {
-        explicit: queued ? (item.model ?? previous.model ?? fallback) : item.model,
-        stored: queued ? undefined : previous.model,
-        fallback: queued ? undefined : fallback,
-        preferStored: Boolean(record.parentId) || source !== 'user',
+        explicit: item.model,
+        stored: previous.model,
+        fallback,
+        preferStored,
         thinkingLevel: item.thinkingLevel,
         inherited: previous.thinkingLevel,
-        unavailable: queued ? 'The queued model is no longer available' : undefined,
       });
-      if (queued) {
-        assertImageInput(models.capabilities(selected.model), item.images.length, true);
-        validateNativeMessage({
-          role: 'user',
-          content: [{ type: 'text', text: item.text }, ...item.images],
-          timestamp: 0,
-        });
-      }
+      assertImageInput(models.capabilities(selected.model), item.images.length);
+      validateNativeMessage({
+        role: 'user',
+        content: [{ type: 'text', text: item.text }, ...item.images],
+        timestamp: 0,
+      });
       return selected;
     };
-    const queuedSelection = (item: InboxItem) => selection(item, log.projection(), true);
+    const queuedSelection = (item: InboxItem) =>
+      selection(
+        item,
+        log.projection(),
+        Boolean(record.parentId || item.mode === 'steer' || item.origin?.source !== 'user'),
+      );
 
-    const prepare = async (item: Input, selected: ReturnType<typeof selection>, inputSource: InputSource) => {
+    const prepare = async (item: Input, selected: ReturnType<typeof selection>, origin: MessageOrigin) => {
       const presentation = item.input ?? { userText: item.text, attachments: [] };
       const context: InputContext = {
         sessionId: id,
         model: selected.model,
-        source: inputSource,
+        source: origin.source,
         signal,
         original: { ...presentation, images: item.images },
         cwd: this.sessions.workspacePath(id),
       };
-      const initial: NativeUserMessage['content'] = [{ type: 'text', text: item.text }, ...item.images];
+      const sender = origin.senderSessionId ? ' from session ' + origin.senderSessionId : '';
+      const taskRef = origin.taskId ? ' (task ' + origin.taskId + ')' : '';
+      const text =
+        origin.source === 'user' ? item.text : '[' + origin.source + sender + taskRef + '] ' + item.text;
+      const initial: NativeUserMessage['content'] = [{ type: 'text', text }, ...item.images];
       const content = await applyTransforms(
         ctx.events.listeners('agent/prepare-input', scopeTarget(ctx)),
         initial,
@@ -192,7 +184,12 @@ export class SessionRun {
       };
     };
 
-    const commit = async (prepared: Awaited<ReturnType<typeof prepare>>, inboxId?: string) => {
+    const commit = async (
+      item: Input,
+      prepared: Awaited<ReturnType<typeof prepare>>,
+      origin: MessageOrigin,
+      inboxId?: string,
+    ) => {
       signal.throwIfAborted();
       this.sessions.assertAvailable(id);
       const edit = inboxId ? undefined : revision;
@@ -203,189 +200,201 @@ export class SessionRun {
         selection: prepared.selection,
         submissionId,
         inboxId,
+        origin,
       } as const;
+      const first = log
+        .projection(edit?.parentId)
+        .timeline.every((item) => item.type !== 'message' || item.role !== 'user');
       const entry = edit ? log.revise(event, edit.parentId, edit.expectedLeafId) : log.append(event);
       await emit({
         type: 'user',
-        source: inboxId ? 'user' : source,
+        source: origin.source,
         ...prepared.selection,
         revised: Boolean(edit),
         message: displayMessage(entry, event.message, submissionId),
       });
+      if (record.titleSource === 'auto' && first && origin.source === 'user') {
+        const title = item.input?.userText || item.input?.attachments[0]?.name || item.text;
+        this.sessions.rename(id, title.slice(0, 72), 'auto');
+      }
     };
-    const deliver = (mode: InboxItem['mode']) =>
+    const originOf = (item: InboxItem): MessageOrigin => item.origin ?? { source: 'user' };
+    const deliver = (modes: MessageMode[], requireInput = false) =>
       inbox.deliver(
-        mode,
+        modes,
         signal,
-        (item) => prepare(item, queuedSelection(item), 'user'),
-        (item, prepared) => commit(prepared, item.id),
+        (item) => prepare(item, queuedSelection(item), originOf(item)),
+        (item, prepared) => commit(item, prepared, originOf(item), item.id),
+        requireInput,
       );
-    // Drain recovered follow-ups as turns before committing the new manual input.
-    let submitted = false;
-    const submit = async () => {
-      signal.throwIfAborted();
-      beginSubmission?.();
-      const previous = log.projection(revision?.parentId);
-      await commit(await prepare(manual, selection(manual, previous), source));
-      if (
-        record.titleSource === 'auto' &&
-        !previous.timeline.some((item) => item.type === 'message' && item.role === 'user')
-      )
-        this.sessions.rename(
-          id,
-          (input.userText || input.attachments[0]?.name || prompt).slice(0, 72),
-          'auto',
-        );
-      if (revision) this.closeUnfinishedTools(log);
-      submitted = true;
-    };
-    if (revision || !(await deliver('followUp'))) await submit();
-    const answer = await requireService(ctx, 'harnessAgent').run(ctx, {
-      signal,
-      task: options.task,
-      retry: (failure) => retryModel(ctx, { ...failure, sessionId: id }),
-      onEvent: (event) => {
-        if (event.type === 'request') {
-          log.recordRequest(event.request);
-          return;
-        }
-        if (event.type !== 'assistant') {
-          emit(event);
-          return;
-        }
-        const { diagnostic, message: result } = event;
-        if (diagnostic) log.append({ type: 'diagnostic', code: diagnostic.code, data: diagnostic.message });
-        const assistant = log.append({ type: 'message', message: result });
-        emit({
-          type: 'assistant-end',
-          message: displayMessage(assistant, result, submissionId),
-        });
-      },
-      afterTurn: async (calls) => {
-        if (await deliver('steer')) return 'continue';
-        if (calls.length) return;
-        if (await deliver('followUp')) return 'continue';
-        if (!submitted) {
-          await submit();
-          return 'restart';
-        }
-      },
-      prepare: async (turn) => {
-        let current = log.projection();
-        const model = current.model;
-        if (!model) throw new Error('Configure a model before sending a message');
-        const capabilities = requireService(ctx, 'harnessModels').capabilities(model);
-        const cwd = this.sessions.workspacePath(id);
-        const step: StepContext = { sessionId: id, turn, phase: 'turn', cwd, model, signal };
-        if (
-          capabilities &&
-          ctx.get('harnessCompaction')?.shouldCompact(current.contextMessages, capabilities)
-        ) {
-          await this.compactLog(ctx, id, log, signal, true);
-          current = log.projection();
-        }
-        const executor = requireService(ctx, 'harnessToolExecutor');
-        const tools = conversationTools(ctx, id);
-        const advertisedTools = new Map(tools.map((tool) => [tool.name, tool]));
-        const toolMetadata = tools.map(({ name, description, parameters, label, metadata }) => ({
-          name,
-          description,
-          parameters,
-          label,
-          metadata,
-        }));
-        const systemPrompt =
-          (await ctx.get('harnessPrompt')?.build({ sessionId: id, cwd, tools: toolMetadata, signal })) ?? '';
-        const request = await this.prepareRequest(
-          ctx,
-          step,
-          { systemPrompt, messages: current.contextMessages, thinkingLevel: current.thinkingLevel },
-          (content) => {
-            for (const [name, tool] of advertisedTools)
-              if (!toolAvailable(tool)) advertisedTools.delete(name);
-            const available = toolMetadata
-              .filter(({ name }) => advertisedTools.has(name))
-              .map(({ name, description, parameters }) => ({ name, description, parameters }));
-            return executor.present(content, available, { model: step.model, turn, signal });
-          },
-        );
+    if (revision) {
+      const origin = { source: 'user' } as const;
+      await commit(
+        revision,
+        await prepare(revision, selection(revision, log.projection(revision.parentId)), origin),
+        origin,
+      );
+      this.closeUnfinishedTools(log);
+    } else {
+      if (!(await deliver(['interrupt', 'steer', 'queue'], true))) return '';
+      while (await deliver(['interrupt'])) {
+        // Coalesce messages accepted during the same interruption before requesting a model turn.
+      }
+    }
+    const answer = await requireService(ctx, 'harnessAgent')
+      .run(ctx, {
+        signal,
+        retry: (failure) => retryModel(ctx, { ...failure, sessionId: id }),
+        onEvent: (event) => {
+          if (event.type === 'phase') {
+            task.update({ phase: event.phase, turn: event.turn });
+            return;
+          }
+          if (event.type === 'request') {
+            log.recordRequest(event.request);
+            return;
+          }
+          if (event.type !== 'assistant') {
+            emit(event);
+            return;
+          }
+          const { diagnostic, message: result } = event;
+          if (diagnostic) log.append({ type: 'diagnostic', code: diagnostic.code, data: diagnostic.message });
+          const assistant = log.append({ type: 'message', message: result });
+          emit({
+            type: 'assistant-end',
+            message: displayMessage(assistant, result, submissionId),
+          });
+        },
+        afterTurn: async () => {
+          if (await deliver(['steer'])) return 'continue';
+        },
+        prepare: async (turn) => {
+          let current = log.projection();
+          const model = current.model;
+          if (!model) throw new Error('Configure a model before sending a message');
+          const capabilities = requireService(ctx, 'harnessModels').capabilities(model);
+          const cwd = this.sessions.workspacePath(id);
+          const step: StepContext = { sessionId: id, turn, phase: 'turn', cwd, model, signal };
+          if (
+            capabilities &&
+            ctx.get('harnessCompaction')?.shouldCompact(current.contextMessages, capabilities)
+          ) {
+            await this.compactLog(ctx, id, log, signal, true);
+            current = log.projection();
+          }
+          const executor = requireService(ctx, 'harnessToolExecutor');
+          const tools = conversationTools(ctx, id);
+          const advertisedTools = new Map(tools.map((tool) => [tool.name, tool]));
+          const toolMetadata = tools.map(({ name, description, parameters, label, metadata }) => ({
+            name,
+            description,
+            parameters,
+            label,
+            metadata,
+          }));
+          const systemPrompt =
+            (await ctx.get('harnessPrompt')?.build({ sessionId: id, cwd, tools: toolMetadata, signal })) ??
+            '';
+          const request = await this.prepareRequest(
+            ctx,
+            step,
+            { systemPrompt, messages: current.contextMessages, thinkingLevel: current.thinkingLevel },
+            (content) => {
+              for (const [name, tool] of advertisedTools)
+                if (!toolAvailable(tool)) advertisedTools.delete(name);
+              const available = toolMetadata
+                .filter(({ name }) => advertisedTools.has(name))
+                .map(({ name, description, parameters }) => ({ name, description, parameters }));
+              return executor.present(content, available, { model: step.model, turn, signal });
+            },
+          );
 
-        const hooks = ctx.events.listeners('agent/tool-result', scopeTarget(ctx));
-        return {
-          request,
-          executor,
-          tools: advertisedTools,
-          execution: {
-            resourceId: id,
-            start(call) {
-              if (signal.aborted) return { outcome: 'skipped', reason: 'Agent run cancelled' };
-              if (inbox.hasValid('steer', queuedSelection))
-                return { outcome: 'skipped', reason: 'Skipped because a steering message arrived.' };
-              const tool = advertisedTools.get(call.name);
-              if (tool && ctx.get('harnessToolPolicy')?.(id, tool) === false)
-                return { outcome: 'denied', reason: 'Tool denied by conversation policy: ' + call.name };
-              emit({
-                type: 'tool',
-                id: call.id,
-                name: call.name,
-                state: 'running',
-                arguments: call.arguments,
-              });
-              return undefined;
-            },
-            update(call, value) {
-              const pending = value.details?.approvalPending;
-              if (pending === undefined && hooks.length) return;
-              emit({
-                type: 'tool',
-                id: call.id,
-                name: call.name,
-                state: pending === true ? 'approval' : 'running',
-                arguments: call.arguments,
-                content: hooks.length ? undefined : value.content,
-              });
-            },
-          },
-          async deliver(output, toolSignal, call) {
-            let executionId: string | undefined;
-            let transformError: Error | undefined;
-            if (toolResultState(output) === 'finished' && hooks.length) {
-              executionId = log.append({ type: 'tool-execution', result: output }).id;
-              try {
-                const resultContext = { ...step, signal: toolSignal, tool: call.name, callId: call.id };
-                const content = await applyTransforms(hooks, output.content, resultContext);
-                if (!isToolContent(content)) throw new Error('Invalid tool result content');
-                output = { ...output, content };
-              } catch (error) {
-                output = {
-                  ...toolFailure(
-                    call,
-                    'Tool execution completed, but the model-visible result transformation failed.',
-                  ),
-                  elapsedMs: output.elapsedMs,
-                };
-                transformError = new Error('Could not transform the result of ' + call.name, {
-                  cause: error,
+          const hooks = ctx.events.listeners('agent/tool-result', scopeTarget(ctx));
+          return {
+            request,
+            executor,
+            tools: advertisedTools,
+            execution: {
+              executionId: task.id,
+              async waitFor(id, signal) {
+                await task.waitFor(id, signal);
+              },
+              start(call) {
+                if (signal.aborted) return { outcome: 'skipped', reason: 'Agent run cancelled' };
+                if (inbox.hasValid('steer', queuedSelection))
+                  return { outcome: 'skipped', reason: 'Skipped because a steering message arrived.' };
+                const tool = advertisedTools.get(call.name);
+                if (tool && ctx.get('harnessToolPolicy')?.(id, tool) === false)
+                  return { outcome: 'denied', reason: 'Tool denied by conversation policy: ' + call.name };
+                emit({
+                  type: 'tool',
+                  id: call.id,
+                  name: call.name,
+                  state: 'running',
+                  arguments: call.arguments,
                 });
+                return undefined;
+              },
+              update(call, value) {
+                const pending = value.details?.approvalPending;
+                if (pending === undefined && hooks.length) return;
+                emit({
+                  type: 'tool',
+                  id: call.id,
+                  name: call.name,
+                  state: pending === true ? 'approval' : 'running',
+                  arguments: call.arguments,
+                  content: hooks.length ? undefined : value.content,
+                });
+              },
+            },
+            async deliver(output, toolSignal, call) {
+              let executionId: string | undefined;
+              let transformError: Error | undefined;
+              if (toolResultState(output) === 'finished' && hooks.length) {
+                executionId = log.append({ type: 'tool-execution', result: output }).id;
+                try {
+                  const resultContext = { ...step, signal: toolSignal, tool: call.name, callId: call.id };
+                  const content = await applyTransforms(hooks, output.content, resultContext);
+                  if (!isToolContent(content)) throw new Error('Invalid tool result content');
+                  output = { ...output, content };
+                } catch (error) {
+                  if (!toolSignal.aborted) {
+                    output = {
+                      ...toolFailure(
+                        call,
+                        'Tool execution completed, but the model-visible result transformation failed.',
+                      ),
+                      elapsedMs: output.elapsedMs,
+                    };
+                    transformError = new Error('Could not transform the result of ' + call.name, {
+                      cause: error,
+                    });
+                  }
+                }
               }
-            }
-            const entry =
-              executionId && !transformError
-                ? log.acceptToolResult(executionId, output.content)
-                : log.append({ type: 'message', message: output, elapsedMs: output.elapsedMs });
-            const details = output.details;
-            const state = toolResultState(output);
-            if (state === 'finished' && typeof details?.changedPath === 'string')
-              changed?.(details.changedPath);
-            emit({
-              type: 'tool-end',
-              message: displayMessage(entry, output, submissionId, call.arguments),
-            });
-            if (transformError) throw transformError;
-          },
-        };
-      },
-    });
+              const entry =
+                executionId && !transformError
+                  ? log.acceptToolResult(executionId, output.content)
+                  : log.append({ type: 'message', message: output, elapsedMs: output.elapsedMs });
+              const details = output.details;
+              const state = toolResultState(output);
+              if (state === 'finished' && typeof details?.changedPath === 'string')
+                changed?.(details.changedPath);
+              emit({
+                type: 'tool-end',
+                message: displayMessage(entry, output, submissionId, call.arguments),
+              });
+              if (transformError) throw transformError;
+            },
+          };
+        },
+      })
+      .catch((error) => {
+        if (signal.aborted) this.closeUnfinishedTools(log, true);
+        throw error;
+      });
     const text = textOf(answer);
     emit({ type: 'complete', text });
     return text;

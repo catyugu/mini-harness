@@ -54,7 +54,9 @@ export interface SessionHistory {
   };
   inspectLog<T>(
     id: string,
-    read: (log: Pick<SessionLogPort, 'entries' | 'branch' | 'projection' | 'queue'>) => T,
+    read: (
+      log: Pick<SessionLogPort, 'entries' | 'branch' | 'projection' | 'queue' | 'inbox' | 'inboxPaused'>,
+    ) => T,
     strict?: boolean,
   ): T | undefined;
   runSummary(id: string): RunInfo | undefined;

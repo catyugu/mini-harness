@@ -1,5 +1,4 @@
 import type { Context } from 'mini-harness/cordis';
-import type { TaskContext, TaskData, TaskOptions, TaskSnapshot } from '@mini-harness/tasks/api';
 import type { ScopeKey } from '@mini-harness/plugin-api/scopes';
 import type { Static, TSchema } from 'typebox';
 import type { TextPart, ImagePart, NativeToolMessage } from '@mini-harness/llm/api';
@@ -31,8 +30,10 @@ export interface ToolDefinition<Arguments = Record<string, any>> extends ToolSch
   metadata?: Record<string, unknown>;
   /** Calls are serial unless this returns true for the validated arguments. */
   isConcurrencySafe?(args: Arguments): boolean;
-  /** Optional compact serializable projection for retained calls. */
-  projectResult?(result: ToolResult): TaskData;
+  /** Allow independent execution through start_background. */
+  background?: boolean;
+  /** Compact observation for independent execution. */
+  projectResult?(result: ToolResult): Record<string, unknown>;
   execute(args: Arguments, context: ToolContext): Promise<ToolResult>;
 }
 
@@ -49,20 +50,22 @@ export interface ToolSelection {
 
 export interface ToolContext {
   callId: string;
-  task: TaskContext;
+  executionId?: string;
   signal: AbortSignal;
   update(update: ToolUpdate): void;
-  /** For a serial tool, wait on behalf of the enclosing scheduling task. */
-  waitFor(id: string): Promise<TaskSnapshot>;
+  write(text: string, channel?: string): void;
+  report?(message: string): void;
+  /** For a serial tool, wait on behalf of the enclosing execution. */
+  waitFor?(id: string): Promise<void>;
 }
 
-export interface ToolInvocation
-  extends Partial<Pick<TaskOptions, 'owner' | 'signal' | 'retain' | 'metadata' | 'commit'>> {
-  resourceId?: string;
-  parentTask?: TaskContext;
-  /** Resolve a factory against a long-lived composition when starting independent work. */
-  context?: Context;
+export interface ToolInvocation {
+  signal?: AbortSignal;
+  executionId?: string;
   onUpdate?(update: ToolUpdate): void;
+  write?(text: string, channel?: string): void;
+  report?(message: string): void;
+  waitFor?(id: string, signal: AbortSignal): Promise<void>;
 }
 
 export interface ToolPort {

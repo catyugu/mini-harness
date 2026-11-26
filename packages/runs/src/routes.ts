@@ -8,13 +8,6 @@ export function registerRoutes(ctx: Context) {
     if (!ctx.harnessSessions.get(id)) throw new HttpError('not_found', 'Conversation not found');
     return id;
   };
-  add('POST', '/api/sessions/:id/queue', async ({ params, body }) => {
-    const id = session(params.id),
-      input = await body(20 * 1024 * 1024);
-    if (!input || typeof input !== 'object' || Array.isArray(input))
-      throw new HttpError('invalid_input', 'Invalid queue request');
-    return new HttpReply(202, ctx.harnessRuns.queueInput(id, input));
-  });
   add('DELETE', '/api/sessions/:id/queue', async ({ params, signal }) => {
     return ctx.harnessRuns.cancelQueue(session(params.id), undefined, signal);
   });
@@ -27,7 +20,7 @@ export function registerRoutes(ctx: Context) {
     return { ok: true };
   });
   add('POST', '/api/sessions/:id/cancel', ({ params }) => ({
-    cancelled: ctx.harnessRuns.current(session(params.id))?.cancel() ?? false,
+    cancelled: ctx.harnessRuns.stop(session(params.id)),
   }));
   add(
     'GET',
@@ -42,7 +35,17 @@ export function registerRoutes(ctx: Context) {
     const input = await body(20 * 1024 * 1024);
     if (!input || typeof input !== 'object' || Array.isArray(input))
       throw new HttpError('invalid_input', 'Invalid run request');
-    ctx.harnessRuns.submit(id, input, { source: 'user' });
-    return new HttpReply(202, ctx.harnessRuns.info(id));
+    const { message, model, attachments, thinkingLevel, mode } = input;
+    return new HttpReply(
+      202,
+      ctx.harnessRuns.send(id, {
+        message,
+        model,
+        attachments,
+        thinkingLevel,
+        mode,
+        origin: { source: 'user' },
+      }),
+    );
   });
 }

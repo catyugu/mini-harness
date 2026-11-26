@@ -1,16 +1,15 @@
 import { Check } from 'typebox/value';
 import type { Context } from 'mini-harness/cordis';
-import type { TaskData, TaskPort } from '@mini-harness/tasks/api';
 import { isToolContent, type ToolDefinition, type ToolInvocation, type ToolResult } from './api.ts';
 
 const bindingKey = Symbol('tool binding');
 
 interface Binding {
   provider?: Context;
-  registration: string;
-  resourceId?: string;
+  signal: AbortSignal;
   available(): boolean;
   resolve(context: Context): ToolDefinition;
+  track(work: Promise<unknown>): void;
 }
 
 type BoundTool = ToolDefinition & { [bindingKey]?: Binding };
@@ -25,74 +24,78 @@ export function toolAvailable(tool: ToolDefinition) {
 
 export function prepareTool(tool: ToolDefinition, args: Record<string, unknown>, context?: Context) {
   const binding = (tool as BoundTool)[bindingKey];
-  if (binding && !binding.available()) throw new Error('Tool is no longer available: ' + tool.name);
+  if (!toolAvailable(tool)) throw new Error('Tool is no longer available: ' + tool.name);
   const definition = context && binding ? binding.resolve(context) : tool;
   if (!Check(definition.parameters, args))
     throw new Error('Invalid arguments for ' + definition.name + ': Schema mismatch');
   return { tool: definition, binding, args };
 }
 
-/** The single invocation boundary for registered and standalone tools. */
+/** Hold a registration from acceptance through settlement, including queued work. */
+export function withToolLease<T>(
+  { tool, binding }: ReturnType<typeof prepareTool>,
+  start: (signal: AbortSignal | undefined, provider: Context | undefined) => Promise<T>,
+) {
+  if (binding && !binding.available()) throw new Error('Tool is no longer available: ' + tool.name);
+  if (!binding) return start(undefined, undefined);
+  let settle!: () => void;
+  binding.track(
+    new Promise<void>((resolve) => {
+      settle = resolve;
+    }),
+  );
+  try {
+    const work = start(binding.signal, binding.provider);
+    void work.then(settle, settle);
+    return work;
+  } catch (error) {
+    settle();
+    throw error;
+  }
+}
+
 export function invokeTool(
-  tasks: TaskPort,
-  { tool, binding, args }: ReturnType<typeof prepareTool>,
+  prepared: ReturnType<typeof prepareTool>,
   callId: string,
   options: ToolInvocation = {},
-) {
-  const assertAvailable = () => {
-    if (binding && !binding.available()) throw new Error('Tool is no longer available: ' + tool.name);
-  };
-  assertAvailable();
-  const { owner, signal, retain = false, parentTask, onUpdate, context, metadata, commit } = options;
-  const resourceId = binding?.resourceId ?? options.resourceId;
-  return tasks.start<ToolResult>(
-    {
-      owner: owner ?? parentTask?.owner ?? resourceId ?? 'tool:' + tool.name,
-      parentId: parentTask?.id,
-      name: tool.label ?? tool.name,
-      type: 'tool-call',
-      metadata: {
-        ...metadata,
-        callId,
-        tool: tool.name,
-        ...(parentTask && { creator: parentTask.id }),
-        ...(binding && { registration: binding.registration }),
-        ...(resourceId && { resourceId }),
-      },
-      provider: binding?.provider ?? context,
-      signal,
-      retain,
-      commit,
-      project: tool.projectResult ?? ((result) => result as unknown as TaskData),
-    },
-    async (task) => {
-      assertAvailable();
+): Promise<ToolResult> {
+  const { tool, args } = prepared;
+  return withToolLease(prepared, (lifetime, provider) => {
+    const signal = AbortSignal.any([lifetime, options.signal].filter((value) => value !== undefined));
+    let completed: { result: ToolResult } | undefined;
+    const execute = async (signal: AbortSignal) => {
+      signal.throwIfAborted();
+      if (prepared.binding && !prepared.binding.available())
+        throw new Error('Tool is no longer available: ' + tool.name);
       const result = await tool.execute(args, {
         callId,
-        task,
-        signal: task.signal,
-        waitFor: (id) => {
-          if (id === task.id) throw new Error('A task cannot wait for itself');
-          return (parentTask ?? task).waitFor(id, task.signal);
-        },
-        update(update) {
-          task.update(update as unknown as TaskData);
-          onUpdate?.(update);
-        },
+        executionId: options.executionId,
+        signal,
+        waitFor: options.waitFor && ((id) => options.waitFor!(id, signal)),
+        report: options.report,
+        update: options.onUpdate ?? (() => {}),
+        write: options.write ?? (() => {}),
       });
       if (!result || !isToolContent(result.content))
         throw new Error('Invalid result from tool: ' + tool.name);
+      completed = { result };
       return result;
-    },
-  );
+    };
+    // Preserve an observed result if the provider fiber sees a concurrent abort on exit.
+    return provider
+      ? provider.fiber.run(execute, signal).catch((error) => {
+          if (completed) return completed.result;
+          throw error;
+        })
+      : execute(signal);
+  });
 }
 
-export function startTool(
-  tasks: TaskPort,
+export function runTool(
   tool: ToolDefinition,
   callId: string,
   args: Record<string, unknown>,
   options: ToolInvocation = {},
 ) {
-  return invokeTool(tasks, prepareTool(tool, args, options.context), callId, options);
+  return invokeTool(prepareTool(tool, args), callId, options);
 }

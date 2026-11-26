@@ -467,7 +467,7 @@ async function checkPackage() {
     });
     assert.equal(startedRun.status, 202);
     const run = await startedRun.json();
-    const chat = await fetch(url + '/events?run=' + run.id, { headers });
+    const chat = await fetch(url + '/events?run=' + run.taskId, { headers });
     assert.match(await chat.text(), /Mock response/);
     assert.match(JSON.stringify(mock.requests[0]?.messages), /Task notes are available/);
     const status = await (await fetch(url + '/runs', { headers })).json();
@@ -524,7 +524,7 @@ async function checkPackage() {
       const response = await write(base + '/runs', 'POST', { message });
       assert.equal(response.status, 202);
       const run = await response.json();
-      assert.match(await (await get(base + '/events?run=' + run.id)).text(), /Mock response/);
+      assert.match(await (await get(base + '/events?run=' + run.taskId)).text(), /Mock response/);
       assert.equal((await (await get(base + '/runs')).json()).run.state, 'completed');
     };
     await runIn(child.childId, 'Pack scoped test');

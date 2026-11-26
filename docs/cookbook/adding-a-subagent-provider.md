@@ -16,7 +16,7 @@ The complete [Task notes follow-up endpoint](../examples/task-notes/plugin.ts) d
 2. Validate the parent and message; prepare `session:<parentId>` before resolving scoped model services.
 3. Read the parent's committed model and verify it resolves in that composition.
 4. If requested, await `harnessApprovalRequests.request`; denial rejects.
-5. Create the child with `harnessSessions.create({ parentId, title })` and submit `harnessRuns.submit(child.id, { message, model }, options)`.
+5. Create the child with `harnessSessions.create({ parentId, title })` and send `harnessRuns.send(child.id, { message, model, origin })`.
 6. Observe the returned Task Handle and report the child ID, run ID and result.
 
 After enabling Task notes and sending a parent message with a configured model, call its authenticated `POST /api/extensions/task-notes/follow-up` endpoint with `parentId` and `message`. The response waits for the result. Its request signal is passed to the child submission, so disconnecting this particular request cancels that work. This is a deliberate request-bound example, distinct from the independently owned built-in delegation path.
@@ -25,4 +25,4 @@ For independent work, return the IDs after admission, select a provider Context 
 
 ## Check lifecycle behavior
 
-Verify model selection, queued admission, cancellation, plugin removal and parent deletion. A serial task-control wait yields the enclosing run's pool capacity while retaining its exclusive session lane. The [execution reference](../subsystems/execution.md) explains the relationship between independent children and structured inline tasks. Keep delegation policy in the delegating plugin, with generic scheduling in Tasks.
+Verify model selection, queued admission, cancellation, plugin removal and parent deletion. A serial task-control wait yields the enclosing run's pool capacity while retaining its exclusive session lane. The [execution reference](../subsystems/execution.md) explains the relationship between independent child Runs and ordinary tool calls. Keep delegation policy in the delegating plugin, with generic scheduling in Tasks.

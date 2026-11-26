@@ -2,10 +2,7 @@ import type { TaskHistoryRecord, TaskSnapshot } from './api.ts';
 
 /** A bounded observation cache, containing no executable state or handles. */
 export class RecentTasks {
-  private readonly records = new Map<
-    string,
-    { record: TaskHistoryRecord; ancestors: string[]; bytes: number }
-  >();
+  private readonly records = new Map<string, { record: TaskHistoryRecord; bytes: number }>();
   private bytes = 0;
 
   get(id: string) {
@@ -16,9 +13,9 @@ export class RecentTasks {
     return Array.from(this.records.values(), ({ record }) => record.task);
   }
 
-  add(record: TaskHistoryRecord, ancestors: string[]) {
+  add(record: TaskHistoryRecord) {
     const bytes = Buffer.byteLength(JSON.stringify(record));
-    this.records.set(record.task.id, { record, ancestors, bytes });
+    this.records.set(record.task.id, { record, bytes });
     this.bytes += bytes;
     const removed: TaskSnapshot[] = [];
     for (const [id, entry] of this.records) {
@@ -28,10 +25,10 @@ export class RecentTasks {
     return removed;
   }
 
-  remove(predicate: (task: TaskSnapshot, ancestors: string[]) => boolean) {
+  remove(predicate: (task: TaskSnapshot) => boolean) {
     const removed: TaskSnapshot[] = [];
     for (const [id, entry] of this.records)
-      if (predicate(entry.record.task, entry.ancestors)) removed.push(this.delete(id, entry));
+      if (predicate(entry.record.task)) removed.push(this.delete(id, entry));
     return removed;
   }
 

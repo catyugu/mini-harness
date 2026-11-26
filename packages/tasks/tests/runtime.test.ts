@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { TaskRuntime } from '../src/runtime.ts';
 import { Context } from 'mini-harness/cordis';
-import type { TaskHandle } from '../src/api.ts';
+import { TaskPool, type TaskHandle } from '../src/api.ts';
 
 function gate() {
   let release!: () => void;
@@ -44,13 +44,12 @@ test('suspending releases admission and resumes only after reacquisition', async
   const runtime = new TaskRuntime();
   const ready = gate();
   const wake = gate();
-  const pool = runtime.pool(1);
+  const target = runtime.start({ owner: 'target' }, () => wake.promise);
+  const pool = new TaskPool(1);
   const task = runtime.start({ owner: 'session:one', pool }, async (context) => {
     assert.equal(pool.active, 1);
-    await context.suspend(async () => {
-      ready.release();
-      await wake.promise;
-    });
+    ready.release();
+    await context.waitFor(target.id);
     assert.equal(pool.active, 1);
     return 42;
   });
@@ -97,14 +96,6 @@ test('ownership, not creation, controls cancellation and deletion', async () => 
     signal.throwIfAborted();
   });
   await entered.promise;
-  const childEntered = gate();
-  const child = runtime.start({ owner: 'session:parent', parentId: parent.id }, async ({ signal }) => {
-    childEntered.release();
-    signal.throwIfAborted();
-    await new Promise<void>((_, reject) => {
-      signal.addEventListener('abort', () => reject(signal.reason), { once: true });
-    });
-  });
   const background = runtime.start(
     { owner: 'session:parent', metadata: { creator: parent.id } },
     async () => {
@@ -112,13 +103,10 @@ test('ownership, not creation, controls cancellation and deletion', async () => 
       return 'independent';
     },
   );
-  await childEntered.promise;
   parent.cancel();
   released.release();
   await assert.rejects(parent.result);
-  await assert.rejects(child.result);
   assert.equal(await background.result, 'independent');
-  assert.equal(runtime.get(child.id)?.state, 'cancelled');
   await runtime.removeOwner('session:parent');
   assert.equal(runtime.list().length, 0);
 });
@@ -136,28 +124,6 @@ test('a durable projection fault cannot acknowledge a successful task', async ()
   );
   await assert.rejects(task.result, /write failed/);
   assert.equal(runtime.get(task.id)?.state, 'failed');
-});
-
-test('a caught whole-task wait error reacquires admission', async () => {
-  const runtime = new TaskRuntime();
-  const pool = runtime.pool(1);
-  const task = runtime.start({ owner: 'one', pool }, async (context) => {
-    await assert.rejects(
-      context.suspend(async () => {
-        assert.equal(pool.active, 0);
-        await assert.rejects(
-          context.suspend(async () => {}),
-          /whole-task/,
-        );
-        throw new Error('wait failed');
-      }),
-      /wait failed/,
-    );
-    assert.equal(pool.active, 1);
-    assert.equal(runtime.get(context.id)?.state, 'running');
-  });
-  await task.result;
-  assert.equal(pool.active, 0);
 });
 
 test('owner removal rejects new work immediately and emits deletion after cleanup', async () => {
@@ -181,17 +147,14 @@ test('owner removal rejects new work immediately and emits deletion after cleanu
   assert.equal(events.at(-1), 'deleted');
 });
 
-test('ephemeral results are delivered without retaining arbitrary objects', async () => {
+test('arbitrary results are delivered without retaining arbitrary objects', async () => {
   const runtime = new TaskRuntime();
-  const observed: string[] = [];
-  runtime.subscribe(({ type }) => observed.push(type));
   const value = () => 42;
-  const handle = runtime.start({ owner: 'session:one', retain: false }, async () => value);
+  const handle = runtime.start({ owner: 'session:one' }, async () => value);
   const terminal = runtime.wait(handle.id);
   assert.strictEqual(await handle.result, value);
   assert.equal((await terminal).state, 'completed');
-  assert.equal(runtime.get(handle.id), undefined);
-  assert.equal(observed.at(-1), 'deleted');
+  assert.equal(runtime.get(handle.id)?.result, undefined);
 });
 
 test('output uses UTF-8 byte offsets and preserves channel and Unicode boundaries', async () => {
@@ -223,17 +186,6 @@ test('terminal observation cannot retroactively cancel a wait', async () => {
   const result = runtime.wait(task.id, cancel.signal);
   gatekeeper.release();
   assert.equal((await result).state, 'completed');
-});
-
-test('forgetting an ephemeral parent also removes retained descendants', async () => {
-  const runtime = new TaskRuntime();
-  const parent = runtime.start({ owner: 'one', retain: false }, async ({ id, owner }) => {
-    const child = runtime.start({ owner, parentId: id }, async () => 'done');
-    await child.result;
-    assert.ok(runtime.get(child.id));
-  });
-  await parent.result;
-  assert.equal(runtime.list().length, 0);
 });
 
 test('a cancellation during running observation prevents invocation of executor code', async () => {
@@ -326,7 +278,7 @@ test('observation data is detached from arbitrary result objects', async () => {
 
 test('pool resizing, queued cancellation and failed execution return capacity', async () => {
   const runtime = new TaskRuntime();
-  const pool = runtime.pool(1);
+  const pool = new TaskPool(1);
   const hold = gate();
   const entered = gate();
   const first = runtime.start({ owner: 'one', pool }, async () => {
@@ -351,7 +303,7 @@ test('pool resizing, queued cancellation and failed execution return capacity', 
 
 test('task waits release capacity and reject circular waits', async () => {
   const runtime = new TaskRuntime();
-  const pool = runtime.pool(1);
+  const pool = new TaskPool(1);
   let first!: TaskHandle<void>;
   let second!: TaskHandle<void>;
   first = runtime.start({ owner: 'one', pool }, async (task) => {
@@ -364,59 +316,15 @@ test('task waits release capacity and reject circular waits', async () => {
   assert.equal(pool.active, 0);
 });
 
-test('batch executes parallel jobs up to capacity and serial jobs as barriers', async () => {
-  const runtime = new TaskRuntime();
-  const order: string[] = [];
-  const ready = gate();
-  const release = gate();
-  const batch = runtime.batch(
-    [
-      {
-        parallel: true,
-        async run() {
-          order.push('first');
-          await release.promise;
-          order.push('first done');
-        },
-      },
-      {
-        parallel: true,
-        async run() {
-          order.push('second');
-          ready.release();
-        },
-      },
-      {
-        async run() {
-          order.push('barrier');
-        },
-      },
-      {
-        parallel: true,
-        async run() {
-          order.push('last');
-        },
-      },
-    ],
-    { signal: new AbortController().signal, limit: 2 },
-  );
-  await ready.promise;
-  assert.deepEqual(order, ['first', 'second']);
-  release.release();
-  await batch;
-  assert.deepEqual(order, ['first', 'second', 'first done', 'barrier', 'last']);
-});
-
 test('a lane stays exclusive while its task releases pool capacity', async () => {
   const runtime = new TaskRuntime();
-  const pool = runtime.pool(1);
+  const pool = new TaskPool(1);
   const ready = gate();
   const wake = gate();
+  const target = runtime.start({ owner: 'target' }, () => wake.promise);
   const first = runtime.start({ owner: 'one', lane: 'one', pool }, async (task) => {
-    await task.suspend(async () => {
-      ready.release();
-      await wake.promise;
-    });
+    ready.release();
+    await task.waitFor(target.id);
   });
   await ready.promise;
   assert.equal(runtime.active('one')?.id, first.id);

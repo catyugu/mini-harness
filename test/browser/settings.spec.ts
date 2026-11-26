@@ -33,7 +33,7 @@ test('settings stay reachable across viewport sizes and theme changes persist', 
     await expect(dialog.getByRole('button', { name: 'Close settings' })).toBeFocused();
     await expectInViewport(dialog, viewport);
     await settingsSection(page, 'General').click();
-    await expect(dialog.getByRole('switch', { name: 'Add instructions' })).toBeVisible();
+    await expect(dialog.getByRole('combobox', { name: 'Add instructions' })).toBeVisible();
     if (viewport.width <= 560) {
       await dialog.getByRole('button', { name: 'All settings' }).click();
       await expect(settingsSection(page, 'General')).toBeFocused();

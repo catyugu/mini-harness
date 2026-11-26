@@ -60,7 +60,7 @@ test(
       message: 'Test native integration',
     });
     assert.equal(started.status, 202);
-    const { id: runId } = await started.json();
+    const { taskId: runId } = await started.json();
     const stream = await get('/api/sessions/' + session.id + '/events?run=' + runId);
     assert.equal(stream.status, 200);
     const raw = await stream.text();
@@ -93,7 +93,7 @@ test(
     const skillRun = await post('/api/sessions/' + session.id + '/runs', { message: '/skill:verification' });
     assert.equal(skillRun.status, 202);
     const skillRequest = await get(
-      '/api/sessions/' + session.id + '/events?run=' + (await skillRun.json()).id,
+      '/api/sessions/' + session.id + '/events?run=' + (await skillRun.json()).taskId,
     );
     assert.equal(skillRequest.status, 200);
     assert.equal((await skillRequest.text()).includes('"type":"error"'), false);

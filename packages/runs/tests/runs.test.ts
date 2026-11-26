@@ -50,7 +50,7 @@ test(
       body: JSON.stringify({ message: 'Keep working' }),
     });
     assert.equal(start.status, 202);
-    const { id: runId } = await start.json();
+    const { taskId: runId } = await start.json();
     const response = await fetch(base + '/api/sessions/' + item.id + '/events?run=' + runId, {
       headers,
       signal: controller.signal,
@@ -139,10 +139,11 @@ test(
     const second = sendRun(app.runtime.plugins.ctx.harnessRuns, other.id, 'Root two');
     await entered.promise;
     assert.equal(activeRunCount(app.runtime.plugins.ctx), 2);
-    await assert.rejects(
-      sendRun(app.runtime.plugins.ctx.harnessRuns, parent.id, 'Duplicate'),
-      /already running/,
-    );
+    const queued = app.runtime.plugins.ctx.harnessRuns.send(parent.id, {
+      message: 'After the first run',
+      mode: 'queue',
+    });
+    assert.equal(queued.queue.at(-1)?.id, queued.messageId);
     const child = app.runtime.plugins.ctx.harnessSessions.create({ parentId: parent.id });
     const childWork = sendRun(app.runtime.plugins.ctx.harnessRuns, child.id, 'Child');
     const childCancelled = assert.rejects(childWork, /cancelled/);
@@ -158,7 +159,7 @@ test(
   },
 );
 
-test('startup durably interrupts runs, fails stale steering, and recovers idempotently', async (t) => {
+test('startup durably interrupts runs and delivers pending inbox messages', async (t) => {
   const mock = await createMockProvider();
   const { root, paths } = createFixturePaths(mock.url);
   t.after(async () => {
@@ -185,7 +186,6 @@ test('startup durably interrupts runs, fails stale steering, and recovers idempo
       startedAt: new Date().toISOString(),
       cancellationRequested: false,
       outputCursor: 0,
-      retained: true,
     },
     run: { sequence: 1 },
   });
@@ -195,7 +195,7 @@ test('startup durably interrupts runs, fails stale steering, and recovers idempo
   });
   registry.log(child.id).append({
     type: 'inbox-enqueued',
-    item: { id: 'follow', mode: 'followUp', text: 'Recovered follow-up', images: [] },
+    item: { id: 'follow', mode: 'queue', text: 'Recovered follow-up', images: [] },
   });
   const file = nativeFile(paths, child);
   registry.dispose();
@@ -224,8 +224,8 @@ test('startup durably interrupts runs, fails stale steering, and recovers idempo
   assert.deepEqual(
     restored.inspectLog(child.id, (log) => log.queue().map(({ id, state }) => [id, state])),
     [
+      ['steer', 'pending'],
       ['follow', 'pending'],
-      ['steer', 'failed'],
     ],
   );
   assert.equal(restored.inspectLog(parent.id, (log) => log.entries()) !== undefined, false);
@@ -233,7 +233,6 @@ test('startup durably interrupts runs, fails stale steering, and recovers idempo
   restored.dispose();
   const restarted = await createMiniHarnessServer(paths);
   try {
-    assert.deepEqual(readFileSync(file), bytes);
     assert.equal(
       await sendRun(restarted.runtime.plugins.ctx.harnessRuns, child.id, 'New manual input'),
       'Mock response',
@@ -242,7 +241,10 @@ test('startup durably interrupts runs, fails stale steering, and recovers idempo
       const content = (messages as { role: string; content: string | { text: string }[] }[]).at(-1)?.content;
       return Array.isArray(content) ? content.map(({ text }) => text).join('') : content;
     });
-    assert.deepEqual(prompts, ['Recovered follow-up', 'New manual input']);
+    assert.deepEqual(
+      prompts.filter((prompt) => !prompt?.startsWith('[agent ')),
+      ['Old instruction', 'Recovered follow-up', 'New manual input'],
+    );
     assert.equal(
       restarted.runtime.plugins.ctx.harnessSessions
         .log(child.id)
@@ -255,7 +257,7 @@ test('startup durably interrupts runs, fails stale steering, and recovers idempo
         .log(child.id)
         .queue()
         .map(({ id, state }) => [id, state]),
-      [['steer', 'failed']],
+      [],
     );
   } finally {
     await restarted.close();
@@ -353,11 +355,10 @@ test('append, torn write and fsync failures evict the writer without acknowledgi
     try {
       assert.throws(
         () =>
-          app.runtime.plugins.ctx.harnessRuns.submit(
-            session.id,
-            { message: 'Unacknowledged' },
-            { source: 'user' },
-          ),
+          app.runtime.plugins.ctx.harnessRuns.send(session.id, {
+            message: 'Unacknowledged',
+            origin: { source: 'user' },
+          }),
         /Could not write/,
       );
     } finally {
@@ -385,10 +386,9 @@ test('append, torn write and fsync failures evict the writer without acknowledgi
     );
     const reopened = app.runtime.plugins.ctx.harnessSessions.log(session.id);
     assert.notStrictEqual(reopened, log);
-    assert.equal(
-      app.runtime.plugins.ctx.harnessRuns.info(session.id)?.state,
-      fault === 'sync' ? 'interrupted' : undefined,
-    );
+    assert.equal(app.runtime.plugins.ctx.harnessRuns.info(session.id), undefined);
+    for (const item of reopened.inbox())
+      await app.runtime.plugins.ctx.harnessRuns.cancelQueue(session.id, item.id);
     if (fault === 'torn') assert.deepEqual(readFileSync(file), original);
     assert.equal(
       await sendRun(app.runtime.plugins.ctx.harnessRuns, session.id, 'Accepted retry'),
@@ -431,10 +431,11 @@ test(
     });
     const { harnessSessions: registry, harnessRuns: runs } = app.runtime.plugins.ctx;
     const session = registry.create();
-    const signal = new AbortController();
-    const first = runs.submit(session.id, { message: 'First' }, { signal: signal.signal });
+    runs.send(session.id, { message: 'First' });
+    const first = expectPresent(runs.current(session.id), 'first run');
     assert.equal(await first.result, 'Done');
-    const later = runs.submit(session.id, { message: 'Later' }, { signal: signal.signal });
+    runs.send(session.id, { message: 'Later' });
+    const later = expectPresent(runs.current(session.id), 'later run');
     const cancelled = assert.rejects(later.result, /cancelled/);
     await entered.promise;
     assert.equal(first.cancel(), false);
@@ -465,23 +466,21 @@ test('retry looks up the failed delivery by its native entry identity', async (t
   const log = registry.log(session.id);
   log.append({
     type: 'inbox-enqueued',
-    item: { id: 'recover-this', mode: 'followUp', text: 'fail this queued input', images: [] },
+    item: { id: 'recover-this', mode: 'queue', text: 'fail this queued input', images: [] },
   });
-  const failed = runs.submit(
-    session.id,
-    { message: 'Manual input waiting for delivery' },
-    { source: 'user' },
-  );
-  assert.equal(failed.state, 'queued');
+  const failed = runs.send(session.id, { message: 'Manual input waiting for delivery', mode: 'queue' });
+  runs.cancelQueue(session.id, failed.messageId);
+  assert.equal(failed.run?.state, 'queued');
+  const failedId = expectPresent(failed.taskId, 'failed task');
   await assert.rejects(expectPresent(runs.current(session.id)?.result, 'active run'));
   assert.equal(runs.info(session.id)?.state, 'failed');
   assert.ok(runs.info(session.id)?.inputEntryId);
   const delivered = log
     .projection()
     .timeline.filter(isViewMessage)
-    .find(({ submissionId }) => submissionId === failed.id);
+    .find(({ submissionId }) => submissionId === failedId);
   assert.equal(delivered?.inboxId, 'recover-this');
-  assert.deepEqual(runs.retryInput(session.id, failed.id), {
+  assert.deepEqual(runs.retryInput(session.id, failedId), {
     message: 'fail this queued input',
     attachments: [],
     missing: [],
@@ -493,21 +492,127 @@ test('retry looks up the failed delivery by its native entry identity', async (t
     mimeType: 'text/plain',
     data: Buffer.from('private text').toString('base64'),
   };
-  const accepted = runs.submit(
-    session.id,
-    { message: 'fail this user input', attachments: [attachment] },
-    { source: 'user' },
-  );
-  assert.equal(accepted.state, 'queued');
+  const accepted = runs.send(session.id, {
+    message: 'fail this user input',
+    attachments: [attachment],
+    origin: { source: 'user' },
+  });
+  assert.equal(accepted.run?.state, 'queued');
+  const acceptedId = expectPresent(accepted.taskId, 'accepted task');
   await assert.rejects(expectPresent(runs.current(session.id)?.result, 'active run'));
   assert.equal(
     log
       .projection()
       .timeline.filter(isViewMessage)
-      .find(({ submissionId }) => submissionId === accepted.id)?.inboxId,
-    undefined,
+      .find(({ submissionId }) => submissionId === acceptedId)?.inboxId,
+    accepted.messageId,
   );
-  assert.deepEqual(runs.retryInput(session.id, accepted.id)?.missing, []);
-  assert.deepEqual(runs.retryInput(session.id, accepted.id)?.attachments, [attachment]);
-  assert.throws(() => runs.retryInput(session.id, failed.id), /no longer the failed conversation run/);
+  assert.deepEqual(runs.retryInput(session.id, acceptedId)?.missing, []);
+  assert.deepEqual(runs.retryInput(session.id, acceptedId)?.attachments, [attachment]);
+  assert.throws(() => runs.retryInput(session.id, failedId), /no longer the failed conversation run/);
+});
+
+test(
+  'Interrupt accepts multiple inputs, drains the existing tool and then resumes on one lane',
+  { timeout: 15000 },
+  async (t) => {
+    const entered = gate();
+    const abort = gate();
+    const cleanup = gate();
+    let calls = 0;
+    const mock = await createMockProvider(({ messages }) =>
+      messages.at(-1)?.content === 'Hold tool' ? { tool: 'hold_tool', args: {} } : 'Resumed',
+    );
+    const { root, paths } = createFixturePaths(mock.url);
+    const app = await createMiniHarnessServer(paths);
+    const ctx = app.runtime.plugins.ctx;
+    const runs = ctx.harnessRuns;
+    const sessions = ctx.harnessSessions;
+    const remove = ctx.harnessTools.register({
+      name: 'hold_tool',
+      description: 'Wait for cleanup',
+      parameters: { type: 'object' },
+      async execute(_, { signal }) {
+        calls++;
+        signal.addEventListener('abort', abort.release, { once: true });
+        entered.release();
+        await cleanup.promise;
+        signal.throwIfAborted();
+        return { content: [] };
+      },
+    });
+    t.after(async () => {
+      cleanup.release();
+      await remove();
+      await app.close();
+      await mock.close();
+      rmSync(root, { recursive: true, force: true });
+    });
+    const { id } = sessions.create();
+    const user = { source: 'user' } as const;
+    runs.send(id, { message: 'Hold tool', origin: user });
+    const first = expectPresent(runs.current(id), 'original run');
+    const finished = assert.rejects(first.result, /Interrupted by a new message/);
+    await entered.promise;
+    assert.deepEqual(
+      ctx.harnessTasks.list('session:' + id).map(({ type }) => type),
+      ['agent-run'],
+    );
+    runs.send(id, { message: 'Interrupt one', origin: user });
+    await abort.promise;
+    runs.send(id, { message: 'Interrupt two', origin: user });
+    assert.equal(runs.current(id)?.id, first.id);
+    assert.equal(mock.requests.length, 1);
+    cleanup.release();
+    await finished;
+    const replacement = expectPresent(runs.current(id), 'replacement run');
+    assert.notEqual(replacement.id, first.id);
+    assert.equal(await replacement.result, 'Resumed');
+    assert.equal(calls, 1);
+    assert.equal(mock.requests.length, 2);
+    const timeline = sessions.log(id).projection().timeline.filter(isViewMessage);
+    assert.equal(timeline.find((entry) => entry.role === 'toolResult')?.toolState, 'cancelled');
+    assert.deepEqual(
+      timeline.filter((entry) => entry.role === 'user').map(({ content }) => content),
+      ['Hold tool', 'Interrupt one', 'Interrupt two'],
+    );
+  },
+);
+
+test('Stop persists the wake pause, preserves pending input and deduplicates notifications', async (t) => {
+  const mock = await createMockProvider();
+  const { root, paths } = createFixturePaths(mock.url);
+  let app = await createMiniHarnessServer(paths);
+  t.after(async () => {
+    await app.close();
+    await mock.close();
+    rmSync(root, { recursive: true, force: true });
+  });
+  const { id } = app.runtime.plugins.ctx.harnessSessions.create();
+  const message = {
+    message: 'Background work is complete',
+    origin: { source: 'task', taskId: 'task-123' } as const,
+    messageId: 'task-123:settled',
+    mode: 'queue' as const,
+  };
+  app.runtime.plugins.ctx.harnessRuns.stop(id);
+  app.runtime.plugins.ctx.harnessRuns.send(id, message);
+  await app.close();
+  app = await createMiniHarnessServer(paths);
+  const { harnessRuns: runs, harnessSessions: sessions } = app.runtime.plugins.ctx;
+  assert.equal(runs.current(id), undefined);
+  assert.equal(sessions.log(id).inboxPaused(), true);
+  assert.equal(runs.send(id, message).queue.length, 1);
+  await sendRun(runs, id, 'Resume', undefined, { mode: 'queue' });
+  await runs.current(id)?.result;
+  assert.equal(sessions.log(id).inboxPaused(), false);
+  assert.equal(runs.send(id, message).queue.length, 0);
+  assert.deepEqual(
+    sessions
+      .log(id)
+      .projection()
+      .timeline.filter(isViewMessage)
+      .flatMap((entry) => (entry.origin?.taskId ? [entry.origin.taskId] : [])),
+    ['task-123'],
+  );
 });
