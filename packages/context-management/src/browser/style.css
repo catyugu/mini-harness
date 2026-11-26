@@ -2,6 +2,7 @@
   min-width: 0;
   display: flex;
   justify-content: center;
+  flex-wrap: wrap;
   gap: 0.65rem;
   padding-top: 0.2rem;
 }
@@ -55,28 +56,43 @@
 .context-settings h4 {
   margin: 0.65rem 0 0.15rem;
 }
-.context-setting,
-.context-buttons {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.4rem;
+.context-fields {
+  display: grid;
+  gap: 0.5rem;
+  min-width: 0;
+  margin: 0;
+  border: 0;
+  padding: 0;
 }
-.context-setting label {
+.context-fields .ui-field {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 0.5rem;
-  flex: 1;
 }
-.context-setting input[type='number'] {
-  width: 5.5em;
+.context-fields input[type='number'] {
+  width: 5em;
 }
-.context-inheritance {
-  color: var(--muted);
+.context-model {
+  max-width: 55%;
+  min-width: 0;
+  display: flex;
+  gap: 0.4rem;
 }
-.context-buttons {
-  margin-top: 0.55rem;
+.context-model span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.context-model svg {
+  flex: none;
+  width: 12px;
+  height: 12px;
+  transform: rotate(90deg);
+}
+.context-details > .ui-button {
+  margin-top: 0.5rem;
+  width: 100%;
 }
 .context-bar {
   display: flex;
@@ -103,7 +119,13 @@
 }
 @media (max-width: 480px) {
   .context-status {
-    gap: 0.25rem;
+    gap: 0.15rem;
+  }
+  .context-statistic {
+    padding-inline: 0.1rem;
+  }
+  .context-status > div {
+    min-width: 0;
   }
   .context-speed {
     display: none;

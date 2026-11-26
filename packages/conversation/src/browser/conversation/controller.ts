@@ -56,7 +56,8 @@ export function createConversationController(ctx: Context): ConversationControll
     if (state.interaction.status !== text || Boolean(state.interaction.error) !== error)
       interact({ status: text, error });
   };
-  const report = (error: Error) => status(error.message, true);
+  const report = (message: string | Error) =>
+    typeof message === 'string' ? status(message) : status(message.message, true);
   function begin() {
     visit.abort();
     visit = new AbortController();
@@ -377,25 +378,6 @@ export function createConversationController(ctx: Context): ConversationControll
       if (!signal.aborted && state.session)
         update({ session: { ...state.session, permission: item.permission } });
       await sessions.refresh();
-    },
-    async compact() {
-      const id = active(),
-        signal = visit.signal;
-      if (!id) throw new Error('Open a conversation to compact it.');
-      if (isRunning(state.run) || state.interaction.operation)
-        throw new Error('Wait for the current operation to finish.');
-      interact({ operation: 'compact', status: 'Compacting conversation…' });
-      try {
-        const result = await browserRequest<{ cancelled?: boolean }>(
-          ctx,
-          path(id, '/compact'),
-          payload('POST', {}),
-        );
-        if (!signal.aborted && (await activate(id, false)))
-          status(result.cancelled ? 'Compaction cancelled.' : 'Conversation compacted.');
-      } finally {
-        if (!signal.aborted) interact({ operation: undefined });
-      }
     },
   };
 }

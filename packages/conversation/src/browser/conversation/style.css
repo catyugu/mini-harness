@@ -602,6 +602,9 @@ button.file-card:hover {
     height: 40px;
   }
 }
+.composer-tools:empty {
+  display: none;
+}
 .composer-tools {
   display: flex;
   align-items: center;

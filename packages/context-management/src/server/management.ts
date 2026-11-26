@@ -1,225 +1,220 @@
-import type { Context } from 'mini-harness/cordis';
 import {
   validateRequestSnapshot,
-  type LlmAdapter,
+  type LlmPort,
   type LlmRequest,
-  type NativeUsage,
+  type NativeMessage,
 } from '@mini-harness/llm/api';
+import type { ModelCatalogPort } from '@mini-harness/models/api';
+import type { ModelFailure, ModelRetry } from '@mini-harness/agent/events';
+import { requestModel } from '@mini-harness/agent/model-request';
+import { selectModel } from '@mini-harness/models/selection';
 import { DomainError } from '@mini-harness/platform/errors';
-import type { ContextRepair, ContextRequest } from '@mini-harness/runs/context-management';
-import type { SessionContext, SessionLogPort } from '@mini-harness/sessions/log-api';
-import type { ContextOccupancy, ContextSettings, ContextState } from '../shared/state.ts';
+import type { ContextReplacement, SessionContext, SessionLogPort } from '@mini-harness/sessions/log-api';
+import type { ContextSettings } from '../shared/state.ts';
 import { checkpoint, splitPoint } from './compaction.ts';
-import { resolveSettings } from './config.ts';
-import { TokenMeter } from './meter.ts';
-import { prune } from './prune.ts';
+import { validateSettings } from './config.ts';
+import { calibration, estimate, measure, messageTokens, totalTokens, type MeasuredRequest } from './meter.ts';
+import { offloadImages, offloadMessage, prune } from './prune.ts';
 
 export const owner = 'context-management';
 
-export class ContextManagement {
-  private readonly signatures = new WeakMap<SessionLogPort, Map<string, string | null>>();
-  private readonly meter = new TokenMeter();
-  private readonly prepared = new WeakMap<
-    LlmRequest['messages'],
-    { occupancy: ContextOccupancy; adapter: LlmAdapter }
-  >();
-  private readonly operations = new Map<string, NonNullable<ContextState['compacting']>>();
-  private readonly issues = new Map<string, string>();
+export function configuration(stored: unknown, defaults: ContextSettings) {
+  return { settings: stored == null ? defaults : validateSettings(stored), customized: stored != null };
+}
 
+type Rebuild = (messages: NativeMessage[]) => Promise<LlmRequest>;
+
+function pendingInputStart(log: SessionLogPort, projection: SessionContext) {
+  const pending = new Set<string>();
+  for (const entry of log.branch().reverse()) {
+    if (entry.type !== 'message') continue;
+    const message = entry.message;
+    if (
+      message.role === 'assistant' &&
+      !message.errorMessage &&
+      message.stopReason !== 'error' &&
+      message.stopReason !== 'aborted'
+    )
+      break;
+    if (message.role === 'user') pending.add(entry.id);
+  }
+  const first = projection.contextEntryIds.findIndex((id) => pending.has(id));
+  return first === -1 ? projection.contextMessages.length : first;
+}
+
+export class ContextManagement {
   constructor(
-    private readonly settings: () => ContextSettings,
-    private readonly notify: (sessionId: string) => void,
+    private readonly models: ModelCatalogPort,
+    private readonly llm: LlmPort,
+    private readonly retry: (failure: ModelFailure) => Promise<ModelRetry | undefined>,
   ) {}
 
-  configuration(stored: unknown, strict = true) {
-    const overrides = (stored ?? {}) as Partial<ContextSettings>;
-    const defaults = this.settings();
-    try {
-      return { settings: resolveSettings(defaults, overrides), overrides };
-    } catch (error) {
-      if (strict) throw error;
-      return {
-        settings: { ...defaults, ...overrides },
-        overrides,
-        issue: error instanceof Error ? error.message : String(error),
-      };
-    }
+  private model(choice: LlmRequest['model']) {
+    const capability = this.models.capabilities(choice);
+    const adapter = this.llm.select(choice);
+    if (!capability || !adapter)
+      throw new DomainError('invalid_input', 'Model capability or adapter unavailable: ' + choice.id);
+    return { capability, adapter };
   }
 
-  status(id: string) {
-    return { compacting: this.operations.get(id), issue: this.issues.get(id) };
-  }
-
-  async measure(ctx: Context, request: LlmRequest, projection?: SessionContext) {
-    const adapter = ctx.get('harnessLlm')?.select?.(request.model);
-    const occupancy = await this.meter.measure(
+  private measure(log: SessionLogPort, request: LlmRequest) {
+    const { capability, adapter } = this.model(request.model);
+    return measure(
       request,
-      ctx.get('harnessModels')?.capabilities(request.model),
+      capability,
       adapter,
-      projection,
+      adapter.countInputTokens ? 1 : calibration(log, request.model),
     );
-    if (adapter) this.prepared.set(request.messages, { occupancy, adapter });
-    return occupancy;
   }
 
-  observe(request: Omit<LlmRequest, 'signal'>, usage: NativeUsage) {
-    const measured = this.prepared.get(request.messages);
-    if (measured) this.meter.calibrate(request, measured.occupancy, measured.adapter, usage);
-  }
-
-  prepare(input: ContextRequest, repair?: ContextRepair) {
-    return this.process(input, repair ? 'recovery' : 'automatic', repair);
-  }
-
-  async compact(input: ContextRequest) {
-    await this.process(input, 'manual');
-  }
-
-  private async process(
-    input: ContextRequest,
-    mode: 'automatic' | 'manual' | 'recovery',
-    repair?: ContextRepair,
+  private async replace(
+    log: SessionLogPort,
+    request: LlmRequest,
+    rebuild: Rebuild,
+    replacements: ContextReplacement[],
   ) {
-    const { log, signal } = input;
-    const { settings: config } = this.configuration(log.setting(owner));
-    const id = log.sessionId;
-    const manual = mode === 'manual';
-    const fail = (reason: string): never => {
-      throw new DomainError(
-        manual ? 'invalid_input' : 'unavailable',
-        repair ? repair.message + '. Context recovery: ' + reason : reason,
-      );
-    };
-    signal.throwIfAborted();
-    if (repair && repair.attempt > 3) fail('The model still rejects the input after three repairs');
-    let projection = log.context();
-    let request = await input.assemble(projection);
-    let occupancy = await this.measure(input.ctx, request, projection);
-    const budget = occupancy.budget;
-    if (budget === 0) fail('The model window has no room after reserving its output budget');
+    if (!replacements.length) return request;
+    log.append({ type: 'context-replace', replacements }, log.context().leafId);
+    return rebuild(log.context().contextMessages);
+  }
 
-    const pressure = budget !== undefined && occupancy.total >= budget * config.triggerRatio;
-    let signatures = this.signatures.get(log);
-    if (!signatures) this.signatures.set(log, (signatures = new Map()));
-    const pruned =
-      (config.pruneTools || pressure || manual || repair !== undefined) &&
-      prune(input, projection, signatures, {
-        tools: config.pruneTools,
-        offload: pressure || manual || repair !== undefined,
-        forceImages: repair?.kind === 'image-limit',
-        toolTokens: Math.max(256, Math.min(4096, Math.floor((budget ?? 64_000) * (repair ? 0.03 : 0.09)))),
-      });
-    if (pruned) {
-      projection = log.context();
-      request = await input.assemble(projection);
-      occupancy = await this.measure(input.ctx, request, projection);
-    }
-    if (repair?.kind === 'image-limit') {
-      if (!pruned) fail('No further images can be offloaded');
-      return request;
-    }
+  async prune(log: SessionLogPort, request: LlmRequest, rebuild: Rebuild) {
+    return this.measure(log, await this.replace(log, request, rebuild, prune(log.context())));
+  }
 
-    const target = Math.floor(
-      (budget ?? occupancy.total) *
-        (repair ? Math.min(config.targetRatio, 0.5 / repair.attempt) : config.targetRatio),
+  async compact(
+    log: SessionLogPort,
+    request: MeasuredRequest,
+    rebuild: Rebuild,
+    settings: ContextSettings,
+    taskId: string,
+  ) {
+    const counts = request.inputMeasurement;
+    const projection = log.context();
+    const { contextMessages: messages, contextEntryIds } = projection;
+    const fixed = counts.system + counts.tools;
+    const target = Math.min(
+      Math.floor(counts.budget * settings.targetRatio),
+      fixed + Math.floor(counts.messages * settings.targetRatio),
     );
-    const needsSummary =
-      manual ||
-      (config.autoCompact &&
-        (repair || (budget !== undefined && occupancy.total >= budget * config.triggerRatio)));
-    if (!needsSummary) {
-      if (repair && !pruned)
-        fail('Automatic compaction is off and pruning cannot reduce this request further');
-      return request;
-    }
-
-    let reduced = false;
-    this.operations.set(id, mode);
-    this.issues.delete(id);
-    this.notify(id);
-    try {
-      for (let attempt = 0; attempt < 3; attempt++) {
-        const minimum = (budget ?? occupancy.messages) * config.retainRatio;
-        const retain = Math.max(
-          1,
-          Math.floor(
-            manual && occupancy.messages <= minimum
-              ? occupancy.messages * config.retainRatio
-              : repair
-                ? Math.min(minimum, target * 0.6)
-                : minimum,
-          ),
-        );
-        const force = repair || (budget !== undefined && occupancy.total > budget);
-        let cut = splitPoint(
-          projection,
-          this.meter,
-          retain,
-          force
-            ? {
-                available: Math.max(0, (budget ?? occupancy.total) - occupancy.system - occupancy.tools - 96),
-              }
-            : undefined,
-        );
-        if (!cut && manual) cut = splitPoint(projection, this.meter, 1);
-        if (!cut) {
-          if (reduced || (pruned && (manual || repair))) break;
-          fail('Nothing to compact within the recent-context budget');
-        }
-        const summaryBudget = Math.min(
-          4096,
-          Math.max(96, target - occupancy.system - occupancy.tools - retain),
-        );
-        const summary = await checkpoint(
-          input,
-          request,
-          projection.contextMessages.slice(0, cut),
-          config,
-          summaryBudget,
-          (draft) => this.measure(input.ctx, draft),
-        );
-        const candidate = {
-          ...projection,
-          contextMessages: [summary, ...projection.contextMessages.slice(cut)],
-          contextRevisions: ['', ...projection.contextRevisions.slice(cut)],
-        };
-        const next = await input.assemble(candidate);
-        validateRequestSnapshot(next);
-        const [measured, baseline] = await Promise.all([
-          this.measure(input.ctx, next, candidate),
-          this.measure(input.ctx, request, projection),
-        ]);
-        signal.throwIfAborted();
-        if (measured.total >= baseline.total || measured.messages >= baseline.messages) {
-          if (reduced) break;
-          fail('The checkpoint did not reduce the prepared request');
-        }
-        log.append(
-          {
-            type: 'context-replace',
-            replacements: [{ start: 0, deleteCount: cut, insert: [summary] }],
+    const rawMessages = estimate(request).messages;
+    const messageScale = rawMessages && counts.messages ? counts.messages / rawMessages : 1;
+    const retain = Math.ceil(
+      (Math.min(counts.budget, counts.messages) * settings.retainRatio) / messageScale,
+    );
+    const cut = Math.min(splitPoint(messages, retain), pendingInputStart(log, projection));
+    if (!cut) return;
+    const kept = messages.slice(cut);
+    const retained = Math.ceil(kept.reduce((sum, message) => sum + messageTokens(message), 0) * messageScale);
+    // The target is aspirational; the retained suffix must leave room for a smaller
+    // checkpoint within the actual model input budget.
+    const available = Math.min(counts.budget, totalTokens(counts) - 1) - fixed - retained;
+    if (available <= 0)
+      throw new DomainError('unavailable', 'Retained context leaves no input budget for a checkpoint');
+    const desired = target - fixed - retained;
+    const output = desired > 0 ? Math.min(desired, available) : available;
+    const { model } = selectModel(this.models, { explicit: settings.summaryModel ?? request.model });
+    const { capability, adapter } = this.model(model);
+    const scale = adapter.countInputTokens ? 1 : calibration(log, model);
+    const currentModel = this.model(request.model);
+    const currentScale = currentModel.adapter.countInputTokens ? 1 : calibration(log, request.model);
+    const summaryRequest: LlmRequest = {
+      model,
+      systemPrompt: 'Prepare a continuation checkpoint.',
+      messages: [],
+      maxTokens: Math.min(capability.maxTokens, output),
+      signal: request.signal,
+    };
+    const summary = await checkpoint(
+      summaryRequest,
+      capability,
+      adapter,
+      messages.slice(0, cut).map((message, index) => offloadMessage(message, contextEntryIds[index])),
+      async (outgoing) => {
+        validateRequestSnapshot(outgoing);
+        const { id: requestId } = log.recordRequest(outgoing, 'summary');
+        return requestModel(this.llm, outgoing, {
+          retry: this.retry,
+          attempt(metrics) {
+            log.append({ type: 'model-attempt', requestId, runId: taskId, summary: true, ...metrics });
           },
-          projection.leafId,
-        );
-        projection = log.context();
-        request = next;
-        occupancy = measured;
-        reduced = true;
-        if (occupancy.total <= target) break;
+        });
+      },
+      scale,
+    );
+    const next = await measure(
+      await rebuild([summary, ...kept]),
+      currentModel.capability,
+      currentModel.adapter,
+      currentScale,
+    );
+    validateRequestSnapshot(next);
+    request.signal.throwIfAborted();
+    if (
+      totalTokens(next.inputMeasurement) >= totalTokens(counts) ||
+      totalTokens(next.inputMeasurement) > next.inputMeasurement.budget
+    )
+      throw new DomainError(
+        'unavailable',
+        'Checkpoint must reduce the request and fit the model input budget',
+      );
+    log.append(
+      {
+        type: 'context-replace',
+        replacements: [{ start: 0, deleteCount: cut, insert: [summary] }],
+        measurement: { ...next.inputMeasurement, model: next.model },
+      },
+      projection.leafId,
+    );
+    return next;
+  }
+
+  async prepare(
+    log: SessionLogPort,
+    request: LlmRequest,
+    rebuild: Rebuild,
+    settings: ContextSettings,
+    taskId: string,
+    failure?: ModelFailure,
+  ) {
+    if (failure && failure.kind !== 'context-overflow' && failure.kind !== 'image-limit') return;
+    const replacements = prune(log.context());
+    let changed = replacements.length > 0;
+    let current = await this.measure(log, await this.replace(log, request, rebuild, replacements));
+    const pressure = () =>
+      totalTokens(current.inputMeasurement) >= current.inputMeasurement.budget * settings.triggerRatio;
+    if (pressure() || failure) {
+      const projection = log.context();
+      const images = offloadImages(projection, pendingInputStart(log, projection));
+      if (images.length) {
+        changed = true;
+        current = await this.measure(log, await this.replace(log, current, rebuild, images));
       }
-    } catch (error) {
-      signal.throwIfAborted();
-      const issue = error instanceof Error ? error.message : String(error);
-      this.issues.set(id, issue);
-      if (manual) fail(issue);
-      if ((repair && !pruned && !reduced) || (budget !== undefined && occupancy.total > budget)) fail(issue);
-    } finally {
-      this.operations.delete(id);
-      this.notify(id);
+      if (failure?.kind === 'image-limit' && !images.length)
+        throw new DomainError(
+          'unavailable',
+          'No historical images can be offloaded without changing pending user input',
+        );
     }
-    if (repair && !pruned && !reduced) fail('No further reduction is possible');
-    if (budget !== undefined && occupancy.total > budget && !manual)
-      fail('The prepared request exceeds the available input budget after compaction');
-    return request;
+    const overflow = failure?.kind === 'context-overflow';
+    if (settings.autoCompact && (overflow || pressure())) {
+      const next = await this.compact(log, current, rebuild, settings, taskId);
+      if (next) return next;
+    }
+    if (totalTokens(current.inputMeasurement) > current.inputMeasurement.budget)
+      throw new DomainError('unavailable', 'The prepared request exceeds its input budget');
+    if (
+      overflow &&
+      (!changed ||
+        totalTokens(current.inputMeasurement) >=
+          totalTokens((await this.measure(log, request)).inputMeasurement))
+    )
+      throw new DomainError(
+        'unavailable',
+        settings.autoCompact
+          ? 'No further context reduction is possible'
+          : 'Automatic compaction is off and no further deterministic reduction is possible',
+      );
+    return current;
   }
 }

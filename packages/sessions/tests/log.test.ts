@@ -240,7 +240,6 @@ test('compaction and context edits change model context without deleting convers
     ['Summary of earlier conversation:\nSummary', 'redacted recent context', 'new question'],
   );
   assert.equal(log.projection().contextEntryIds[1], keep.id);
-  assert.notEqual(log.context().contextRevisions[1], keep.id);
   assert.equal(log.projection().contextEntryIds.length, log.projection().contextMessages.length);
   const compacted = log.context();
   log.revise(user('new branch'), keep.id, compacted.leafId);

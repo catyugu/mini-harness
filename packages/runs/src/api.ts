@@ -4,6 +4,7 @@ import type { RunEvent, ToolProgress } from './stream.ts';
 export { defaultMessageMode, messageModes } from '@mini-harness/sessions/queue';
 export type { MessageMode, MessageOrigin } from '@mini-harness/sessions/queue';
 import type { MessageMode, MessageOrigin, QueueEntry } from '@mini-harness/sessions/queue';
+import type { Context } from 'mini-harness/cordis';
 import type { TaskHandle, TaskOptions } from '@mini-harness/tasks/api';
 import type { RunInfo } from '@mini-harness/sessions/run-state';
 
@@ -68,7 +69,12 @@ export interface RunPort {
     end?: () => void,
   ): () => void;
   cancelQueue(id: string, itemId?: string, signal?: AbortSignal): Promise<QueueEntry[]>;
-  compact(id: string): Promise<void>;
+  /** Execute independent work in the conversation's exclusive lane and agent scope. */
+  runTask<T>(
+    id: string,
+    type: string,
+    work: (ctx: Context, signal: AbortSignal, taskId: string) => Promise<T>,
+  ): Promise<T>;
 }
 
 declare module 'mini-harness/cordis' {

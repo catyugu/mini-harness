@@ -7,6 +7,7 @@ import type { ThinkingLevel, ModelChoice, ToolSchema } from '@mini-harness/llm/v
 import type { ImageInput, PreparedMessage } from '@mini-harness/input/message';
 import type {
   LlmRequest,
+  InputMeasurement,
   ModelRequestSnapshot,
   NativeMessage,
   NativeToolMessage,
@@ -84,7 +85,11 @@ export type SessionEvent<Data = unknown> =
       data: unknown;
     }
   | PluginRecord<Data>
-  | { type: 'context-replace'; replacements: ContextReplacement[] }
+  | {
+      type: 'context-replace';
+      replacements: ContextReplacement[];
+      measurement?: InputMeasurement & { model: ModelChoice };
+    }
   | ({ type: 'model-attempt' } & ModelAttempt)
   | { type: 'session-setting'; owner: string; value: unknown }
   | { type: 'inbox-enqueued'; item: InboxItem }
@@ -95,12 +100,7 @@ export type SessionEvent<Data = unknown> =
   | ({ type: 'task'; run?: RunDetails } & TaskHistoryRecord)
   | { type: 'branch' };
 
-// Historical logs still decode through the same replacement projection.
-export type HistoricalContextEvent =
-  | { type: 'compaction'; summary: string; keepFromId: string | null }
-  | { type: 'context-edit'; targetId: string; replacement: NativeMessage['content'] | null };
-
-export type SessionEntry<Data = unknown> = LogEntry<SessionEvent<Data> | HistoricalContextEvent>;
+export type SessionEntry<Data = unknown> = LogEntry<SessionEvent<Data>>;
 
 /** Historical run envelopes remain readable; new writes have one canonical task lifecycle. */
 export function runFromEntry(sessionId: string, entry: SessionEntry): RunInfo | undefined {
@@ -114,8 +114,6 @@ export interface SessionContext {
   contextMessages: NativeMessage[];
   /** Original entry IDs parallel to contextMessages. Synthetic entries use their replacement record ID. */
   contextEntryIds: string[];
-  /** Cache keys change when content changes, even when its source remains the same. */
-  contextRevisions: string[];
   model?: ModelChoice;
   thinkingLevel?: ThinkingLevel;
 }
@@ -128,7 +126,6 @@ export interface SessionProjection extends SessionContext {
 export interface SessionLogPort {
   readonly sessionId: string;
   entries(after?: number): SessionEntry[];
-  hasAttachments(id: string): boolean;
   /** Fetch the pre-pruning message or, for tool results, the raw execution before transforms. */
   originalMessage(id: string, raw?: boolean): NativeMessage | undefined;
   setting(owner: string): unknown;

@@ -1,13 +1,18 @@
 import type { Context, Plugin } from 'mini-harness/cordis';
 import type { PluginInfo } from '@mini-harness/plugin-api/descriptor';
+import { modelRetry } from '@mini-harness/agent/model-request';
 import type { LlmRequest } from '@mini-harness/llm/api';
+import type {} from '@mini-harness/agent/events';
+import type {} from '@mini-harness/runs/api';
+import { terminal } from '@mini-harness/tasks/api';
+import { prepareModelMessages, selectModel } from '@mini-harness/models/selection';
 import type { SessionLogPort } from '@mini-harness/sessions/log-api';
 import { defineTool } from '@mini-harness/tools/api';
 import { HttpError } from '@mini-harness/transport/routes';
 import { Type } from 'typebox';
-import type { ContextSettings, ContextState } from '../shared/state.ts';
-import { Config } from './config.ts';
-import { ContextManagement, owner } from './management.ts';
+import type { ContextState } from '../shared/state.ts';
+import { Config, validateSettings } from './config.ts';
+import { configuration, ContextManagement, owner } from './management.ts';
 import { Statistics } from './statistics.ts';
 
 export const metadata: PluginInfo = {
@@ -20,12 +25,24 @@ export const metadata: PluginInfo = {
 function setup(ctx: Context) {
   const { harnessSessions: sessions, harnessChanges: changes } = ctx;
   const notify = (id?: string) => changes.invalidate('context-management', id);
-  const manager = new ContextManagement(
-    () => ctx.fiber.effectiveConfig as unknown as ContextSettings,
-    notify,
-  );
+  const defaults = () => validateSettings(ctx.fiber.effectiveConfig);
   const statistics = new WeakMap<Pick<SessionLogPort, 'entries'>, Statistics>();
-  ctx.provide('harnessContextManagement', manager);
+  const createManager = (scoped: Context, id: string) =>
+    new ContextManagement(scoped.harnessModels, scoped.harnessLlm, modelRetry(scoped, id));
+  ctx.on('agent/setup', (run, id) => {
+    const manager = createManager(run, id);
+    const log = sessions.log(id);
+    run.on('agent/prepare-request', (request, step) =>
+      manager.prepare(
+        log,
+        request,
+        step.rebuild,
+        configuration(log.setting(owner), defaults()).settings,
+        step.runId,
+        step.failure,
+      ),
+    );
+  });
   ctx.effect(() => changes.register('context-management'));
   ctx.effect(() => ctx.harnessProfileConfig.subscribe(() => notify()));
   ctx.effect(() => {
@@ -42,7 +59,54 @@ function setup(ctx: Context) {
       run.effect(() =>
         routes.register('POST', '/api/sessions/:id/compact', async ({ params }) => {
           try {
-            await run.harnessRuns.compact(params.id);
+            await run.harnessRuns.runTask(params.id, 'compaction', async (scoped, signal, taskId) => {
+              const log = sessions.log(params.id);
+              const projection = log.context();
+              if (!projection.contextMessages.length)
+                throw new HttpError('invalid_input', 'Nothing to compact in this conversation');
+              const { harnessModels: models } = scoped;
+              const ancestors = new Set(log.branch().map(({ id }) => id));
+              const latest = log
+                .entries()
+                .reverse()
+                .find(
+                  (entry) =>
+                    entry.type === 'model-request' &&
+                    !entry.request.purpose &&
+                    entry.parentId !== null &&
+                    ancestors.has(entry.parentId),
+                );
+              if (!latest)
+                throw new HttpError('invalid_input', 'No model request has been prepared for this branch');
+              const {
+                model: choice,
+                systemPrompt,
+                tools,
+                thinkingLevel,
+                maxTokens,
+              } = log.requestDefinition(latest.id);
+              const { model } = selectModel(models, { explicit: choice });
+              const rebuild = async (messages: LlmRequest['messages']): Promise<LlmRequest> => ({
+                model,
+                systemPrompt,
+                tools,
+                thinkingLevel,
+                maxTokens,
+                messages: prepareModelMessages(models.capabilities(model), messages),
+                signal,
+              });
+              const manager = createManager(scoped, params.id);
+              const request = await manager.prune(log, await rebuild(projection.contextMessages), rebuild);
+              const compacted = await manager.compact(
+                log,
+                request,
+                rebuild,
+                configuration(log.setting(owner), defaults()).settings,
+                taskId,
+              );
+              if (!compacted)
+                throw new HttpError('invalid_input', 'Nothing to compact within the recent-context budget');
+            });
             return { ok: true };
           } catch (error) {
             if (error instanceof Error && error.name === 'AbortError') return { cancelled: true };
@@ -52,10 +116,9 @@ function setup(ctx: Context) {
       );
     });
     web.effect(() =>
-      routes.register('GET', '/api/sessions/:id/context', async ({ params, signal }) => {
+      routes.register('GET', '/api/sessions/:id/context', async ({ params }) => {
         const id = params.id;
         if (!sessions.get(id)) throw new HttpError('not_found', 'Conversation not found');
-        const scoped = ctx.harnessProfileScopes.context(`session:${id}`);
         const result = sessions.inspectLog(
           id,
           (log) => {
@@ -65,52 +128,31 @@ function setup(ctx: Context) {
               entry = new Statistics(log);
               statistics.set(log, entry);
             }
-            const { stats, latestRequest } = entry.read(projection.leafId);
-            const exact = latestRequest?.transformed && latestRequest.parentId === projection.leafId;
-            const definition = latestRequest && log.requestDefinition(latestRequest.id);
-            const request: LlmRequest | undefined = projection.model && {
-              ...definition,
-              model: projection.model,
-              systemPrompt: definition?.systemPrompt ?? '',
-              messages:
-                exact && latestRequest
-                  ? log.requestSnapshot(latestRequest.id).messages
-                  : projection.contextMessages,
-              signal,
-            };
             return {
-              settings: manager.configuration(log.setting(owner), false),
-              stats,
-              occupancy: request && manager.measure(scoped, request, exact ? undefined : projection),
+              ...configuration(log.setting(owner), defaults()),
+              ...entry.read(projection.leafId),
             };
           },
           true,
         );
-        const status = manager.status(id);
-        const settings = result?.settings ?? manager.configuration(undefined);
+        const manual = ctx.harnessTasks
+          .list('session:' + id)
+          .some((task) => task.type === 'compaction' && !terminal(task.state));
         return {
-          ...settings,
-          ...(result?.stats ?? { turns: 0, steps: 0, assistantUsage: {} }),
-          ...status,
-          issue: settings.issue ?? status.issue,
-          occupancy: await result?.occupancy,
+          ...(result ?? { ...configuration(undefined, defaults()), turns: 0, steps: 0, assistantUsage: {} }),
+          compacting: manual ? 'manual' : undefined,
         } satisfies ContextState;
       }),
     );
     web.effect(() =>
       routes.register('PUT', '/api/sessions/:id/context', async ({ params, body }) => {
-        const overrides = await body();
-        if (!overrides || typeof overrides !== 'object' || Array.isArray(overrides))
-          throw new HttpError('invalid_input', 'Expected a context settings object');
-        const config = manager.configuration(overrides).settings;
-        if (
-          Object.hasOwn(overrides, 'summaryModel') &&
-          config.summaryModel &&
-          !ctx.harnessModels.resolve(config.summaryModel)
-        )
+        const value = await body();
+        const custom = value === null ? null : validateSettings(value);
+        if (custom?.summaryModel && !ctx.harnessModels.resolve(custom.summaryModel))
           throw new HttpError('invalid_input', 'Unknown summary model');
         const log = sessions.log(params.id);
-        log.append({ type: 'session-setting', owner, value: overrides });
+        if (custom || log.setting(owner) != null)
+          log.append({ type: 'session-setting', owner, value: custom });
         return { ok: true };
       }),
     );
@@ -184,12 +226,12 @@ const plugin: Plugin.Object = {
   inject: [
     'harnessSessions',
     'harnessModels',
+    'harnessLlm',
+    'harnessTasks',
     'harnessTools',
     'harnessChanges',
     'harnessProfileConfig',
-    'harnessProfileScopes',
   ],
-  provide: ['harnessContextManagement'],
   apply: setup,
 };
 

@@ -22,7 +22,7 @@ export class AgentLoop implements AgentPort {
     const knownCalls = new Set<string>();
     for (let turn = 1; turn <= maxTurns; turn++) {
       signal.throwIfAborted();
-      let step: AgentTurn = await ('prepare' in input
+      let step: AgentTurn | undefined = await ('prepare' in input
         ? input.prepare(turn)
         : (() => {
             const executor = ctx.get('harnessToolExecutor');
@@ -42,39 +42,30 @@ export class AgentLoop implements AgentPort {
               tools,
             };
           })());
+      if (!step) throw new Error('The step was not prepared');
       input.onEvent?.({ type: 'phase', phase: 'model', turn });
       input.onEvent?.({ type: 'assistant-start' });
-      let original: NativeAssistantMessage;
-      for (;;) {
-        const { request } = step;
-        const requestCalls = validateRequestSnapshot(request);
-        for (const id of requestCalls ?? []) knownCalls.add(id);
-        input.onEvent?.({ type: 'request', request });
-        original = await requestModel(
-          llm,
-          { ...request, signal },
-          {
-            delta: (text) => input.onEvent?.({ type: 'delta', text }),
-            attempt: (metrics) => input.onEvent?.({ type: 'model-attempt', metrics }),
-            retry: input.retry,
+      const original = await requestModel(
+        llm,
+        { ...step.request, signal },
+        {
+          request(request) {
+            for (const id of validateRequestSnapshot(request) ?? []) knownCalls.add(id);
+            input.onEvent?.({ type: 'request', request });
           },
-        );
-        const { errorKind, errorMessage } = original;
-        if (
-          signal.aborted ||
-          !('prepare' in input) ||
-          (errorKind !== 'context-overflow' && errorKind !== 'image-limit')
-        )
-          break;
-        const recovered = await input.recover?.(
-          turn,
-          errorKind,
-          errorMessage ?? 'Model input limit exceeded',
-        );
-        if (!recovered) break;
-        step = recovered;
-        input.onEvent?.({ type: 'assistant-start' });
-      }
+          delta: (text) => input.onEvent?.({ type: 'delta', text }),
+          attempt: (metrics) => input.onEvent?.({ type: 'model-attempt', metrics }),
+          retry: input.retry,
+          async recover(failure) {
+            if (!('prepare' in input)) return;
+            const next = await input.prepare(turn, failure);
+            if (!next) return;
+            step = next;
+            input.onEvent?.({ type: 'assistant-start' });
+            return { ...next.request, signal };
+          },
+        },
+      );
       const { request, executor, execution, deliver } = step;
       let result = original;
       let diagnostic: Extract<AgentEvent, { type: 'assistant' }>['diagnostic'];

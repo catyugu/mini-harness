@@ -9,6 +9,7 @@
     }
   },
   "dependencies": {
+    "@mini-harness/agent": "workspace:*",
     "@mini-harness/conversation": "workspace:*",
     "@mini-harness/llm": "workspace:*",
     "@mini-harness/models": "workspace:*",
@@ -17,6 +18,7 @@
     "@mini-harness/runs": "workspace:*",
     "@mini-harness/sessions": "workspace:*",
     "@mini-harness/settings": "workspace:*",
+    "@mini-harness/tasks": "workspace:*",
     "@mini-harness/tools": "workspace:*",
     "@mini-harness/transport": "workspace:*",
     "@mini-harness/ui-primitives": "workspace:*",

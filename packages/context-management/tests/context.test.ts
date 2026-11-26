@@ -10,15 +10,24 @@ import { fixture } from '../../../test/support/api-fixture.ts';
 import { sendRun } from '../../../test/support/runs.ts';
 import { SessionLog } from '../../sessions/src/log.ts';
 import type { SessionLogPort } from '@mini-harness/sessions/log-api';
+import { estimate, totalTokens } from '../src/server/meter.ts';
+import { splitPoint } from '../src/server/compaction.ts';
 import type { MockProvider } from '../../../test/helpers/mock-provider.ts';
 
+const settings = {
+  autoCompact: true,
+  triggerRatio: 0.8,
+  targetRatio: 0.6,
+  retainRatio: 0.16,
+  summaryModel: null,
+};
 const summary = (content?: string) => content?.startsWith('Write a continuation checkpoint');
-const withUsage = (text: string) => ({
+const withUsage = (text: string, input: number) => ({
   text,
   usage: {
-    prompt_tokens: 100,
+    prompt_tokens: input,
     completion_tokens: 20,
-    total_tokens: 120,
+    total_tokens: input + 20,
     prompt_tokens_details: { cached_tokens: 80 },
   },
 });
@@ -30,13 +39,71 @@ function assertPaired(log: SessionLogPort, mock: MockProvider) {
   for (const request of requests) validateRequestSnapshot(log.requestSnapshot(request.id));
 }
 
+test('retention includes the complete latest exchange even when it exceeds the minimum', () => {
+  const messages = [
+    { role: 'user', content: 'History', timestamp: 0 },
+    {
+      role: 'assistant',
+      content: [{ type: 'toolCall', id: 'probe', name: 'probe', arguments: {} }],
+      timestamp: 0,
+    },
+    {
+      role: 'toolResult',
+      toolCallId: 'probe',
+      toolName: 'probe',
+      content: [{ type: 'text', text: 'diagnostics '.repeat(1000) }],
+      isError: false,
+      timestamp: 0,
+    },
+  ] satisfies import('@mini-harness/llm/api').NativeMessage[];
+  assert.equal(splitPoint(messages, 10), 1);
+});
+
+test('provider input usage calibrates the next request without compounding previous estimates', async (t) => {
+  const { app, request } = await fixture(t, () => withUsage('Done', 1600));
+  const ctx = app.runtime.plugins.ctx;
+  const { body: session } = await request('/sessions', 'POST', {});
+  for (const text of ['First', 'Second', 'Third']) await sendRun(ctx.harnessRuns, session.id, text);
+  const log = ctx.harnessSessions.log(session.id);
+  const recorded = log.entries().filter((entry) => entry.type === 'model-request');
+  assert.equal(recorded.length, 3);
+  for (let index = 1; index < recorded.length; index++) {
+    const previous = log.requestSnapshot(recorded[index - 1].id);
+    const current = log.requestSnapshot(recorded[index].id);
+    const scale = 1600 / totalTokens(estimate(previous));
+    const raw = estimate(current);
+    assert.ok(current.inputMeasurement?.estimated);
+    assert.deepEqual(
+      {
+        system: current.inputMeasurement.system,
+        tools: current.inputMeasurement.tools,
+        messages: current.inputMeasurement.messages,
+      },
+      {
+        system: Math.ceil(raw.system * scale),
+        tools: Math.ceil(raw.tools * scale),
+        messages: Math.ceil(raw.messages * scale),
+      },
+    );
+  }
+});
+
 test('a single user turn supports repeated token-budget compaction while tools execute once', async (t) => {
   let calls = 0;
   let checkpoints = 0;
+  let input = 0;
   const { app, mock, request } = await fixture(t, ({ messages }) => {
+    const report = (text: string) => {
+      const count = Math.max(
+        100,
+        Math.ceil(messages.reduce((sum, message) => sum + message.content.length + 16, 0) / 4),
+      );
+      input += count;
+      return withUsage(text, count);
+    };
     if (summary(messages.at(-1)?.content)) {
       checkpoints++;
-      return withUsage(checkpointFixture);
+      return report(checkpointFixture + '\nComplete the task and preserve the constraints');
     }
     if (calls < 7)
       return {
@@ -45,7 +112,7 @@ test('a single user turn supports repeated token-budget compaction while tools e
         callId: 'probe-' + calls,
         text: 'Important diagnostics. '.repeat(1250),
       };
-    return withUsage('Long task completed');
+    return report('Long task completed');
   });
   const ctx = app.runtime.plugins.ctx;
   t.after(
@@ -64,6 +131,7 @@ test('a single user turn supports repeated token-budget compaction while tools e
   const { body: session } = await request('/sessions', 'POST', {});
   const path = '/sessions/' + session.id;
   const reply = await request(path + '/context', 'PUT', {
+    ...settings,
     retainRatio: 0.1,
     targetRatio: 0.38,
     triggerRatio: 0.45,
@@ -78,6 +146,15 @@ test('a single user turn supports repeated token-budget compaction while tools e
     1,
   );
   assert.ok(log.entries().filter(({ type }) => type === 'context-replace').length >= 2);
+  const submitted = log
+    .projection()
+    .timeline.find((entry) => entry.type === 'message' && entry.role === 'user');
+  assert.ok(
+    submitted &&
+      JSON.stringify(log.context().contextMessages).includes(
+        'Complete the task and preserve the constraints',
+      ),
+  );
   assertPaired(log, mock);
 
   const { body: state } = await request(path + '/context');
@@ -85,7 +162,7 @@ test('a single user turn supports repeated token-budget compaction while tools e
   assert.equal(state.steps, 8);
   assert.equal(state.toolMs, 84);
   assert.deepEqual(state.usage, {
-    input: 20 * (checkpoints + 1),
+    input: input - 80 * (checkpoints + 1),
     cacheRead: 80 * (checkpoints + 1),
     output: 20 * (checkpoints + 1),
   });
@@ -93,7 +170,67 @@ test('a single user turn supports repeated token-budget compaction while tools e
   assert.deepEqual(Object.values(state.assistantUsage), [state.usage]);
 });
 
-test('context overflow repairs the current request and leaves raw, duplicate tool results recoverable', async (t) => {
+test('automatic compaction preserves the pending multimodal input and accepts a result above the soft target', async (t) => {
+  let checkpoints = 0;
+  const fresh = 'Fresh attachment. '.repeat(500);
+  const { app, request } = await fixture(
+    t,
+    ({ messages }) => {
+      if (summary(messages.at(-1)?.content)) {
+        checkpoints++;
+        assert.ok(messages.every(({ content }) => !content.includes('Fresh attachment.')));
+        return 'The earlier analysis is complete.';
+      }
+      return 'Done';
+    },
+    (paths) => {
+      const file = join(paths.home, 'models.json');
+      const models = JSON.parse(readFileSync(file, 'utf8'));
+      models.providers['local-mock'].models[0].input.push('image');
+      writeFileSync(file, JSON.stringify(models));
+    },
+  );
+  const ctx = app.runtime.plugins.ctx;
+  const { body: session } = await request('/sessions', 'POST', {});
+  const endpoint = '/sessions/' + session.id + '/context';
+  const targetRatio = 0.05;
+  assert.equal(
+    (
+      await request(endpoint, 'PUT', {
+        ...settings,
+        triggerRatio: 0.15,
+        targetRatio,
+        retainRatio: 0.02,
+      })
+    ).status,
+    200,
+  );
+  await sendRun(ctx.harnessRuns, session.id, 'Earlier analysis. '.repeat(1800));
+  assert.equal(checkpoints, 0, 'The first user message must reach the model before being compressed');
+  const attachment = { name: 'sample.png', mimeType: 'image/png', data: 'iVBORw0KGgo=' };
+  await sendRun(ctx.harnessRuns, session.id, fresh, undefined, { attachments: [attachment] });
+  assert.equal(checkpoints, 1);
+  const log = ctx.harnessSessions.log(session.id);
+  const submitted = log
+    .branch()
+    .filter((entry) => entry.type === 'message' && entry.message.role === 'user')
+    .at(-1);
+  assert.ok(submitted?.type === 'message');
+  const normal = log.entries().filter((entry) => entry.type === 'model-request' && !entry.request.purpose);
+  assert.equal(normal.length, 2);
+  const prepared = log.requestSnapshot(normal[1].id);
+  assert.deepEqual(prepared.messages.at(-1), submitted.message);
+  assert.ok(
+    Array.isArray(submitted.message.content) &&
+      submitted.message.content.some((part) => part.type === 'image'),
+  );
+  const counts = prepared.inputMeasurement;
+  assert.ok(counts && totalTokens(counts) > counts.budget * targetRatio);
+  assert.ok(totalTokens(counts) <= counts.budget);
+  assert.ok(log.context().contextEntryIds.includes(submitted.id));
+});
+
+test('context overflow repairs the current request and leaves raw tool results recoverable', async (t) => {
   let calls = 0,
     overflowed = false;
   let restored = false;
@@ -106,7 +243,7 @@ test('context overflow repairs the current request and leaves raw, duplicate too
     if (last?.content === 'Repeat the probe') return { tool: 'probe', args: {}, callId: 'second-probe' };
     if (calls === 2 && !overflowed) {
       overflowed = true;
-      assert.match(last?.content ?? '', /Identical tool output/);
+      assert.match(last?.content ?? '', /Tool output shortened/);
       return { overflow: 'context' };
     }
     if (last?.content === 'Read back the full diagnostic') {
@@ -151,40 +288,55 @@ test('context overflow repairs the current request and leaves raw, duplicate too
   assert.equal(restored, true);
 });
 
-test('session overrides inherit defaults, reject invalid ratios and preserve context on summary failure', async (t) => {
+test('session overrides inherit defaults, reject invalid ratios and accept unstructured checkpoints', async (t) => {
   const { app, request, paths } = await fixture(t, ({ messages }) =>
-    summary(messages.at(-1)?.content) ? 'Invalid checkpoint' : 'Answer to the task',
+    summary(messages.at(-1)?.content) ? 'Continue the earlier task.' : 'Answer to the task',
   );
   const ctx = app.runtime.plugins.ctx;
   const { body: session } = await request('/sessions', 'POST', {});
   const path = '/sessions/' + session.id;
-  assert.equal((await request(path + '/context', 'PUT', { targetRatio: 0.85 })).status, 400);
-  assert.equal((await request(path + '/context', 'PUT', { autoCompact: false })).status, 200);
+  assert.equal((await request(path + '/context', 'PUT', { ...settings, targetRatio: 0.85 })).status, 400);
+  assert.equal((await request(path + '/context', 'PUT', { autoCompact: false })).status, 400);
+  assert.equal((await request(path + '/context', 'PUT', { ...settings, autoCompact: false })).status, 200);
   await app.runtime.configuration.update({
     entries: { 'context-management': { config: { triggerRatio: 0.9 } } },
   });
   const { body: configured } = await request(path + '/context');
-  assert.deepEqual(configured.overrides, { autoCompact: false });
-  assert.equal(configured.settings.triggerRatio, 0.9);
+  assert.equal(configured.customized, true);
+  assert.deepEqual(configured.settings, { ...settings, autoCompact: false });
+  assert.equal(configured.settings.triggerRatio, 0.8);
   await sendRun(ctx.harnessRuns, session.id, 'First request. '.repeat(60));
   await sendRun(ctx.harnessRuns, session.id, 'Second request. '.repeat(60));
   const sessionLog = ctx.harnessSessions.log(session.id);
   const before = sessionLog.projection();
-  assert.equal((await request(path + '/compact', 'POST')).status, 400);
-  assert.deepEqual(sessionLog.context().contextMessages, before.contextMessages);
+  const compacted = await request(path + '/compact', 'POST');
+  assert.equal(
+    compacted.status,
+    200,
+    JSON.stringify(
+      sessionLog
+        .entries()
+        .filter((entry) => entry.type === 'task')
+        .at(-1),
+    ),
+  );
+  assert.ok(sessionLog.context().contextMessages.length < before.contextMessages.length);
   const exported = ctx.harnessSessions.export([session.id])[0];
   const copy = join(paths.cwd, 'reopened-log.jsonl');
   writeFileSync(copy, exported.log);
   const restored = new SessionLog(copy, session.id);
   try {
     assert.deepEqual(restored.context(), sessionLog.context());
-    assert.deepEqual(restored.setting('context-management'), { autoCompact: false });
+    assert.deepEqual(restored.setting('context-management'), { ...settings, autoCompact: false });
   } finally {
     restored.close();
   }
   assert.ok(readFileSync(copy, 'utf8').includes('model-attempt'));
-  assert.equal((await request(path + '/context', 'PUT', {})).status, 200);
-  assert.deepEqual((await request(path + '/context')).body.overrides, {});
+  assert.equal((await request(path + '/context', 'PUT', null)).status, 200);
+  const inherited = (await request(path + '/context')).body;
+  assert.equal(inherited.customized, false);
+  assert.equal(inherited.settings.triggerRatio, 0.9);
+  assert.equal(sessionLog.setting('context-management'), undefined);
 });
 
 test('switching to a smaller window uses the configured summary model and segments its input', async (t) => {
@@ -206,7 +358,7 @@ test('switching to a smaller window uses the configured summary model and segmen
   const { body: session } = await request('/sessions', 'POST', {});
   const endpoint = '/sessions/' + session.id + '/context';
   const summaryModel = { provider: 'local-mock', id: 'summary' };
-  assert.equal((await request(endpoint, 'PUT', { summaryModel })).status, 200);
+  assert.equal((await request(endpoint, 'PUT', { ...settings, summaryModel })).status, 200);
   for (let index = 0; index < 3; index++)
     await sendRun(ctx.harnessRuns, session.id, 'Document ' + index + '\n' + 'Prior context. '.repeat(1000));
   const model = { provider: 'local-mock', id: 'smaller' };
@@ -219,13 +371,13 @@ test('switching to a smaller window uses the configured summary model and segmen
   assert.ok(state.occupancy.total < state.occupancy.budget);
 });
 
-test('an image limit offloads the oldest image and an irreducible overflow exits with a reason', async (t) => {
+test('image rejection offloads all historical images and an irreducible overflow exits with a reason', async (t) => {
   let imageRequests = 0;
   const { app, request } = await fixture(
     t,
     ({ messages }) => {
       const text = messages.at(-1)?.content;
-      if (text === 'Second image' && ++imageRequests === 1) return { overflow: 'image' };
+      if (text === 'Latest image' && ++imageRequests === 1) return { overflow: 'image' };
       if (text === 'Always overflow') return { overflow: 'context' };
       return 'Done';
     },
@@ -239,8 +391,9 @@ test('an image limit offloads the oldest image and an irreducible overflow exits
   const ctx = app.runtime.plugins.ctx;
   const { body: session } = await request('/sessions', 'POST', {});
   const attachment = { name: 'sample.png', mimeType: 'image/png', data: 'iVBORw0KGgo=' };
-  await sendRun(ctx.harnessRuns, session.id, 'First image', undefined, { attachments: [attachment] });
-  await sendRun(ctx.harnessRuns, session.id, 'Second image', undefined, { attachments: [attachment] });
+  for (const text of ['First image', 'Second image', 'Third image', 'Fourth image'])
+    await sendRun(ctx.harnessRuns, session.id, text, undefined, { attachments: [attachment] });
+  await sendRun(ctx.harnessRuns, session.id, 'Latest image', undefined, { attachments: [attachment] });
   assert.equal(imageRequests, 2);
   const log = ctx.harnessSessions.log(session.id);
   const images = (content: ReturnType<typeof log.context>['contextMessages']) =>
@@ -249,16 +402,52 @@ test('an image limit offloads the oldest image and an irreducible overflow exits
     );
   assert.equal(images(log.context().contextMessages).length, 1);
   const requests = log.entries().filter(({ type }) => type === 'model-request');
-  assert.equal(images(log.requestSnapshot(requests[1].id).messages).length, 2);
+  const rejected = log.requestSnapshot(requests.at(-2)!.id);
+  const repaired = log.requestSnapshot(requests.at(-1)!.id);
+  assert.equal(images(rejected.messages).length, 5);
+  assert.deepEqual(repaired.messages.at(-1), rejected.messages.at(-1));
   const { body: plain } = await request('/sessions', 'POST', {});
   assert.equal(
-    (await request('/sessions/' + plain.id + '/context', 'PUT', { autoCompact: false })).status,
+    (await request('/sessions/' + plain.id + '/context', 'PUT', { ...settings, autoCompact: false })).status,
     200,
   );
   await assert.rejects(sendRun(ctx.harnessRuns, plain.id, 'Always overflow'), /Automatic compaction is off/);
   const failed = ctx.harnessSessions.log(plain.id);
   assert.equal(failed.context().contextMessages.filter(({ role }) => role === 'user').length, 1);
   assert.equal(failed.entries().filter(({ type }) => type === 'model-attempt').length, 1);
+});
+
+test('disabled automatic compaction still retries context overflow after deterministic image offloading', async (t) => {
+  let attempts = 0;
+  const { app, request } = await fixture(
+    t,
+    ({ messages }) => {
+      if (summary(messages.at(-1)?.content)) assert.fail('Automatic summary is disabled');
+      if (messages.at(-1)?.content === 'Latest input' && ++attempts === 1) return { overflow: 'context' };
+      return 'Done';
+    },
+    (paths) => {
+      const file = join(paths.home, 'models.json');
+      const models = JSON.parse(readFileSync(file, 'utf8'));
+      models.providers['local-mock'].models[0].input.push('image');
+      writeFileSync(file, JSON.stringify(models));
+    },
+  );
+  const ctx = app.runtime.plugins.ctx;
+  const { body: session } = await request('/sessions', 'POST', {});
+  const endpoint = '/sessions/' + session.id + '/context';
+  assert.equal((await request(endpoint, 'PUT', { ...settings, autoCompact: false })).status, 200);
+  const attachment = { name: 'sample.png', mimeType: 'image/png', data: 'iVBORw0KGgo=' };
+  await sendRun(ctx.harnessRuns, session.id, 'Earlier input', undefined, { attachments: [attachment] });
+  await sendRun(ctx.harnessRuns, session.id, 'Latest input', undefined, { attachments: [attachment] });
+  assert.equal(attempts, 2);
+  const log = ctx.harnessSessions.log(session.id);
+  const records = log.entries().filter((entry) => entry.type === 'model-request');
+  assert.equal(records.length, 3);
+  const rejected = log.requestSnapshot(records[1].id);
+  const repaired = log.requestSnapshot(records[2].id);
+  assert.deepEqual(repaired.messages.at(-1), rejected.messages.at(-1));
+  assert.ok(totalTokens(repaired.inputMeasurement!) < totalTokens(rejected.inputMeasurement!));
 });
 
 test('cancelling a manual checkpoint keeps the active branch and releases the conversation lane', async (t) => {
@@ -281,7 +470,7 @@ test('cancelling a manual checkpoint keeps the active branch and releases the co
   const ctx = app.runtime.plugins.ctx;
   const { body: session } = await request('/sessions', 'POST', {});
   await sendRun(ctx.harnessRuns, session.id, 'First analysis. '.repeat(150));
-  await sendRun(ctx.harnessRuns, session.id, 'Next request');
+  await sendRun(ctx.harnessRuns, session.id, 'Next request. '.repeat(100));
   const log = ctx.harnessSessions.log(session.id);
   const before = log.context();
   const endpoint = '/sessions/' + session.id;
@@ -289,8 +478,18 @@ test('cancelling a manual checkpoint keeps the active branch and releases the co
   try {
     await Promise.race([
       entered,
-      compact.then(() => {
-        throw new Error('Compaction settled before cancellation');
+      compact.then((result) => {
+        throw new Error(
+          'Compaction settled before cancellation: ' +
+            JSON.stringify(result) +
+            ' ' +
+            JSON.stringify(
+              log
+                .entries()
+                .filter((entry) => entry.type === 'task')
+                .at(-1),
+            ),
+        );
       }),
     ]);
     assert.equal((await request(endpoint + '/context')).body.compacting, 'manual');

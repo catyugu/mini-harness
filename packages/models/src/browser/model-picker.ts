@@ -10,6 +10,7 @@ export function createModelPicker(
   onSelect: (model: ModelChoice) => void,
   signal: AbortSignal,
   emptyLabel = 'Choose model',
+  selectEmpty?: () => void,
 ) {
   const id = 'model-options-' + ++nextPicker;
   const popup = fromMarkup(`<div class="ui-popover model-picker" popover="auto">
@@ -27,7 +28,7 @@ export function createModelPicker(
   const empty = required(popup.querySelector<HTMLElement>('.model-empty'));
   let models: ModelSummary[] = [];
   let providers = new Map<string, string>();
-  let selected: ModelSummary | undefined;
+  let selected: ModelSummary | null | undefined;
   let options: HTMLButtonElement[] = [];
   let cursor = -1;
 
@@ -65,11 +66,32 @@ export function createModelPicker(
     if (scroll) active.scrollIntoView({ block: 'nearest' });
   }
 
+  function addOption(parent: HTMLElement, active: boolean, select: () => void) {
+    const option = document.createElement('button');
+    option.type = 'button';
+    option.tabIndex = -1;
+    option.className = 'suggestion model-option';
+    option.id = id + '-' + options.length;
+    option.setAttribute('role', 'option');
+    option.setAttribute('aria-selected', String(active));
+    option.onpointermove = () => highlight(options.indexOf(option), false);
+    option.onclick = () => {
+      popup.hidePopover();
+      button.focus();
+      select();
+    };
+    options.push(option);
+    parent.append(option);
+    return option;
+  }
+
   function render() {
     const terms = search.value.trim().toLowerCase().split(/\s+/);
     const groups = new Map<string, HTMLElement>();
     results.replaceChildren();
     options = [];
+    if (selectEmpty && terms.every((term) => matches(emptyLabel.toLowerCase(), term)))
+      addOption(results, selected === null, selectEmpty).textContent = emptyLabel;
     for (const model of models) {
       const provider = providerName(model.provider);
       const labels = [model.name, model.id, provider, model.provider].map((label) => label.toLowerCase());
@@ -87,13 +109,9 @@ export function createModelPicker(
         results.append(group);
         groups.set(model.provider, group);
       }
-      const option = document.createElement('button');
-      option.type = 'button';
-      option.tabIndex = -1;
-      option.className = 'suggestion model-option';
-      option.id = id + '-' + options.length;
-      option.setAttribute('role', 'option');
-      option.setAttribute('aria-selected', String(model === selected));
+      const option = addOption(group, model === selected, () =>
+        onSelect({ provider: model.provider, id: model.id }),
+      );
       const label = document.createElement('span');
       label.className = 'model-option-label';
       const name = document.createElement('strong');
@@ -108,14 +126,6 @@ export function createModelPicker(
       modality.textContent = model.input.includes('image') ? 'Text and images' : 'Text only';
       label.append(modality);
       option.append(label);
-      option.onpointermove = () => highlight(options.indexOf(option), false);
-      option.onclick = () => {
-        popup.hidePopover();
-        button.focus();
-        onSelect({ provider: model.provider, id: model.id });
-      };
-      options.push(option);
-      group.append(option);
     }
     empty.textContent = models.length
       ? 'No matching models.'
@@ -160,8 +170,8 @@ export function createModelPicker(
   };
   return {
     open,
-    selected: () => selected,
-    update(catalog: ModelSummary[], names: { id: string; name: string }[], choice: ModelChoice) {
+    selected: () => selected ?? undefined,
+    update(catalog: ModelSummary[], names: { id: string; name: string }[], choice: ModelChoice | null) {
       providers = new Map(names.map(({ id, name }) => [id, name]));
       models = catalog
         .filter((model) => model.configured)
@@ -171,16 +181,19 @@ export function createModelPicker(
             a.provider.localeCompare(b.provider) ||
             a.name.localeCompare(b.name),
         );
-      selected = models.find(
-        (model) => model.provider === choice.provider && (!choice.id || model.id === choice.id),
-      );
+      selected =
+        choice === null
+          ? null
+          : models.find(
+              (model) => model.provider === choice.provider && (!choice.id || model.id === choice.id),
+            );
       const label = document.createElement('span');
-      label.textContent = selected?.name ?? emptyLabel;
+      label.textContent = selected?.name ?? (choice?.id || emptyLabel);
       button.replaceChildren(label, icon('chevron'));
       button.title = selected ? providerName(selected.provider) + ' / ' + selected.id : '';
       button.setAttribute('aria-label', selected ? 'Model: ' + selected.name : emptyLabel);
       if (popup.matches(':popover-open')) render();
-      return selected;
+      return selected ?? undefined;
     },
   };
 }

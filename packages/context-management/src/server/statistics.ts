@@ -1,10 +1,9 @@
 import type { NativeUsage } from '@mini-harness/llm/api';
 import type { ModelAttempt, SessionEntry, SessionLogPort } from '@mini-harness/sessions/log-api';
-import type { ContextState, TokenTotals } from '../shared/state.ts';
+import type { ContextOccupancy, ContextState, TokenTotals } from '../shared/state.ts';
 
-type Request = { id: string; parentId: string | null; transformed?: true };
 type Observation = { id: string; parentId: string | null } & (
-  | ({ type: 'model-request' } & Request)
+  | { type: 'model-request' | 'context-replace'; occupancy?: ContextOccupancy }
   | ({ type: 'model-attempt' } & ModelAttempt)
   | { type: 'user' }
   | { type: 'assistant'; usage?: NativeUsage; attemptsRecorded?: true }
@@ -31,11 +30,31 @@ function knownUsage(usage: NativeUsage | undefined): TokenTotals | undefined {
   return { input, cacheRead, cacheWrite: cacheWrite || (usage.cacheWriteSupported ? 0 : undefined), output };
 }
 
+function occupancy(
+  counts: import('@mini-harness/llm/api').InputMeasurement,
+  model: ContextOccupancy['model'],
+): ContextOccupancy {
+  return { ...counts, model, total: counts.system + counts.tools + counts.messages };
+}
+
 function observe(entry: SessionEntry): Observation | undefined {
   const { id, parentId } = entry;
   if (entry.type === 'model-attempt') return entry;
   if (entry.type === 'model-request' && !entry.request.purpose)
-    return { id, parentId, type: entry.type, transformed: entry.request.messagesPatch ? true : undefined };
+    return {
+      id,
+      parentId,
+      type: entry.type,
+      occupancy:
+        entry.request.inputMeasurement && occupancy(entry.request.inputMeasurement, entry.request.model),
+    };
+  if (entry.type === 'context-replace' && entry.measurement)
+    return {
+      id,
+      parentId,
+      type: entry.type,
+      occupancy: occupancy(entry.measurement, entry.measurement.model),
+    };
   if (entry.type !== 'message') return;
   const { message } = entry;
   switch (message.role) {
@@ -57,12 +76,11 @@ function observe(entry: SessionEntry): Observation | undefined {
 }
 
 class BranchStatistics {
-  private readonly totals: Omit<ContextState, 'settings' | 'overrides'> = {
+  private readonly totals: Omit<ContextState, 'settings' | 'customized'> = {
     turns: 0,
     steps: 0,
     assistantUsage: Object.create(null),
   };
-  private latestRequest?: Request;
   private latency = 0;
   private latencySamples = 0;
   private generationMs = 0;
@@ -79,7 +97,8 @@ class BranchStatistics {
     const stats = this.totals;
     switch (entry.type) {
       case 'model-request':
-        this.latestRequest = entry;
+      case 'context-replace':
+        stats.occupancy = entry.occupancy;
         break;
       case 'model-attempt': {
         if (!entry.summary && entry.step !== undefined) {
@@ -146,7 +165,7 @@ class BranchStatistics {
       const usage = addUsage(this.assistantUsage, this.pendingUsage);
       if (usage) stats.assistantUsage[this.assistantId] = usage;
     }
-    return { stats, latestRequest: this.latestRequest };
+    return stats;
   }
 }
 

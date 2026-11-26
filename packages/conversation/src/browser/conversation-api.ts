@@ -42,7 +42,7 @@ export interface ConversationState {
   mode: MessageMode;
   queue: readonly ConversationView['queue'][number][];
   interaction: {
-    operation?: 'open' | 'submit' | 'compact';
+    operation?: 'open' | 'submit';
     cancelling?: boolean;
     status: string;
     error?: boolean;
@@ -54,7 +54,7 @@ export interface ConversationController {
   subscribe(parts: readonly (keyof ConversationState)[], listener: () => void, signal: AbortSignal): void;
   activate(id: string, revealWorkspace?: boolean): Promise<boolean>;
   clear(): void;
-  report(error: Error): void;
+  report(message: string | Error): void;
   submit(
     input: ConversationSubmission,
     created?: (sessionId: string) => void,
@@ -64,7 +64,6 @@ export interface ConversationController {
   cancel(): Promise<void>;
   cancelQueue(id?: string): Promise<void>;
   setPermission(permission: ConversationPermission): Promise<void>;
-  compact(): Promise<void>;
 }
 
 declare module 'mini-harness/cordis' {
@@ -77,6 +76,7 @@ declare module '@mini-harness/ui-slots/browser/api' {
   interface SlotMap {
     'workspace.welcome': { kind: 'single' };
     'conversation.composer': { kind: 'list' };
+    'conversation.composer-options': { kind: 'list' };
     'conversation.composer-footer': { kind: 'list' };
     'conversation.composer-view': { kind: 'single' };
     'conversation.history': { kind: 'single' };

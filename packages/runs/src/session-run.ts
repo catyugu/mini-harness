@@ -4,7 +4,7 @@ import { conversationTools } from './tool-selection.ts';
 import type { Context } from 'mini-harness/cordis';
 import type { TaskContext } from '@mini-harness/tasks/api';
 import { scopeTarget } from '@mini-harness/plugin-api/scopes';
-import type { InputContext, ModelFailure, StepContext } from '@mini-harness/agent/events';
+import type { InputContext, StepContext } from '@mini-harness/agent/events';
 import { DomainError } from '@mini-harness/platform/errors';
 import { isDeepStrictEqual } from 'node:util';
 import type { SessionCatalog, SessionLifecycle, SessionStore } from '@mini-harness/sessions/records';
@@ -32,23 +32,12 @@ import {
   selectModel,
   assertImageInput,
 } from '@mini-harness/models/selection';
-import type { AgentTurn } from '@mini-harness/agent/api';
-import type { ContextRepair, ContextRequest } from './context-management.ts';
-import { requestModel } from '@mini-harness/agent/model-request';
+import { modelRetry } from '@mini-harness/agent/model-request';
 
 function requireService<K extends keyof Context & string>(ctx: Context, name: K): NonNullable<Context[K]> {
   const value = ctx.get(name);
   if (value == null) throw new DomainError('unavailable', 'Required service is unavailable: ' + name);
   return value;
-}
-
-async function retryModel(ctx: Context, failure: ModelFailure & { sessionId: string }) {
-  const { signal, ...input } = failure;
-  for (const { context, callback } of ctx.events.listeners('agent/model-retry', scopeTarget(ctx))) {
-    const retry = await context.fiber.run((signal) => callback({ ...input, signal }), signal);
-    if (retry === undefined) continue;
-    return retry;
-  }
 }
 
 const textOf = (message: NativeAssistantMessage) =>
@@ -92,7 +81,7 @@ export class SessionRun {
   ) {}
 
   /** Never retry an unknown tool outcome after restart or provider failure. */
-  private closeUnfinishedTools(log: SessionLogPort, cancelled = false) {
+  closeUnfinishedTools(log: SessionLogPort, cancelled = false) {
     const pending = new Map<string, ToolCallPart>();
     for (const message of log.context().contextMessages) {
       if (message.role === 'assistant')
@@ -248,16 +237,13 @@ export class SessionRun {
         // Coalesce messages accepted during the same interruption before requesting a model turn.
       }
     }
-    let modelRequest: AgentTurn['request'] | undefined;
     let requestId: string | undefined;
     let attemptsRecorded = false;
     let modelStep = 0;
-    let repairs = 0;
-    let prepareTurn: ((repair?: ContextRepair) => Promise<AgentTurn>) | undefined;
     const answer = await requireService(ctx, 'harnessAgent')
       .run(ctx, {
         signal,
-        retry: (failure) => retryModel(ctx, { ...failure, sessionId: id }),
+        retry: modelRetry(ctx, id),
         onEvent: (event) => {
           if (event.type === 'phase') {
             if (event.phase === 'model') modelStep = event.turn;
@@ -265,7 +251,6 @@ export class SessionRun {
             return;
           }
           if (event.type === 'request') {
-            modelRequest = event.request;
             requestId = log.recordRequest(event.request).id;
             attemptsRecorded = false;
             return;
@@ -279,8 +264,6 @@ export class SessionRun {
               step: modelStep,
               ...event.metrics,
             });
-            if (modelRequest && event.metrics.usage)
-              ctx.get('harnessContextManagement')?.observe(modelRequest, event.metrics.usage);
             attemptsRecorded = true;
             return;
           }
@@ -303,105 +286,103 @@ export class SessionRun {
         afterTurn: async () => {
           if (await deliver(['steer'])) return 'continue';
         },
-        recover: (_turn, kind, message) => prepareTurn?.({ kind, message, attempt: ++repairs }),
-        prepare: async (turn) => {
-          repairs = 0;
+        prepare: async (turn, failure) => {
           const current = log.context();
           const model = current.model;
           if (!model) throw new Error('Configure a model before sending a message');
           const cwd = this.sessions.workspacePath(id);
-          const step: StepContext = { sessionId: id, turn, phase: 'turn', cwd, model, signal };
+          const step: StepContext = { sessionId: id, turn, cwd, model, signal };
           const executor = requireService(ctx, 'harnessToolExecutor');
-          const input = await this.contextRequest(ctx, step, log, submissionId);
-          const advertisedTools = input.tools;
-          const strategy = ctx.get('harnessContextManagement');
-          prepareTurn = async (repair) => {
-            const request = strategy
-              ? await strategy.prepare(input, repair)
-              : await input.assemble(log.context());
-            const hooks = ctx.events.listeners('agent/tool-result', scopeTarget(ctx));
-            return {
-              request,
-              executor,
-              tools: advertisedTools,
-              execution: {
-                executionId: task.id,
-                async waitFor(id, signal) {
-                  await task.waitFor(id, signal);
-                },
-                start(call) {
-                  if (signal.aborted) return { outcome: 'skipped', reason: 'Agent run cancelled' };
-                  if (inbox.hasValid('steer', selection))
-                    return { outcome: 'skipped', reason: 'Skipped because a steering message arrived.' };
-                  const tool = advertisedTools.get(call.name);
-                  if (tool && ctx.get('harnessToolPolicy')?.(id, tool) === false)
-                    return { outcome: 'denied', reason: 'Tool denied by conversation policy: ' + call.name };
-                  emit({
-                    type: 'tool',
-                    id: call.id,
-                    name: call.name,
-                    state: 'running',
-                    arguments: call.arguments,
-                  });
-                  return undefined;
-                },
-                update(call, value) {
-                  const pending = value.details?.approvalPending;
-                  if (pending === undefined && hooks.length) return;
-                  emit({
-                    type: 'tool',
-                    id: call.id,
-                    name: call.name,
-                    state: pending === true ? 'approval' : 'running',
-                    arguments: call.arguments,
-                    content: hooks.length ? undefined : value.content,
-                  });
-                },
+          const { tools: advertisedTools, assemble } = await this.requestBuilder(ctx, step, log);
+          const prepareHooks = ctx.events.listeners('agent/prepare-request', scopeTarget(ctx));
+          if (failure && !prepareHooks.length) return;
+          const initial = await assemble(log.context().contextMessages);
+          const request = await applyTransforms(prepareHooks, initial, {
+            ...step,
+            runId: submissionId,
+            failure,
+            rebuild: assemble,
+          });
+          if (failure && request === initial) return;
+          const hooks = ctx.events.listeners('agent/tool-result', scopeTarget(ctx));
+          return {
+            request,
+            executor,
+            tools: advertisedTools,
+            execution: {
+              executionId: task.id,
+              async waitFor(id, signal) {
+                await task.waitFor(id, signal);
               },
-              async deliver(output, toolSignal, call) {
-                let executionId: string | undefined;
-                let transformError: Error | undefined;
-                if (toolResultState(output) === 'finished' && hooks.length) {
-                  executionId = log.append({ type: 'tool-execution', result: output }).id;
-                  try {
-                    const resultContext = { ...step, signal: toolSignal, tool: call.name, callId: call.id };
-                    const content = await applyTransforms(hooks, output.content, resultContext);
-                    if (!isToolContent(content)) throw new Error('Invalid tool result content');
-                    output = { ...output, content };
-                  } catch (error) {
-                    if (!toolSignal.aborted) {
-                      output = {
-                        ...toolFailure(
-                          call,
-                          'Tool execution completed, but the model-visible result transformation failed.',
-                        ),
-                        elapsedMs: output.elapsedMs,
-                      };
-                      transformError = new Error('Could not transform the result of ' + call.name, {
-                        cause: error,
-                      });
-                    }
+              start(call) {
+                if (signal.aborted) return { outcome: 'skipped', reason: 'Agent run cancelled' };
+                if (inbox.hasValid('steer', selection))
+                  return { outcome: 'skipped', reason: 'Skipped because a steering message arrived.' };
+                const tool = advertisedTools.get(call.name);
+                if (tool && ctx.get('harnessToolPolicy')?.(id, tool) === false)
+                  return { outcome: 'denied', reason: 'Tool denied by conversation policy: ' + call.name };
+                emit({
+                  type: 'tool',
+                  id: call.id,
+                  name: call.name,
+                  state: 'running',
+                  arguments: call.arguments,
+                });
+                return undefined;
+              },
+              update(call, value) {
+                const pending = value.details?.approvalPending;
+                if (pending === undefined && hooks.length) return;
+                emit({
+                  type: 'tool',
+                  id: call.id,
+                  name: call.name,
+                  state: pending === true ? 'approval' : 'running',
+                  arguments: call.arguments,
+                  content: hooks.length ? undefined : value.content,
+                });
+              },
+            },
+            async deliver(output, toolSignal, call) {
+              let executionId: string | undefined;
+              let transformError: Error | undefined;
+              if (toolResultState(output) === 'finished' && hooks.length) {
+                executionId = log.append({ type: 'tool-execution', result: output }).id;
+                try {
+                  const resultContext = { ...step, signal: toolSignal, tool: call.name, callId: call.id };
+                  const content = await applyTransforms(hooks, output.content, resultContext);
+                  if (!isToolContent(content)) throw new Error('Invalid tool result content');
+                  output = { ...output, content };
+                } catch (error) {
+                  if (!toolSignal.aborted) {
+                    output = {
+                      ...toolFailure(
+                        call,
+                        'Tool execution completed, but the model-visible result transformation failed.',
+                      ),
+                      elapsedMs: output.elapsedMs,
+                    };
+                    transformError = new Error('Could not transform the result of ' + call.name, {
+                      cause: error,
+                    });
                   }
                 }
-                const entry =
-                  executionId && !transformError
-                    ? log.acceptToolResult(executionId, output.content)
-                    : log.append({ type: 'message', message: output, elapsedMs: output.elapsedMs });
-                const details = output.details;
-                const state = toolResultState(output);
-                if (state === 'finished' && typeof details?.changedPath === 'string')
-                  changed?.(details.changedPath);
-                emit({
-                  type: 'tool-end',
-                  message: displayMessage(entry, output, submissionId, call.arguments),
-                });
-                if (transformError) throw transformError;
-              },
-            };
+              }
+              const entry =
+                executionId && !transformError
+                  ? log.acceptToolResult(executionId, output.content)
+                  : log.append({ type: 'message', message: output, elapsedMs: output.elapsedMs });
+              const details = output.details;
+              const state = toolResultState(output);
+              if (state === 'finished' && typeof details?.changedPath === 'string')
+                changed?.(details.changedPath);
+              emit({
+                type: 'tool-end',
+                message: displayMessage(entry, output, submissionId, call.arguments),
+              });
+              if (transformError) throw transformError;
+            },
           };
-          const prepared = await prepareTurn();
-          if (!strategy) prepareTurn = undefined;
-          return prepared;
         },
       })
       .catch((error) => {
@@ -436,7 +417,7 @@ export class SessionRun {
     };
   }
 
-  private async contextRequest(ctx: Context, step: StepContext, log: SessionLogPort, runId?: string) {
+  private async requestBuilder(ctx: Context, step: StepContext, log: SessionLogPort) {
     const { sessionId, cwd, model, signal } = step;
     const executor = requireService(ctx, 'harnessToolExecutor');
     const tools = conversationTools(ctx, sessionId);
@@ -450,16 +431,13 @@ export class SessionRun {
     }));
     const systemPrompt =
       (await ctx.get('harnessPrompt')?.build({ sessionId, cwd, tools: metadata, signal })) ?? '';
-    const input = {
-      ctx,
-      log,
-      signal,
+    return {
       tools: advertised,
-      assemble: (projection) =>
+      assemble: (messages: LlmRequest['messages']) =>
         this.prepareRequest(
           ctx,
           step,
-          { systemPrompt, messages: projection.contextMessages, thinkingLevel: projection.thinkingLevel },
+          { systemPrompt, messages, thinkingLevel: log.context().thinkingLevel },
           (content) => {
             for (const [name, tool] of advertised) if (!toolAvailable(tool)) advertised.delete(name);
             const schemas = metadata
@@ -468,46 +446,6 @@ export class SessionRun {
             return executor.present(content, schemas, { model, turn: step.turn, signal });
           },
         ),
-      assembleSummary: (summary) =>
-        this.prepareRequest(
-          ctx,
-          { ...step, model: summary.model, phase: 'compaction' },
-          summary,
-          (content) => ({ ...content, tools: summary.tools }),
-        ),
-      summarize: (request) => {
-        const recorded = log.recordRequest(request, 'summary');
-        return requestModel(requireService(ctx, 'harnessLlm'), request, {
-          maxAttempts: 3,
-          retry: (failure) => retryModel(ctx, { ...failure, sessionId }),
-          attempt: (metrics) => {
-            log.append({ type: 'model-attempt', requestId: recorded.id, summary: true, runId, ...metrics });
-            if (metrics.usage) ctx.get('harnessContextManagement')?.observe(request, metrics.usage);
-          },
-        });
-      },
-    } satisfies ContextRequest;
-    return input;
-  }
-
-  async compact(ctx: Context, id: string, signal: AbortSignal) {
-    signal.throwIfAborted();
-    this.sessions.assertAvailable(id);
-    const strategy = requireService(ctx, 'harnessContextManagement');
-    const log = this.sessions.log(id);
-    const current = log.context();
-    if (!current.contextMessages.length)
-      throw new DomainError('invalid_input', 'Nothing to compact in this conversation');
-    const { model } = selectModel(requireService(ctx, 'harnessModels'), {
-      explicit: current.model,
-      unavailable: 'Configure a model before compacting',
-    });
-    this.closeUnfinishedTools(log);
-    const input = await this.contextRequest(
-      ctx,
-      { sessionId: id, cwd: this.sessions.workspacePath(id), model, turn: 0, phase: 'turn', signal },
-      log,
-    );
-    await strategy.compact(input);
+    };
   }
 }

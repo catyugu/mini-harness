@@ -6,6 +6,8 @@ import type {
   ModelErrorKind,
   NativeAssistantMessage,
 } from '@mini-harness/llm/api';
+import type { Context } from 'mini-harness/cordis';
+import { scopeTarget } from '@mini-harness/plugin-api/scopes';
 import type { ModelFailure, ModelRetry } from './events.ts';
 
 function failedMessage(
@@ -30,14 +32,17 @@ export async function requestModel(
   llm: Pick<LlmPort, 'stream'> & Partial<Pick<LlmPort, 'select'>>,
   request: LlmRequest,
   options: {
-    maxAttempts?: number;
+    request?(request: LlmRequest): void;
+    recover?(failure: ModelFailure): Promise<LlmRequest | undefined>;
     delta?(text: string): void;
     attempt?(metrics: ModelAttemptMetrics): void;
     retry?(failure: ModelFailure): ModelRetry | undefined | Promise<ModelRetry | undefined>;
   },
 ): Promise<NativeAssistantMessage> {
-  const { signal, model } = request;
+  const { signal } = request;
+  options.request?.(request);
   for (let attempt = 1; ; attempt++) {
+    const { model } = request;
     const started = performance.now();
     let firstTokenMs: number | undefined;
     let message: NativeAssistantMessage | undefined;
@@ -69,19 +74,23 @@ export async function requestModel(
       !!message.errorMessage || message.stopReason === 'error' || message.stopReason === 'aborted';
     if (!failed || streamed || message.content.length || signal.aborted || message.stopReason === 'aborted')
       return message;
-    if (
-      attempt >= (options.maxAttempts ?? Infinity) ||
-      (message.errorKind && message.errorKind !== 'transient')
-    )
-      return message;
+    if (attempt >= 3) return message;
+    const failure: ModelFailure = {
+      model,
+      attempt,
+      signal,
+      error: message.errorMessage || 'Model request failed',
+      kind: message.errorKind,
+    };
+    if (failure.kind && failure.kind !== 'transient') {
+      const next = await options.recover?.(failure);
+      if (!next) return message;
+      request = next;
+      options.request?.(request);
+      continue;
+    }
     try {
-      const custom = await options.retry?.({
-        model,
-        attempt,
-        signal,
-        error: message.errorMessage || 'Model request failed',
-        kind: message.errorKind,
-      });
+      const custom = await options.retry?.(failure);
       const retry =
         custom ??
         (message.errorKind === 'transient' && attempt < 3
@@ -97,4 +106,15 @@ export async function requestModel(
       return failedMessage(request, error);
     }
   }
+}
+
+/** Dispatch the same scoped retry policy for every model execution. */
+export function modelRetry(ctx: Context, sessionId: string) {
+  return async (failure: ModelFailure) => {
+    const { signal, ...input } = failure;
+    for (const { context, callback } of ctx.events.listeners('agent/model-retry', scopeTarget(ctx))) {
+      const retry = await context.fiber.run((signal) => callback({ ...input, sessionId, signal }), signal);
+      if (retry !== undefined) return retry;
+    }
+  };
 }

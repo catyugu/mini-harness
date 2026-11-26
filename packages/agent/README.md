@@ -16,7 +16,7 @@ export function respond(ctx: Context, request: Omit<LlmRequest, 'signal'>, signa
 }
 ```
 
-Await the returned Promise for the assistant message. The fixed `request` form maintains an in-memory transcript. The alternative `prepare(turn)` form supplies a fresh request, executor and tool map for each turn; `deliver` and `afterTurn` let the caller commit results and continue or restart a conversation cycle. Use Runs when the work belongs to a persisted conversation.
+Await the returned Promise for the assistant message. The fixed `request` form maintains an in-memory transcript. The alternative `prepare(turn, failure?)` form supplies a fresh request, executor and tool map for each turn; `deliver` and `afterTurn` let the caller commit results and continue or restart a conversation cycle. Use Runs when the work belongs to a persisted conversation.
 
 The executor presents tool schemas, interprets the assistant response and delivers tool results. Agent rejects duplicate call IDs, unmatched results and omitted results before another model turn. Executor implementations and reusable execution helpers belong to [Tools](../tools/README.md).
 
@@ -28,13 +28,14 @@ The executor presents tool schemas, interprets the assistant response and delive
 
 [`mini-harness/agent/events`](src/events.ts) declares the hooks used by Runs:
 
-| Hook                  | Purpose                                                              |
-| --------------------- | -------------------------------------------------------------------- |
-| `agent/setup`         | Contribute capabilities to the run Context before execution.         |
-| `agent/prepare-input` | Transform prepared user content before acceptance.                   |
-| `agent/model-request` | Transform model-visible content before a request.                    |
-| `agent/model-retry`   | Choose whether to retry a failed request before output has streamed. |
-| `agent/tool-result`   | Transform accepted tool content after raw execution is persisted.    |
+| Hook                    | Purpose                                                              |
+| ----------------------- | -------------------------------------------------------------------- |
+| `agent/setup`           | Contribute capabilities to the run Context before execution.         |
+| `agent/prepare-input`   | Transform prepared user content before acceptance.                   |
+| `agent/model-request`   | Transform model-visible content before a request.                    |
+| `agent/prepare-request` | Prepare the final request or recover it after a model input error.   |
+| `agent/model-retry`     | Choose whether to retry a failed request before output has streamed. |
+| `agent/tool-result`     | Transform accepted tool content after raw execution is persisted.    |
 
 These hooks are dispatched by conversation orchestration in Runs; a direct `harnessAgent.run` call uses its supplied callbacks. Register run-local effects on the supplied run Context so disposal releases them. Return transformed values instead of mutating inputs. The [execution reference](../../docs/subsystems/execution.md) describes their position in the persistence flow.
 
@@ -42,7 +43,7 @@ These hooks are dispatched by conversation orchestration in Runs; a direct `harn
 
 The base Profile mounts separate `core:agent`, `core:prompt` and `core:prompt-defaults` entries. [Agent configuration](src/manifests/agent.ts) bounds a run's model steps. [Context Management](../context-management/README.md) prepares and repairs persistent conversation requests.
 
-The caller's signal owns cancellation. Agent reports phase, request, attempt metrics, assistant-start, text delta and assistant events through `onEvent`. Model errors, invalid tool protocol and exhausting the turn limit reject the run. Transient retry applies before streamed output. A normalized context-limit error can invoke the caller’s recovery hook to replace the request for the same step.
+The caller's signal owns cancellation. Agent reports phase, request, attempt metrics, assistant-start, text delta and assistant events through `onEvent`. Model errors, invalid tool protocol and exhausting the turn limit reject the run. Transient retry applies before streamed output. A normalized context-limit error can invoke the caller’s preparation callback to replace the request for the same step.
 
 ## Verification
 

@@ -450,16 +450,23 @@ export class Runs implements RunPort {
     return new Inbox(this.registry.log(id)).cancel('User cancelled', itemId);
   }
 
-  async compact(id: string) {
+  async runTask<T>(
+    id: string,
+    type: string,
+    work: (ctx: Context, signal: AbortSignal, taskId: string) => Promise<T>,
+  ) {
     this.assertIdle(id);
     const task = this.tasks.start(
-      { ...this.registry.task(id), type: 'compaction', lane: this.lane(id) },
-      ({ signal }) =>
-        this.withAgentContext(id, signal, (ctx, signal) => this.sessionRun.compact(ctx, id, signal)),
+      { ...this.registry.task(id), type, lane: this.lane(id) },
+      ({ id: taskId, signal }) =>
+        this.withAgentContext(id, signal, async (ctx, signal) => {
+          this.sessionRun.closeUnfinishedTools(this.registry.log(id));
+          return work(ctx, signal, taskId);
+        }),
     );
     this.changed(id);
     try {
-      await task.result;
+      return await task.result;
     } finally {
       this.changed(id);
       this.wake(id);
@@ -475,7 +482,10 @@ export class Runs implements RunPort {
     await this.scopes.prepare(key, signal);
     signal.throwIfAborted();
     const scope = this.scopes.context(key);
-    const fiber = tagScope(scope.extend(), this.registry.runScope(id)!).inject(['harnessAgent'], () => {});
+    const fiber = tagScope(scope.extend(), this.registry.runScope(id)!).inject(
+      ['harnessAgent', 'harnessModels', 'harnessLlm'],
+      () => {},
+    );
     try {
       await fiber;
       if (!fiber.ctx.get('harnessAgent'))

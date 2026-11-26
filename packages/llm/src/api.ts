@@ -58,6 +58,13 @@ export interface InputTokenCounts {
   messages: number;
 }
 
+/** Counts and usable input capacity for a prepared model request. */
+export interface InputMeasurement extends InputTokenCounts {
+  window: number;
+  budget: number;
+  estimated: boolean;
+}
+
 export interface ModelAttemptMetrics {
   elapsedMs: number;
   firstTokenMs?: number;
@@ -98,6 +105,7 @@ export interface LlmRequest {
   thinkingLevel?: ThinkingLevel;
   signal: AbortSignal;
   maxTokens?: number;
+  inputMeasurement?: InputMeasurement;
 }
 export type ModelRequestContent = Pick<
   LlmRequest,

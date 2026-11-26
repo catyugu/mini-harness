@@ -2,9 +2,10 @@ import type { Context } from 'mini-harness/cordis';
 import type {} from '@mini-harness/conversation/browser/composer-api';
 import type {} from '@mini-harness/conversation/browser/conversation-api';
 import type {} from '@mini-harness/conversation/browser/history-api';
+import type {} from '@mini-harness/settings/browser/api';
 import type {} from '@mini-harness/ui-slots/browser/api';
 import type {} from '@mini-harness/ui-runtime/projection-api';
-import { bindPopover } from '@mini-harness/ui-primitives/primitives';
+import { bindPopover, button as uiButton, iconButton } from '@mini-harness/ui-primitives/primitives';
 import { browserRequest, payload } from '@mini-harness/ui-runtime/http';
 import { browserPluginId, browserPluginSettings } from '@mini-harness/ui-runtime/plugin-settings';
 import type { ContextSettings, ContextState, TokenTotals } from '../shared/state.ts';
@@ -80,29 +81,25 @@ function showUsage(list: HTMLElement, usage?: TokenTotals) {
 }
 
 function showOccupancy(list: HTMLElement, bar: HTMLElement, state: ContextState) {
-  const { occupancy: value, settings } = state;
+  const { occupancy: value } = state;
   const estimate = value?.estimated ? '~' : '';
   const show = (count: number) => estimate + tokens(count);
   rows(list, [
-    ['Current context', value ? show(value.total) : 'Unavailable'],
-    ['Model window', value?.window ? tokens(value.window) : undefined],
+    ['Last measured input', value ? show(value.total) : 'Unavailable'],
+    ['Model window', value ? tokens(value.window) : undefined],
     ['System prompt', value ? show(value.system) : undefined],
     ['Tool schemas', value ? show(value.tools) : undefined],
     ['Messages', value ? show(value.messages) : undefined],
-    ['Input budget', value?.budget !== undefined ? tokens(value.budget) : undefined],
-    ['Input budget used', value?.budget ? estimate + percent(value.total / value.budget) : undefined],
-    ['Auto compaction trigger', percent(settings.triggerRatio) + ' of input budget'],
-    ['Auto compaction', settings.autoCompact ? 'On' : 'Off'],
-    ['Compaction', state.compacting ? 'Running (' + state.compacting + ')' : undefined],
-    ['Last compaction', state.issue],
+    ['Input budget', value ? tokens(value.budget) : undefined],
+    ['Input budget used', value ? estimate + percent(value.total / value.budget) : undefined],
   ]);
-  bar.hidden = !value?.window;
+  bar.hidden = !value;
   bar.replaceChildren(
-    ...(value?.window
+    ...(value
       ? [value.system, value.tools, value.messages].map((size, index) => {
           const segment = document.createElement('span');
           segment.className = 'context-segment-' + index;
-          segment.style.flexBasis = percent(Math.min(size / value.window!, 1));
+          segment.style.flexBasis = percent(Math.min(size / value.window, 1));
           return segment;
         })
       : []),
@@ -165,7 +162,7 @@ function mountStats(ctx: Context) {
   );
   select();
 
-  const write = async (values: Partial<ContextSettings>) => {
+  const write = async (values: ContextSettings | null) => {
     if (!id) return;
     const request = controller;
     await browserRequest(ctx, path(id), { ...payload('PUT', values), signal: request.signal });
@@ -180,6 +177,7 @@ function mountStats(ctx: Context) {
       const run = detail('Run statistics', signal);
       const usage = detail('Token usage', signal);
       const context = detail('Context usage', signal);
+      context.trigger.title = 'Last measured input / model window';
       const speed = document.createElement('span');
       speed.className = 'context-speed';
       const runList = document.createElement('dl'),
@@ -193,38 +191,9 @@ function mountStats(ctx: Context) {
       ring.setAttribute('aria-hidden', 'true');
       const windowRatio = document.createElement('span');
       context.trigger.replaceChildren(ring, windowRatio);
-      const form = settingsForm(
-        ctx,
-        signal,
-        async (field, value) => {
-          if (!state) return;
-          const values = { ...state.overrides } as Record<string, unknown>;
-          if (value === undefined) delete values[field];
-          else values[field] = value;
-          await write(values);
-        },
-        true,
-      );
-      const compact = button('Compact now'),
-        reset = button('Reset to defaults');
-      compact.className = 'small-button';
-      reset.className = 'link-button';
-      const controls = document.createElement('div');
-      controls.className = 'context-buttons';
-      controls.append(compact, reset);
-      compact.onclick = () => {
-        if (state?.compacting === 'manual' && id) {
-          void browserRequest(
-            ctx,
-            '/sessions/' + encodeURIComponent(id) + '/cancel',
-            payload('POST', {}),
-          ).catch(conversation.report);
-        } else void conversation.compact().catch(conversation.report);
-      };
-      reset.onclick = () => void write({}).catch(conversation.report);
       run.panel.append(runList);
       usage.panel.append(usageList);
-      context.panel.append(bar, contextList, form.node, controls);
+      context.panel.append(bar, contextList);
       row.append(run.node, usage.node, context.node);
 
       function render() {
@@ -255,33 +224,89 @@ function mountStats(ctx: Context) {
           ? short.format(totalInput(totals) + totals.output) + ' tok · Cache ' + cache(totals)
           : '— tok';
         showUsage(usageList, totals);
-        const ratio = occupancy?.window ? occupancy.total / occupancy.window : undefined;
+        const ratio = occupancy ? occupancy.total / occupancy.window : undefined;
         ring.style.setProperty('--context-fill', ratio === undefined ? '0%' : percent(Math.min(1, ratio)));
         windowRatio.textContent =
-          ratio === undefined ? '—' : (occupancy?.estimated ? '~' : '') + percent(ratio);
+          ratio === undefined ? '—' : 'Last ' + (occupancy?.estimated ? '~' : '') + percent(ratio);
         showOccupancy(contextList, bar, state);
-        form.update(state.settings, state.overrides);
-        const current = conversation.get();
-        compact.disabled =
-          state.compacting !== 'manual' &&
-          Boolean(
-            state.compacting ||
-              current.interaction.operation ||
-              current.run?.state === 'running' ||
-              current.run?.state === 'queued' ||
-              current.run?.state === 'waiting',
-          );
-        compact.textContent =
-          state.compacting === 'manual'
-            ? 'Cancel compaction'
-            : state.compacting
-              ? 'Compacting…'
-              : 'Compact now';
-        reset.disabled = !Object.keys(state.overrides).length;
       }
       updates.addEventListener('change', render, { signal });
       render();
       return row;
+    }),
+  );
+
+  const compactConversation = async () => {
+    if (!id) throw new Error('Open a conversation to compact it.');
+    const sessionId = id;
+    const result = await browserRequest<{ cancelled?: boolean }>(
+      ctx,
+      '/sessions/' + encodeURIComponent(sessionId) + '/compact',
+      payload('POST', {}),
+    );
+    if (id === sessionId && (await conversation.activate(sessionId, false)))
+      conversation.report(result.cancelled ? 'Compaction cancelled.' : 'Conversation compacted.');
+  };
+
+  ctx.effect(() =>
+    ctx.miniSlots.register('conversation.composer-options', (signal) => {
+      const node = document.createElement('div');
+      const trigger = iconButton('Context settings', 'settings');
+      const panel = document.createElement('div');
+      panel.className = 'ui-popover context-details';
+      panel.setAttribute('popover', 'auto');
+      panel.setAttribute('role', 'dialog');
+      panel.setAttribute('aria-label', 'Context settings');
+      node.append(trigger, panel);
+      const position = bindPopover(trigger, panel, signal, { width: 300, prefer: 'above' });
+      trigger.onclick = () => {
+        if (panel.matches(':popover-open')) panel.hidePopover();
+        else if (state) {
+          form.update(state.settings);
+          panel.showPopover();
+          position();
+        }
+      };
+      const form = settingsForm(ctx, signal, write);
+      const reset = uiButton('Restore defaults', 'quiet');
+      reset.onclick = () =>
+        void write(null)
+          .then(() => {
+            if (state) form.update(state.settings);
+          })
+          .catch(conversation.report);
+      const compact = uiButton('Compact now');
+      compact.onclick = () => {
+        if (state?.compacting === 'manual' && id)
+          void browserRequest(
+            ctx,
+            '/sessions/' + encodeURIComponent(id) + '/cancel',
+            payload('POST', {}),
+          ).catch(conversation.report);
+        else void compactConversation().catch(conversation.report);
+      };
+      panel.append(form.node, reset, compact);
+      const render = () => {
+        node.hidden = !state;
+        if (!state) {
+          if (panel.matches(':popover-open')) panel.hidePopover();
+          return;
+        }
+        reset.disabled = !state.customized;
+        const current = conversation.get();
+        compact.disabled =
+          state.compacting !== 'manual' &&
+          Boolean(
+            current.interaction.operation ||
+              current.run?.state === 'running' ||
+              current.run?.state === 'queued' ||
+              current.run?.state === 'waiting',
+          );
+        compact.textContent = state.compacting ? 'Cancel compaction' : 'Compact now';
+      };
+      updates.addEventListener('change', render, { signal });
+      render();
+      return node;
     }),
   );
 
@@ -311,7 +336,7 @@ function mountStats(ctx: Context) {
         name: 'compact',
         group: 'Conversation',
         description: 'Summarize earlier messages to free context',
-        run: conversation.compact,
+        run: compactConversation,
       }),
     );
   });
@@ -329,24 +354,16 @@ function setup(ctx: Context) {
           section: { title: 'General', icon: 'settings', order: 20 },
           order: 10,
           render({ signal }) {
-            const form = settingsForm(settings, signal, (field, value) => configuration.set(field, value));
+            const form = settingsForm(settings, signal, (value) => configuration.patch({ ...value }));
             const read = () =>
               form.update({
                 autoCompact: configuration.get('autoCompact'),
                 triggerRatio: configuration.get('triggerRatio'),
                 targetRatio: configuration.get('targetRatio'),
                 retainRatio: configuration.get('retainRatio'),
-                pruneTools: configuration.get('pruneTools'),
                 summaryModel: configuration.get('summaryModel'),
               });
-            for (const key of [
-              'autoCompact',
-              'triggerRatio',
-              'targetRatio',
-              'retainRatio',
-              'pruneTools',
-              'summaryModel',
-            ])
+            for (const key of ['autoCompact', 'triggerRatio', 'targetRatio', 'retainRatio', 'summaryModel'])
               signal.addEventListener('abort', configuration.subscribe(key, read), { once: true });
             read();
             return form.node;
