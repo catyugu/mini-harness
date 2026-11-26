@@ -30,6 +30,16 @@ test('drafts isolate attachments and discover workspace files and skills', async
     const index = readJson<any>(paths.registry, { sessions: [] });
     expect(index.sessions).toHaveLength(0);
     const draft = page.getByRole('textbox', { name: 'Message', exact: true });
+    for (const method of ['Enter', 'button'] as const) {
+      await draft.fill('  /file  ');
+      const chooser = page.waitForEvent('filechooser');
+      if (method === 'Enter') await draft.press('Enter');
+      else await page.getByRole('button', { name: 'Send', exact: true }).click();
+      await (await chooser).setFiles([]);
+      await expect(draft).toHaveText('');
+    }
+    await expect(page.locator('#sessions .session-row')).toHaveCount(0);
+
     await draft.fill('@');
     await suggestions(page).getByRole('option', { name: 'task files, expand folder' }).click();
     await suggestions(page).getByRole('option', { name: 'draft.md', exact: true }).click();
