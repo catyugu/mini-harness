@@ -51,7 +51,7 @@ export class ContextManagement {
   }
 
   async measure(ctx: Context, request: LlmRequest, projection?: SessionContext) {
-    const adapter = ctx.get('harnessLlm')?.select(request.model);
+    const adapter = ctx.get('harnessLlm')?.select?.(request.model);
     const occupancy = await this.meter.measure(
       request,
       ctx.get('harnessModels')?.capabilities(request.model),
@@ -139,13 +139,15 @@ export class ContextManagement {
     this.notify(id);
     try {
       for (let attempt = 0; attempt < 3; attempt++) {
+        const minimum = (budget ?? occupancy.messages) * config.retainRatio;
         const retain = Math.max(
           1,
           Math.floor(
-            Math.min(
-              (budget ?? occupancy.messages) * config.retainRatio,
-              manual ? occupancy.messages * config.retainRatio : target * 0.6,
-            ),
+            manual && occupancy.messages <= minimum
+              ? occupancy.messages * config.retainRatio
+              : repair
+                ? Math.min(minimum, target * 0.6)
+                : minimum,
           ),
         );
         const cut = splitPoint(

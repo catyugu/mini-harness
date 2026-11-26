@@ -41,7 +41,8 @@ export function settingsForm(
     busy = true;
     error.hidden = true;
     node.setAttribute('aria-busy', 'true');
-    sync.forEach((render) => render());
+    for (const control of node.querySelectorAll<HTMLInputElement | HTMLButtonElement>('input, button'))
+      control.disabled = true;
     try {
       await write(key, value);
     } catch (failure) {

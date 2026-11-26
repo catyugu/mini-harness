@@ -186,3 +186,77 @@ test('session overrides inherit defaults, reject invalid ratios and preserve con
   assert.equal((await request(path + '/context', 'PUT', {})).status, 200);
   assert.deepEqual((await request(path + '/context')).body.overrides, {});
 });
+
+test('switching to a smaller window uses the configured summary model and segments its input', async (t) => {
+  const { app, request, mock } = await fixture(
+    t,
+    ({ messages }) => (summary(messages.at(-1)?.content) ? checkpointFixture : 'Done'),
+    (paths) => {
+      const file = join(paths.home, 'models.json');
+      const models = JSON.parse(readFileSync(file, 'utf8'));
+      const catalog = models.providers['local-mock'].models;
+      catalog.push(
+        { ...catalog[0], id: 'smaller', name: 'Smaller model', contextWindow: 9000 },
+        { ...catalog[0], id: 'summary', name: 'Summary model', contextWindow: 5500, maxTokens: 512 },
+      );
+      writeFileSync(file, JSON.stringify(models));
+    },
+  );
+  const ctx = app.runtime.plugins.ctx;
+  const { body: session } = await request('/sessions', 'POST', {});
+  const endpoint = '/sessions/' + session.id + '/context';
+  const summaryModel = { provider: 'local-mock', id: 'summary' };
+  assert.equal((await request(endpoint, 'PUT', { summaryModel })).status, 200);
+  for (let index = 0; index < 3; index++)
+    await sendRun(ctx.harnessRuns, session.id, 'Document ' + index + '\n' + 'Prior context. '.repeat(1000));
+  const model = { provider: 'local-mock', id: 'smaller' };
+  await sendRun(ctx.harnessRuns, session.id, 'Continue under the original constraints', undefined, { model });
+  assert.equal(mock.requests.at(-1)?.model, model.id);
+  assert.ok(mock.requests.filter((request) => request.model === summaryModel.id).length >= 2);
+  const { body: state } = await request(endpoint);
+  assert.equal(state.occupancy.window, 9000);
+  assert.equal(state.occupancy.model.id, model.id);
+  assert.ok(state.occupancy.total < state.occupancy.budget);
+});
+
+test('an image limit offloads the oldest image and an irreducible overflow exits with a reason', async (t) => {
+  let imageRequests = 0;
+  const { app, request } = await fixture(
+    t,
+    ({ messages }) => {
+      const text = messages.at(-1)?.content;
+      if (text === 'Second image' && ++imageRequests === 1) return { overflow: 'image' };
+      if (text === 'Always overflow') return { overflow: 'context' };
+      return 'Done';
+    },
+    (paths) => {
+      const file = join(paths.home, 'models.json');
+      const models = JSON.parse(readFileSync(file, 'utf8'));
+      models.providers['local-mock'].models[0].input.push('image');
+      writeFileSync(file, JSON.stringify(models));
+    },
+  );
+  const ctx = app.runtime.plugins.ctx;
+  const { body: session } = await request('/sessions', 'POST', {});
+  const attachment = { name: 'sample.png', mimeType: 'image/png', data: 'iVBORw0KGgo=' };
+  await sendRun(ctx.harnessRuns, session.id, 'First image', undefined, { attachments: [attachment] });
+  await sendRun(ctx.harnessRuns, session.id, 'Second image', undefined, { attachments: [attachment] });
+  assert.equal(imageRequests, 2);
+  const log = ctx.harnessSessions.log(session.id);
+  const images = (content: ReturnType<typeof log.context>['contextMessages']) =>
+    content.flatMap((message) =>
+      typeof message.content === 'string' ? [] : message.content.filter((part) => part.type === 'image'),
+    );
+  assert.equal(images(log.context().contextMessages).length, 1);
+  const requests = log.entries().filter(({ type }) => type === 'model-request');
+  assert.equal(images(log.requestSnapshot(requests[1].id).messages).length, 2);
+  const { body: plain } = await request('/sessions', 'POST', {});
+  assert.equal(
+    (await request('/sessions/' + plain.id + '/context', 'PUT', { autoCompact: false })).status,
+    200,
+  );
+  await assert.rejects(sendRun(ctx.harnessRuns, plain.id, 'Always overflow'), /Automatic compaction is off/);
+  const failed = ctx.harnessSessions.log(plain.id);
+  assert.equal(failed.context().contextMessages.filter(({ role }) => role === 'user').length, 1);
+  assert.equal(failed.entries().filter(({ type }) => type === 'model-attempt').length, 1);
+});

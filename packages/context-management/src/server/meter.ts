@@ -68,7 +68,12 @@ export class TokenMeter {
     adapter?: LlmAdapter | null,
     projection?: SessionContext,
   ): Promise<ContextOccupancy> {
-    const measured = await adapter?.countInputTokens?.(request);
+    let measured;
+    try {
+      measured = await adapter?.countInputTokens?.(request);
+    } catch {
+      request.signal.throwIfAborted();
+    }
     const exact =
       measured &&
       [measured.system, measured.tools, measured.messages].every(
@@ -76,7 +81,7 @@ export class TokenMeter {
       );
     const scale = adapter ? (this.calibrations.get(adapter)?.get(key(request)) ?? 1) : 1;
     let counts;
-    if (exact) counts = measured;
+    if (exact && measured) counts = measured;
     else {
       const revisions =
         projection &&

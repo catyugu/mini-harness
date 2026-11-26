@@ -478,6 +478,7 @@ export class SessionRun {
       summarize: (request) => {
         const recorded = log.recordRequest(request, 'summary');
         return requestModel(requireService(ctx, 'harnessLlm'), request, {
+          maxAttempts: 3,
           retry: (failure) => retryModel(ctx, { ...failure, sessionId }),
           attempt: (metrics) => {
             log.append({ type: 'model-attempt', requestId: recorded.id, summary: true, runId, ...metrics });

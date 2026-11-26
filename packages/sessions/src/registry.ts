@@ -80,8 +80,16 @@ export class SessionRegistry implements SessionStore {
     this.state = state;
   }
 
-  private notify(id: string, deleted = false, queue = false, record?: RecordAppend) {
-    this.events.dispatchEvent(new CustomEvent('change', { detail: { id, deleted, queue, record } }));
+  private notify(
+    id: string,
+    deleted = false,
+    queue = false,
+    record?: RecordAppend,
+    entryType?: SessionEntry['type'],
+  ) {
+    this.events.dispatchEvent(
+      new CustomEvent('change', { detail: { id, deleted, queue, record, entryType } }),
+    );
   }
 
   list(workspaceId?: string | null) {
@@ -286,6 +294,7 @@ export class SessionRegistry implements SessionStore {
           entry.type === 'plugin-record'
             ? { leafId: entry.id, display: structuredClone(displayRecord(entry)) }
             : undefined,
+          entry.type,
         );
     };
     let log: SessionLog | undefined;

@@ -116,16 +116,14 @@ function mountStats(ctx: Context) {
   let state: ContextState | undefined;
   let id: string | undefined;
   let controller = new AbortController();
-  let inFlight = false;
+  let inFlight: Promise<void> | undefined;
   let queued = false;
   const path = (id: string) => '/sessions/' + encodeURIComponent(id) + '/context';
   const publish = () => updates.dispatchEvent(new Event('change'));
 
-  async function refresh() {
+  function refresh() {
     queued = true;
-    if (inFlight) return;
-    inFlight = true;
-    try {
+    return (inFlight ??= (async () => {
       while (queued && !signal.aborted) {
         queued = false;
         if (!id) break;
@@ -141,9 +139,9 @@ function mountStats(ctx: Context) {
           publish();
         }
       }
-    } finally {
-      inFlight = false;
-    }
+    })().finally(() => {
+      inFlight = undefined;
+    }));
   }
 
   function select() {

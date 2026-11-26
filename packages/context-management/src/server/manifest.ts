@@ -30,7 +30,7 @@ function setup(ctx: Context) {
   ctx.effect(() => ctx.harnessProfileConfig.subscribe(() => notify()));
   ctx.effect(() => {
     const change = (event: Event) => {
-      if (event instanceof CustomEvent && !event.detail.queue) notify(event.detail.id);
+      if (event instanceof CustomEvent && event.detail.entryType) notify(event.detail.id);
     };
     sessions.events.addEventListener('change', change);
     return () => sessions.events.removeEventListener('change', change);
@@ -126,11 +126,12 @@ function setup(ctx: Context) {
             {
               entry: Type.String({ pattern: '^[a-fA-F0-9]{8,64}$' }),
               offset: Type.Optional(Type.Integer({ minimum: 0, maximum: 1_073_741_824 })),
+              limit: Type.Optional(Type.Integer({ minimum: 128, maximum: 12_000 })),
               image: Type.Optional(Type.Integer({ minimum: 1 })),
             },
             { additionalProperties: false },
           ),
-          async execute({ entry, offset = 0, image }) {
+          async execute({ entry, offset = 0, limit = 2400, image }) {
             const message = sessions.log(id).originalMessage(entry);
             if (!message)
               return { isError: true, content: [{ type: 'text', text: 'Original message not found' }] };
@@ -153,7 +154,7 @@ function setup(ctx: Context) {
                     : [],
               )
               .join('\n');
-            const end = Math.min(offset + 12_000, text.length);
+            const end = Math.min(offset + limit, text.length);
             return {
               content: [
                 {

@@ -15,6 +15,7 @@ const title = 'Summary of earlier conversation:\n';
 const instruction = [
   'Write a continuation checkpoint for the next assistant. Summarize the preceding work and merge any older checkpoint, removing obsolete information.',
   'Keep important user instructions, identifiers, paths, commands and errors verbatim where practical. Preserve failed attempts and their resolutions.',
+  'Keep original entry references for offloaded data needed to continue.',
   'Use Markdown headings exactly as follows and give concise factual details under each:',
   ...headings.map((name) => '## ' + name),
   'Respond with the checkpoint only.',
@@ -122,10 +123,8 @@ export async function checkpoint(
     return { outgoing, fits: tally.total <= (tally.budget ?? window - maxTokens) };
   }
 
-  async function summarize(segment: NativeMessage[]) {
+  async function summarize(outgoing: LlmRequest) {
     if (++attempts > limit) throw new Error('Summary model requires too many segments for this context');
-    const { outgoing, fits } = await assemble(segment);
-    if (!fits) throw new Error('Summary model has too little input capacity for this segment');
     validateRequestSnapshot(outgoing);
     const answer = await input.summarize(outgoing);
     input.signal.throwIfAborted();
@@ -145,38 +144,47 @@ export async function checkpoint(
     prior = user(title + summary);
   }
 
-  const pending = groups(messages);
-  if ((await assemble(messages)).fits) {
-    await summarize(messages);
+  const whole = await assemble(messages);
+  if (whole.fits) {
+    await summarize(whole.outgoing);
     return prior!;
   }
-  if ((await assemble([user('A short segment')])).fits === false) useShort = true;
-  let segment: NativeMessage[] = [];
-  for (const group of pending) {
-    const combined = [...segment, ...group];
-    if ((await assemble(combined)).fits) {
-      segment = combined;
-      continue;
+  if (!(await assemble([user('A short segment')])).fits) useShort = true;
+  const pending = groups(messages);
+  for (let from = 0; from < pending.length; ) {
+    let best: LlmRequest | undefined;
+    let low = from + 1;
+    let high = pending.length;
+    let end = from;
+    while (low <= high) {
+      const middle = Math.floor((low + high) / 2);
+      const result = await assemble(pending.slice(from, middle).flat());
+      if (result.fits) {
+        end = middle;
+        best = result.outgoing;
+        low = middle + 1;
+      } else high = middle - 1;
     }
-    if (segment.length) await summarize(segment);
-    segment = [];
-    if ((await assemble(group)).fits) {
-      segment = group;
+    if (best) {
+      await summarize(best);
+      from = end;
       continue;
     }
     useShort = true;
-    if ((await assemble(group)).fits) {
-      segment = group;
+    const group = pending[from++];
+    const result = await assemble(group);
+    if (result.fits) {
+      await summarize(result.outgoing);
       continue;
     }
-    // Only an indivisible exchange that exceeds the summary window uses a text transcript.
+    // An indivisible exchange that exceeds the summary window uses a bounded text transcript.
     const text = transcript(group);
     let offset = 0;
     let length = Math.max(64, Math.floor(window / 2));
     while (offset < text.length) {
-      const piece = user(text.slice(offset, offset + length));
-      if ((await assemble([piece])).fits) {
-        await summarize([piece]);
+      const result = await assemble([user(text.slice(offset, offset + length))]);
+      if (result.fits) {
+        await summarize(result.outgoing);
         offset += length;
       } else {
         length = Math.floor(length / 2);
@@ -184,7 +192,6 @@ export async function checkpoint(
       }
     }
   }
-  if (segment.length) await summarize(segment);
   if (!prior) throw new Error('No messages selected for compaction');
   return prior;
 }

@@ -30,6 +30,7 @@ export async function requestModel(
   llm: Pick<LlmPort, 'stream'> & Partial<Pick<LlmPort, 'select'>>,
   request: LlmRequest,
   options: {
+    maxAttempts?: number;
     delta?(text: string): void;
     attempt?(metrics: ModelAttemptMetrics): void;
     retry?(failure: ModelFailure): ModelRetry | undefined | Promise<ModelRetry | undefined>;
@@ -68,7 +69,11 @@ export async function requestModel(
       !!message.errorMessage || message.stopReason === 'error' || message.stopReason === 'aborted';
     if (!failed || streamed || message.content.length || signal.aborted || message.stopReason === 'aborted')
       return message;
-    if (message.errorKind && message.errorKind !== 'transient') return message;
+    if (
+      attempt >= (options.maxAttempts ?? Infinity) ||
+      (message.errorKind && message.errorKind !== 'transient')
+    )
+      return message;
     try {
       const custom = await options.retry?.({
         model,

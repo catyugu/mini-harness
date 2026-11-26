@@ -36,9 +36,14 @@ export function prune(
   const { contextMessages, contextEntryIds, contextRevisions } = projection;
   const replacements: ContextReplacement[] = [];
   const originals = new Map<string, string>();
-  const seenPrior = new Map<string, string>();
   let latestUser = contextMessages.length - 1;
   while (latestUser >= 0 && contextMessages[latestUser].role !== 'user') latestUser--;
+  let latestExchange = contextMessages.length - 1;
+  while (latestExchange >= 0) {
+    const message = contextMessages[latestExchange];
+    if (message.role === 'assistant' && message.content.some(({ type }) => type === 'toolCall')) break;
+    latestExchange--;
+  }
   let imageIndex = 0;
   const imageCount = contextMessages.reduce(
     (sum, message) =>
@@ -56,7 +61,7 @@ export function prune(
         if (
           options.forceImages
             ? current < Math.max(1, Math.ceil(imageCount / 2))
-            : options.offload && index < latestUser
+            : options.offload && index < (message.role === 'user' ? latestUser : latestExchange)
         )
           return [{ type: 'text' as const, text: reference(id, 'Image ' + (position + 1) + ' offloaded') }];
       }
@@ -83,6 +88,7 @@ export function prune(
       const tool = input.tools.get(message.toolName);
       // A replacement revision can never become the original for a second text prune.
       const fresh = contextRevisions[index] === id;
+      let duplicate: string | undefined;
       if (!message.isError && tool?.tags?.includes('readOnly')) {
         let key = signatures.get(id);
         if (key === undefined) {
@@ -100,12 +106,10 @@ export function prune(
           signatures.set(id, key);
         }
         if (key) {
-          const previous = originals.get(key);
-          if (previous) seenPrior.set(id, previous);
-          else originals.set(key, id);
+          duplicate = originals.get(key);
+          if (!duplicate) originals.set(key, id);
         }
       }
-      const duplicate = seenPrior.get(id);
       const text = parts.flatMap((part) => (part.type === 'text' ? [part.text] : [])).join('\n');
       if (
         fresh &&
@@ -140,9 +144,9 @@ export function prune(
     )
       continue;
     if (messageTokens(replacement) >= messageTokens(message) && !options.forceImages) continue;
-    replacements.unshift({ start: index, deleteCount: 1, insert: [replacement], preserveSource: true });
+    replacements.push({ start: index, deleteCount: 1, insert: [replacement], preserveSource: true });
   }
   if (!replacements.length) return false;
-  input.log.append({ type: 'context-replace', replacements }, projection.leafId);
+  input.log.append({ type: 'context-replace', replacements: replacements.reverse() }, projection.leafId);
   return true;
 }
