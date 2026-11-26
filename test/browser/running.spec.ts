@@ -462,11 +462,13 @@ test('an already open tab reconnects to the same instance after restart', async 
   }
 });
 
-test('the mobile task panel reads live output and cancels independent work', async ({ page }) => {
+test('mobile background tasks and subagents use independent popovers', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   const mock = await createMockProvider(({ messages }) => {
     if (messages.at(-1)?.content === 'Start independent job')
       return { tool: 'start_background', args: { tool: 'fixture_background', arguments: {} } };
+    if (messages.at(-1)?.content === 'Start child')
+      return { tool: 'delegate', args: { task: 'Child fixture' } };
     return 'Acknowledged';
   });
   const { root, paths } = createFixturePaths(mock.url);
@@ -504,6 +506,9 @@ export const apply = (ctx) => {
     await expect(page.getByRole('combobox', { name: 'Message sending mode' })).toBeHidden();
     const tasks = page.locator('.background-tasks');
     const toggle = tasks.getByRole('button', { name: 'Tasks', exact: true });
+    const agents = page.locator('.subagent-tasks');
+    const agentToggle = agents.getByRole('button', { name: 'Subagents', exact: true });
+    await expect(agents).toBeHidden();
     await expect(toggle).toBeInViewport();
     await expect
       .poll(async () => {
@@ -520,11 +525,70 @@ export const apply = (ctx) => {
     await toggle.click();
     const panel = tasks.locator('.background-task-list');
     await expect(panel).toBeInViewport({ ratio: 0.95 });
-    await panel.getByText(/Fixture job · running/).click();
-    await expect(panel.locator('pre')).toHaveText('Task output is visible');
-    await panel.getByRole('button', { name: 'Cancel', exact: true }).click();
-    await expect(panel.getByText(/Fixture job · cancelled/)).toBeVisible();
-    await expect(page.locator('.async-message')).toContainText('Background task');
+    const row = panel.getByRole('button', { name: 'Fixture job · Running', exact: true });
+    await expect(row).toHaveAttribute('aria-expanded', 'false');
+    await expect(panel.locator('.task-output')).toHaveCount(0);
+    await row.click();
+    await expect(panel.locator('.task-output')).toHaveText('Task output is visible');
+    await row.click();
+    await expect(panel.locator('.task-output')).toHaveCount(0);
+    await row.click();
+    await expect(panel.locator('.task-output')).toHaveText('Task output is visible');
+    await panel.getByRole('button', { name: 'Cancel Fixture job', exact: true }).click();
+    await expect(panel.getByRole('button', { name: 'Fixture job · Cancelled', exact: true })).toBeVisible();
+    await expect(panel.getByRole('button', { name: 'Finished 1', exact: true })).toBeVisible();
+    await toggle.click();
+    const notification = page
+      .locator('details.async-message')
+      .filter({ hasText: 'Background task finished' });
+    await expect(notification.locator('summary')).toBeVisible();
+    await expect(notification).not.toHaveAttribute('open', '');
+    await expect(notification.locator('article')).toBeHidden();
+    await page.getByRole('textbox', { name: 'Message', exact: true }).fill('Start child');
+    await page.getByRole('button', { name: 'Send', exact: true }).click();
+    await expect(agentToggle).toHaveText('1 subagent');
+    await expect(toggle).toHaveText('1 task');
+
+    await page.setViewportSize({ width: 280, height: 844 });
+    const more = page.getByRole('button', { name: 'More conversation controls', exact: true });
+    const overflow = page.locator('#headerOverflow');
+    await expect(more).toBeVisible();
+    await expect(overflow).toBeHidden();
+    await more.click();
+    await expect(overflow).toBeInViewport({ ratio: 0.95 });
+    const overflowed = overflow.getByRole('button', { name: /^(Tasks|Subagents)$/ }).first();
+    await expect(overflowed).toBeVisible();
+    const type = await overflowed.getAttribute('aria-label');
+    await overflowed.click();
+    await expect(page.getByRole('region', { name: type!, exact: true })).toBeInViewport({ ratio: 0.95 });
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('Escape');
+
+    await page.setViewportSize({ width: 1280, height: 844 });
+    await expect(more).toBeHidden();
+    await expect(
+      page.locator('#conversationExtensions').getByRole('button', { name: 'Subagents', exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.locator('#conversationExtensions').getByRole('button', { name: 'Tasks', exact: true }),
+    ).toBeVisible();
+    await agentToggle.click();
+    const agentPanel = agents.locator('.subagent-list');
+    await expect(agentPanel).toBeInViewport({ ratio: 0.95 });
+    await expect(
+      agentPanel.getByRole('button', { name: 'Open conversation: Child fixture', exact: true }),
+    ).toBeVisible();
+    await expect(agentPanel.locator('.task-output')).toHaveCount(0);
+    await expect(panel).toBeHidden();
+    await toggle.click();
+    await expect(agentPanel).toBeHidden();
+    await expect(panel.getByRole('button', { name: 'Fixture job · Cancelled', exact: true })).toBeVisible();
+    await expect(
+      panel.getByRole('button', { name: 'Open conversation: Child fixture', exact: true }),
+    ).toHaveCount(0);
+    await panel.getByRole('button', { name: 'Clear', exact: true }).click();
+    await expect(toggle).toBeHidden();
+    await expect(agentToggle).toHaveText('1 subagent');
   } finally {
     await service.stop();
     await mock.close();

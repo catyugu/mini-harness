@@ -170,7 +170,6 @@ export class Runs implements RunPort {
               ctx,
               record,
               (event) => {
-                if (event.type === 'delta' && record.parentId) task.write(event.text, 'assistant');
                 if (event.type === 'user') {
                   activity.events!.info.inputEntryId = event.message.id;
                   runSource ??= event.source;

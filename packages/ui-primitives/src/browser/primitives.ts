@@ -6,6 +6,32 @@ export function fromMarkup<T extends HTMLElement = HTMLElement>(markup: string):
   return template.content.firstElementChild as T;
 }
 
+/** Bind a native header popover to its trigger and keep it inside the viewport. */
+export function bindHeaderPopover(trigger: HTMLButtonElement, panel: HTMLElement, signal: AbortSignal) {
+  const position = () => {
+    const bounds = trigger.getBoundingClientRect();
+    panel.style.left = Math.max(8, Math.min(bounds.left, innerWidth - panel.offsetWidth - 8)) + 'px';
+    panel.style.top = bounds.bottom + 6 + 'px';
+    panel.style.maxHeight = Math.max(0, Math.min(520, innerHeight - bounds.bottom - 14)) + 'px';
+  };
+  panel.addEventListener(
+    'toggle',
+    () => {
+      const open = panel.matches(':popover-open');
+      trigger.setAttribute('aria-expanded', String(open));
+      if (open) position();
+    },
+    { signal },
+  );
+  window.addEventListener(
+    'resize',
+    () => {
+      if (panel.matches(':popover-open')) position();
+    },
+    { signal },
+  );
+}
+
 export function closeOnBackdrop(dialog: HTMLDialogElement) {
   let startedOutside = false;
   const outside = (event: MouseEvent) => {

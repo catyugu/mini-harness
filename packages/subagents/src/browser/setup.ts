@@ -1,5 +1,20 @@
 import type { Context } from 'mini-harness/cordis';
+import { isRunning, type RunInfo } from '@mini-harness/sessions/run-state';
 import { icon } from '@mini-harness/ui-primitives/icons';
+import { bindHeaderPopover, fromMarkup, required } from '@mini-harness/ui-primitives/primitives';
+
+function runStatus(run?: RunInfo, waitingApproval = false) {
+  if (waitingApproval && isRunning(run)) return 'Awaiting approval';
+  return run ? run.state[0].toUpperCase() + run.state.slice(1) : 'Idle';
+}
+
+function duration(run: RunInfo) {
+  const seconds = Math.max(
+    0,
+    Math.floor((Date.parse(run.finishedAt ?? new Date().toISOString()) - Date.parse(run.startedAt)) / 1000),
+  );
+  return seconds < 60 ? seconds + ' s' : Math.floor(seconds / 60) + ' min ' + (seconds % 60) + ' s';
+}
 
 const setup = (ctx: Context) => {
   const signal = ctx.fiber.signal;
@@ -7,9 +22,28 @@ const setup = (ctx: Context) => {
   const trail = document.createElement('nav');
   trail.className = 'parent-conversations';
   trail.setAttribute('aria-label', 'Parent conversations');
-  const renderTrail = () => {
+  const container = fromMarkup(`<div class="subagent-tasks" hidden>
+    <button type="button" class="link-button ui-header-trigger" aria-label="Subagents" aria-expanded="false" aria-controls="subagentTasks" popovertarget="subagentTasks"><span></span></button>
+    <div id="subagentTasks" class="ui-header-popover subagent-list" popover="auto" role="region" aria-label="Subagents"></div>
+  </div>`);
+  const toggle = required(container.querySelector<HTMLButtonElement>('button'));
+  const count = required(toggle.querySelector('span'));
+  toggle.append(icon('chevron'));
+  const panel = required(container.querySelector<HTMLElement>('#subagentTasks'));
+  bindHeaderPopover(toggle, panel, signal);
+  let active: string | undefined;
+  let clocks: { time: HTMLTimeElement; run: RunInfo }[] = [];
+
+  const tick = () => {
+    for (const { time, run } of clocks) time.textContent = duration(run);
+  };
+  function render() {
+    const session = services.session();
+    const parentId = session?.id;
+    if (active !== parentId && panel.matches(':popover-open')) panel.hidePopover();
+    active = parentId;
     const parents = [];
-    for (let id = services.session()?.parentId; id; ) {
+    for (let id = session?.parentId; id; ) {
       const parent = services.session(id);
       if (!parent) break;
       parents.unshift(parent);
@@ -29,10 +63,68 @@ const setup = (ctx: Context) => {
         return step;
       }),
     );
-  };
+
+    const children = parentId ? ctx.miniSessions.get().filter((child) => child.parentId === parentId) : [];
+    const running = children.filter(({ run }) => isRunning(run)).length;
+    count.textContent = children.length + (children.length === 1 ? ' subagent' : ' subagents');
+    toggle.dataset.running = String(running > 0);
+    toggle.title = running + ' running · ' + (children.length - running) + ' idle or finished';
+    container.hidden = !children.length;
+    if (container.hidden && panel.matches(':popover-open')) panel.hidePopover();
+    clocks = [];
+    const focused = (document.activeElement as HTMLElement | null)?.dataset.childSession;
+    panel.replaceChildren(
+      ...children.map(({ id, title, run, waitingApproval }) => {
+        const row = fromMarkup<HTMLButtonElement>(`<button type="button" class="subagent-row">
+          <span class="subagent-dot" aria-hidden="true"></span><span class="subagent-title"></span>
+          <span class="subagent-status"></span><time></time>
+        </button>`);
+        row.dataset.childSession = id;
+        row.dataset.state = run?.state ?? 'idle';
+        row.setAttribute('aria-label', 'Open conversation: ' + title);
+        row.title = title;
+        required(row.querySelector('.subagent-title')).textContent = title;
+        required(row.querySelector('.subagent-status')).textContent = runStatus(run, waitingApproval);
+        if (run) {
+          const time = required(row.querySelector('time'));
+          time.textContent = duration(run);
+          clocks.push({ time, run });
+        }
+        row.append(icon('chevron'));
+        row.onclick = () => {
+          panel.hidePopover();
+          services.openConversation(id);
+        };
+        return row;
+      }),
+    );
+    if (focused) panel.querySelector<HTMLElement>('[data-child-session="' + focused + '"]')?.focus();
+  }
+
   ctx.effect(() => ctx.miniSlots.register('conversation.header', trail));
-  services.onConversationChange(renderTrail, signal);
-  renderTrail();
+  ctx.effect(() => ctx.miniSlots.register('conversation.header', container));
+  services.onConversationChange(render, signal);
+  render();
+  const timer = setInterval(() => {
+    if (panel.matches(':popover-open')) tick();
+  }, 1000);
+  ctx.effect(() => () => clearInterval(timer));
+  ctx.effect(() =>
+    ctx.miniMessages.registerTool('delegate', ({ sessionId }, lifetime) => {
+      if (!sessionId) return;
+      const text = document.createElement('span');
+      text.className = 'subagent-receipt';
+      const update = () => {
+        const child = services.session(sessionId);
+        text.textContent = child
+          ? child.title + ' · ' + runStatus(child.run, child.waitingApproval)
+          : 'Accepted';
+      };
+      services.onConversationChange(update, lifetime);
+      update();
+      return text;
+    }),
+  );
   ctx.effect(() =>
     ctx.miniMessages.registerTool(
       'delegate',
@@ -49,4 +141,8 @@ const setup = (ctx: Context) => {
     ),
   );
 };
-export default { inject: ['harnessBrowser', 'miniMessages', 'miniSlots'], provide: [], apply: setup };
+export default {
+  inject: ['harnessBrowser', 'miniSessions', 'miniMessages', 'miniSlots'],
+  provide: [],
+  apply: setup,
+};

@@ -305,6 +305,7 @@ test('independent shell calls use one task, retain output channels and do not du
   const id = String(receipt.details?.taskId);
   const task = await ctx.harnessTasks.wait(id);
   assert.equal(task.state, 'completed');
+  assert.deepEqual(task.metadata, { tool: 'sandbox_shell', arguments: { command: 'echo task-output' } });
   assert.equal((task.result as { details: { exitCode: number } }).details.exitCode, 0);
   assert.equal(ctx.harnessTasks.list('session:' + session.id).length, 1);
   assert.match(

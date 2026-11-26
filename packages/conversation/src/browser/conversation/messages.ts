@@ -10,6 +10,7 @@ import { attachmentView } from './attachment-view.ts';
 import { renderReferences } from './file-references.ts';
 import type { MessageExtensions } from './message-extensions.ts';
 import { groupHistory, textOf } from './timeline.ts';
+import { notificationLabel } from './notification.ts';
 
 export function createMessageView(
   ctx: Context,
@@ -261,24 +262,20 @@ export function createMessageView(
   }
 
   function renderUser(message: Extract<ViewMessage, { role: 'user' }>) {
-    const entry = document.createElement('div');
     const origin = message.origin;
-    const asynchronous = origin && origin.source !== 'user';
-    entry.className = asynchronous ? 'message-row async-message' : 'message-row user';
+    const notification = notificationLabel(origin, message.inboxId);
+    const entry = document.createElement(notification ? 'details' : 'div');
+    entry.className = notification ? 'async-message' : 'message-row user';
     const text = textOf(message.content);
     const attachments = message.attachments ?? [];
     const bubble = document.createElement('article');
-    bubble.className = asynchronous ? 'message' : 'message user';
-    if (asynchronous) {
-      const label = document.createElement('small');
-      label.className = 'hint';
-      label.textContent =
-        origin.source === 'task'
-          ? 'Background task'
-          : origin.source === 'agent'
-            ? 'Agent message'
-            : 'Plugin message';
-      bubble.append(label);
+    bubble.className = notification ? 'async-message-body' : 'message user';
+    if (notification) {
+      const summary = document.createElement('summary');
+      const sender = origin?.senderSessionId;
+      const title = sender ? ctx.get('harnessBrowser')?.session(sender)?.title : undefined;
+      summary.append(icon('chevron'), document.createTextNode(notification + (title ? ' · ' + title : '')));
+      entry.append(summary);
     }
     const list = document.createElement('div');
     list.className = 'message-attachments';
@@ -305,15 +302,18 @@ export function createMessageView(
     if (list.childElementCount) bubble.append(list);
     if (text) {
       const body = document.createElement('div');
-      body.className = 'user-text';
-      renderReferences(body, text, (path) => {
-        if (workspaceId)
-          ctx.get('miniFilePreview')?.open({ kind: 'workspace', workspaceId, path }, 'sidebar');
-      });
+      if (notification) renderMarkdown(body, text);
+      else {
+        body.className = 'user-text';
+        renderReferences(body, text, (path) => {
+          if (workspaceId)
+            ctx.get('miniFilePreview')?.open({ kind: 'workspace', workspaceId, path }, 'sidebar');
+        });
+      }
       bubble.append(body);
     }
     entry.append(bubble);
-    if (!asynchronous) {
+    if (!notification) {
       entry.append(
         messageActions(entry, { type: 'user-message', message, rawText: text }, message.timestamp),
       );

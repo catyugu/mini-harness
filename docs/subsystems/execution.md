@@ -4,7 +4,7 @@ Runs writes every accepted input to the Session Log Inbox. It starts an exclusiv
 
 Agent executes a model turn and delegates tool calls to Tools. Tools validates arguments and invokes the owning Cordis Fiber. Ordinary tool calls use Promises and honor the Run signal. Tools closes each model tool call with a result, including skipped or interrupted calls. History records actual completed results and unknown effects are left unretried.
 
-Independent work uses a Task with a Session owner and a stable provider. Background tools and child sessions send status through the same Inbox. Task logs and progress remain available as task observations. A serial tool can wait for an independent Task while yielding pool capacity. Its exclusive conversation lane stays occupied.
+Independent work uses a Task with a Session owner and a stable provider. Background tools and child sessions send status through the same Inbox. Tool logs and progress remain available as task observations. Child agent transcripts belong to the child Session, not the task output buffer. A serial tool can wait for an independent Task while yielding pool capacity. Its exclusive conversation lane stays occupied.
 
 Interrupt durably accepts input, requests cancellation of the current Run and starts its replacement after settlement. Stop pauses automatic admission before cancellation. Queue waits for the current Run to end, and Steer uses model and tool boundaries. See [Runs](../../packages/runs/README.md) for the API and delivery modes.
 

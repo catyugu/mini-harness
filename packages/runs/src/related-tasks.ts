@@ -1,5 +1,5 @@
 import type { Context } from 'mini-harness/cordis';
-import type { TaskSnapshot } from '@mini-harness/tasks/api';
+import { terminal, type TaskSnapshot } from '@mini-harness/tasks/api';
 
 export const backgroundTool = 'background-tool';
 
@@ -19,8 +19,8 @@ function childrenOf(ctx: Context, id: string) {
   );
 }
 
-export function relatedTasks(ctx: Context, id: string) {
-  const children = childrenOf(ctx, id);
+export function relatedTasks(ctx: Context, id: string, includeChildren = true) {
+  const children = includeChildren ? childrenOf(ctx, id) : new Set<string>();
   const owners = ['session:' + id, ...children];
   const tasks = new Map<string, TaskSnapshot>();
   for (const owner of owners) {
@@ -31,10 +31,13 @@ export function relatedTasks(ctx: Context, id: string) {
     for (const task of ctx.harnessTasks.list(owner))
       if (related(task, id, children)) tasks.set(task.id, task);
   }
-  return [...tasks.values()]
-    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-    .slice(0, 50)
-    .map((task) => ctx.harnessTasks.get(task.id) ?? task);
+  const ordered = [...tasks.values()]
+    .map((task) => ctx.harnessTasks.get(task.id) ?? task)
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  return [
+    ...ordered.filter((task) => !terminal(task.state)),
+    ...ordered.filter((task) => terminal(task.state)).slice(0, 50),
+  ];
 }
 
 export function relatedTask(ctx: Context, id: string, taskId: string) {

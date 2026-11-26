@@ -53,6 +53,7 @@ function start(ctx: Context, id: string, name: string, args: Record<string, unkn
         ...service.task(id),
         type: backgroundTool,
         name: tool.label ?? tool.name,
+        metadata: { tool: name, arguments: prepared.args as TaskData },
         provider: owner ?? ctx,
         signal: lifetime,
         project: (result: ToolResult) =>
@@ -166,15 +167,12 @@ const plugin: Plugin.Object = {
       web.effect(() => changes.register('tasks'));
       web.effect(() =>
         tasks.subscribe(({ task }) => {
-          if (task.type !== backgroundTool && task.type !== 'agent-run') return;
-          const id = task.owner.slice('session:'.length);
-          const recipient = task.type === 'agent-run' ? ctx.harnessSessions.get(id)?.parentId : id;
-          if (recipient) changes.invalidate('tasks', recipient);
+          if (task.type === backgroundTool) changes.invalidate('tasks', task.owner.slice('session:'.length));
         }),
       );
       const route = '/api/sessions/:id/tasks';
       web.effect(() =>
-        web.harnessRoutes.register('GET', route, ({ params }) => relatedTasks(ctx, params.id)),
+        web.harnessRoutes.register('GET', route, ({ params }) => relatedTasks(ctx, params.id, false)),
       );
       web.effect(() =>
         web.harnessRoutes.register('GET', route + '/:task/output', ({ params, url }) => {
