@@ -47,7 +47,7 @@ test('refresh and navigation preserve a run while another conversation completes
       await expect(page.getByRole('button', { name: 'Stop response' })).toBeVisible();
       await openSidebar();
       await page.getByRole('button', { name: 'Settings', exact: true }).click();
-      await settingsSection(page, 'Appearance').click();
+      await settingsSection(page, 'General').click();
       await page.getByRole('combobox', { name: 'Theme', exact: true }).selectOption('dark');
       await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
       await page.getByRole('button', { name: 'Close settings' }).click();

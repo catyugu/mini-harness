@@ -399,7 +399,7 @@ function setup(ctx: Context) {
         browserPluginId(ctx),
         {
           id: 'context-management',
-          section: { title: 'Context', icon: 'file-text', order: 25 },
+          section: { title: 'Context', icon: 'file-text', order: 40 },
           order: 10,
           render({ signal }) {
             const form = settingsForm(settings, signal, (value) => configuration.patch({ ...value }));

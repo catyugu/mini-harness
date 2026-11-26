@@ -113,7 +113,7 @@ test('file inspection, responsive themes and reduced viewport height keep contro
           if (theme === 'system') await page.emulateMedia({ colorScheme: 'dark' });
           if (width <= 860) await page.getByRole('button', { name: 'Toggle navigation' }).click();
           await page.getByRole('button', { name: 'Settings', exact: true }).click();
-          await settingsSection(page, 'Appearance').click();
+          await settingsSection(page, 'General').click();
           await page.getByRole('combobox', { name: 'Theme', exact: true }).selectOption(theme);
           await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
           await page.getByRole('button', { name: 'Close settings' }).click();

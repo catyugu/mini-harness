@@ -21,7 +21,7 @@ const setup = (ctx: Context) => {
       browserPluginId(ctx),
       {
         id: 'message-mode',
-        section: { title: 'General', icon: 'settings', order: 20 },
+        section: { title: 'General', icon: 'settings', order: 10 },
         render({ bind }) {
           const content = fromMarkup(
             '<div class="settings-preference"><label class="switch-line"><span><strong>Add instructions</strong><small>Default sending mode for conversations without a selection.</small></span></label></div>',
