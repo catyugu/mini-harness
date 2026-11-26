@@ -64,9 +64,26 @@ export class AgentLoop implements AgentPort {
           thinking(text) {
             if (!reasoningOpened) {
               reasoningOpened = true;
-              input.onEvent?.({ type: 'record-update', operation: 'set', record: { type: 'record', id: reasoningId, plugin: owner.pluginId, instanceId: owner.instanceId, kind, title } });
+              input.onEvent?.({
+                type: 'record-update',
+                operation: 'set',
+                record: {
+                  type: 'record',
+                  id: reasoningId,
+                  plugin: owner.pluginId,
+                  instanceId: owner.instanceId,
+                  kind,
+                  title,
+                },
+              });
             }
-            input.onEvent?.({ type: 'record-update', operation: 'append', id: reasoningId, channel: 'text', text });
+            input.onEvent?.({
+              type: 'record-update',
+              operation: 'append',
+              id: reasoningId,
+              channel: 'text',
+              text,
+            });
           },
           attempt: (metrics) => input.onEvent?.({ type: 'model-attempt', metrics }),
           retry: input.retry,
@@ -104,10 +121,13 @@ export class AgentLoop implements AgentPort {
       }
       validateNativeMessage(result);
       messages?.push(result);
-      const display: RecordPresentation | undefined = result.content.some((part) => part.type === 'thinking' && part.thinking && !part.redacted)
+      const display: RecordPresentation | undefined = result.content.some(
+        (part) => part.type === 'thinking' && part.thinking && !part.redacted,
+      )
         ? { owner, kind, title, id: reasoningId, source: ['message', 'content'] }
         : undefined;
-      if (reasoningOpened && !display) input.onEvent?.({ type: 'record-update', operation: 'remove', id: reasoningId });
+      if (reasoningOpened && !display)
+        input.onEvent?.({ type: 'record-update', operation: 'remove', id: reasoningId });
       input.onEvent?.({ type: 'assistant', message: result, diagnostic, display });
       if (failed(result)) {
         signal.throwIfAborted();

@@ -70,7 +70,9 @@ export class MessageExtensions {
       return render(structuredClone(record), {
         ...context,
         signal,
-        subscribe(listener) { listeners.add(listener); },
+        subscribe(listener) {
+          listeners.add(listener);
+        },
       });
     });
     if (!node) return;
@@ -81,8 +83,11 @@ export class MessageExtensions {
         if (current === next) return;
         current = next;
         for (const listener of listeners) {
-          try { listener(structuredClone(next)); }
-          catch (error) { this.report(error); }
+          try {
+            listener(structuredClone(next));
+          } catch (error) {
+            this.report(error);
+          }
         }
       },
     };

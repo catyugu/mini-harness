@@ -75,7 +75,7 @@ export function createConversationController(ctx: Context): ConversationControll
       history: undefined,
       partial: '',
       tools: [],
-    records: [],
+      records: [],
       queue: [],
     });
     selection.selectConversation(item, revealWorkspace);
@@ -166,7 +166,10 @@ export function createConversationController(ctx: Context): ConversationControll
             const index = timeline.findIndex(({ id }) => id === display.id);
             timeline.splice(index < 0 ? timeline.length : index, index < 0 ? 0 : 1, display);
           }
-          update({ history: { timeline, leafId: event.leafId }, records: display ? state.records.filter(({ id }) => id !== display.id) : state.records });
+          update({
+            history: { timeline, leafId: event.leafId },
+            records: display ? state.records.filter(({ id }) => id !== display.id) : state.records,
+          });
           break;
         }
         case 'snapshot':

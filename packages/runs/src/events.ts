@@ -10,7 +10,9 @@ export class RunEvents {
   partial = '';
   private records: SessionDisplayRecord[] = [];
 
-  get activeRecords() { return this.records; }
+  get activeRecords() {
+    return this.records;
+  }
 
   constructor(readonly info: RunInfo) {}
 

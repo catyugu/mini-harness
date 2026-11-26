@@ -430,7 +430,9 @@ export function createMessageView(
           label.className = 'hint';
           label.textContent = entry.title;
           node.append(label);
-          recordUpdates.set(node, (next) => { label.textContent = next.title; });
+          recordUpdates.set(node, (next) => {
+            label.textContent = next.title;
+          });
         }
         return node;
       });

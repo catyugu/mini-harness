@@ -71,7 +71,12 @@ export async function requestModel(
     } catch (error) {
       message = {
         ...failedMessage(request, error, partial, llm.select?.(model)?.classifyError?.(error)),
-        ...(thinking && { content: [{ type: 'thinking' as const, thinking }, ...(partial ? [{ type: 'text' as const, text: partial }] : [])] }),
+        ...(thinking && {
+          content: [
+            { type: 'thinking' as const, thinking },
+            ...(partial ? [{ type: 'text' as const, text: partial }] : []),
+          ],
+        }),
         usage: message?.usage,
       };
     }

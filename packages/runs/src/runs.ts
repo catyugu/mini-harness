@@ -62,7 +62,11 @@ export class Runs implements RunPort {
 
   activity(id: string) {
     const events = this.streams.get(id)?.events;
-    return { partial: events?.partial, tools: events?.activeTools ?? [], records: events?.activeRecords ?? [] };
+    return {
+      partial: events?.partial,
+      tools: events?.activeTools ?? [],
+      records: events?.activeRecords ?? [],
+    };
   }
 
   branchChanged(id: string, record: RecordAppend) {

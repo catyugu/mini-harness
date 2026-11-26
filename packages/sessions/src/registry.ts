@@ -291,7 +291,8 @@ export class SessionRegistry implements SessionStore {
           id,
           false,
           false,
-          advancesBranch(entry) && (entry.display !== undefined || (entry.type !== 'message' && entry.type !== 'tool-accepted'))
+          advancesBranch(entry) &&
+            (entry.display !== undefined || (entry.type !== 'message' && entry.type !== 'tool-accepted'))
             ? { leafId: entry.id, display: structuredClone(displayRecord(entry)) }
             : undefined,
           entry.type,
