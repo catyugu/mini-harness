@@ -1,6 +1,14 @@
-export type TaskState = 'queued' | 'running' | 'waiting' | 'completed' | 'failed' | 'cancelled' | 'interrupted';
+export type TaskState =
+  | 'queued'
+  | 'running'
+  | 'waiting'
+  | 'completed'
+  | 'failed'
+  | 'cancelled'
+  | 'interrupted';
 
-export const terminal = (state: TaskState) => state !== 'queued' && state !== 'running' && state !== 'waiting';
+export const terminal = (state: TaskState) =>
+  state !== 'queued' && state !== 'running' && state !== 'waiting';
 
 /** Acquire a caller-defined execution slot. Release is called exactly once per acquisition. */
 export type TaskAdmission = (signal: AbortSignal) => Promise<() => void>;

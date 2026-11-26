@@ -123,9 +123,12 @@ export class TaskRuntime implements TaskPort {
         return value;
       } catch (error) {
         const reason = signal.aborted ? signal.reason : error;
-        settle(signal.aborted ? (reason instanceof TaskInterrupted ? 'interrupted' : 'cancelled') : 'failed', {
-          error: describe(reason),
-        });
+        settle(
+          signal.aborted ? (reason instanceof TaskInterrupted ? 'interrupted' : 'cancelled') : 'failed',
+          {
+            error: describe(reason),
+          },
+        );
         throw reason;
       }
     });
