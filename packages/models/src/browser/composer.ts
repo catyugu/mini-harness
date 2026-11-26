@@ -37,7 +37,8 @@ export function mountModelControls(ctx: Context, signal: AbortSignal) {
   let previousModel: ReturnType<typeof model.draft>['model'],
     previousThinking: ThinkingLevel | null | undefined;
   function render() {
-    const current = model.draft(), state = control.get();
+    const current = model.draft(),
+      state = control.get();
     const sending = running() || state.interaction.operation === 'submit';
     const catalog = ctx.miniModels.get();
     const choice = current.model ?? (sending ? state.session?.model : undefined) ?? catalog.recent;

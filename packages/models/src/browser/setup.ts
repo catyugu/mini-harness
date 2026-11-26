@@ -25,7 +25,11 @@ const setup = async (ctx: Context) => {
   ctx.effect(() => ctx.miniProjections.register('models', state));
   ctx.provide('miniModels', state);
   ctx.inject(['miniComposer', 'miniConversation', 'miniSlots'], (composer) => {
-    composer.effect(() => composer.miniSlots.register('conversation.composer-trailing', (signal) => mountModelControls(composer, signal)));
+    composer.effect(() =>
+      composer.miniSlots.register('conversation.composer-trailing', (signal) =>
+        mountModelControls(composer, signal),
+      ),
+    );
   });
   ctx.on('settings/options', (schema, value) => {
     if (!schema['x-modelChoice']) return;

@@ -12,16 +12,18 @@ const setup = (ctx: Context) => {
     miniWorkspace: workspace,
   } = ctx;
   ctx.inject(['miniComposer', 'miniConversation'], (composer) => {
-    composer.effect(() => composer.miniComposer.command({
-      name: 'export',
-      group: 'Conversation',
-      description: 'Export the current conversation',
-      run() {
-        const id = composer.miniConversation.get().session?.id;
-        if (!id) throw new Error('Open a conversation to export it.');
-        return exportSessions([id], composer.fiber.signal);
-      },
-    }));
+    composer.effect(() =>
+      composer.miniComposer.command({
+        name: 'export',
+        group: 'Conversation',
+        description: 'Export the current conversation',
+        run() {
+          const id = composer.miniConversation.get().session?.id;
+          if (!id) throw new Error('Open a conversation to export it.');
+          return exportSessions([id], composer.fiber.signal);
+        },
+      }),
+    );
   });
   sessionNavigation(ctx, {
     state,
