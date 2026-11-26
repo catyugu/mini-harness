@@ -7,11 +7,12 @@ import assert from 'node:assert/strict';
 import { Type } from 'typebox';
 import { defineTool } from '../src/api.ts';
 import { ToolRegistry } from '../src/registry.ts';
+import { TaskRuntime } from '@mini-harness/tasks/runtime';
 
 test('scoped tools inherit locally and disposal aborts and drains active execution', async () => {
   const workspace = createScopeKey();
   const child = createScopeKey(workspace);
-  const registry = new ToolRegistry();
+  const registry = new ToolRegistry(new TaskRuntime());
   const make = (text: string) =>
     defineTool({
       name: 'inspect',
@@ -61,7 +62,7 @@ test('scoped tools inherit locally and disposal aborts and drains active executi
 test('a scoped replacement invalidates existing leases and removal restores inheritance', async () => {
   const parent = createScopeKey();
   const child = createScopeKey(parent);
-  const registry = new ToolRegistry();
+  const registry = new ToolRegistry(new TaskRuntime());
   const make = (text: string) =>
     defineTool({
       name: 'inspect',
@@ -87,6 +88,7 @@ test('a scoped replacement invalidates existing leases and removal restores inhe
 
 test('Tools activates and registers a definition without Sessions or a policy provider', async () => {
   const ctx = new Context();
+  ctx.provide('harnessTasks', new TaskRuntime().service());
   const fiber = ctx.plugin(toolsPlugin);
   try {
     await fiber;
@@ -111,4 +113,34 @@ test('Tools activates and registers a definition without Sessions or a policy pr
   } finally {
     await fiber.dispose();
   }
+});
+
+test('a registered tool uses one task for inline and independent background calls', async () => {
+  const tasks = new TaskRuntime();
+  const registry = new ToolRegistry(tasks);
+  let ready!: () => void;
+  const entered = new Promise<void>((resolve) => { ready = resolve; });
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => { release = resolve; });
+  registry.register(defineTool({
+    name: 'work',
+    description: 'Work',
+    parameters: Type.Object({ hold: Type.Boolean() }),
+    async execute(_id, args, _signal, _update, context) {
+      assert.ok(context);
+      if (args.hold) { ready(); await gate; }
+      return { content: [{ type: 'text', text: 'done' }] };
+    },
+  }));
+  const tool = registry.list({ resourceId: 'session' })[0];
+  assert.equal((await tool.execute('inline', { hold: false })).content[0].type, 'text');
+  assert.equal(tasks.list().length, 0);
+  const background = tool.start('background', { hold: true }, { retain: true });
+  await entered;
+  assert.equal(tasks.list('session:session').length, 1);
+  assert.equal(tasks.get(background.id)?.state, 'running');
+  release();
+  await background.result;
+  assert.equal(tasks.get(background.id)?.state, 'completed');
+  assert.deepEqual(tasks.get(background.id)?.result, { content: [{ type: 'text', text: 'done' }] });
 });

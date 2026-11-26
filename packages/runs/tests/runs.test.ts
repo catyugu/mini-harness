@@ -392,7 +392,7 @@ test('append, torn write and fsync failures evict the writer without acknowledgi
 });
 
 test(
-  'execution handles cancel only their own run and cannot cancel a later run in the same conversation',
+  'task handles cancel only their own run and cannot cancel a later run in the same conversation',
   { timeout: 15000 },
   async (t) => {
     const entered = gate(),
@@ -416,9 +416,9 @@ test(
     const { harnessSessions: registry, harnessRuns: runs } = app.runtime.plugins.ctx;
     const session = registry.create();
     const signal = new AbortController();
-    const first = runs.submit(session.id, { message: 'First' }, signal.signal);
+    const first = runs.submit(session.id, { message: 'First' }, { signal: signal.signal });
     assert.equal(await first.result, 'Done');
-    const later = runs.submit(session.id, { message: 'Later' }, signal.signal);
+    const later = runs.submit(session.id, { message: 'Later' }, { signal: signal.signal });
     const cancelled = assert.rejects(later.result, /cancelled/);
     await entered.promise;
     assert.equal(first.cancel(), false);

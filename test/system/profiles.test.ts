@@ -217,6 +217,7 @@ test('a third-party plugin uses tools, models and subprocesses from a Profile wi
   writeText(
     join(directory, 'cordis.patch.yml'),
     `plugins:
+  - name: '@mini-harness/tasks'
   - name: '@mini-harness/tools'
   - name: '@mini-harness/model-catalog'
   - name: '@mini-harness/llm'

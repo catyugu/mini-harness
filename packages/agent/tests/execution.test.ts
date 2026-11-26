@@ -19,6 +19,7 @@ import { basicCompaction } from '../src/compaction.ts';
 import { SessionRegistry } from '@mini-harness/sessions/registry';
 import { WorkspaceCatalog } from '@mini-harness/workspaces/catalog';
 import { ToolRegistry } from '@mini-harness/tools/registry';
+import { TaskRuntime } from '@mini-harness/tasks/runtime';
 import { defineTool, toolResultState } from '@mini-harness/tools/api';
 import type { LlmPort, NativeAssistantMessage, ToolCallPart } from '@mini-harness/llm/api';
 import type { ModelRetry } from '../src/events.ts';
@@ -64,8 +65,10 @@ function fixture(
     sessions.dispose();
     rmSync(root, { recursive: true, force: true });
   });
-  const tools = new ToolRegistry();
+  const runtime = new TaskRuntime();
+  const tools = new ToolRegistry(runtime);
   const ctx = new Context();
+  ctx.provide('harnessTasks', runtime.service());
   ctx.provide('harnessTools', tools.service());
   ctx.provide('harnessModels', {
     list: () => [],
@@ -387,6 +390,7 @@ test('a concurrent cancellation does not hide a genuine tool failure', async () 
   const states: string[] = [];
   await nativeExecutor.execute([call('one', 'fail'), call('two', 'fail')], new Map([[tool.name, tool]]), {
     signal: controller.signal,
+    tasks: new TaskRuntime(),
     async deliver(result) {
       states.push(toolResultState(result));
     },
@@ -730,6 +734,7 @@ test('a fatal pipeline failure stops dispatch and drains active calls', async ()
   await assert.rejects(
     nativeExecutor.execute(calls, tools, {
       signal: new AbortController().signal,
+      tasks: new TaskRuntime(),
       start(call) {
         started.push(call.id);
         return undefined;

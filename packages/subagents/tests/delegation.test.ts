@@ -25,8 +25,8 @@ test('semaphore caps concurrency and releases on errors', async () => {
   const outputs = await Promise.all(
     Array.from({ length: 8 }, (_, i) =>
       sem
-        .lease()
-        .then(async (lease) => {
+        .acquire()
+        .then(async (release) => {
           try {
             active++;
             peak = Math.max(peak, active);
@@ -35,7 +35,7 @@ test('semaphore caps concurrency and releases on errors', async () => {
             return i;
           } finally {
             active--;
-            lease.release();
+            release();
           }
         })
         .catch(() => 'error'),

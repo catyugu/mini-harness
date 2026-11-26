@@ -21,6 +21,7 @@
   },
   "dependencies": {
     "@mini-harness/llm": "workspace:*",
-    "@mini-harness/plugin-api": "workspace:*"
+    "@mini-harness/plugin-api": "workspace:*",
+    "@mini-harness/tasks": "workspace:*"
   }
 }
