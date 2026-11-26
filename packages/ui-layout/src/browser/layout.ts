@@ -242,12 +242,26 @@ export function createLayout(view: LayoutElements, signal: AbortSignal) {
     );
   }
 
-  bindResize(sidebarResize, sidebar, 1, sidebarWidthKey, () => sidebarWidth, (value) => {
-    sidebarWidth = sidebarSize(value);
-  });
-  bindResize(panelResize, panel, -1, panelWidthKey, () => panelWidth, (value) => {
-    panelWidth = panelSize(value);
-  });
+  bindResize(
+    sidebarResize,
+    sidebar,
+    1,
+    sidebarWidthKey,
+    () => sidebarWidth,
+    (value) => {
+      sidebarWidth = sidebarSize(value);
+    },
+  );
+  bindResize(
+    panelResize,
+    panel,
+    -1,
+    panelWidthKey,
+    () => panelWidth,
+    (value) => {
+      panelWidth = panelSize(value);
+    },
+  );
 
   function resize() {
     document.documentElement.style.setProperty('--app-height', (viewport?.height ?? innerHeight) + 'px');
