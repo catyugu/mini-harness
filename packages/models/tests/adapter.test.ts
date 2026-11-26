@@ -4,7 +4,7 @@ import { readFileSync, rmSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { PiLlm } from '../src/server/pi-adapter.ts';
 import { ModelStore } from '../src/server/store.ts';
-import { createFixturePaths, createMockProvider } from '../../../test/helpers/mock-provider.ts';
+import { createFixturePaths, createMockProvider } from '../../../test/support/mock-provider.ts';
 import { readJson, writeJson } from '@mini-harness/platform/json';
 import type { LlmEvent, NativeMessage } from '@mini-harness/llm/api';
 

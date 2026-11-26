@@ -21,4 +21,4 @@ Plugins can add their own actions through `mini-harness/conversation/history` an
 
 ## Testing
 
-[Revision tests](tests/revision.test.ts) cover selected-branch replacement, rejected input, retained history and stale-leaf conflicts. [Message-action browser tests](../../test/browser/message-actions.spec.ts) cover copy, attachment restoration and draft cleanup. See [session coordination](../../docs/subsystems/sessions.md) for the revision flow.
+[Revision tests](../../test/system/revision.test.ts) cover selected-branch replacement, rejected input, retained history and stale-leaf conflicts. [Message-action browser tests](../../test/browser/message-actions.spec.ts) cover copy, attachment restoration and draft cleanup. See [session coordination](../../docs/subsystems/sessions.md) for the revision flow.

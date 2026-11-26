@@ -21,6 +21,6 @@ The surrounding Host web composition authenticates requests. Gateway does not in
 
 ## Verification
 
-[Browser graph tests](../../test/system/browser-graph.test.ts) exercise bootstrap and browser-safe module publication. [Browser projection tests](../../test/system/browser-projections.test.ts) cover the receiving side, and [navigation/shutdown tests](../../test/system/navigation-shutdown.test.ts) cover shutdown behavior.
+[Browser graph tests](../../test/system/browser-graph.test.ts) exercise bootstrap and browser-safe module publication. [Browser projection tests](../ui-runtime/tests/projections.test.ts) cover the receiving side, and [navigation/shutdown tests](../../test/system/navigation-shutdown.test.ts) cover shutdown behavior.
 
 See [Transport](../transport/README.md), [Plugins](../plugins/README.md) and the [transport subsystem](../../docs/subsystems/transport.md).

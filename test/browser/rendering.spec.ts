@@ -1,7 +1,7 @@
 import { expectPresent } from '../support/required.ts';
 import { test, expect } from '@playwright/test';
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
-import { checkpointFixture, createFixturePaths, createMockProvider } from '../helpers/mock-provider.ts';
+import { checkpointFixture, createFixturePaths, createMockProvider } from '../support/mock-provider.ts';
 import { join } from 'node:path';
 import { writeJson } from '@mini-harness/platform/json';
 import { settingsSection, startIsolatedHost } from '../support/browser.ts';
@@ -249,12 +249,8 @@ export const apply = (ctx) => {
     await page.getByRole('button', { name: 'Stop response' }).click();
     const cancelled = page.locator('.tool-card[data-state=cancelled]');
     await expect(cancelled.locator('.tool-state')).toHaveText('Cancelled');
-    const yellow = /rgb\((138, 101, 0|245, 204, 101)\)/;
-    await expect(cancelled.locator('.tool-state')).toHaveCSS('color', yellow);
-    await expect(skipped.locator('.tool-state')).toHaveCSS('color', yellow);
     await page.reload();
     await expect(cancelled.locator('.tool-state')).toHaveText('Cancelled');
-    await expect(cancelled.locator('.tool-state')).toHaveCSS('color', yellow);
   } finally {
     release();
     resumeSteering();

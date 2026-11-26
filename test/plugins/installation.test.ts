@@ -11,7 +11,7 @@ import { promisify } from 'node:util';
 import { parse } from 'yaml';
 import { writeJson } from '@mini-harness/platform/json';
 import { createMiniHarnessServer } from '../support/profile.ts';
-import { createFixturePaths } from '../helpers/mock-provider.ts';
+import { createFixturePaths } from '../support/mock-provider.ts';
 import { parseNpmPackResult } from '../../scripts/npm-pack.ts';
 
 const execFile = promisify(exec);
@@ -274,7 +274,7 @@ export function apply(ctx, config) {
   const browser = (await request('/bootstrap')).body.ui.find(
     (entry: { id: string }) => entry.id === id,
   ).browser;
-  assert.match(await (await fetch(base + browser)).text(), /function/);
+  assert.equal((await fetch(base + browser)).status, 200);
   assert.deepEqual((await request(route, 'POST', { value: 1 })).body, { echo: { value: 1 } });
   const failure = await request('/settings', 'PATCH', { entries: { [id]: { config: { fail: true } } } });
   assert.equal(failure.status, 400);

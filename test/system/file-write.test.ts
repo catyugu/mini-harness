@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { fixture } from '../../../test/support/api-fixture.ts';
+import { fixture } from '../support/api-fixture.ts';
 test('successful file writes retain arguments and this-turn paths after reopening history', async (t) => {
   const { paths, request, finish } = await fixture(t, ({ messages }) =>
     messages.at(-1)?.role === 'tool'

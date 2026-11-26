@@ -11,7 +11,7 @@ import assert from 'node:assert/strict';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { MiniHarnessRuntime, storedProfile } from '../support/profile.ts';
-import { createFixturePaths, createMockProvider } from '../helpers/mock-provider.ts';
+import { createFixturePaths, createMockProvider } from '../support/mock-provider.ts';
 import { DEFAULTS, mergeSettings } from '@mini-harness/plugin-api/selection';
 import { writeJson } from '@mini-harness/platform/json';
 

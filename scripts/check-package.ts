@@ -11,7 +11,7 @@ import { promisify } from 'node:util';
 import { readServerInfo } from '@mini-harness/host/process';
 import { parseNpmPackResult } from './npm-pack.ts';
 import { waitUntil } from '../test/support/api-fixture.ts';
-import { createFixturePaths, createMockProvider } from '../test/helpers/mock-provider.ts';
+import { createFixturePaths, createMockProvider } from '../test/support/mock-provider.ts';
 
 const execFile = promisify(exec);
 const npmPath =

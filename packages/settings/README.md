@@ -34,4 +34,4 @@ The browser data store is a projection, not another configuration owner. Entry i
 
 ## Verification
 
-[Configuration tests](tests/config.test.ts) cover bounds and preservation of unrelated sections. [Plugin lifecycle tests](../../test/plugins/lifecycle.test.ts) cover reconciliation and rollback; [Settings browser tests](../../test/browser/settings.spec.ts) cover live updates, persistence and responsive navigation.
+[Configuration tests](../plugin-api/tests/selection.test.ts) cover bounds and preservation of unrelated sections. [Plugin lifecycle tests](../../test/plugins/lifecycle.test.ts) cover reconciliation and rollback; [Settings browser tests](../../test/browser/settings.spec.ts) cover live updates, persistence and responsive navigation.

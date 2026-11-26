@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { DEFAULTS, mergeSettings, validateSettings } from '@mini-harness/plugin-api/selection';
+import { DEFAULTS, mergeSettings, validateSettings } from '../src/selection.ts';
 
 test('settings merge preserves other sections and validates bounds', () => {
   const before = structuredClone(DEFAULTS);

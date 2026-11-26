@@ -28,6 +28,6 @@ The runtime has no Profile Entry or configuration of its own: Host serves its st
 
 ## Verification
 
-[Browser graph tests](../../test/system/browser-graph.test.ts) verify published runtime dependencies and exclusion of server code. [Projection tests](../../test/system/browser-projections.test.ts) verify domain routing, failed refresh isolation and disposal. [Plugin browser tests](../../test/browser/plugins.spec.ts) exercise live graph changes and cleanup.
+[Browser graph tests](../../test/system/browser-graph.test.ts) verify published runtime dependencies and exclusion of server code. [Projection tests](tests/projections.test.ts) verify domain routing, failed refresh isolation and disposal. [Plugin browser tests](../../test/browser/plugins.spec.ts) exercise live graph changes and cleanup.
 
 See [UI Gateway](../ui-gateway/README.md), [Transport](../transport/README.md), [Plugins](../plugins/README.md), and [browser composition](../../docs/subsystems/frontend.md).

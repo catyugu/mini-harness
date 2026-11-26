@@ -5,14 +5,14 @@ import { join } from 'node:path';
 import { Type } from 'typebox';
 import { defineTool } from '@mini-harness/tools/api';
 import { validateRequestSnapshot } from '@mini-harness/llm/api';
-import { checkpointFixture } from '../../../test/helpers/mock-provider.ts';
+import { checkpointFixture } from '../../../test/support/mock-provider.ts';
 import { fixture } from '../../../test/support/api-fixture.ts';
 import { sendRun } from '../../../test/support/runs.ts';
 import { SessionLog } from '../../sessions/src/log.ts';
 import type { SessionLogPort } from '@mini-harness/sessions/log-api';
 import { estimate, totalTokens } from '../src/server/meter.ts';
 import { splitPoint } from '../src/server/compaction.ts';
-import type { MockProvider } from '../../../test/helpers/mock-provider.ts';
+import type { MockProvider } from '../../../test/support/mock-provider.ts';
 
 const settings = {
   autoCompact: true,

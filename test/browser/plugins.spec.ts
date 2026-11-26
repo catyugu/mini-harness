@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { rmSync, mkdirSync, realpathSync, writeFileSync, cpSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { createFixturePaths, createMockProvider } from '../helpers/mock-provider.ts';
+import { createFixturePaths, createMockProvider } from '../support/mock-provider.ts';
 import { workspaceId } from '@mini-harness/workspaces/identity';
 import { writeJson } from '@mini-harness/platform/json';
 import {

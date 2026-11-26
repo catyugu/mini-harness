@@ -24,7 +24,7 @@ import { TaskRuntime } from '@mini-harness/tasks/runtime';
 import { defineTool, toolResultState } from '@mini-harness/tools/api';
 import type { LlmPort, NativeAssistantMessage, ToolCallPart } from '@mini-harness/llm/api';
 import type { ModelRetry } from '../src/events.ts';
-import { checkpointFixture, createFixturePaths } from '../../../test/helpers/mock-provider.ts';
+import { checkpointFixture, createFixturePaths } from '../../../test/support/mock-provider.ts';
 
 const model = { provider: 'fixture', id: 'native' };
 const answer = (text = 'Done'): NativeAssistantMessage => ({

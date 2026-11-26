@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { rmSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { createFixturePaths, createMockProvider } from '../helpers/mock-provider.ts';
+import { createFixturePaths, createMockProvider } from '../support/mock-provider.ts';
 import { readJson, writeJson } from '@mini-harness/platform/json';
 import { startIsolatedHost, modelSearch, suggestions, modelButton, chooseModel } from '../support/browser.ts';
 

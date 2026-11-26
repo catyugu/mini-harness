@@ -6,7 +6,7 @@ import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { storedProfile } from '../support/profile.ts';
 import { MiniHarnessRuntime } from '../support/profile.ts';
-import { createFixturePaths, createMockProvider } from '../helpers/mock-provider.ts';
+import { createFixturePaths, createMockProvider } from '../support/mock-provider.ts';
 
 test('appearance, parallelism and child defaults update without interrupting a running session', async (t) => {
   let entered: () => void;

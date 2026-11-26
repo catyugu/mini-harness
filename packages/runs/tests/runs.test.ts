@@ -10,7 +10,7 @@ import { SessionRegistry } from '@mini-harness/sessions/registry';
 import { nativeFile } from '../../sessions/src/storage.ts';
 import { WorkspaceCatalog } from '@mini-harness/workspaces/catalog';
 import type { RunEvent } from '../src/stream.ts';
-import { createFixturePaths, createMockProvider } from '../../../test/helpers/mock-provider.ts';
+import { createFixturePaths, createMockProvider } from '../../../test/support/mock-provider.ts';
 
 function gate() {
   let release: () => void;

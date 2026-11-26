@@ -7,7 +7,7 @@ import { mkdirSync, renameSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { MiniHarnessRuntime } from '../../../test/support/profile.ts';
 import { readJson, writeJson } from '@mini-harness/platform/json';
-import { createFixturePaths, createMockProvider } from '../../../test/helpers/mock-provider.ts';
+import { createFixturePaths, createMockProvider } from '../../../test/support/mock-provider.ts';
 
 test('recent main model survives child overrides and a restart through the native agent', async (t) => {
   const mock = await createMockProvider();

@@ -8,7 +8,7 @@ import { join } from 'node:path';
 import { createMiniHarnessServer } from '../../../test/support/profile.ts';
 import { fixture, waitUntil } from '../../../test/support/api-fixture.ts';
 import { expectPresent } from '../../../test/support/required.ts';
-import { createMockProvider, createFixturePaths } from '../../../test/helpers/mock-provider.ts';
+import { createMockProvider, createFixturePaths } from '../../../test/support/mock-provider.ts';
 
 test(
   'Native execution honors file policy and recursive task waits release the single child slot',

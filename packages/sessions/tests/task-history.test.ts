@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { rmSync } from 'node:fs';
 import { createMiniHarnessServer } from '../../../test/support/profile.ts';
-import { createFixturePaths, createMockProvider } from '../../../test/helpers/mock-provider.ts';
+import { createFixturePaths, createMockProvider } from '../../../test/support/mock-provider.ts';
 
 test('durable retained tasks recover by ID without reconstructing execution handles', async (t) => {
   const mock = await createMockProvider();
