@@ -2,7 +2,8 @@ import { sendRun } from '../support/runs.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
+import { realpath } from 'node:fs/promises';
 import { createMiniHarnessServer } from '../support/profile.ts';
 import { createMockProvider, createFixturePaths } from '../support/mock-provider.ts';
 
@@ -10,7 +11,12 @@ test(
   'native agent through HTTP: streaming, persistence, Skills, export and permanent delete',
   { timeout: 60000 },
   async (t) => {
-    const mock = await createMockProvider();
+    let lastInput = '';
+    const mock = await createMockProvider(({ messages }) => {
+      lastInput = messages.at(-1)?.content ?? '';
+      if (lastInput === 'Load verification skill') return { tool: 'load_skill', args: { name: 'verification' } };
+      return 'Mock response';
+    });
     t.after(() => mock.close());
     const { root, paths } = createFixturePaths(mock.url);
     t.after(() => rmSync(root, { recursive: true, force: true }));
@@ -92,10 +98,13 @@ test(
     );
     assert.equal(skillRequest.status, 200);
     assert.equal((await skillRequest.text()).includes('"type":"error"'), false);
-    assert.ok(
-      JSON.stringify(mock.requests.at(-1)).includes('Mention the verification skill'),
-      'The native loader did not expand the native SKILL.md instructions',
-    );
+    const directory = dirname(await realpath(join(skillDir, 'SKILL.md')));
+    assert.ok(lastInput.includes('Mention the verification skill'));
+    assert.ok(lastInput.includes('directory="' + directory + '"'));
+
+    await sendRun(app.runtime.plugins.ctx.harnessRuns, session.id, 'Load verification skill');
+    assert.ok(lastInput.includes('Mention the verification skill'));
+    assert.ok(lastInput.includes('directory="' + directory + '"'));
 
     await app.close();
     open = false;
