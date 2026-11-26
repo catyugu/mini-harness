@@ -75,7 +75,7 @@
     grid-template-columns: auto minmax(0, 1fr) auto;
     align-items: start;
     gap: var(--space);
-    padding: calc(20px + env(safe-area-inset-top)) var(--space-4) var(--space-1);
+    padding: calc(20px + env(safe-area-inset-top)) var(--space-4) var(--space-3);
   }
   #inspectorOpen {
     grid-column: 3;
