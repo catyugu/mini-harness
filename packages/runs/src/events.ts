@@ -17,10 +17,8 @@ export class RunEvents {
   publish(event: StreamEvent) {
     if (event.type === 'assistant-start' || event.type === 'assistant-end') this.partial = '';
     if (event.type === 'delta') this.partial += event.text;
-    if (event.type === 'tool') {
-      if (event.state === 'running' || event.state === 'approval') this.tools.set(event.id, event);
-      else this.tools.delete(event.id);
-    }
+    if (event.type === 'tool') this.tools.set(event.id, event);
+    if (event.type === 'tool-end') this.tools.delete(event.message.toolCallId);
     const item: RunEvent = {
       ...event,
       runId: this.info.id,

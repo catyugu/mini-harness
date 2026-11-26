@@ -1,4 +1,4 @@
-import { userContent } from '@mini-harness/sessions/user-content';
+import { displayMessage } from '@mini-harness/sessions/projection';
 import { conversationTools } from './tool-selection.ts';
 import type { Context } from 'mini-harness/cordis';
 import { scopeTarget } from '@mini-harness/plugin-api/scopes';
@@ -189,7 +189,7 @@ export class SessionRun {
       };
     };
 
-    const commit = async (item: Input, prepared: Awaited<ReturnType<typeof prepare>>, inboxId?: string) => {
+    const commit = async (prepared: Awaited<ReturnType<typeof prepare>>, inboxId?: string) => {
       signal.throwIfAborted();
       this.sessions.assertAvailable(id);
       const edit = inboxId ? undefined : revision;
@@ -206,13 +206,8 @@ export class SessionRun {
         type: 'user',
         source: inboxId ? 'user' : source,
         ...prepared.selection,
-        id: entry.id,
-        parentId: entry.parentId,
         revised: Boolean(edit),
-        submissionId,
-        inboxId,
-        timestamp: event.message.timestamp,
-        ...userContent(prepared.content, { ...prepared.presentation, images: item.images }),
+        message: displayMessage(entry, event.message, submissionId),
       });
     };
     const deliver = (mode: InboxItem['mode']) =>
@@ -220,7 +215,7 @@ export class SessionRun {
         mode,
         signal,
         (item) => prepare(item, queuedSelection(item), 'user'),
-        (item, prepared) => commit(item, prepared, item.id),
+        (item, prepared) => commit(prepared, item.id),
       );
     // Drain recovered follow-ups as turns before committing the new manual input.
     let submitted = false;
@@ -228,7 +223,7 @@ export class SessionRun {
       signal.throwIfAborted();
       beginSubmission?.();
       const previous = log.projection(revision?.parentId);
-      await commit(manual, await prepare(manual, selection(manual, previous), source));
+      await commit(await prepare(manual, selection(manual, previous), source));
       if (
         record.titleSource === 'auto' &&
         !previous.timeline.some((item) => item.type === 'message' && item.role === 'user')
@@ -259,14 +254,7 @@ export class SessionRun {
         const assistant = log.append({ type: 'message', message: result });
         emit({
           type: 'assistant-end',
-          message: {
-            type: 'message',
-            id: assistant.id,
-            parentId: assistant.parentId,
-            role: 'assistant',
-            content: result.content,
-            timestamp: result.timestamp,
-          },
+          message: displayMessage(assistant, result, submissionId),
         });
       },
       afterTurn: async (calls) => {
@@ -384,18 +372,8 @@ export class SessionRun {
             if (state === 'finished' && typeof details?.changedPath === 'string')
               changed?.(details.changedPath);
             emit({
-              type: 'tool',
-              id: call.id,
-              name: call.name,
-              state,
-              isError: output.isError,
-              arguments: call.arguments,
-              content: output.content,
-              entry: { id: entry.id, parentId: entry.parentId, timestamp: output.timestamp },
-              elapsedMs: output.elapsedMs,
-              approvalMs: typeof details?.approvalMs === 'number' ? details.approvalMs : undefined,
-              sessionId: typeof details?.sessionId === 'string' ? details.sessionId : undefined,
-              exitCode: typeof details?.exitCode === 'number' ? details.exitCode : undefined,
+              type: 'tool-end',
+              message: displayMessage(entry, output, submissionId, call.arguments),
             });
             if (transformError) throw transformError;
           },

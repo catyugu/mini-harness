@@ -41,9 +41,9 @@ test(
       },
     });
     const parent = app.runtime.plugins.ctx.harnessSessions.create();
-    const toolEvents: Extract<import('@mini-harness/runs/stream').StreamEvent, { type: 'tool' }>[] = [];
+    const toolEvents: Extract<import('@mini-harness/runs/stream').StreamEvent, { type: 'tool-end' }>[] = [];
     await app.runtime.plugins.ctx.harnessRuns.send(parent.id, 'root task', (event) => {
-      if (event.type === 'tool') toolEvents.push(event);
+      if (event.type === 'tool-end') toolEvents.push(event);
     });
     const records = app.runtime.plugins.ctx.harnessSessions
       .descendants([parent.id])
@@ -72,7 +72,11 @@ test(
         .includes('delegate'),
       false,
     );
-    assert.ok(toolEvents.some((event) => event.state === 'finished' && event.sessionId === childRecord.id));
+    assert.ok(
+      toolEvents.some(
+        (event) => event.message.toolState === 'finished' && event.message.sessionId === childRecord.id,
+      ),
+    );
     const check = app.runtime.plugins.ctx.harnessSessions.create();
     await app.runtime.plugins.ctx.harnessRuns.send(check.id, 'read policy');
     const failure = app.runtime.plugins.ctx.harnessSessions

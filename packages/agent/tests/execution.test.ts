@@ -540,7 +540,7 @@ test('steering accepts off, skips deterministic failures and resets incompatible
   assert.deepEqual(levels, ['off', 'off', 'high', undefined]);
   assert.ok(!events.some(({ type }) => type === 'error'));
   assert.deepEqual(
-    events.flatMap((event) => (event.type === 'tool' ? [event.state] : [])),
+    events.flatMap((event) => (event.type === 'tool-end' ? [event.message.toolState] : [])),
     ['skipped'],
   );
   assert.equal(
@@ -629,9 +629,9 @@ test(
       record,
       'Run batch',
       (event) => {
-        if (event.type === 'tool' && event.state === 'finished') {
+        if (event.type === 'tool-end' && event.message.toolState === 'finished') {
           snapshots.push(log().map(({ toolCallId }) => toolCallId));
-          if (event.id === 'two') release();
+          if (event.message.toolCallId === 'two') release();
         }
       },
       { fallback: model, signal: AbortSignal.timeout(3000) },

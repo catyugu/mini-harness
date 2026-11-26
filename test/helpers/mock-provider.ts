@@ -14,7 +14,7 @@ export interface MockProvider {
 type MockAnswer =
   | string
   | AsyncIterable<string>
-  | { tool: string; args: Record<string, unknown>; text?: string };
+  | { tool: string; args: Record<string, unknown>; text?: string; callId?: string };
 
 export async function createMockProvider(
   reply?: (request: { messages: { role: string; content: string }[] }) => MockAnswer | Promise<MockAnswer>,
@@ -72,7 +72,7 @@ export async function createMockProvider(
                 tool_calls: [
                   {
                     index: 0,
-                    id: 'call_' + id,
+                    id: answer.callId ?? 'call_' + id,
                     type: 'function',
                     function: { name: answer.tool, arguments: JSON.stringify(answer.args) },
                   },

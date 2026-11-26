@@ -3,7 +3,7 @@ import { waitFor } from '@mini-harness/platform/wait';
 import type { ConversationView } from '../shared/api.ts';
 import { isRunning } from '@mini-harness/sessions/run-state';
 import { eventStream } from '@mini-harness/transport/http';
-import { projectHistory, projectToolEvent } from './display-events.ts';
+import { projectHistory, projectToolEvent, projectToolResult } from './display-events.ts';
 import { scheduler } from 'node:timers/promises';
 import type { ConversationPermission } from '@mini-harness/sessions/identity';
 import type { SessionSearchResult } from '../shared/api.ts';
@@ -173,6 +173,8 @@ export function registerSessionRoutes(ctx: Context, read: (id: string) => Conver
             runSessionId: id,
             sequence: run?.sequence ?? event.sequence,
           });
+        } else if (event.type === 'tool-end') {
+          stream.send({ ...event, message: projectToolResult(ctx, id, event.message) });
         } else stream.send(event.type === 'tool' ? projectToolEvent(ctx, id, event) : event);
         if ((event.type === 'run' || event.type === 'snapshot') && !isRunning(event.run)) response.end();
       },

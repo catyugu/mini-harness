@@ -68,7 +68,7 @@ test(
       .split('\n')
       .map((line) => JSON.parse(line));
     const user = events.find((event) => event.type === 'user');
-    assert.equal(user.content, 'Test native integration');
+    assert.equal(user.message.content, 'Test native integration');
     assert.equal(Object.hasOwn(user, 'text'), false);
     assert.ok(
       events.some((event) => event.type === 'delta'),

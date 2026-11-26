@@ -113,35 +113,15 @@ export function createConversationController(ctx: Context): ConversationControll
     function accept(event: RunEvent) {
       if (signal.aborted) return;
       switch (event.type) {
-        case 'user': {
-          const {
-            id,
-            parentId,
-            submissionId,
-            inboxId,
-            timestamp,
-            content,
-            attachments,
-            model,
-            thinkingLevel,
-          } = event;
-          append(
-            {
-              id,
-              parentId,
-              submissionId,
-              inboxId,
-              timestamp,
-              content,
-              attachments,
-              type: 'message',
-              role: 'user',
-              runId: event.runId,
+        case 'user':
+          append(event.message, {
+            session: state.session && {
+              ...state.session,
+              model: event.model,
+              thinkingLevel: event.thinkingLevel,
             },
-            { session: state.session && { ...state.session, model, thinkingLevel } },
-          );
+          });
           break;
-        }
         case 'assistant-start':
           update({ partial: '' });
           break;
@@ -149,45 +129,19 @@ export function createConversationController(ctx: Context): ConversationControll
           update({ partial: state.partial + event.text });
           break;
         case 'assistant-end':
-          append({ ...event.message, runId: event.runId }, { partial: '' });
+          append(event.message, { partial: '' });
+          break;
+        case 'tool-end':
+          append(event.message, { tools: state.tools.filter(({ id }) => id !== event.message.toolCallId) });
+          status('Thinking…');
           break;
         case 'tool': {
-          const tools = state.tools.filter(({ id }) => id !== event.id);
-          if (event.entry) {
-            append(
-              {
-                id: event.entry.id,
-                parentId: event.entry.parentId,
-                type: 'message',
-                role: 'toolResult',
-                runId: event.runId,
-                toolCallId: event.id,
-                toolName: event.name,
-                content: event.content ?? '',
-                arguments: event.arguments,
-                timestamp: event.entry.timestamp,
-                sessionId: event.sessionId,
-                elapsedMs: event.elapsedMs,
-                approvalMs: event.approvalMs,
-                exitCode: event.exitCode,
-                toolState: event.state,
-                isError: event.isError,
-              },
-              { tools },
-            );
-          } else {
-            const index = state.tools.findIndex(({ id }) => id === event.id);
-            const { runId: _runId, runSessionId: _sessionId, sequence: _sequence, ...tool } = event;
-            tools.splice(index === -1 ? tools.length : index, 0, tool);
-            update({ tools });
-          }
-          status(
-            event.state === 'approval'
-              ? 'Waiting for approval…'
-              : event.state === 'running'
-                ? 'Running ' + event.name + '…'
-                : 'Thinking…',
-          );
+          const { runId: _runId, runSessionId: _sessionId, sequence: _sequence, ...tool } = event;
+          const tools = [...state.tools];
+          const index = tools.findIndex(({ id }) => id === tool.id);
+          tools.splice(index === -1 ? tools.length : index, 1, tool);
+          update({ tools });
+          status(tool.state === 'approval' ? 'Waiting for approval…' : 'Running ' + tool.name + '…');
           break;
         }
         case 'branch':

@@ -7,6 +7,7 @@
     "./content-delta": "./src/content-delta.ts",
     "./identity": "./src/shared/identity.ts",
     "./log-api": "./src/log-api.ts",
+    "./projection": "./src/projection.ts",
     "./manifest": "./src/manifest.ts",
     "./message": "./src/shared/message.ts",
     "./user-content": "./src/user-content.ts",

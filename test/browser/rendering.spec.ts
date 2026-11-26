@@ -34,10 +34,17 @@ test('renders Markdown and tool results, and stops a pending reply', async ({ pa
       return { tool: 'ls', args: { path: '.' } };
     }
     if (last.content === 'Change course') return 'Steering accepted';
-    if (last.role === 'user') return { tool: 'ls', args: { path: '.' }, text: 'Checking the workspace' };
+    if (last.role === 'user' && last.content.startsWith('user: Show a result'))
+      return 'Summarized the earlier tool call.';
+    if (last.content === 'Reuse the tool ID')
+      return { tool: 'read', args: { path: 'sample.txt' }, callId: 'reused-tool' };
+    if (last.role === 'tool' && last.content === 'A second tool result') return 'The second tool finished';
+    if (last.role === 'user')
+      return { tool: 'ls', args: { path: '.' }, text: 'Checking the workspace', callId: 'reused-tool' };
     return '### Workspace\n\n```text\nExample\n```\n\n<img src=x onerror="alert(1)">\n\n<p class="overlay">A tool note</p>';
   });
   const { root, paths } = createFixturePaths(mock.url);
+  writeFileSync(join(paths.cwd, 'sample.txt'), 'A second tool result');
   const folder = writePlugin(
     paths.plugins,
     'bad-renderer',
@@ -186,6 +193,20 @@ export const apply = (ctx) => {
     await expect(skipped.locator('summary')).toContainText('Skipped');
     await expect(page.locator('.tool-card[data-state=finished]')).toHaveCount(1);
     await expect(page.getByText(/^Run cancelled/)).toHaveCount(2);
+
+    await prompt.fill('/compact');
+    await prompt.press('Enter');
+    await expect(page.getByRole('status').filter({ hasText: 'Conversation compacted.' })).toBeVisible();
+    await prompt.fill('Reuse the tool ID');
+    await page.getByRole('button', { name: 'Send', exact: true }).click();
+    await expect(page.getByText('The second tool finished', { exact: true })).toBeVisible();
+    const finishedTools = page.locator('.tool-card[data-state=finished]');
+    await expect(finishedTools.locator('summary strong')).toHaveText(['ls', 'read']);
+    await finishedTools.first().locator('summary').click();
+    await expect(finishedTools.first().locator('.tool-content')).toContainText('sample.txt');
+    await expect(finishedTools.last()).not.toHaveAttribute('open', '');
+    await page.reload();
+    await expect(finishedTools.locator('summary strong')).toHaveText(['ls', 'read']);
   } finally {
     release();
     resumeSteering();

@@ -135,7 +135,7 @@ export class Runs implements RunPort {
       throw error;
     }
     const publish = (event: StreamEvent) => {
-      if (event.type === 'user') info.inputEntryId = event.id;
+      if (event.type === 'user') info.inputEntryId = event.message.id;
       const item = events.publish(event);
       try {
         emit?.(item);

@@ -36,7 +36,7 @@ export function createRightTabs(
   const workspaceChanges = new EventTarget();
   let scope: TabScope | undefined;
   let nextId = 0;
-  let shown: Tab | undefined;
+  let shown: HTMLElement | undefined;
   const inspector = Symbol('inspector');
 
   const state = (id: string) => {
@@ -132,10 +132,11 @@ export function createRightTabs(
   }
 
   function revealActive() {
-    const active = layout.panelOpen() ? current()?.active : undefined;
+    const node = current()?.active?.view?.node;
+    const active = layout.panelOpen() && node?.isConnected && !node.hidden ? node : undefined;
     if (shown === active) return;
     shown = active;
-    active?.view?.node.dispatchEvent(new Event('tab-activate'));
+    active?.dispatchEvent(new Event('tab-activate'));
   }
 
   function activate(tab: Tab) {
@@ -214,9 +215,9 @@ export function createRightTabs(
     }
     if (visible().includes(tab)) {
       layout.closeDrawer(false);
-      if (!layout.panelOpen()) shown = undefined;
+      target.active = tab;
       layout.setPanel(true, true);
-      activate(tab);
+      render(true);
     } else {
       target.active = tab;
       target.open = true;
@@ -242,12 +243,8 @@ export function createRightTabs(
     }
   }
 
-  view.toggle.onclick = () => {
-    const opening = !layout.panelOpen();
-    layout.setPanel(opening, true);
-    shown = undefined;
-    revealActive();
-  };
+  layout.onPanelVisibilityChange(revealActive);
+  view.toggle.onclick = () => layout.setPanel(!layout.panelOpen(), true);
   view.bar.addEventListener(
     'keydown',
     (event) => {

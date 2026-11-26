@@ -172,11 +172,8 @@ export function createMessageView(
       exitCode?: number;
     },
     card?: HTMLDetailsElement,
-    refresh = false,
   ) {
     const item = card ?? document.createElement('details');
-    const previous = toolItems.get(item);
-    if (!refresh && previous === data) return item;
     toolItems.set(item, data);
     item.className = 'tool-card';
     item.dataset.state = data.state;
@@ -304,7 +301,7 @@ export function createMessageView(
   function refreshTools(name: string) {
     for (const card of messages.querySelectorAll<HTMLDetailsElement>('details.tool-card')) {
       const tool = toolItems.get(card);
-      if (tool?.name === name) toolCard(tool, card, true);
+      if (tool?.name === name) toolCard(tool, card);
     }
   }
 
@@ -365,6 +362,8 @@ export function createMessageView(
     tools: Parameters<typeof groupHistory>[3],
   ) {
     const pending = new Set(nodes.keys());
+    const progressKey = (runId: string | undefined, callId: string) =>
+      'tool-progress:' + JSON.stringify([runId, callId]);
     function retain<T extends HTMLElement>(key: string, source: unknown, render: (prior?: T) => T) {
       pending.delete(key);
       const prior = nodes.get(key);
@@ -405,8 +404,11 @@ export function createMessageView(
         case 'record':
           return record(part);
         case 'message':
-          return retain('tool:' + part.toolCallId, part, (node?: HTMLDetailsElement) =>
-            toolCard(
+          return retain('tool-result:' + part.id, part, (node?: HTMLDetailsElement) => {
+            const key = progressKey(part.runId, part.toolCallId);
+            const progress = nodes.get(key)?.node as HTMLDetailsElement | undefined;
+            nodes.delete(key);
+            return toolCard(
               {
                 name: part.toolName,
                 state: part.toolState,
@@ -418,11 +420,13 @@ export function createMessageView(
                 approvalMs: part.approvalMs,
                 exitCode: part.exitCode,
               },
-              node,
-            ),
-          );
+              node ?? progress,
+            );
+          });
         case 'tool':
-          return retain('tool:' + part.id, part, (node?: HTMLDetailsElement) => toolCard(part, node));
+          return retain(progressKey(run?.id, part.id), part, (node?: HTMLDetailsElement) =>
+            toolCard(part, node),
+          );
         case 'partial':
           preview.textContent = partial;
           return preview;
@@ -457,7 +461,7 @@ export function createMessageView(
           return retain('run:' + row.id, retry, () => terminalNode(row, retry));
         }
         case 'message':
-          return retain('user:' + row.id, row.id, () => renderUser(row));
+          return retain('user:' + row.id, undefined, () => renderUser(row));
         case 'turn': {
           const wrapper = retain('turn:' + row.id, undefined, () => {
             const node = document.createElement('div');

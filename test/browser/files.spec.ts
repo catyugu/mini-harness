@@ -180,12 +180,19 @@ test('an open file preview and diff refresh after an agent write', async ({ page
     await expect(panel.locator('.file-preview')).toContainText('const updated = 1;');
     await expect(panel.locator('.file-preview')).toHaveAttribute('aria-hidden', 'true');
     await expect(panel.locator('.file-accessible-source')).toHaveText('const updated = 1;');
-    await page.getByRole('textbox', { name: 'Message', exact: true }).fill('Update the file');
+    await page.getByRole('textbox', { name: 'Message', exact: true }).fill('Update the file @"update.js"');
     await page.getByRole('button', { name: 'Send', exact: true }).click();
     await expect(panel.locator('.file-preview')).toContainText('const updated = 2;');
     await panel.getByRole('tab', { name: 'Diff: update.js', exact: true }).click();
     await expect(panel.locator('.diff .added')).toContainText(['+const updated = 1;', '+const updated = 2;']);
-    await expect(panel.getByRole('tab', { name: 'update.js', exact: true })).toHaveCount(1);
+    const preview = panel.getByRole('tab', { name: 'update.js', exact: true });
+    await preview.click();
+    await page.keyboard.press('Escape');
+    await expect(panel).toBeHidden();
+    writeFileSync(file, 'const updated = 3;\n');
+    await page.locator('.message.user').getByRole('button', { name: 'update.js', exact: true }).click();
+    await expect(preview).toHaveAttribute('aria-selected', 'true');
+    await expect(panel.locator('.file-preview:visible')).toContainText('const updated = 3;');
   } finally {
     await page.close();
     await service.stop();

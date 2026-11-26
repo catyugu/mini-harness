@@ -88,6 +88,7 @@ export function createLayout(view: LayoutElements, signal: AbortSignal) {
     if (open && (focus || narrow.matches)) panelClose.focus();
     if (!open && focus)
       (panelTrigger?.isConnected && !panelTrigger.closest('[inert]') ? panelTrigger : panelButton).focus();
+    panel.dispatchEvent(new Event('panel-visibility'));
   }
   sidebarButton.onclick = () => {
     if (narrow.matches) {
@@ -205,5 +206,12 @@ export function createLayout(view: LayoutElements, signal: AbortSignal) {
   window.addEventListener('resize', resize, { signal });
   resize();
   render();
-  return { closeDrawer, setPanel, panelOpen: () => panelOpen };
+  return {
+    closeDrawer,
+    setPanel,
+    panelOpen: () => panelOpen,
+    onPanelVisibilityChange(listener: () => void) {
+      panel.addEventListener('panel-visibility', listener, { signal });
+    },
+  };
 }

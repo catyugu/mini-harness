@@ -23,6 +23,58 @@ export function projectMessage(
   return { ...result, content };
 }
 
+export function displayMessage<M extends NativeMessage>(
+  entry: SessionEntry,
+  message: M,
+  runId?: string,
+  toolArguments?: unknown,
+): Extract<ViewMessage, { role: M['role'] }>;
+export function displayMessage(
+  entry: SessionEntry,
+  message: NativeMessage,
+  runId?: string,
+  toolArguments?: unknown,
+): ViewMessage {
+  const fields = {
+    type: 'message' as const,
+    id: entry.id,
+    parentId: entry.parentId,
+    runId,
+    content: message.content as MessageContent,
+    timestamp: message.timestamp,
+  };
+  const view: ViewMessage =
+    message.role === 'toolResult'
+      ? {
+          ...fields,
+          role: message.role,
+          toolName: message.toolName,
+          toolCallId: message.toolCallId,
+          toolState: toolResultState(message),
+        }
+      : message.role === 'user'
+        ? { ...fields, role: 'user' }
+        : { ...fields, role: 'assistant' };
+  if (entry.type === 'message') {
+    if (entry.submissionId) view.submissionId = entry.submissionId;
+    if (entry.inboxId) view.inboxId = entry.inboxId;
+  }
+  if (entry.type === 'message' && message.role === 'user')
+    Object.assign(view, userContent(message.content, entry.presentation));
+  if (message.role === 'assistant' && !runId && message.stopReason !== 'aborted')
+    view.error = message.errorMessage;
+  if (message.role === 'toolResult') {
+    view.isError = message.isError;
+    if (typeof message.details?.approvalMs === 'number') view.approvalMs = message.details.approvalMs;
+    view.arguments = toolArguments;
+    view.elapsedMs = (entry.type === 'message' ? entry.elapsedMs : undefined) ?? message.elapsedMs;
+    if (typeof message.details?.sessionId === 'string') view.sessionId = message.details.sessionId;
+    if (typeof message.details?.exitCode === 'number' && Number.isInteger(message.details.exitCode))
+      view.exitCode = message.details.exitCode;
+  }
+  return view;
+}
+
 export function displayRecord(
   entry: Extract<SessionEntry, { type: 'plugin-record' }>,
 ): SessionDisplayRecord | undefined {
@@ -96,44 +148,14 @@ export function projectLog(
     if (message.role === 'assistant')
       for (const block of message.content)
         if (block.type === 'toolCall') calls.set(block.id, block.arguments);
-    const fields = {
-      type: 'message' as const,
-      id: entry.id,
-      parentId: entry.parentId,
-      runId,
-      content: message.content as MessageContent,
-      timestamp: message.timestamp,
-    };
-    const view: ViewMessage =
-      message.role === 'toolResult'
-        ? {
-            ...fields,
-            role: message.role,
-            toolName: message.toolName,
-            toolCallId: message.toolCallId,
-            toolState: toolResultState(message),
-          }
-        : message.role === 'user'
-          ? { ...fields, role: 'user' }
-          : { ...fields, role: 'assistant' };
-    if (entry.type === 'message') {
-      if (entry.submissionId) view.submissionId = entry.submissionId;
-      if (entry.inboxId) view.inboxId = entry.inboxId;
-    }
-    if (entry.type === 'message' && message.role === 'user')
-      Object.assign(view, userContent(message.content, entry.presentation));
-    if (message.role === 'assistant' && !runId && message.stopReason !== 'aborted')
-      view.error = message.errorMessage;
-    if (message.role === 'toolResult') {
-      view.isError = message.isError;
-      if (typeof message.details?.approvalMs === 'number') view.approvalMs = message.details.approvalMs;
-      view.arguments = calls.get(message.toolCallId);
-      view.elapsedMs = (entry.type === 'message' ? entry.elapsedMs : undefined) ?? message.elapsedMs;
-      if (typeof message.details?.sessionId === 'string') view.sessionId = message.details.sessionId;
-      if (typeof message.details?.exitCode === 'number' && Number.isInteger(message.details.exitCode))
-        view.exitCode = message.details.exitCode;
-    }
-    state.timeline.push(view);
+    state.timeline.push(
+      displayMessage(
+        entry,
+        message,
+        runId,
+        message.role === 'toolResult' ? calls.get(message.toolCallId) : undefined,
+      ),
+    );
   }
   projectRuns(Infinity);
   let context = branch;
