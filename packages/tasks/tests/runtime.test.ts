@@ -243,3 +243,15 @@ test('forgetting an ephemeral parent also removes retained descendants', async (
   await parent.result;
   assert.equal(runtime.list().length, 0);
 });
+
+test('a cancellation during running observation prevents invocation of executor code', async () => {
+  const runtime = new TaskRuntime();
+  let executed = false;
+  runtime.subscribe(({ task }) => {
+    if (task.state === 'running') runtime.cancel(task.id);
+  });
+  const handle = runtime.start({ owner: 'one' }, async () => { executed = true; });
+  await assert.rejects(handle.result, /cancelled/);
+  assert.equal(executed, false);
+  assert.equal(runtime.get(handle.id)?.state, 'cancelled');
+});

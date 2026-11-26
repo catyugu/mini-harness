@@ -34,8 +34,8 @@ export interface TaskOptions<T = unknown> {
   retain?: boolean;
   /** Select a serializable result for subsequent observation. The handle always returns the original value. */
   projectResult?(result: T): TaskData;
-  /** Persist a domain lifecycle transition before it is published. */
-  record?(task: TaskSnapshot): void;
+  /** Persist a transition; optionally return a projection callback to run after the runtime commits it. */
+  record?(task: TaskSnapshot): void | (() => void);
 }
 
 export interface TaskSnapshot {

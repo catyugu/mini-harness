@@ -10,7 +10,7 @@ export class TaskOutputRing {
   private chunks: TaskChunk[] = [];
   cursor = 0;
 
-  constructor(private capacity = 1024 * 1024) {}
+  constructor(private readonly capacity = 1024 * 1024) {}
 
   write(text: string, channel: string) {
     const bytes = Buffer.from(text);
@@ -41,6 +41,7 @@ export class TaskOutputRing {
 }
 
 export function readTaskOutput(output: TaskOutput, after = 0): TaskOutput {
+  if (!Number.isSafeInteger(after) || after < 0) throw new Error('Invalid task output cursor');
   const first = output.chunks[0]?.start ?? output.cursor;
   const chunks = output.chunks
     .filter(({ end }) => end > after)

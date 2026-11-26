@@ -54,6 +54,7 @@ export class AgentLoop implements AgentPort {
       const { request, executor, execution, deliver } = step;
       const requestCalls = validateRequestSnapshot(request);
       for (const id of requestCalls ?? []) knownCalls.add(id);
+      task.update({ phase: 'model', turn });
       input.onEvent?.({ type: 'request', request });
       input.onEvent?.({ type: 'assistant-start' });
       const original = await requestModel(
@@ -95,6 +96,7 @@ export class AgentLoop implements AgentPort {
       signal.throwIfAborted();
 
       if (calls.length) {
+        task.update({ phase: 'tools', turn });
         const pending = new Map(calls.map((call) => [call.id, call]));
         await executor.execute(calls, step.tools, {
           ...execution,

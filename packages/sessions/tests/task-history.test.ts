@@ -16,7 +16,7 @@ test('durable retained tasks recover by ID without reconstructing execution hand
   let ctx = app.runtime.plugins.ctx;
   const session = ctx.harnessSessions.create();
   const owner = 'session:' + session.id;
-  const done = ctx.harnessTasks.start({ owner, projectResult: (value) => value }, async (task) => {
+  const done = ctx.harnessTasks.start<string>({ owner, projectResult: (value) => value }, async (task) => {
     task.write('hello', 'stdout');
     return 'finished';
   });

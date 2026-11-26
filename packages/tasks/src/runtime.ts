@@ -19,6 +19,7 @@ interface Entry {
   handle?: TaskHandle;
   output: TaskOutputRing;
   finishing: boolean;
+  retainedBytes?: number;
 }
 
 const describe = (error: unknown) => (error instanceof Error ? error.message : String(error));
@@ -102,25 +103,25 @@ export class TaskRuntime implements TaskPort {
       retained: retain,
     };
     const persist = (next: TaskSnapshot, output?: TaskOutput) => {
-      if (record) record(clone(next));
+      if (record) return record(clone(next));
       else if (retain) this.domain.record?.({ task: clone(next), output });
     };
-    persist(snapshot);
+    const accepted = persist(snapshot);
     let release: (() => void) | undefined;
     const relinquish = () => {
       const held = release;
       release = undefined;
       held?.();
     };
-    const update = (patch: Partial<TaskSnapshot>, type: TaskEvent['type'] = 'updated') => {
+    const update = (patch: Partial<TaskSnapshot>, type: TaskEvent['type'] = 'updated', committed?: void | (() => void)) => {
       if (terminal(snapshot.state)) return;
       Object.assign(snapshot, clone(patch));
-      this.notify(type, snapshot);
+      this.notify(type, snapshot, committed);
     };
     const transition = (patch: Partial<TaskSnapshot>) => {
       const next = { ...snapshot, ...patch };
-      persist(next, terminal(next.state) && next.outputCursor ? entry.output.read() : undefined);
-      update(patch);
+      const committed = persist(next, terminal(next.state) && next.outputCursor ? entry.output.read() : undefined);
+      update(patch, 'updated', committed);
     };
     const enter = async () => {
       signal.throwIfAborted();
@@ -154,8 +155,10 @@ export class TaskRuntime implements TaskPort {
             if (entry.finishing) throw new Error('Task ended with an unawaited suspension');
             transition({ state: 'queued' });
             await enter();
+            signal.throwIfAborted();
           } catch (error) {
             relinquish();
+            if (signal.aborted && error === signal.reason) throw error;
             admissionFailure = { error };
             controller.abort(error);
             throw error;
@@ -170,6 +173,7 @@ export class TaskRuntime implements TaskPort {
       let projected: TaskSnapshot['result'];
       try {
         await enter();
+        signal.throwIfAborted();
         value = await execute(context);
         if (!signal.aborted && projectResult) projected = clone(projectResult(value));
       } catch (error) {
@@ -214,7 +218,10 @@ export class TaskRuntime implements TaskPort {
         throw error;
       } finally {
         if (!retain) this.forgetTree(entry);
-        else this.prune();
+        else {
+          entry.retainedBytes = Buffer.byteLength(JSON.stringify(snapshot)) + Math.min(snapshot.outputCursor, 1024 * 1024);
+          this.prune();
+        }
       }
       if (failure) throw reason;
       return value!;
@@ -234,7 +241,7 @@ export class TaskRuntime implements TaskPort {
     signal.addEventListener('abort', cancelled, { once: true });
     void result.catch(() => {});
     if (provider) void provider.fiber.run(() => result).catch(() => {});
-    this.notify('created', snapshot);
+    this.notify('created', snapshot, accepted);
     return handle;
   }
 
@@ -242,7 +249,9 @@ export class TaskRuntime implements TaskPort {
     const entry = this.entries.get(id);
     if (entry) return clone(entry.snapshot);
     const historical = this.domain.history?.(id)?.task;
-    return historical && clone(historical);
+    if (!historical) return;
+    // A durable record without an executor cannot represent live work.
+    return terminal(historical.state) ? clone(historical) : { ...clone(historical), state: 'interrupted' as const, error: 'No live executor remains for this task' };
   }
 
   list(owner?: string) {
@@ -295,10 +304,11 @@ export class TaskRuntime implements TaskPort {
     };
   }
 
-  private notify(type: TaskEvent['type'], snapshot: TaskSnapshot) {
+  private notify(type: TaskEvent['type'], snapshot: TaskSnapshot, committed?: void | (() => void)) {
     if (type !== 'deleted') {
       for (const waiter of [...(this.waiters.get(snapshot.id) ?? [])]) waiter(snapshot);
     }
+    try { committed?.(); } catch { /* The transition is already committed. */ }
     for (const listener of [...this.listeners]) {
       try {
         listener({ type, task: clone(snapshot) });
@@ -342,7 +352,14 @@ export class TaskRuntime implements TaskPort {
   private prune() {
     const history = [...this.entries.values()].filter(({ snapshot }) => terminal(snapshot.state));
     // Only retained snapshots/output remain here, not execution promises. Long-term history is domain-owned.
-    for (const entry of history.slice(0, Math.max(0, history.length - 256))) this.forgetTree(entry);
+    let bytes = history.reduce((sum, entry) => sum + (entry.retainedBytes ?? 0), 0);
+    let remaining = history.length;
+    for (const entry of history) {
+      if (remaining <= 256 && bytes <= 16 * 1024 * 1024) break;
+      this.forgetTree(entry);
+      remaining--;
+      bytes -= entry.retainedBytes ?? 0;
+    }
   }
 
   removeOwner(owner: string): Promise<void> {

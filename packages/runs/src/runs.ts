@@ -142,14 +142,31 @@ export class Runs implements RunPort {
           });
         }
       };
-      const project = (task: TaskSnapshot): RunInfo => ({
+      const project = (task: TaskSnapshot, extraEvents = 0): RunInfo => ({
         ...info,
         state: task.state,
         executedAt: task.startedAt,
         finishedAt: task.finishedAt,
         error: task.error,
-        sequence: info.sequence + 1,
+        sequence: info.sequence + 1 + extraEvents,
       });
+      const apply = (next: RunInfo, error?: string) => {
+        const firstAdmission = !info.executedAt && next.state === 'running';
+        const ended = terminal(next.state);
+        try {
+          if (error) publish({ type: 'error', error });
+          Object.assign(info, next, { sequence: info.sequence });
+          publish({ type: 'run', run: next });
+          if (firstAdmission) this.observe({ type: 'run-started', sessionId: id, run: next }, activity.task?.signal);
+          if (ended) this.observe({ type: 'run-ended', sessionId: id, run: next });
+        } finally {
+          if (ended) {
+            this.work.delete(id);
+            events.close();
+          }
+          this.changed(id);
+        }
+      };
       const task = this.tasks.start(
         {
           owner: 'session:' + id,
@@ -186,10 +203,11 @@ export class Runs implements RunPort {
                     ? 'The target run was interrupted before delivery'
                     : 'The target run ended before delivery',
                 );
-              if (snapshot.state === 'failed' && snapshot.error)
-                publish({ type: 'error', error: snapshot.error });
             }
-            log.append({ type: 'run', run: project(snapshot) });
+            const error = snapshot.state === 'failed' ? snapshot.error : undefined;
+            const next = project(snapshot, error ? 1 : 0);
+            log.append({ type: 'run', run: next });
+            return () => apply(next, error);
           },
         },
         async (task) => {
@@ -221,31 +239,14 @@ export class Runs implements RunPort {
         },
       );
       activity.task = task;
-      let started = false;
-      const unsubscribe = this.tasks.subscribe(({ type, task: snapshot }) => {
-        if (type === 'deleted') return;
-        if (snapshot.id !== task.id || snapshot.state === info.state) return;
-        const ended = terminal(snapshot.state);
-        try {
-          const fault = this.registry.logError(id);
-          if (fault) publish({ type: 'error', error: fault });
-          const next = project(snapshot);
-          Object.assign(info, next, { sequence: info.sequence });
-          publish({ type: 'run', run: next });
-          if (snapshot.state === 'running' && !started) {
-            started = true;
-            this.observe({ type: 'run-started', sessionId: id, run: next }, task.signal);
-          }
-          if (ended) this.observe({ type: 'run-ended', sessionId: id, run: next });
-        } finally {
-          if (ended) {
-            unsubscribe();
-            this.work.delete(id);
-            events.close();
-          }
-          this.changed(id);
-        }
-      });
+      // Only a failed durable commit bypasses the normal postcommit projection.
+      void task.result.catch((error) => {
+        if (terminal(info.state)) return;
+        const snapshot = this.tasks.get(task.id);
+        if (!snapshot) return;
+        const message = this.registry.logError(id) ?? (error instanceof Error ? error.message : String(error));
+        apply(project(snapshot, 1), message);
+      }).catch(() => {});
       this.changed(id);
       return { info: info!, task };
     } catch (error) {
