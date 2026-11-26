@@ -1,4 +1,5 @@
 import type { Context } from 'mini-harness/cordis';
+import type { TaskContext, TaskHandle, TaskOptions } from '@mini-harness/tasks/api';
 import type { ScopeKey } from '@mini-harness/plugin-api/scopes';
 import type { Static, TSchema } from 'typebox';
 import type { TextPart, ImagePart, NativeToolMessage } from '@mini-harness/llm/api';
@@ -35,6 +36,7 @@ export interface ToolDefinition<Arguments = Record<string, any>> extends ToolSch
     args: Arguments,
     signal?: AbortSignal,
     onUpdate?: (update: ToolUpdate) => void,
+    context?: ToolContext,
   ): Promise<ToolResult>;
 }
 
@@ -49,7 +51,22 @@ export interface ToolSelection {
   resourceId?: string;
 }
 
+export interface ToolContext {
+  task: TaskContext;
+  /** Present for inline calls made by another task. */
+  owner?: TaskContext;
+}
+
+export interface ToolInvocation extends Partial<Pick<TaskOptions<ToolResult>, 'owner' | 'creator' | 'signal' | 'retain' | 'projectResult'>> {
+  resourceId?: string;
+  ownerTask?: TaskContext;
+  /** Resolve a factory against a long-lived composition when starting independent work. */
+  context?: Context;
+  onUpdate?(update: ToolUpdate): void;
+}
+
 export interface RegisteredTool extends ToolDefinition {
+  start(callId: string, args: Record<string, unknown>, options?: ToolInvocation): TaskHandle<ToolResult>;
   available(): boolean;
 }
 

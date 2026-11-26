@@ -1,6 +1,7 @@
 import { displayMessage } from '@mini-harness/sessions/projection';
 import { conversationTools } from './tool-selection.ts';
 import type { Context } from 'mini-harness/cordis';
+import type { TaskContext } from '@mini-harness/tasks/api';
 import { scopeTarget } from '@mini-harness/plugin-api/scopes';
 import type { InputContext, ModelFailure, StepContext } from '@mini-harness/agent/events';
 import { DomainError } from '@mini-harness/platform/errors';
@@ -54,6 +55,7 @@ const textOf = (message: NativeAssistantMessage) =>
     .join('');
 interface SessionPrompt {
   signal: AbortSignal;
+  task?: TaskContext;
   source?: InputSource;
   submissionId?: string;
   choice?: ModelChoice;
@@ -239,6 +241,7 @@ export class SessionRun {
     if (revision || !(await deliver('followUp'))) await submit();
     const answer = await requireService(ctx, 'harnessAgent').run(ctx, {
       signal,
+      task: options.task,
       retry: (failure) => retryModel(ctx, { ...failure, sessionId: id }),
       onEvent: (event) => {
         if (event.type === 'request') {
@@ -311,6 +314,7 @@ export class SessionRun {
           executor,
           tools: advertisedTools,
           execution: {
+            resourceId: id,
             start(call) {
               if (signal.aborted) return { outcome: 'skipped', reason: 'Agent run cancelled' };
               if (inbox.hasValid('steer', queuedSelection))

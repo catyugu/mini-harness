@@ -1,5 +1,8 @@
 import type { Context } from 'mini-harness/cordis';
-import { isToolContent, type ToolDefinition, type ToolUpdate } from './api.ts';
+import { type ToolDefinition, type ToolUpdate } from './api.ts';
+import type { TaskContext, TaskPort } from '@mini-harness/tasks/api';
+import { startTool } from './invocation.ts';
+export { startTool } from './invocation.ts';
 import { Check } from 'typebox/value';
 import type {
   LlmRequest,
@@ -18,6 +21,9 @@ export interface ToolTurn {
 
 export interface ToolExecution {
   readonly signal: AbortSignal;
+  readonly tasks: TaskPort;
+  readonly ownerTask?: TaskContext;
+  readonly resourceId?: string;
   /** Decides whether to start the call. A rejection still produces a model-visible result. */
   start?(call: ToolCallPart): { outcome: 'skipped' | 'denied'; reason: string } | undefined;
   update?(call: ToolCallPart, result: ToolUpdate): void;
@@ -123,10 +129,13 @@ async function executeTool(
   try {
     if (!tool) throw new Error('Tool is no longer available: ' + call.name);
     if (invalid) throw new Error('Invalid arguments for ' + call.name + ': ' + invalid);
-    const result = await tool.execute(call.id, call.arguments, signal, (update) =>
-      execution.update?.(call, update),
-    );
-    if (!result || !isToolContent(result.content)) throw new Error('Invalid result from tool: ' + call.name);
+    const task = startTool(execution.tasks, tool, call.id, call.arguments, {
+      signal,
+      ownerTask: execution.ownerTask,
+      resourceId: execution.resourceId,
+      onUpdate: (update) => execution.update?.(call, update),
+    });
+    const result = await task.result;
     return {
       ...result,
       role: 'toolResult',

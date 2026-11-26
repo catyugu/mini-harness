@@ -199,6 +199,7 @@ export class Runs implements RunPort {
                 },
                 signal,
                 source,
+                task,
                 submissionId: task.id,
                 choice: model,
                 images: prepared.images,
@@ -249,14 +250,7 @@ export class Runs implements RunPort {
   }
 
   submit(id: string, { message, ...input }: RunInput, options: RunSubmission = {}) {
-    const caller = Service.caller(this);
-    return this.launch(
-      id,
-      message,
-      undefined,
-      { ...input, ...options, source: 'plugin' },
-      caller.harnessTasks,
-    ).task;
+    return this.launch(id, message, undefined, { ...input, ...options, source: 'plugin' }).task;
   }
 
   async send(id: string, prompt: string, emit?: (event: StreamEvent) => void, options: RunOptions = {}) {

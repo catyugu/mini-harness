@@ -1,6 +1,9 @@
 import { ScopedLayers, scopeOf, type ScopeKey } from '@mini-harness/plugin-api/scopes';
 import { toolNamePattern } from '@mini-harness/llm/vocabulary';
 import { Service, type Context } from 'mini-harness/cordis';
+import { randomUUID } from 'node:crypto';
+import { terminal, type TaskPort } from '@mini-harness/tasks/api';
+import { invokeTool } from './invocation.ts';
 import {
   type ToolDefinition,
   type RegisteredTool,
@@ -16,6 +19,8 @@ interface ToolRegistration {
 
 export class ToolRegistry {
   private readonly tools = new ScopedLayers<ToolRegistration>();
+
+  constructor(private readonly tasks: TaskPort) {}
   service(): ToolPort {
     const registry = this;
     return Service.track<ToolPort>({
@@ -37,49 +42,56 @@ export class ToolRegistry {
     const { name } = definition;
     const factory = 'resolve' in definition ? definition : undefined;
     if (!toolNamePattern.test(name)) throw new Error('Invalid tool name: ' + name);
-    const lifetime = new AbortController();
+    const registration = randomUUID();
     const registry = this;
-    const active = new Set<Promise<unknown>>();
-    const signal = owner?.fiber.signal;
     const unavailable = () => new Error('Tool is no longer available: ' + name);
-    const expired = () => lifetime.signal.aborted || signal?.aborted === true;
+    let removed = false;
+    const expired = () => removed || owner?.fiber.signal.aborted === true;
     const entry: ToolRegistration = {
       name,
       visible: (resourceId) =>
         !expired() && (!factory || (resourceId !== undefined && (factory.visible?.(resourceId) ?? true))),
       resolve(selection, caller) {
-        const tool = 'resolve' in definition ? definition.resolve(selection.resourceId!, caller) : definition;
+        const tool = factory ? factory.resolve(selection.resourceId!, caller) : definition as ToolDefinition;
         if (tool.name !== name) throw new Error('Tool binding changed its registered name: ' + name);
         const available = () => registry.selected(name, selection) === entry;
+        const start: RegisteredTool['start'] = (callId, args, options = {}) => {
+          if (!available()) throw unavailable();
+          const resolved = factory && options.context ? factory.resolve(selection.resourceId!, options.context) : tool;
+          if (resolved.name !== name) throw new Error('Tool binding changed its registered name: ' + name);
+          return invokeTool(registry.tasks, {
+            ...resolved,
+            execute(...args) {
+              if (!available()) throw unavailable();
+              return resolved.execute(...args);
+            },
+          }, callId, args, {
+            ...options,
+            resourceId: selection.resourceId ?? options.resourceId,
+            provider: owner,
+            registration,
+          });
+        };
         return {
           ...tool,
           available,
-          async execute(call, args, signal, update) {
-            if (expired()) throw unavailable();
-            const combined = signal ? AbortSignal.any([signal, lifetime.signal]) : lifetime.signal;
-            const execute = async (signal: AbortSignal) => {
-              signal.throwIfAborted();
-              if (!available()) throw unavailable();
-              return tool.execute(call, args, signal, update);
-            };
-            const work = owner
-              ? owner.fiber.run(execute, combined)
-              : Promise.resolve().then(() => execute(combined));
-            active.add(work);
-            try {
-              return await work;
-            } finally {
-              active.delete(work);
-            }
+          start,
+          async execute(callId, args, signal, update) {
+            return start(callId, args, { signal, onUpdate: update }).result;
           },
         };
       },
     };
     const remove = this.tools.add(scope, name, entry);
     return async () => {
+      removed = true;
       remove();
-      lifetime.abort(unavailable());
-      await Promise.allSettled(active);
+      const active = registry.tasks.list().filter(
+        (task) => task.metadata?.registration === registration && !terminal(task.state),
+      );
+      const settled = active.map((task) => registry.tasks.wait(task.id));
+      for (const task of active) registry.tasks.cancel(task.id, unavailable());
+      await Promise.allSettled(settled);
     };
   }
 

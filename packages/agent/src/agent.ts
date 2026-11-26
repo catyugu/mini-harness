@@ -1,4 +1,5 @@
 import type { Context } from 'mini-harness/cordis';
+import type { TaskContext } from '@mini-harness/tasks/api';
 import { isDeepStrictEqual } from 'node:util';
 import {
   validateNativeMessage,
@@ -13,6 +14,14 @@ export class AgentLoop implements AgentPort {
   constructor(private readonly limit: () => number) {}
 
   async run(ctx: Context, input: AgentRun) {
+    if (input.task) return this.loop(ctx, input, input.task);
+    return ctx.harnessTasks.start(
+      { owner: 'agent', type: 'agent-run', signal: input.signal, retain: false },
+      (task) => this.loop(ctx, { ...input, signal: task.signal }, task),
+    ).result;
+  }
+
+  private async loop(ctx: Context, input: AgentRun, task: TaskContext) {
     const { signal } = input;
     const llm = ctx.get('harnessLlm');
     if (!llm) throw new Error('Required service is unavailable: harnessLlm');
@@ -90,6 +99,8 @@ export class AgentLoop implements AgentPort {
         await executor.execute(calls, step.tools, {
           ...execution,
           signal,
+          tasks: ctx.harnessTasks,
+          ownerTask: task,
           async deliver(result, workSignal) {
             const call = pending.get(result.toolCallId);
             if (!call || call.name !== result.toolName)

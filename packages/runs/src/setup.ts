@@ -1,5 +1,5 @@
 import { observe } from '@mini-harness/plugin-api/observations';
-import { Service, type Context } from 'mini-harness/cordis';
+import type { Context } from 'mini-harness/cordis';
 import { registerRoutes } from './routes.ts';
 import { SessionRun } from './session-run.ts';
 import { Runs } from './runs.ts';
@@ -14,7 +14,7 @@ export function setup(ctx: Context) {
     () => ctx.get('harnessModelPreference')?.recent(),
     new SessionRun(catalog),
   );
-  ctx.provide('harnessRuns', Service.track(runs));
+  ctx.provide('harnessRuns', runs);
   ctx.effect(() => {
     const changed = (event: Event) => {
       if (event instanceof CustomEvent && event.detail.record)

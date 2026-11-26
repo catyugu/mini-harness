@@ -1,4 +1,5 @@
 import type { Context } from 'mini-harness/cordis';
+import type { TaskContext } from '@mini-harness/tasks/api';
 import type {
   LlmRequest,
   ModelRequestContent,
@@ -17,7 +18,7 @@ export interface AgentTurn {
   request: Request;
   executor: ToolExecutorPort;
   tools: ReadonlyMap<string, ToolDefinition>;
-  execution?: Partial<Omit<ToolExecution, 'signal' | 'deliver'>>;
+  execution?: Partial<Omit<ToolExecution, 'signal' | 'deliver' | 'tasks' | 'ownerTask'>>;
   deliver?(result: NativeToolMessage, signal: AbortSignal, call: ToolCallPart): Promise<void>;
 }
 
@@ -36,6 +37,7 @@ export type AgentEvent =
 
 export type AgentRun = {
   signal: AbortSignal;
+  task?: TaskContext;
   onEvent?(event: AgentEvent): void;
   retry?(failure: ModelFailure): ModelRetry | undefined | Promise<ModelRetry | undefined>;
 } & (
