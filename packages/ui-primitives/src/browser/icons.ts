@@ -26,6 +26,8 @@ const paths = {
   search: 'M16 10a6 6 0 1 0-12 0 6 6 0 0 0 12 0m-2 5 5 5',
   'list-checks': 'M3 5l1.5 1.5L7 4M10 6h11M3 12l1.5 1.5L7 10M10 12h11M3 19l1.5 1.5L7 17M10 18h11',
   files: 'M3 7h7l2-3h9v16H3z',
+  'panel-right':
+    'M13.5 1.5H2.5C1.94772 1.5 1.5 1.94772 1.5 2.5V13.5C1.5 14.0523 1.94772 14.5 2.5 14.5H13.5C14.0523 14.5 14.5 14.0523 14.5 13.5V2.5C14.5 1.94772 14.0523 1.5 13.5 1.5Z M10.5 1.5V14.5',
   file: 'M6 3h8l4 4v14H6zM14 3v5h4',
   'file-code': 'M6 3h8l4 4v14H6zM14 3v5h4m-7 4-2 2 2 2m2-4 2 2-2 2',
   'file-image': 'M6 3h8l4 4v14H6zM14 3v5h4M8 17l3-4 4 4m-5-7h.01',
@@ -42,7 +44,7 @@ const paths = {
   chevron: 'm9 5 7 7-7 7',
   skills: 'm12 3 3 6 6 3-6 3-3 6-3-6-6-3 6-3z',
 };
-// Folder and settings contours follow DeepSeek Harness's MIT-licensed icon artwork.
+// Folder, settings and panel contours follow DeepSeek Harness's MIT-licensed icon artwork.
 export function icon(spec: PluginIcon = 'plugin') {
   const name = typeof spec === 'string' ? spec : '';
   const custom = typeof spec === 'object' && spec !== null ? spec : undefined;
@@ -53,6 +55,7 @@ export function icon(spec: PluginIcon = 'plugin') {
     name === 'settings' ||
     name === 'folder' ||
     name === 'folder-open' ||
+    name === 'panel-right' ||
     name === 'ellipsis' ||
     name === 'new-chat' ||
     name === 'triangle';

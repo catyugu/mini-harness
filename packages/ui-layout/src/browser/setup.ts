@@ -62,7 +62,7 @@ function createAppFrame(
     <header class="topbar">
       <button id="sidebarOpen" class="icon-button" type="button" aria-label="Toggle navigation" aria-controls="sidebar" data-icon="menu"></button>
       <div class="title-block" id="titleBlock"><strong id="conversationTitle">New conversation</strong><div class="header-meta" id="headerMeta"><div class="header-context" id="headerContext"></div><div id="headerActions" hidden><div id="headerInline"></div><button id="headerMore" type="button" class="link-button" aria-label="More conversation controls" aria-expanded="false" aria-controls="headerOverflow" popovertarget="headerOverflow" data-icon="ellipsis" hidden></button><div id="headerOverflow" class="ui-popover" popover="auto" role="region" aria-label="More conversation controls"></div></div></div></div>
-      <button id="inspectorOpen" class="icon-button" type="button" aria-label="Open workspace panel" aria-controls="inspector" data-icon="files"></button>
+      <button id="inspectorOpen" class="icon-button" type="button" aria-label="Open workspace panel" aria-controls="inspector" data-icon="panel-right"></button>
     </header>
     <div id="conversationSlot"></div>
     <div id="mainSlot" hidden></div>
