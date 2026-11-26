@@ -11,7 +11,7 @@ Browser plugins import [`mini-harness/ui-layout`](src/browser/api.ts) and inject
 | `miniPages`   | Register a page, contribute a page with navigation, and open a registered page or return to the conversation. |
 | `miniTabs`    | Register a typed tab renderer, contribute a workspace-panel entry, and open or inspect content.               |
 | `miniDialogs` | Create a mounted dialog and an explicit disposer.                                                             |
-| `miniHeader`  | Set the title and context-row visibility.                                                   |
+| `miniHeader`  | Set the title and context-row visibility.                                                                     |
 | `miniLayout`  | Close the navigation drawer.                                                                                  |
 
 The [browser panel example](../../docs/examples/browser-panel/web.ts) is a build-checked example of a page and dialog. For a workspace tab, register the type once in the plugin's lifetime and retain the returned handle:

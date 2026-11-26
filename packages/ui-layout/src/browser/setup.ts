@@ -32,11 +32,7 @@ const setup = (ctx: Context) => {
   ctx.provide('miniDialogs', dialogs);
   for (const name of Object.keys(slots) as Array<keyof typeof slots>)
     ctx.effect(() =>
-      ctx.miniSlots.define(
-        name,
-        outlet(name),
-        name === 'conversation.body' ? 'single' : 'list',
-      ),
+      ctx.miniSlots.define(name, outlet(name), name === 'conversation.body' ? 'single' : 'list'),
     );
 };
 export default {
@@ -207,7 +203,6 @@ function createAppFrame(
     pages,
     tabs,
     dialogs,
-    outlet: (name: keyof typeof slots) =>
-      name === 'header.actions' ? placeHeader : element(slots[name]),
+    outlet: (name: keyof typeof slots) => (name === 'header.actions' ? placeHeader : element(slots[name])),
   };
 }

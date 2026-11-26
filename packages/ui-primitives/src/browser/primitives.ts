@@ -23,8 +23,7 @@ export function positionFloating(anchor: HTMLElement, panel: HTMLElement, option
   const above = Math.max(0, bounds.top - top - 14);
   const below = Math.max(0, bottom - bounds.bottom - 14);
   const height = panel.offsetHeight;
-  const placeBelow =
-    prefer === 'below' ? height <= below || below >= above : height > above && below > above;
+  const placeBelow = prefer === 'below' ? height <= below || below >= above : height > above && below > above;
   panel.style.maxHeight = Math.min(maxHeight, placeBelow ? below : above) + 'px';
   const size = panel.getBoundingClientRect();
   const x = align === 'end' ? bounds.right - size.width : bounds.left;
