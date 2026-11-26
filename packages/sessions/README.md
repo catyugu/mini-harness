@@ -17,7 +17,7 @@ export async function saveNote(ctx: Context, sessionId: string, text: string) {
     pluginId: 'notes',
     instanceId: 'notes',
   });
-  return records.append({ text }, { title: 'Saved note', content: text });
+  return records.append({ text }, { kind: 'note', title: 'Saved note', source: ['data', 'text'] });
 }
 ```
 

@@ -1,7 +1,6 @@
 import { isViewMessage } from '../src/shared/message.ts';
 import { expectPresent } from '../../../test/support/required.ts';
 import assert from 'node:assert/strict';
-import { createHash } from 'node:crypto';
 import {
   appendFileSync,
   linkSync,
@@ -293,83 +292,30 @@ test('tool execution stays auditable while accepted content is stored as a compa
   assert.throws(() => log.acceptToolResult('a'.repeat(32), []), /missing execution/);
 });
 
-test('historical plugin records normalize to one owner without changing identity or the selected branch', (t) => {
-  const { open, file } = fixture(t);
-  const log = open(),
-    first = log.append(user('before'));
+test('display records resolve explicitly selected content on the committed branch', (t) => {
+  const { open } = fixture(t);
+  let log = open();
+  const first = log.append(user('before'));
+  const owner = { pluginId: 'notes', instanceId: 'notes' };
+  const record = log.append({
+    type: 'plugin-record',
+    owner,
+    data: { note: 'Done' },
+    display: { owner, kind: 'progress', title: 'Progress', source: ['data', 'note'] },
+  });
   log.close();
-  const instanceId = 'session:aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/notes';
-  function historical(seq: number, parentId: string, namespace: string, data: unknown) {
-    const entry = {
-      type: 'custom',
-      namespace,
-      data,
-      version: 1,
-      seq,
-      id: seq.toString().repeat(32),
-      parentId,
-      timestamp: first.timestamp,
-    };
-    const checksum = createHash('sha256').update(JSON.stringify(entry)).digest('hex');
-    appendFileSync(file, JSON.stringify({ ...entry, checksum }) + '\n');
-    return entry;
-  }
-  const application = historical(2, first.id, 'notes', { count: 1 });
-  const scoped = historical(3, application.id, 'display:' + instanceId, {
-    data: { count: 2 },
-    display: { title: 'Progress', content: 'Done' },
-  });
-  const unmapped = historical(4, scoped.id, 'unknown.format', ['raw']);
-  const restored = open();
-  const last = restored.append(user('after'));
-  const diagnostic = restored.entries().find(({ id }) => id === unmapped.id);
-  assert.deepEqual(diagnostic, {
-    type: 'diagnostic',
-    code: 'historical-record',
-    version: 1,
-    seq: 4,
-    id: unmapped.id,
-    parentId: scoped.id,
-    timestamp: first.timestamp,
-    data: { label: 'unknown.format', payload: ['raw'] },
-  });
-  assert.match(readFileSync(file, 'utf8').trimEnd().split('\n').at(-1) ?? '', /"type":"message"/);
-  const records = restored.branch().filter((entry) => entry.type === 'plugin-record');
-  assert.deepEqual(
-    records.map(({ id, parentId, owner, data }) => ({ id, parentId, owner, data })),
-    [
-      {
-        id: application.id,
-        parentId: first.id,
-        owner: { pluginId: 'notes', instanceId: 'notes' },
-        data: { count: 1 },
-      },
-      {
-        id: scoped.id,
-        parentId: application.id,
-        owner: { pluginId: 'notes', instanceId },
-        data: { count: 2 },
-      },
-    ],
-  );
-  assert.deepEqual(
-    restored.projection().timeline.filter((entry) => entry.type === 'record'),
-    [
-      {
-        id: scoped.id,
-        plugin: 'notes',
-        instanceId,
-        type: 'record',
-        title: 'Progress',
-        content: 'Done',
-      },
-    ],
-  );
-  assert.equal(restored.projection().leafId, last.id);
-  assert.deepEqual(
-    restored.projection().contextMessages.map(({ content }) => content),
-    ['before', 'after'],
-  );
+  log = open();
+  assert.deepEqual(log.projection().timeline.filter((entry) => entry.type === 'record'), [{
+    type: 'record',
+    id: record.id,
+    plugin: 'notes',
+    instanceId: 'notes',
+    kind: 'progress',
+    title: 'Progress',
+    content: 'Done',
+  }]);
+  assert.equal(log.projection(first.id).timeline.filter((entry) => entry.type === 'record').length, 0);
+  assert.deepEqual(log.context().contextMessages.map(({ content }) => content), ['before']);
 });
 
 test('recorded requests reuse their tool schema and restore transformed input after reopening', (t) => {

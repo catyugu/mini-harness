@@ -68,7 +68,7 @@ export const apply = (ctx) => {
       ctx.on("agent/tool-result", async (_content, { sessionId, tool }) => {
         if (tool === 'ls') await ctx.harnessSessions.records(sessionId, {
           pluginId: 'bad-renderer', instanceId: 'bad-renderer'
-        }).append({}, { title: 'Tool progress record' });
+        }).append({}, { kind: 'progress', title: 'Tool progress record' });
       });
       ctx.on("agent/prepare-input", async (_content, { original, signal }) => {
         if (original.userText !== 'Stop before acceptance') return;

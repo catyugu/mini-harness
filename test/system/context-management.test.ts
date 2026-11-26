@@ -528,7 +528,7 @@ test('native compaction reduces context and preserves message identities and his
   assert.ok(log.context().contextMessages.length < before.length);
   const projection = log.projection();
   assert.match(JSON.stringify(projection.contextMessages[0]), /Summary of earlier conversation/);
-  const checkpoints = projection.timeline.filter((entry) => entry.type === 'checkpoint');
+  const checkpoints = projection.timeline.filter((entry) => entry.type === 'record' && entry.plugin === 'context-management' && entry.kind === 'checkpoint');
   assert.equal(checkpoints.length, 1);
-  assert.equal(checkpoints[0].summary, 'Summary of earlier conversation:\n' + checkpointFixture);
+  assert.equal(checkpoints[0].type === 'record' && checkpoints[0].content, 'Summary of earlier conversation:\n' + checkpointFixture);
 });

@@ -85,7 +85,7 @@ The read projection exposes:
 
 Pending input is read separately through `SessionLogPort.inbox()`; `queue()` also exposes failed deliveries for the UI. See [the source contract](../packages/sessions/src/log-api.ts) for the exact projection fields.
 
-A `context-replace` event applies one or more ordered splices to the parent branch's effective model messages as one durable write. A splice can preserve source identities for one-for-one edits. Full history continues to use the original records. A summarizing replacement carries the resulting request measurement and projects a checkpoint row whose summary is read directly from the inserted message. Unmeasured pruning and image offloading do not produce checkpoint rows. The effective context is updated incrementally as the branch advances and can be read without building the display timeline.
+A `context-replace` event applies one or more ordered splices to the parent branch's effective model messages as one durable write. A splice can preserve source identities for one-for-one edits. Full history continues to use the original records. A branch event can carry an explicit plugin-owned display descriptor, independently of its domain fields. The descriptor selects its own content or a source path within the event. Context Management uses this mechanism to display a committed summary without storing it twice. The effective context is updated incrementally as the branch advances and can be read without building the display timeline.
 
 Model requests may record their measured input counts and budget. Model attempts record timing and provider-reported usage by request ID, separately from assistant messages. Conversation settings store plugin-owned values without advancing the branch; null removes a setting.
 
@@ -114,9 +114,9 @@ Deletion first marks the selected tree as unavailable, drains registered partici
 cascades through its conversations while retaining the user's project files.
 There is no archive state.
 
-## Extension records and historical envelopes
+## Extension records
 
-Plugin records use a typed payload (`PluginRecord<Data>` / `SessionRecords<Data>`) in the same record log with an explicit owner (plugin ID and instance ID), data, and optional display metadata. The storage reader converts old custom record envelopes after validating their original checksums, retaining IDs, parents and payloads. An unscoped historical plugin record belongs to the application instance. Unmapped historical envelopes remain available as diagnostic records in native exports. New records use explicit plugin owners or diagnostic codes. The browser receives the explicitly supplied display data and the preceding message identity on the selected branch. Model context omits these records. Deleting its owning conversation removes both the records and private data for that session’s plugin instances.
+Plugin records use a typed payload (`PluginRecord<Data>` / `SessionRecords<Data>`) in the same record log with an explicit owner (plugin ID and instance ID). A branch event may carry a display descriptor identifying its renderer by plugin ID and kind, with a title and either a presentation payload or an explicit source path. Display metadata does not change the model context; the source is resolved from the committed event. Private records still advance the branch. Deleting a conversation removes all of its records.
 
 ## Retained tasks and retry identity
 
