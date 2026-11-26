@@ -55,3 +55,52 @@ test('search, rename, switch conversations and enter bulk selection', async ({ p
   await page.getByRole('button', { name: 'Renamed chat', exact: true }).click();
   await expect(page.locator('.message.user')).toHaveText('Find the violet-sparrow detail');
 });
+
+test('desktop navigation resizes within bounds and remembers its width', async ({ page, launch }) => {
+  const { host } = await launch();
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto(host.url + '/#token=' + host.token);
+  const sidebar = page.locator('#sidebar');
+  const handle = page.locator('#sidebarResize');
+  const toggle = page.getByRole('button', { name: 'Toggle navigation' });
+  await expect(sidebar).toHaveCSS('width', '340px');
+  const bounds = await handle.boundingBox();
+  if (!bounds) throw new Error('Missing navigation separator');
+  await page.mouse.move(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(bounds.x - 150, bounds.y + bounds.height / 2, { steps: 5 });
+  await page.mouse.up();
+  await expect(sidebar).toHaveCSS('width', '280px');
+  await handle.press('ArrowRight');
+  await expect(sidebar).toHaveCSS('width', '300px');
+  const updated = await handle.boundingBox();
+  if (!updated) throw new Error('Missing navigation separator');
+  await page.mouse.move(updated.x + updated.width / 2, updated.y + updated.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(updated.x + 160, updated.y + updated.height / 2, { steps: 5 });
+  await page.mouse.up();
+  await expect(sidebar).toHaveCSS('width', '380px');
+  await toggle.click();
+  await expect(sidebar).toHaveCSS('width', '56px');
+  await expect(handle).toBeHidden();
+  await toggle.click();
+  await expect(sidebar).toHaveCSS('width', '380px');
+
+  await page.reload();
+  await expect(sidebar).toHaveCSS('width', '380px');
+  await page.setViewportSize({ width: 900, height: 900 });
+  await page.getByRole('button', { name: 'Open workspace panel' }).click();
+  await expect(sidebar).toHaveCSS('width', '340px');
+  await expect(page.locator('#inspector')).toHaveCSS('width', '260px');
+  await expect(page.locator('#main')).toHaveCSS('width', '300px');
+  await page.getByRole('button', { name: 'Close workspace panel' }).click();
+  await expect(sidebar).toHaveCSS('width', '380px');
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await toggle.click();
+  await expect(sidebar).toHaveCSS('width', '300px');
+  await expect(handle).toBeHidden();
+  await page.getByRole('button', { name: 'Close navigation', exact: true }).click();
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await expect(sidebar).toHaveCSS('width', '380px');
+});
