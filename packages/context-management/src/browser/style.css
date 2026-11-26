@@ -2,6 +2,7 @@
   min-width: 0;
   display: flex;
   justify-content: center;
+  flex-wrap: wrap;
   gap: 0.65rem;
   padding-top: 0.2rem;
 }
@@ -111,11 +112,6 @@
   }
   .context-status > div {
     min-width: 0;
-  }
-  .context-status .context-statistic {
-    max-width: 100%;
-    overflow: hidden;
-    text-overflow: ellipsis;
   }
   .context-speed {
     display: none;

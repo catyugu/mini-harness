@@ -24,7 +24,7 @@ export class ContextManagement {
   private readonly meter = new TokenMeter();
   private readonly prepared = new WeakMap<
     Pick<SessionLogReader, 'entries'>,
-    { occupancy: ContextOccupancy; adapter: LlmAdapter; leafId: string | null; requestId?: string }
+    { occupancy: ContextOccupancy; adapter?: LlmAdapter | null; leafId: string | null; requestId?: string }
   >();
   private readonly operations = new Map<string, 'automatic' | 'recovery'>();
 
@@ -45,8 +45,8 @@ export class ContextManagement {
   measure(ctx: Context, request: LlmRequest, count = true) {
     return this.meter.measure(
       request,
-      ctx.harnessModels.capabilities(request.model),
-      ctx.harnessLlm.select?.(request.model),
+      ctx.get('harnessModels')?.capabilities(request.model),
+      ctx.get('harnessLlm')?.select?.(request.model),
       count,
     );
   }
@@ -71,7 +71,7 @@ export class ContextManagement {
     )
       return;
     measured.requestId = requestId;
-    this.meter.calibrate(measured.occupancy, measured.occupancy, measured.adapter, usage);
+    if (measured.adapter) this.meter.calibrate(measured.occupancy, measured.occupancy, measured.adapter, usage);
   }
 
   prepare(
@@ -113,8 +113,8 @@ export class ContextManagement {
     let projection = log.context();
     let occupancy = await this.measure(ctx, request);
     const finish = () => {
-      const adapter = ctx.harnessLlm.select?.(request.model);
-      if (adapter) this.prepared.set(log, { occupancy, adapter, leafId: log.context().leafId });
+      const adapter = ctx.get('harnessLlm')?.select?.(request.model);
+      this.prepared.set(log, { occupancy, adapter, leafId: log.context().leafId });
       return request;
     };
     const budget = occupancy.budget;

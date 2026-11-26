@@ -81,7 +81,7 @@ function showUsage(list: HTMLElement, usage?: TokenTotals) {
 }
 
 function showOccupancy(list: HTMLElement, bar: HTMLElement, state: ContextState) {
-  const { occupancy: value, settings } = state;
+  const { occupancy: value } = state;
   const estimate = value?.estimated ? '~' : '';
   const show = (count: number) => estimate + tokens(count);
   rows(list, [
@@ -92,9 +92,6 @@ function showOccupancy(list: HTMLElement, bar: HTMLElement, state: ContextState)
     ['Messages', value ? show(value.messages) : undefined],
     ['Input budget', value?.budget !== undefined ? tokens(value.budget) : undefined],
     ['Input budget used', value?.budget ? estimate + percent(value.total / value.budget) : undefined],
-    ['Auto compaction trigger', percent(settings.triggerRatio) + ' of input budget'],
-    ['Auto compaction', settings.autoCompact ? 'On' : 'Off'],
-    ['Compaction', state.compacting ? 'Running (' + state.compacting + ')' : undefined],
   ]);
   bar.hidden = !value?.window;
   bar.replaceChildren(

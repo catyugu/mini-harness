@@ -96,7 +96,9 @@ export async function checkpoint(
   measure: (request: LlmRequest) => Promise<ContextOccupancy>,
   runId?: string,
 ) {
-  const { harnessModels: models, harnessLlm: llm } = ctx;
+  const models = ctx.get('harnessModels');
+  const llm = ctx.get('harnessLlm');
+  if (!models || !llm) throw new DomainError('unavailable', 'Summary model service is unavailable');
   const { signal } = request;
   const { model } = selectModel(models, { explicit: settings.summaryModel ?? request.model });
   const capability = models.capabilities(model);

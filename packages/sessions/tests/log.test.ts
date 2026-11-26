@@ -18,6 +18,7 @@ import { join } from 'node:path';
 import test from 'node:test';
 import type { NativeAssistantMessage } from '@mini-harness/llm/api';
 import { SessionLog } from '../src/log.ts';
+import { encodeLog } from '../src/record-log.ts';
 
 function fixture(t: test.TestContext) {
   const root = mkdtempSync(join(tmpdir(), 'mini-harness-log-'));
@@ -37,6 +38,37 @@ function fixture(t: test.TestContext) {
 const user = (content: string) => ({
   type: 'message' as const,
   message: { role: 'user' as const, content, timestamp: 1 },
+});
+
+test('historical context records migrate once without changing source identity', (t) => {
+  const { open, file } = fixture(t);
+  const log = open();
+  const first = log.append(user('original'));
+  const second = log.append(user('recent'));
+  const timestamp = new Date().toISOString();
+  const editId = 'a'.repeat(32);
+  const compactId = 'b'.repeat(32);
+  const historical = encodeLog(JSON.parse(log.serialize().split('\n')[0]), [
+    first, second,
+    { type: 'context-edit', targetId: first.id, replacement: 'shortened', id: editId, seq: 3, parentId: second.id, timestamp, version: 1 },
+    { type: 'compaction', summary: 'checkpoint', keepFromId: second.id, id: compactId, seq: 4, parentId: editId, timestamp, version: 1 },
+  ] as Parameters<typeof encodeLog>[1]);
+  log.close();
+  writeFileSync(file, historical);
+  const reader = new SessionLog(file, 'conversation', undefined, undefined, true);
+  const projection = reader.context();
+  reader.close();
+  assert.equal(readFileSync(file, 'utf8'), historical);
+  const writer = open();
+  assert.deepEqual(writer.context(), projection);
+  assert.equal(writer.originalMessage(first.id)?.content, 'original');
+  assert.equal(writer.entry(compactId)?.type, 'context-replace');
+  const migrated = readFileSync(file, 'utf8');
+  assert.equal(migrated, writer.serialize());
+  assert.notEqual(migrated, historical);
+  writer.close();
+  assert.deepEqual(open().context(), projection);
+  assert.equal(readFileSync(file, 'utf8'), migrated);
 });
 
 test('native log retains model semantics and gives defensive read projections', (t) => {

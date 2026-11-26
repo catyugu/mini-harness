@@ -58,7 +58,9 @@ function setup(ctx: Context) {
               const projection = log.context();
               if (!projection.contextMessages.length)
                 throw new HttpError('invalid_input', 'Nothing to compact in this conversation');
-              const { model } = selectModel(scoped.harnessModels, {
+              const models = scoped.get('harnessModels');
+              if (!models) throw new HttpError('unavailable', 'Model catalog is unavailable');
+              const { model } = selectModel(models, {
                 explicit: projection.model,
                 unavailable: 'Configure a model before compacting',
               });
@@ -71,7 +73,7 @@ function setup(ctx: Context) {
                 ...previous,
                 model,
                 systemPrompt: previous?.systemPrompt ?? '',
-                messages: prepareModelMessages(scoped.harnessModels.capabilities(model), messages),
+                messages: prepareModelMessages(models.capabilities(model), messages),
                 signal,
               });
               await manager.compact(scoped, log, await rebuild(projection.contextMessages), rebuild);
