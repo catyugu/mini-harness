@@ -2,7 +2,10 @@ import type { TaskHistoryRecord, TaskSnapshot } from './api.ts';
 
 /** A bounded observation cache, containing no executable state or handles. */
 export class RecentTasks {
-  private readonly records = new Map<string, { record: TaskHistoryRecord; ancestors: string[]; bytes: number }>();
+  private readonly records = new Map<
+    string,
+    { record: TaskHistoryRecord; ancestors: string[]; bytes: number }
+  >();
   private bytes = 0;
 
   get(id: string) {

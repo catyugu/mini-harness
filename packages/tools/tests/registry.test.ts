@@ -174,15 +174,26 @@ test('task control can inspect and await standalone work without Sessions or Sub
   const controlFiber = ctx.plugin(taskControlPlugin);
   try {
     await controlFiber;
-    const tool = expectPresent(ctx.harnessTools.list().find(({ name }) => name === 'task_control'), 'task control');
+    const tool = expectPresent(
+      ctx.harnessTools.list().find(({ name }) => name === 'task_control'),
+      'task control',
+    );
     const work = tasks.start({ owner: 'resource' }, async (task) => {
       task.setResult('done');
     });
-    const result = await startTool(ctx.harnessTasks, tool, 'wait', { action: 'wait', taskId: work.id }).result;
-    assert.deepEqual(result.content, [{
-      type: 'text',
-      text: JSON.stringify({ taskId: work.id, state: 'completed', result: 'done', cancellationRequested: false }),
-    }]);
+    const result = await startTool(ctx.harnessTasks, tool, 'wait', { action: 'wait', taskId: work.id })
+      .result;
+    assert.deepEqual(result.content, [
+      {
+        type: 'text',
+        text: JSON.stringify({
+          taskId: work.id,
+          state: 'completed',
+          result: 'done',
+          cancellationRequested: false,
+        }),
+      },
+    ]);
   } finally {
     await controlFiber.dispose();
     await toolsFiber.dispose();

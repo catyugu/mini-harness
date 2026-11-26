@@ -488,10 +488,13 @@ function validateEvent(event: SessionEvent) {
         !Number.isSafeInteger(event.task.outputCursor) ||
         event.task.outputCursor < 0 ||
         (event.run !== undefined &&
-          (!event.run || !Number.isSafeInteger(event.run.sequence) || event.run.sequence < 0 ||
+          (!event.run ||
+            !Number.isSafeInteger(event.run.sequence) ||
+            event.run.sequence < 0 ||
             (event.run.inputEntryId != null && !entryId.test(event.run.inputEntryId)) ||
             (event.run.changedFiles !== undefined &&
-              (!Array.isArray(event.run.changedFiles) || event.run.changedFiles.some((path) => typeof path !== 'string')))))
+              (!Array.isArray(event.run.changedFiles) ||
+                event.run.changedFiles.some((path) => typeof path !== 'string')))))
       )
         throw new Error('Invalid task record');
       return;
