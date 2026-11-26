@@ -74,6 +74,10 @@
   align-items: center;
   gap: 12px;
 }
+.settings-preference .switch-line > select {
+  flex-shrink: 0;
+  width: 55%;
+}
 .switch-line small {
   display: block;
   color: var(--muted);
@@ -86,9 +90,6 @@
 .settings-contributions {
   display: grid;
   gap: 16px;
-}
-.settings-field {
-  max-width: 280px;
 }
 .settings-body {
   display: grid;

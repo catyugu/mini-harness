@@ -61,7 +61,7 @@ const setup = async (ctx: Context) => {
       browserPluginId(ctx),
       {
         id: 'providers',
-        section: { title: 'Model', icon: 'model', order: 10 },
+        section: { title: 'Model', icon: 'model', order: 20 },
         render({ signal }) {
           if (!state.get().canManageProviders) {
             const hint = document.createElement('p');

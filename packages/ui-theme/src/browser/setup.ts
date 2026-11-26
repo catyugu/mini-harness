@@ -14,18 +14,21 @@ const setup = (ctx: Context) => {
         browserPluginId(ctx),
         {
           id: 'theme',
-          section: { title: 'Appearance', icon: 'theme', order: 30 },
+          section: { title: 'General', icon: 'settings', order: 10 },
+          order: -10,
           render({ bind }) {
             const content = document.createElement('div');
-            content.className = 'settings-field';
+            content.className = 'settings-preference';
             const label = document.createElement('label');
-            label.textContent = 'Theme';
+            label.className = 'switch-line';
+            const title = document.createElement('strong');
+            title.textContent = 'Theme';
             const theme = document.createElement('select');
             theme.name = 'appearance';
             theme.add(new Option('System', 'system'));
             theme.add(new Option('Light', 'light'));
             theme.add(new Option('Dark', 'dark'));
-            label.append(theme);
+            label.append(title, theme);
             content.append(
               label,
               bind<string>(theme, 'appearance', {

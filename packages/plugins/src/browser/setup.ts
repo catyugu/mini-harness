@@ -74,7 +74,7 @@ function pluginCatalog(
       browserPluginId(ctx),
       {
         id: 'built-in-plugins',
-        section: { title: 'Built-in plugins', icon: 'plugin', order: 40 },
+        section: { title: 'Built-in plugins', icon: 'plugin', order: 30 },
         render: () => builtins,
       },
       browserPluginSettings(ctx),

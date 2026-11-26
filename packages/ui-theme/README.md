@@ -20,7 +20,7 @@ This is an Entry fragment for the Profile's `plugins` list. See [Profiles](../..
 
 [`setup.ts`](src/browser/setup.ts) reads the Entry configuration, applies `data-theme` to the document root and subscribes to accepted updates. The [stylesheet](src/browser/style.css) defines the tokens and system-color-scheme behavior. There is no separate theme service or public SDK module. Tokens include semantic colors, typography, spacing, control and icon sizes, shadows and motion. Native CSS layers are ordered by the startup stylesheet; unlayered custom styles can override these defaults.
 
-When `miniSettingsRegistry` is available, Theme contributes the Appearance section and binds its selector to the same Entry configuration. Theme activation and changes also work without Settings. Unloading Theme releases the subscription, removes the document attribute and removes its Entry-owned stylesheet; the optional Settings contribution follows its injected lifetime.
+When `miniSettingsRegistry` is available, Theme contributes a selector to General and binds it to the same Entry configuration. Theme activation and changes also work without Settings. Unloading Theme releases the subscription, removes the document attribute and removes its Entry-owned stylesheet; the optional Settings contribution follows its injected lifetime.
 
 ## Typography
 

@@ -32,13 +32,17 @@ test('settings stay reachable across viewport sizes and theme changes persist', 
     await expect(dialog).toBeVisible();
     await expect(dialog.getByRole('button', { name: 'Close settings' })).toBeFocused();
     await expectInViewport(dialog, viewport);
+    await expect(
+      dialog.getByRole('navigation', { name: 'Settings sections' }).getByRole('button'),
+    ).toHaveText(['General', 'Model', 'Built-in plugins', 'Context']);
     await settingsSection(page, 'General').click();
-    await expect(dialog.getByRole('combobox', { name: 'Add instructions' })).toBeVisible();
+    await expect(dialog.getByRole('combobox').nth(0)).toHaveAccessibleName('Theme');
+    await expect(dialog.getByRole('combobox').nth(1)).toHaveAccessibleName('Add instructions');
     if (viewport.width <= 560) {
       await dialog.getByRole('button', { name: 'All settings' }).click();
       await expect(settingsSection(page, 'General')).toBeFocused();
     }
-    await settingsSection(page, 'Appearance').click();
+    if (viewport.width <= 560) await settingsSection(page, 'General').click();
     await theme.selectOption('system');
     await page.emulateMedia({ colorScheme: 'dark' });
     await expect(page.locator('html')).toHaveCSS('color-scheme', 'dark');
@@ -49,7 +53,7 @@ test('settings stay reachable across viewport sizes and theme changes persist', 
     await expect(theme).toBeEnabled();
     await expect(theme).toHaveCSS('font-size', viewport.width <= 860 ? '16px' : '13px');
     if (viewport.width > 860) {
-      await dialog.getByRole('heading', { name: 'Appearance' }).click();
+      await dialog.getByRole('heading', { name: 'General' }).click();
       await expect(dialog).toBeVisible();
       await page.mouse.click(4, 4);
     } else {
