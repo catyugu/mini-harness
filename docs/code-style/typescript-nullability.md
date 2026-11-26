@@ -45,9 +45,7 @@ type WeakSession = {
 };
 
 // Prefer: the state establishes the available data.
-type Session =
-  | { status: 'idle' }
-  | { status: 'running'; run: Run; controller: AbortController };
+type Session = { status: 'idle' } | { status: 'running'; run: Run; controller: AbortController };
 
 function stop(session: Session) {
   if (session.status === 'running') session.controller.abort();

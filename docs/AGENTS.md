@@ -14,7 +14,7 @@ Documentation is part of the implementation. Maintain English Markdown in the re
 | End-user workflows                                             | User guide                              |
 | Step-by-step extension development                             | Cookbook and linked runnable examples   |
 | Build, tests and distribution                                  | Development guide                       |
-| Code style and implementation rules                  | `docs/code-style/`                      |
+| Code style and implementation rules                            | `docs/code-style/`                      |
 
 Other documents should link to the owner rather than duplicate its reference material. A short contextual sentence or quick-start example is useful; a second API catalog or full description is not.
 
