@@ -65,16 +65,20 @@
   padding: 0;
 }
 .context-fields .ui-field {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 45%);
   align-items: center;
-  justify-content: space-between;
   gap: 0.5rem;
 }
-.context-fields input[type='number'] {
+.context-fields .ui-field > :last-child {
+  justify-self: end;
+}
+.context-fields .ui-field input[type='number'] {
   width: 5em;
+  max-width: 100%;
 }
 .context-model {
-  max-width: 55%;
+  max-width: 100%;
   min-width: 0;
   display: flex;
   gap: 0.4rem;
