@@ -126,7 +126,7 @@ test('plugin schema controls, recursive tree navigation, batch export and perman
     await expect(ancestors.getByRole('button')).toHaveText(['Parent task', 'Child task']);
     await expect
       .poll(async () => {
-        const workspace = await page.locator('#workspaceHeader').boundingBox();
+        const workspace = await page.locator('#headerContext .workspace-button').boundingBox();
         const trail = await ancestors.boundingBox();
         return (
           workspace &&

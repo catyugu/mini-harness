@@ -499,6 +499,9 @@ export const apply = (ctx) => {
   const service = await startIsolatedHost(paths);
   try {
     await page.goto(service.url + '/#token=' + service.token);
+    const title = page.locator('#conversationTitle');
+    await expect(title).toHaveText('New conversation');
+    const initialTitle = await title.boundingBox();
     await page.getByRole('textbox', { name: 'Message', exact: true }).fill('Start independent job');
     await page.getByRole('button', { name: 'Send', exact: true }).click();
     await expect(page.locator('.tool-card .tool-state')).toHaveText('Accepted');
@@ -510,9 +513,10 @@ export const apply = (ctx) => {
     const agentToggle = agents.getByRole('button', { name: 'Subagents', exact: true });
     await expect(agents).toBeHidden();
     await expect(toggle).toBeInViewport();
+    expect((await title.boundingBox())?.y).toBe(initialTitle?.y);
     await expect
       .poll(async () => {
-        const workspace = await page.locator('#workspaceHeader').boundingBox();
+        const workspace = await page.locator('#headerContext .workspace-button').boundingBox();
         const button = await toggle.boundingBox();
         return (
           workspace &&
@@ -553,6 +557,7 @@ export const apply = (ctx) => {
     const more = page.getByRole('button', { name: 'More conversation controls', exact: true });
     const overflow = page.locator('#headerOverflow');
     await expect(more).toBeVisible();
+    expect((await title.boundingBox())?.y).toBe(initialTitle?.y);
     await expect(overflow).toBeHidden();
     await more.click();
     await expect(overflow).toBeInViewport({ ratio: 0.95 });
@@ -567,10 +572,10 @@ export const apply = (ctx) => {
     await page.setViewportSize({ width: 1280, height: 844 });
     await expect(more).toBeHidden();
     await expect(
-      page.locator('#conversationExtensions').getByRole('button', { name: 'Subagents', exact: true }),
+      page.locator('#headerInline').getByRole('button', { name: 'Subagents', exact: true }),
     ).toBeVisible();
     await expect(
-      page.locator('#conversationExtensions').getByRole('button', { name: 'Tasks', exact: true }),
+      page.locator('#headerInline').getByRole('button', { name: 'Tasks', exact: true }),
     ).toBeVisible();
     await agentToggle.click();
     const agentPanel = agents.locator('.subagent-list');

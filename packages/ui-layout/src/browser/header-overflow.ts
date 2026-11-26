@@ -1,8 +1,8 @@
-import { bindHeaderPopover } from '@mini-harness/ui-primitives/primitives';
+import { bindPopover } from '@mini-harness/ui-primitives/primitives';
 
 export function createHeaderOutlet(
   meta: HTMLElement,
-  workspace: HTMLElement,
+  context: HTMLElement,
   actions: HTMLElement,
   row: HTMLElement,
   more: HTMLButtonElement,
@@ -11,7 +11,7 @@ export function createHeaderOutlet(
 ) {
   let nodes: readonly HTMLElement[] = [];
   let frame = 0;
-  bindHeaderPopover(more, panel, signal);
+  bindPopover(more, panel, signal);
 
   function schedule() {
     if (frame || signal.aborted) return;
@@ -31,18 +31,26 @@ export function createHeaderOutlet(
   function render() {
     const visible = nodes.filter((node) => !node.hidden);
     actions.hidden = visible.length === 0;
-    if (!visible.length && panel.matches(':popover-open')) panel.hidePopover();
+    if (!visible.length) {
+      more.hidden = true;
+      if (panel.matches(':popover-open')) panel.hidePopover();
+      place(row, nodes);
+      return;
+    }
     const width = meta.clientWidth;
-    if (!width || !visible.length) return;
-    const gap = parseFloat(getComputedStyle(row).columnGap);
-    // Leave room for the workspace icon and a short, ellipsized path.
-    const reserved = workspace.hidden ? 0 : Math.min(64, width * 0.3) + gap;
+    if (!width) return;
+    const gap = parseFloat(getComputedStyle(row).columnGap) || 0;
+    // Keep a small amount of space for flexible context contributions.
+    const reserved =
+      context.hidden || !context.querySelector(':scope > :not([hidden])')
+        ? 0
+        : Math.min(64, width * 0.3) + gap;
     const available = width - reserved;
     const sizes = visible.map((node) => Math.ceil(node.getBoundingClientRect().width));
     const total = sizes.reduce((sum, size) => sum + size, 0) + gap * (sizes.length - 1);
     let count = visible.length;
     if (total > available) {
-      const budget = available - parseFloat(getComputedStyle(more).width) - gap;
+      const budget = available - (parseFloat(getComputedStyle(more).width) || 32) - gap;
       count = 0;
       let used = 0;
       for (const size of sizes) {
@@ -82,7 +90,12 @@ export function createHeaderOutlet(
     resize.disconnect();
     visibility.disconnect();
     resize.observe(meta);
-    visibility.observe(workspace, { attributes: true, attributeFilter: ['hidden'] });
+    visibility.observe(context, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ['hidden'],
+    });
     for (const node of nodes) {
       resize.observe(node);
       visibility.observe(node, { attributes: true, attributeFilter: ['hidden'] });

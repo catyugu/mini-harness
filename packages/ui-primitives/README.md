@@ -17,6 +17,12 @@ Mount the returned nodes through a page, dialog or slot contribution and attach 
 
 `icon` accepts a symbolic icon name or a custom SVG path specification. The [API source](src/browser/api.ts) defines the supported control variants; the [icon implementation](src/browser/icons.ts) owns the icon vocabulary.
 
+## Optional layout and styling
+
+Use `ui-row`, `ui-stack`, `ui-fill`, `ui-fixed`, `ui-truncate`, `ui-scroll` and `ui-content-width` on any native elements. Row and stack spacing is configurable with `--gap`; list rows also accept `--row-size`. `ui-meta`, `ui-status-dot` (with semantic `data-tone`), `ui-disclosure` and `ui-popover` provide shared presentation without prescribing content or business state. Custom components and unlayered plugin styles remain supported.
+
+Use `bindPopover(trigger, panel, signal, options)` for a native popover. The returned positioning function can be called immediately after opening; the binding tracks viewport changes and updates the trigger's expanded state. `positionFloating` also works with an already visible non-popover surface.
+
 ## Markdown and lifecycle
 
 The internal [`renderMarkdown`](src/browser/markdown.ts) helper parses with the pinned Marked distribution and sanitizes the result with DOMPurify. It allows a defined subset of elements and attributes, removes arbitrary classes, gives external links safe new-window attributes, and wraps tables for horizontal scrolling. Interactive rendering adds copy controls to code blocks. This helper is used by native views; it is not a method of the public `miniPrimitives` service or a separate SDK export.

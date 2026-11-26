@@ -9,7 +9,7 @@ export function mountHistory(ctx: Context, extensions: MessageExtensions, signal
   viewport.className = 'messages';
   viewport.setAttribute('aria-label', 'Messages');
   const messages = document.createElement('div');
-  messages.className = 'message-list';
+  messages.className = 'message-list ui-content-width';
   viewport.append(messages);
   const view = createMessageView(
     ctx,

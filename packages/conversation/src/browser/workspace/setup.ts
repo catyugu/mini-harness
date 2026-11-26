@@ -10,21 +10,23 @@ const setup = (ctx: Context) => {
   const signal = ctx.fiber.signal;
   const { miniSelection: select, miniSessions: sessions, miniWorkspaces: workspaces, miniTabs: tabs } = ctx;
   const picker = workspacePicker(ctx, sessions.get);
-  const badges = (['workspace.header', 'workspace.welcome'] as const).map((slot) => {
+  const badges = (['header.context', 'workspace.welcome'] as const).map((slot) => {
     const node = document.createElement('div');
-    node.className = 'workspace-button';
+    node.className = 'workspace-button ui-row';
     const label = document.createElement('small');
+    label.className = 'ui-truncate ui-meta';
     node.append(icon('folder'), label);
-    ctx.effect(() => ctx.miniSlots.register(slot, node));
-    return { node, label };
+    ctx.effect(() => ctx.miniSlots.register(slot, node, { order: -100 }));
+    return { node, label, slot };
   });
   ctx.provide('miniWorkspace', picker);
   const update = () => {
     const selected = workspaces.get().find(({ id }) => id === select.selectedWorkspace);
-    for (const { node, label } of badges) {
+    for (const { node, label, slot } of badges) {
       label.textContent = selected?.path ?? '';
       node.title = selected?.path ?? '';
-      node.hidden = !selected;
+      node.hidden =
+        !selected || (slot === 'header.context' ? !select.activeConversation : !!select.activeConversation);
     }
     tabs.selectWorkspace(selected?.id);
     tabs.prune(new Set(workspaces.get().map(({ id }) => id)));

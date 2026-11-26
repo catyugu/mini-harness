@@ -1,4 +1,5 @@
 import { icon } from './icons.ts';
+import type { FloatingOptions } from './api.ts';
 
 export function fromMarkup<T extends HTMLElement = HTMLElement>(markup: string): T {
   const template = document.createElement('template');
@@ -6,30 +7,56 @@ export function fromMarkup<T extends HTMLElement = HTMLElement>(markup: string):
   return template.content.firstElementChild as T;
 }
 
-/** Bind a native header popover to its trigger and keep it inside the viewport. */
-export function bindHeaderPopover(trigger: HTMLButtonElement, panel: HTMLElement, signal: AbortSignal) {
+/** Position an already visible floating surface relative to its anchor. */
+export function positionFloating(anchor: HTMLElement, panel: HTMLElement, options: FloatingOptions = {}) {
+  const { width, maxHeight = 520, align = 'start', prefer = 'below' } = options;
+  const viewport = window.visualViewport;
+  const left = viewport?.offsetLeft ?? 0;
+  const top = viewport?.offsetTop ?? 0;
+  const right = left + (viewport?.width ?? innerWidth);
+  const bottom = top + (viewport?.height ?? innerHeight);
+  const availableWidth = Math.max(0, right - left - 16);
+  const bounds = anchor.getBoundingClientRect();
+  panel.style.maxWidth = availableWidth + 'px';
+  if (width !== undefined) panel.style.width = Math.min(width, availableWidth) + 'px';
+  panel.style.maxHeight = Math.max(0, Math.min(maxHeight, bottom - top - 16)) + 'px';
+  const above = Math.max(0, bounds.top - top - 14);
+  const below = Math.max(0, bottom - bounds.bottom - 14);
+  const height = panel.offsetHeight;
+  const placeBelow = prefer === 'below' ? height <= below || below >= above : height > above && below > above;
+  panel.style.maxHeight = Math.min(maxHeight, placeBelow ? below : above) + 'px';
+  const size = panel.getBoundingClientRect();
+  const x = align === 'end' ? bounds.right - size.width : bounds.left;
+  panel.style.left = Math.max(left + 8, Math.min(x, right - size.width - 8)) + 'px';
+  panel.style.top = Math.max(top + 8, placeBelow ? bounds.bottom + 6 : bounds.top - size.height - 6) + 'px';
+  panel.style.bottom = 'auto';
+}
+
+/** Bind positioning and expanded state to a native popover; callers own its content and actions. */
+export function bindPopover(
+  trigger: HTMLElement,
+  panel: HTMLElement,
+  signal: AbortSignal,
+  options: FloatingOptions = {},
+) {
   const position = () => {
-    const bounds = trigger.getBoundingClientRect();
-    panel.style.left = Math.max(8, Math.min(bounds.left, innerWidth - panel.offsetWidth - 8)) + 'px';
-    panel.style.top = bounds.bottom + 6 + 'px';
-    panel.style.maxHeight = Math.max(0, Math.min(520, innerHeight - bounds.bottom - 14)) + 'px';
+    if (panel.matches(':popover-open')) {
+      if (!trigger.getClientRects().length) panel.hidePopover();
+      else positionFloating(trigger, panel, options);
+    }
   };
   panel.addEventListener(
     'toggle',
     () => {
-      const open = panel.matches(':popover-open');
-      trigger.setAttribute('aria-expanded', String(open));
-      if (open) position();
+      trigger.setAttribute('aria-expanded', String(panel.matches(':popover-open')));
+      position();
     },
     { signal },
   );
-  window.addEventListener(
-    'resize',
-    () => {
-      if (panel.matches(':popover-open')) position();
-    },
-    { signal },
-  );
+  window.addEventListener('resize', position, { signal });
+  window.visualViewport?.addEventListener('resize', position, { signal });
+  window.visualViewport?.addEventListener('scroll', position, { signal });
+  return position;
 }
 
 export function closeOnBackdrop(dialog: HTMLDialogElement) {
@@ -61,10 +88,10 @@ export function button(label: string, variant: 'primary' | 'secondary' | 'quiet'
   return node;
 }
 
-export function iconButton(label: string, name: Parameters<typeof icon>[0], className = 'icon-button') {
+export function iconButton(label: string, name: Parameters<typeof icon>[0], className?: string) {
   const node = document.createElement('button');
   node.type = 'button';
-  node.className = className;
+  node.className = className ? 'icon-button ' + className : 'icon-button';
   node.setAttribute('aria-label', label);
   node.title = label;
   node.append(icon(name));
@@ -112,7 +139,7 @@ export function saveToggle(node: HTMLInputElement, save: (checked: boolean) => P
 
 export function dialog(title: string, content: HTMLElement) {
   const node = fromMarkup<HTMLDialogElement>(`<dialog class="ui-dialog">
-    <header class="settings-header"><h2></h2><button type="button" class="icon-button"></button></header>
+    <header class="ui-dialog-header"><h2></h2><button type="button" class="icon-button"></button></header>
     <div class="ui-dialog-body"></div>
   </dialog>`);
   node.setAttribute('aria-label', title);

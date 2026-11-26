@@ -5,7 +5,6 @@ const setup = (ctx: Context) => {
   const {
     miniLayout: layout,
     miniPages: pages,
-    miniHeader: header,
     miniSelection: state,
     miniSessions: sessions,
     miniWorkspaces: workspaces,
@@ -32,7 +31,6 @@ const setup = (ctx: Context) => {
     removeWorkspace: workspace.remove,
     activate: (id) => state.dispatchEvent(new CustomEvent('open', { detail: id })),
     clearConversation: () => state.dispatchEvent(new Event('clear')),
-    setTitle: header.setTitle,
     report: (error) => state.dispatchEvent(new CustomEvent('error', { detail: error })),
   });
 };
@@ -44,7 +42,6 @@ export default {
     'miniWorkspaces',
     'miniLayout',
     'miniPages',
-    'miniHeader',
     'miniWorkspace',
     'miniSlots',
   ],

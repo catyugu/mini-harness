@@ -185,19 +185,19 @@ test('an outlet can place the original ordered nodes across containers without r
     alpha = element(),
     beta = element();
   const lifetimes: AbortSignal[] = [];
-  const close = registry.define('conversation.header', (nodes) => {
+  const close = registry.define('header.actions', (nodes) => {
     inline.replaceChildren(...(nodes.slice(0, 1) as unknown as ElementStub[]));
     overflow.replaceChildren(...(nodes.slice(1) as unknown as ElementStub[]));
   });
   const removeAlpha = registry.register(
-    'conversation.header',
+    'header.actions',
     (signal) => {
       lifetimes.push(signal);
       return node(alpha);
     },
     { order: 10 },
   );
-  const removeBeta = registry.register('conversation.header', node(beta), { order: 0 });
+  const removeBeta = registry.register('header.actions', node(beta), { order: 0 });
   assert.deepEqual(inline.children, [beta]);
   assert.deepEqual(overflow.children, [alpha]);
   assert.equal(lifetimes.length, 1);

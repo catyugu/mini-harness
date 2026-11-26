@@ -15,9 +15,9 @@ export function mountConversationLayout(ctx: Context) {
         <h1>What are we working on?</h1>
         <div id="workspaceWelcome"></div>
       </section>
-      <div id="runSummary" class="run-summary" aria-label="Latest run" hidden><span></span><time></time><details id="changedFiles" hidden><summary></summary><ul></ul></details></div>
+      <div id="runSummary" class="run-summary ui-content-width" aria-label="Latest run" hidden><span></span><time></time><details id="changedFiles" hidden><summary></summary><ul></ul></details></div>
       <div id="conversationHistory" hidden></div>
-      <div class="composer-wrap">
+      <div class="composer-wrap ui-content-width">
         <div id="approvalRequests" class="approval-requests"></div>
         <div id="queuedMessages" class="queued-messages" hidden></div>
         <div id="status" class="status" role="status"></div>
@@ -45,12 +45,18 @@ export function mountConversationLayout(ctx: Context) {
     const welcome = !busy && !isRunning(state.run) && !state.history?.timeline.some(hasContent);
     element('welcome').hidden = !welcome;
     element('conversationHistory').hidden = welcome;
-    ctx.miniHeader.showWorkspace(!welcome);
-    ctx.miniHeader.setTitle(state.session?.title ?? 'New conversation');
     element('status').textContent = state.interaction.status;
     element('status').classList.toggle('error', Boolean(state.interaction.error));
     previous = state;
   }
+  function renderTitle() {
+    const session = control.get().session;
+    const latest = ctx.miniSessions.get().find(({ id }) => id === session?.id);
+    ctx.miniHeader.setTitle(latest?.title ?? session?.title ?? 'New conversation');
+  }
+  control.subscribe(['session'], renderTitle, signal);
+  ctx.miniSessions.subscribe(renderTitle, signal);
   control.subscribe(['session', 'history', 'run', 'queue', 'interaction'], render, signal);
+  renderTitle();
   render();
 }

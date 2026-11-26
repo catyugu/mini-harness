@@ -13,6 +13,7 @@ import {
   fromMarkup,
   iconButton,
   confirmAction,
+  positionFloating,
 } from '@mini-harness/ui-primitives/primitives';
 import { payload } from '@mini-harness/ui-runtime/http';
 import { workspaceTree } from './navigation-tree.ts';
@@ -30,7 +31,6 @@ interface NavigationServices {
   removeWorkspace(record: WorkspaceRecord): Promise<void>;
   clearConversation(): void;
   report(error: Error): void;
-  setTitle(title: string): void;
 }
 
 export function sessionNavigation(ctx: Context, options: NavigationServices) {
@@ -105,12 +105,7 @@ export function sessionNavigation(ctx: Context, options: NavigationServices) {
       void options.removeWorkspace(record).catch(options.report);
     };
     menu.hidden = false;
-    const anchor = trigger.getBoundingClientRect();
-    const bounds = menu.getBoundingClientRect();
-    menu.style.left = Math.max(8, Math.min(anchor.left, innerWidth - bounds.width - 8)) + 'px';
-    const below = anchor.bottom + 4;
-    menu.style.top =
-      (below + bounds.height > innerHeight - 8 ? Math.max(8, anchor.top - bounds.height - 4) : below) + 'px';
+    positionFloating(trigger, menu);
     renameAction.focus({ preventScroll: true });
   }
   document.addEventListener(
@@ -293,7 +288,7 @@ export function sessionNavigation(ctx: Context, options: NavigationServices) {
         visible.push(...tree.visible);
         const open = !collapsed.has(id) || Boolean(query);
         const row = document.createElement('div');
-        row.className = 'workspace-row';
+        row.className = 'workspace-row ui-list-row';
         row.dataset.workspaceId = id;
         row.draggable = !selecting && !query;
         row.ondragstart = (event) => {
@@ -427,12 +422,8 @@ export function sessionNavigation(ctx: Context, options: NavigationServices) {
         .map(({ id }) => id),
     );
     for (const id of selection) if (!available.has(id)) selection.delete(id);
-    const active = sessions.find(({ id }) => id === state.activeConversation);
     if (state.activeConversation && !available.has(state.activeConversation)) options.clearConversation();
-    else {
-      if (active) options.setTitle(active.title);
-      render();
-    }
+    else render();
   }
   state.subscribe(update, signal);
   sessionStore.subscribe(update, signal);

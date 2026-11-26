@@ -34,7 +34,7 @@ export function sessionTree(
     for (const item of children.get(parent) ?? []) {
       const entry = document.createElement('li');
       const row = document.createElement('div');
-      row.className = 'session-row' + (item.id === active ? ' active' : '');
+      row.className = 'session-row ui-list-row' + (item.id === active ? ' active' : '');
       const open = expanded.has(item.id) || Boolean(query);
       const hit = options.matches.get(item.id);
       const titleMatch = (node: HTMLElement) => {
@@ -75,7 +75,7 @@ export function sessionTree(
       } else {
         const title = button(item.title, 'quiet');
         title.id = 'session-' + item.id;
-        title.classList.add('session-name');
+        title.classList.add('session-name', 'ui-fill', 'ui-truncate');
         title.title = item.title;
         titleMatch(title);
         if (item.id === active) title.setAttribute('aria-current', 'page');

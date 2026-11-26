@@ -7,7 +7,7 @@
   border-radius: 9px;
   padding: 9px 10px;
   background: var(--surface);
-  font-size: 13px;
+  font-size: var(--font-ui);
 }
 .new-session {
   width: 100%;
@@ -29,7 +29,7 @@
   gap: 6px;
   padding: 13px 4px 2px;
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--font-meta);
 }
 #workspaceActions .icon-button:is([aria-pressed='true'], [aria-expanded='true']) {
   color: var(--ink);
@@ -42,6 +42,7 @@
 }
 .tree-button {
   flex: 0 0 24px;
+  min-width: 0;
   min-height: 30px;
   padding: 0;
   color: var(--muted);
@@ -85,15 +86,9 @@
   color: var(--danger);
 }
 .session-row {
-  display: flex;
-  align-items: center;
-  min-height: 34px;
-  min-width: 0;
+  --row-size: 34px;
+  --gap: 0px;
   padding: 1px 3px;
-  border-radius: 7px;
-}
-.session-row:hover {
-  background: var(--hover);
 }
 .session-row.active {
   background: var(--selected);
@@ -110,7 +105,7 @@
   border-radius: 5px;
   background: transparent;
   text-align: left;
-  font-size: 13px;
+  font-size: var(--font-ui);
   cursor: pointer;
 }
 .bulk-actions {
@@ -119,7 +114,7 @@
   flex-shrink: 0;
   gap: 4px;
   padding: 7px 2px;
-  font-size: 12px;
+  font-size: var(--font-meta);
 }
 .bulk-actions span {
   grid-column: 1 / -1;
@@ -146,28 +141,19 @@
   overflow-wrap: anywhere;
 }
 .session-branch mark {
-  color: var(--text);
+  color: var(--ink);
   background: var(--selected);
   font-weight: 700;
 }
 #sessionSearch {
   margin: 6px 0 10px;
-  font-size: 13px;
-}
-.session-row {
-  position: relative;
+  font-size: var(--font-ui);
 }
 .session-actions {
-  position: absolute;
-  right: 3px;
   display: flex;
   flex-shrink: 0;
   opacity: 0;
-  background: var(--hover);
-  border-radius: 6px;
-}
-.session-row.active .session-actions {
-  background: var(--selected);
+  pointer-events: none;
 }
 .session-actions .icon-button {
   min-width: 24px;
@@ -180,8 +166,7 @@
 }
 .session-row:is(:hover, :focus-within) .session-actions {
   opacity: 1;
-  position: static;
-  background: transparent;
+  pointer-events: auto;
 }
 .session-row:has(.session-actions) .run-state {
   max-width: 100%;
@@ -207,11 +192,9 @@
   gap: 2px;
 }
 .workspace-row {
+  --row-size: 34px;
+  --gap: 0px;
   position: relative;
-  display: flex;
-  align-items: center;
-  border-radius: 7px;
-  min-height: 34px;
 }
 .workspace-row:is(:hover, :focus-within),
 .workspace-row:has([aria-current]) {
@@ -318,7 +301,7 @@
   border: 0;
   border-radius: 7px;
   text-align: left;
-  font-size: 13px;
+  font-size: var(--font-ui);
 }
 .workspace-menu .ui-button svg {
   flex: 0 0 15px;
@@ -364,8 +347,7 @@
   }
   .session-actions {
     opacity: 1;
-    position: static;
-    background: transparent;
+    pointer-events: auto;
   }
   .session-actions .icon-button {
     min-width: 30px;

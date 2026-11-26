@@ -12,8 +12,8 @@ const slots = {
   'sidebar.actions': 'sidebarExtensions',
   'sidebar.navigation': 'navigationSlot',
   'sidebar.footer': 'sidebarFooter',
-  'conversation.header': 'conversationExtensions',
-  'workspace.header': 'workspaceHeader',
+  'header.actions': 'headerInline',
+  'header.context': 'headerContext',
   'conversation.body': 'conversationSlot',
   'dialog.root': 'dialogSlot',
 } as const;
@@ -32,11 +32,7 @@ const setup = (ctx: Context) => {
   ctx.provide('miniDialogs', dialogs);
   for (const name of Object.keys(slots) as Array<keyof typeof slots>)
     ctx.effect(() =>
-      ctx.miniSlots.define(
-        name,
-        outlet(name),
-        name === 'conversation.body' || name === 'workspace.header' ? 'single' : 'list',
-      ),
+      ctx.miniSlots.define(name, outlet(name), name === 'conversation.body' ? 'single' : 'list'),
     );
 };
 export default {
@@ -65,7 +61,7 @@ function createAppFrame(
   <main class="main" id="main">
     <header class="topbar">
       <button id="sidebarOpen" class="icon-button" type="button" aria-label="Toggle navigation" aria-controls="sidebar" data-icon="menu"></button>
-      <div class="title-block" id="titleBlock"><strong id="conversationTitle">New conversation</strong><div class="header-meta" id="headerMeta"><div id="workspaceHeader" hidden></div><div id="headerActions" hidden><div id="conversationExtensions"></div><button id="headerMore" type="button" class="link-button" aria-label="More conversation controls" aria-expanded="false" aria-controls="headerOverflow" popovertarget="headerOverflow" data-icon="ellipsis" hidden></button><div id="headerOverflow" class="ui-header-popover" popover="auto" role="region" aria-label="More conversation controls"></div></div></div></div>
+      <div class="title-block" id="titleBlock"><strong id="conversationTitle">New conversation</strong><div class="header-meta" id="headerMeta"><div class="header-context" id="headerContext"></div><div id="headerActions" hidden><div id="headerInline"></div><button id="headerMore" type="button" class="link-button" aria-label="More conversation controls" aria-expanded="false" aria-controls="headerOverflow" popovertarget="headerOverflow" data-icon="ellipsis" hidden></button><div id="headerOverflow" class="ui-popover" popover="auto" role="region" aria-label="More conversation controls"></div></div></div></div>
       <button id="inspectorOpen" class="icon-button" type="button" aria-label="Open workspace panel" aria-controls="inspector" data-icon="files"></button>
     </header>
     <div id="conversationSlot"></div>
@@ -86,9 +82,9 @@ function createAppFrame(
   const { element } = scopedElements(root);
   const placeHeader = createHeaderOutlet(
     element('headerMeta'),
-    element('workspaceHeader'),
+    element('headerContext'),
     element('headerActions'),
-    element('conversationExtensions'),
+    element('headerInline'),
     element<'button'>('headerMore'),
     element('headerOverflow'),
     signal,
@@ -194,9 +190,6 @@ function createAppFrame(
     setTitle: (title: string) => {
       element('conversationTitle').textContent = title;
     },
-    showWorkspace: (show: boolean) => {
-      element('workspaceHeader').hidden = !show;
-    },
   };
   const ui = {
     closeDrawer: layout.closeDrawer,
@@ -207,7 +200,6 @@ function createAppFrame(
     pages,
     tabs,
     dialogs,
-    outlet: (name: keyof typeof slots) =>
-      name === 'conversation.header' ? placeHeader : element(slots[name]),
+    outlet: (name: keyof typeof slots) => (name === 'header.actions' ? placeHeader : element(slots[name])),
   };
 }

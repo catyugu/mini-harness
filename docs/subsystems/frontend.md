@@ -11,7 +11,7 @@ The Web interface is a separate Cordis graph. Server services publish a bootstra
 | Conversation selection, drafts, history and composer contracts | [Conversation](../../packages/conversation/README.md)   |
 | Configuration UI contributions                                 | [Settings](../../packages/settings/README.md)           |
 
-A feature contributes a page, renderer or command rather than replacing the application shell. A keyed renderer can replace presentation while keeping the underlying controller state. Mounting and disposal belong to the appropriate activation or view lifetime; do not retain a removed view's signal or listeners. Use shared primitives and tokens, and verify narrow and wide layouts.
+A feature contributes a page, renderer or command rather than replacing the application shell. A keyed renderer can replace presentation while keeping the underlying controller state. Mounting and disposal belong to the appropriate activation or view lifetime; do not retain a removed view's signal or listeners. Shared primitives and tokens are optional building blocks; features can supply arbitrary native DOM and their own styles. The startup stylesheet declares the reset, theme, primitives and layout layers. Unlayered feature styles override these defaults regardless of activation order. Verify narrow and wide layouts.
 
 ## Workspace resources
 

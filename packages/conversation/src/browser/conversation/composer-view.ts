@@ -1,7 +1,7 @@
 import type { Context } from 'mini-harness/cordis';
 import type { ConversationPermission } from '@mini-harness/sessions/identity';
 import type { ThinkingLevel } from '@mini-harness/llm/vocabulary';
-import { fromMarkup, required, scopedElements } from '@mini-harness/ui-primitives/primitives';
+import { bindPopover, fromMarkup, required, scopedElements } from '@mini-harness/ui-primitives/primitives';
 import { messageModes, type MessageMode } from '@mini-harness/sessions/queue';
 import { modeLabel } from './queue-view.ts';
 import { icon } from '@mini-harness/ui-primitives/icons';
@@ -21,17 +21,17 @@ export function mountComposer(ctx: Context, signal: AbortSignal) {
           <div class="composer-footer">
             <div id="composerExtensions" class="composer-tools"></div>
             <button id="permissionSelect" class="permission-select" type="button" aria-haspopup="listbox" aria-expanded="false" aria-controls="permissionResults"></button>
-            <div id="permissionPicker" class="model-picker permission-picker" popover="auto">
+            <div id="permissionPicker" class="ui-popover model-picker permission-picker" popover="auto">
               <div id="permissionResults" role="listbox" aria-label="Conversation permissions"></div>
             </div>
             <button id="modelSelect" class="model-select" type="button" aria-haspopup="listbox" aria-expanded="false" aria-controls="modelResults">Choose model</button>
-            <div id="modelPicker" class="model-picker" popover="auto">
+            <div id="modelPicker" class="ui-popover model-picker" popover="auto">
               <input id="modelSearch" type="search" role="combobox" aria-label="Search models" aria-controls="modelResults" aria-autocomplete="list" aria-expanded="true" placeholder="Search models">
               <div id="modelResults" role="listbox" aria-label="Configured models"></div>
               <p id="modelEmpty" class="hint" role="status" hidden></p>
             </div>
             <button id="thinkingLevel" class="model-select" type="button" aria-haspopup="listbox" aria-expanded="false" aria-controls="thinkingResults" hidden>Default</button>
-            <div id="thinkingPicker" class="model-picker thinking-picker" popover="auto"><div id="thinkingResults" role="listbox" aria-label="Thinking levels"></div></div>
+            <div id="thinkingPicker" class="ui-popover model-picker thinking-picker" popover="auto"><div id="thinkingResults" role="listbox" aria-label="Thinking levels"></div></div>
             <select id="messageMode" class="small-button" aria-label="Message sending mode" hidden></select>
             <button id="stop" type="button" aria-label="Stop response" hidden data-icon="stop"></button>
             <button id="send" type="submit" aria-label="Send" data-icon="send"></button>
@@ -127,23 +127,18 @@ export function mountComposer(ctx: Context, signal: AbortSignal) {
       }),
     );
   }
+  const positionPermission = bindPopover(permissionButton, permissionPopup, signal, {
+    width: 290,
+    prefer: 'above',
+  });
   permissionButton.onclick = () => {
     if (permissionPopup.matches(':popover-open')) permissionPopup.hidePopover();
     else {
       permissionPopup.showPopover();
-      const bounds = permissionButton.getBoundingClientRect();
-      const width = Math.min(290, innerWidth - 16);
-      permissionPopup.style.width = width + 'px';
-      permissionPopup.style.left = Math.max(8, Math.min(bounds.left, innerWidth - width - 8)) + 'px';
-      permissionPopup.style.top = Math.max(8, bounds.top - permissionPopup.offsetHeight - 6) + 'px';
+      positionPermission();
       permissionResults.querySelector<HTMLButtonElement>('[aria-selected="true"]')?.focus();
     }
   };
-  permissionPopup.addEventListener(
-    'toggle',
-    () => permissionButton.setAttribute('aria-expanded', String(permissionPopup.matches(':popover-open'))),
-    { signal },
-  );
 
   let previousCatalog: ReturnType<typeof ctx.miniModels.get> | undefined;
   let previousModel: ReturnType<typeof model.draft>['model'],

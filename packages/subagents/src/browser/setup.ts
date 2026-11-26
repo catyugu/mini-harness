@@ -1,7 +1,7 @@
 import type { Context } from 'mini-harness/cordis';
 import { isRunning, type RunInfo } from '@mini-harness/sessions/run-state';
 import { icon } from '@mini-harness/ui-primitives/icons';
-import { bindHeaderPopover, fromMarkup, required } from '@mini-harness/ui-primitives/primitives';
+import { bindPopover, fromMarkup, required } from '@mini-harness/ui-primitives/primitives';
 
 function runStatus(run?: RunInfo, waitingApproval = false) {
   if (waitingApproval && isRunning(run)) return 'Awaiting approval';
@@ -23,14 +23,14 @@ const setup = (ctx: Context) => {
   trail.className = 'parent-conversations';
   trail.setAttribute('aria-label', 'Parent conversations');
   const container = fromMarkup(`<div class="subagent-tasks" hidden>
-    <button type="button" class="link-button ui-header-trigger" aria-label="Subagents" aria-expanded="false" aria-controls="subagentTasks" popovertarget="subagentTasks"><span></span></button>
-    <div id="subagentTasks" class="ui-header-popover subagent-list" popover="auto" role="region" aria-label="Subagents"></div>
+    <button type="button" class="link-button ui-disclosure-trigger" aria-label="Subagents" aria-expanded="false" aria-controls="subagentTasks" popovertarget="subagentTasks"><span></span></button>
+    <div id="subagentTasks" class="ui-popover subagent-list" popover="auto" role="region" aria-label="Subagents"></div>
   </div>`);
   const toggle = required(container.querySelector<HTMLButtonElement>('button'));
   const count = required(toggle.querySelector('span'));
   toggle.append(icon('chevron'));
   const panel = required(container.querySelector<HTMLElement>('#subagentTasks'));
-  bindHeaderPopover(toggle, panel, signal);
+  bindPopover(toggle, panel, signal);
   let active: string | undefined;
   let clocks: { time: HTMLTimeElement; run: RunInfo }[] = [];
 
@@ -67,7 +67,7 @@ const setup = (ctx: Context) => {
     const children = parentId ? ctx.miniSessions.get().filter((child) => child.parentId === parentId) : [];
     const running = children.filter(({ run }) => isRunning(run)).length;
     count.textContent = children.length + (children.length === 1 ? ' subagent' : ' subagents');
-    toggle.dataset.running = String(running > 0);
+    toggle.dataset.tone = running > 0 ? 'info' : 'neutral';
     toggle.title = running + ' running · ' + (children.length - running) + ' idle or finished';
     container.hidden = !children.length;
     if (container.hidden && panel.matches(':popover-open')) panel.hidePopover();
@@ -76,11 +76,22 @@ const setup = (ctx: Context) => {
     panel.replaceChildren(
       ...children.map(({ id, title, run, waitingApproval }) => {
         const row = fromMarkup<HTMLButtonElement>(`<button type="button" class="subagent-row">
-          <span class="subagent-dot" aria-hidden="true"></span><span class="subagent-title"></span>
-          <span class="subagent-status"></span><time></time>
+          <span class="subagent-dot ui-status-dot" aria-hidden="true"></span><span class="subagent-title ui-truncate"></span>
+          <span class="subagent-status ui-meta"></span><time></time>
         </button>`);
         row.dataset.childSession = id;
         row.dataset.state = run?.state ?? 'idle';
+        const dot = required(row.querySelector<HTMLElement>('.subagent-dot'));
+        dot.dataset.tone =
+          run?.state === 'running' || run?.state === 'queued'
+            ? 'info'
+            : run?.state === 'completed'
+              ? 'success'
+              : run?.state === 'failed' || run?.state === 'interrupted'
+                ? 'danger'
+                : waitingApproval || run?.state === 'cancelled'
+                  ? 'warning'
+                  : 'neutral';
         row.setAttribute('aria-label', 'Open conversation: ' + title);
         row.title = title;
         required(row.querySelector('.subagent-title')).textContent = title;
@@ -101,8 +112,8 @@ const setup = (ctx: Context) => {
     if (focused) panel.querySelector<HTMLElement>('[data-child-session="' + focused + '"]')?.focus();
   }
 
-  ctx.effect(() => ctx.miniSlots.register('conversation.header', trail));
-  ctx.effect(() => ctx.miniSlots.register('conversation.header', container));
+  ctx.effect(() => ctx.miniSlots.register('header.context', trail));
+  ctx.effect(() => ctx.miniSlots.register('header.actions', container));
   services.onConversationChange(render, signal);
   render();
   const timer = setInterval(() => {

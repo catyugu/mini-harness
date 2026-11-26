@@ -1,14 +1,12 @@
-#workspaceHeader,
 #workspaceWelcome {
   min-width: 0;
   max-width: 100%;
 }
 .workspace-button {
-  display: flex;
-  align-items: center;
-  gap: 5px;
+  --gap: 5px;
   min-width: 0;
   max-width: 100%;
+  flex-shrink: 1;
   color: var(--muted);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -18,9 +16,7 @@
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
-  font:
-    11px/1.4 ui-monospace,
-    monospace;
+  font: var(--font-meta) / var(--line-ui) var(--font-sans);
 }
 .workspace-button span {
   display: inline-flex;
@@ -28,7 +24,8 @@
 }
 .workspace-button svg {
   width: 14px;
-  height: 14px;
+  height: var(--icon-sm);
+  flex: none;
 }
 .welcome .workspace-button {
   padding: 6px 9px;

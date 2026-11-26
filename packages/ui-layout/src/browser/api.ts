@@ -39,7 +39,7 @@ export interface PageContribution {
 declare module 'mini-harness/cordis' {
   interface Context {
     miniLayout: { closeDrawer(restore?: boolean): void };
-    miniHeader: { setTitle(title: string): void; showWorkspace(show: boolean): void };
+    miniHeader: { setTitle(title: string): void };
     miniPages: {
       open(id?: string): void;
       register(id: string, node: HTMLElement): () => void;
@@ -61,8 +61,8 @@ declare module '@mini-harness/ui-slots/browser/api' {
     'sidebar.actions': { kind: 'list' };
     'sidebar.navigation': { kind: 'list' };
     'sidebar.footer': { kind: 'list' };
-    'conversation.header': { kind: 'list' };
-    'workspace.header': { kind: 'single' };
+    'header.actions': { kind: 'list' };
+    'header.context': { kind: 'list' };
     'conversation.body': { kind: 'single' };
     'dialog.root': { kind: 'list' };
   }
