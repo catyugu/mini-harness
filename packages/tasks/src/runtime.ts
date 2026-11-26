@@ -95,7 +95,16 @@ export class TaskRuntime implements TaskPort {
 
   start<T>(options: TaskOptions<T>, execute: (context: TaskContext) => Promise<T>): TaskHandle<T> {
     if (this.closing) throw new Error('Task runtime is closing');
-    const { signal: lifetime, provider, pool, retain = true, commit, onEvent, project, ...metadata } = options;
+    const {
+      signal: lifetime,
+      provider,
+      pool,
+      retain = true,
+      commit,
+      onEvent,
+      project,
+      ...metadata
+    } = options;
     if (this.removing.has(options.owner)) throw new Error('Task owner has been removed');
     if (options.lane !== undefined && this.active(options.lane))
       throw new Error('Task lane is already occupied');

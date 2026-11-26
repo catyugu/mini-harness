@@ -4,16 +4,16 @@ A business-independent asynchronous scheduler. Start an arbitrary async function
 returned handle for inline execution, or keep the ID for independent work.
 
 ```ts
-const pool = tasks.pool(4)
+const pool = tasks.pool(4);
 const work = tasks.start(
   { owner: 'resource', lane: 'exclusive-operation', pool, project: (value: string) => value },
   async (task) => {
-    task.signal.throwIfAborted()
-    task.write('started')
-    return 'done'
+    task.signal.throwIfAborted();
+    task.write('started');
+    return 'done';
   },
-)
-await work.result
+);
+await work.result;
 ```
 
 An opaque owner groups resource lifetimes; `parentId` defines structured child cancellation and
