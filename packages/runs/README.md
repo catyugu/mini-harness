@@ -24,7 +24,7 @@ const receipt = ctx.harnessRuns.send(sessionId, {
 
 `stop` persists a pause before requesting cancellation. Subsequent explicit user input resumes delivery. Notifications accumulate in the Session Log through a pause. `cancelQueue` discards specified pending messages. `reviseAndStart` handles an explicit branch revision, which supplies its own leaf identity.
 
-`info`, `activity` and `watch` expose current state and replay. `retryInput` reads the failed Run's input. `compact` uses the same exclusive lane, so incoming messages remain durable through compaction. A stopped process cannot resume an old executor. Startup can start new work for pending Inbox messages in unpaused sessions.
+`info`, `activity` and `watch` expose current state and replay. `retryInput` reads the failed Run's input. `runTask` admits independent plugin work in the same exclusive lane and agent scope, so incoming messages remain durable until it settles. A stopped process cannot resume an old executor. Startup can start new work for pending Inbox messages in unpaused sessions.
 
 ## Independent tools
 

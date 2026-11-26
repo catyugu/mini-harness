@@ -7,8 +7,9 @@ import {
 } from '@mini-harness/llm/api';
 import { DomainError } from '@mini-harness/platform/errors';
 import type { RequestRecovery } from '@mini-harness/agent/events';
-import type { SessionContext, SessionLogPort } from '@mini-harness/sessions/log-api';
-import type { ContextOccupancy, ContextSettings, ContextState } from '../shared/state.ts';
+import type { ContextReplacement, SessionLogReader, SessionLogPort } from '@mini-harness/sessions/log-api';
+import type { ContextOccupancy, ContextSettings } from '../shared/state.ts';
+import { applyReplacements } from '@mini-harness/sessions/projection';
 import { checkpoint, splitPoint } from './compaction.ts';
 import { validateSettings } from './config.ts';
 import { TokenMeter } from './meter.ts';
@@ -22,10 +23,10 @@ export class ContextManagement {
   private readonly signatures = new WeakMap<SessionLogPort, Map<string, string | null>>();
   private readonly meter = new TokenMeter();
   private readonly prepared = new WeakMap<
-    SessionLogPort,
+    Pick<SessionLogReader, 'entries'>,
     { occupancy: ContextOccupancy; adapter: LlmAdapter; leafId: string | null; requestId?: string }
   >();
-  private readonly operations = new Map<string, NonNullable<ContextState['compacting']>>();
+  private readonly operations = new Map<string, 'automatic' | 'recovery'>();
 
   constructor(
     private readonly settings: () => ContextSettings,
@@ -41,16 +42,14 @@ export class ContextManagement {
     return { compacting: this.operations.get(id) };
   }
 
-  async measure(ctx: Context, request: LlmRequest, projection?: SessionContext, count = true) {
-    const adapter = ctx.get('harnessLlm')?.select?.(request.model);
-    const occupancy = await this.meter.measure(
-      request,
-      ctx.get('harnessModels')?.capabilities(request.model),
-      adapter,
-      projection,
-      count,
-    );
-    return occupancy;
+  measure(ctx: Context, request: LlmRequest, count = true) {
+    return this.meter.measure(request, ctx.harnessModels.capabilities(request.model), ctx.harnessLlm.select(request.model), count);
+  }
+
+  occupancy(ctx: Context, log: SessionLogReader, request: LlmRequest, leafId: string | null) {
+    const measured = this.prepared.get(log);
+    if (measured?.leafId === leafId && measured.occupancy.model.provider === request.model.provider && measured.occupancy.model.id === request.model.id) return measured.occupancy;
+    return this.measure(ctx, request, false);
   }
 
   observe(log: SessionLogPort, requestId: string, usage: NativeUsage) {
@@ -102,7 +101,7 @@ export class ContextManagement {
     signal.throwIfAborted();
     if (repair && repair.attempt > 3) fail('The model still rejects the input after three repairs');
     let projection = log.context();
-    let occupancy = await this.measure(ctx, request, projection);
+    let occupancy = await this.measure(ctx, request);
     const finish = () => {
       const adapter = ctx.harnessLlm.select(request.model);
       if (adapter) this.prepared.set(log, { occupancy, adapter, leafId: log.context().leafId });
@@ -117,22 +116,19 @@ export class ContextManagement {
     const pruned = prune(ctx, log, projection, signatures, {
       offload: pressure || manual || repair !== undefined,
       forceImages: repair?.kind === 'image-limit',
-      toolTokens: Math.max(256, Math.min(4096, Math.floor((budget ?? 64_000) * (repair ? 0.03 : 0.09)))),
+      toolTokens: Math.max(256, Math.min(4096, Math.floor((budget ?? occupancy.total) * config.retainRatio))),
     });
     if (pruned) {
       projection = log.context();
       request = await rebuild(projection.contextMessages);
-      occupancy = await this.measure(ctx, request, projection);
+      occupancy = await this.measure(ctx, request);
     }
     if (repair?.kind === 'image-limit') {
       if (!pruned) fail('No further images can be offloaded');
       return finish();
     }
 
-    const target = Math.floor(
-      (budget ?? occupancy.total) *
-        (repair ? Math.min(config.targetRatio, 0.5 / repair.attempt) : config.targetRatio),
-    );
+    const target = Math.floor((repair || manual ? Math.min(budget ?? occupancy.total, occupancy.total) : budget ?? occupancy.total) * config.targetRatio);
     const needsSummary =
       manual ||
       (config.autoCompact &&
@@ -144,58 +140,53 @@ export class ContextManagement {
     }
 
     let reduced = false;
-    this.operations.set(id, mode);
+    if (mode !== 'manual') this.operations.set(id, mode);
     this.notify(id);
     try {
-      for (let attempt = 0; attempt < 3; attempt++) {
-        const minimum = (budget ?? occupancy.messages) * config.retainRatio;
-        const retain = Math.max(
-          1,
-          Math.floor(
-            manual && occupancy.messages <= minimum ? occupancy.messages * config.retainRatio : minimum,
-          ),
-        );
+      do {
+        const minimum = Math.floor((budget ?? occupancy.messages) * config.retainRatio);
+        const retain = Math.max(1, Math.min(minimum, Math.floor(occupancy.messages * config.retainRatio)));
+        const { contextMessages, contextEntryIds } = projection;
+        const latestUser = contextMessages.reduce((latest, message, index) =>
+          message.role === 'user' && log.entry(contextEntryIds[index])?.type === 'message' ? index : latest, -1);
         const force = repair || (budget !== undefined && occupancy.total > budget);
-        const checkpointAtStart = log
-          .branch(projection.leafId)
-          .some(
-            (entry) =>
-              entry.id === projection.contextEntryIds[0] &&
-              (entry.type === 'context-replace' || entry.type === 'compaction'),
-          );
-        const cut = splitPoint(
-          projection,
-          this.meter,
-          retain,
-          checkpointAtStart,
-          force ? Math.max(0, (budget ?? occupancy.total) - occupancy.system - occupancy.tools) : undefined,
-        );
-        if (!cut) {
+        let cut = splitPoint(projection, this.meter, retain, force ? Math.max(0, target - occupancy.system - occupancy.tools) : undefined);
+        if (cut === latestUser + 1) cut = latestUser;
+        const selected = contextMessages.slice(0, cut).filter((_, index) => index !== latestUser);
+        const source = log.entry(contextEntryIds[0]);
+        if (!selected.length || (selected.length === 1 && source?.type === 'context-replace' && cut === 1)) {
           if (reduced || (pruned && (manual || repair))) break;
           fail('Nothing to compact within the recent-context budget');
         }
-        const summaryBudget = Math.min(
-          4096,
-          Math.max(96, target - occupancy.system - occupancy.tools - retain),
-        );
+        const retained = contextMessages.slice(cut).reduce((sum, message) => sum + this.meter.message(message), 0)
+          + (latestUser >= 0 && latestUser < cut ? this.meter.message(contextMessages[latestUser]) : 0);
+        const summaryBudget = Math.floor(Math.min(occupancy.messages, target - occupancy.system - occupancy.tools - retained));
+        if (summaryBudget <= 0) {
+          if (reduced || (pruned && manual)) break;
+          fail('There is no output budget for a continuation checkpoint');
+        }
         const summary = await checkpoint(
           ctx,
           log,
           request,
-          projection.contextMessages.slice(0, cut),
+          contextMessages.slice(0, cut),
           config,
           summaryBudget,
           (draft) => this.measure(ctx, draft),
           runId,
         );
-        const candidate = {
-          ...projection,
-          contextMessages: [summary, ...projection.contextMessages.slice(cut)],
-          contextRevisions: ['', ...projection.contextRevisions.slice(cut)],
-        };
+        // Preserve the latest submitted message and its source identity even in a long single turn.
+        const replacements: ContextReplacement[] = latestUser >= 0 && latestUser < cut
+          ? [
+            { start: latestUser + 1, deleteCount: cut - latestUser - 1, insert: [summary] },
+            ...(latestUser ? [{ start: 0, deleteCount: latestUser, insert: [] }] : []),
+          ]
+          : [{ start: 0, deleteCount: cut, insert: [summary] }];
+        const candidate = structuredClone(projection);
+        applyReplacements(candidate, replacements, '');
         const next = await rebuild(candidate.contextMessages);
         validateRequestSnapshot(next);
-        const measured = await this.measure(ctx, next, candidate);
+        const measured = await this.measure(ctx, next);
         signal.throwIfAborted();
         if (measured.total >= occupancy.total || measured.messages >= occupancy.messages) {
           if (reduced) break;
@@ -204,7 +195,7 @@ export class ContextManagement {
         log.append(
           {
             type: 'context-replace',
-            replacements: [{ start: 0, deleteCount: cut, insert: [summary] }],
+            replacements,
           },
           projection.leafId,
         );
@@ -212,13 +203,12 @@ export class ContextManagement {
         request = next;
         occupancy = measured;
         reduced = true;
-        if (occupancy.total <= target) break;
-      }
+      } while (occupancy.total > target);
     } catch (error) {
       signal.throwIfAborted();
-      const issue = error instanceof Error ? error.message : String(error);
-      if (manual) fail(issue);
-      if ((repair && !pruned && !reduced) || (budget !== undefined && occupancy.total > budget)) fail(issue);
+      if (!(error instanceof DomainError)) throw error;
+      if (manual || repair || (budget !== undefined && occupancy.total > budget)) fail(error.message);
+      ctx.logger.warn(error.message);
     } finally {
       this.operations.delete(id);
       this.notify(id);

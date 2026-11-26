@@ -13,7 +13,6 @@ import {
   type NativeToolMessage,
 } from '@mini-harness/llm/api';
 import type {
-  HistoricalContextEvent,
   InboxItem,
   MessagePatch,
   SessionContext,
@@ -35,6 +34,10 @@ import { RecordLog, digest, entryId } from './record-log.ts';
 
 type StoredEntry =
   | SessionEntry
+  | (Pick<SessionEntry, 'version' | 'seq' | 'id' | 'parentId' | 'timestamp'> & (
+      | { type: 'compaction'; summary: string; keepFromId: string | null }
+      | { type: 'context-edit'; targetId: string; replacement: NativeMessage['content'] | null }
+    ))
   | (Omit<Extract<SessionEntry, { type: 'inbox-enqueued' }>, 'item'> & {
       item: Omit<InboxItem, 'mode'> & { mode: 'followUp' };
     })
@@ -64,7 +67,7 @@ function messagePatch(base: NativeMessage[], actual: NativeMessage[]): MessagePa
 }
 
 /** Session semantics layered over the generic durable record log. */
-export class SessionLog extends RecordLog<SessionEvent | HistoricalContextEvent> implements SessionLogPort {
+export class SessionLog extends RecordLog<SessionEvent> implements SessionLogPort {
   private readonly schemas = new Map<string, ToolSchema[]>();
   private readonly settings = new Map<string, unknown>();
   private paused = false;
@@ -80,7 +83,7 @@ export class SessionLog extends RecordLog<SessionEvent | HistoricalContextEvent>
   readonly port: SessionLogPort = {
     sessionId: this.sessionId,
     entries: (after) => this.entries(after),
-    hasAttachments: (id) => this.hasAttachments(id),
+    entry: (id) => this.entry(id),
     originalMessage: (id, raw) => this.originalMessage(id, raw),
     setting: (owner) => this.setting(owner),
     inbox: () => this.inbox(),
@@ -111,7 +114,9 @@ export class SessionLog extends RecordLog<SessionEvent | HistoricalContextEvent>
   }
 
   protected decodeRecord(record: Record<string, unknown>): SessionEntry {
-    const entry = storedEntry(record as StoredEntry);
+    const stored = record as StoredEntry;
+    if (stored.type === 'compaction' || stored.type === 'context-edit') return this.normalizeContextRecord(stored);
+    const entry = storedEntry(stored);
     if (
       entry.type === 'message' &&
       entry.message.role === 'toolResult' &&
@@ -122,6 +127,32 @@ export class SessionLog extends RecordLog<SessionEvent | HistoricalContextEvent>
       entry.message = { ...entry.message, outcome: 'denied', details };
     }
     return entry;
+  }
+
+  /** Convert old storage envelopes at ingestion; projection and validation use only replacements. */
+  private normalizeContextRecord(entry: Extract<StoredEntry, { type: 'compaction' | 'context-edit' }>): SessionEntry {
+    const { version, seq, id, parentId, timestamp } = entry;
+    const identity = { version, seq, id, parentId, timestamp };
+    const state = this.context(parentId);
+    if (entry.type === 'compaction') {
+      if (typeof entry.summary !== 'string' || (entry.keepFromId !== null &&
+        !this.branchEntries(parentId).some((source) => source.id === entry.keepFromId && source.type === 'message')))
+        throw new Error('Invalid historical compaction');
+      if (!state.contextMessages.length) return { ...identity, type: 'branch' };
+      const keep = entry.keepFromId === null ? -1 : state.contextEntryIds.indexOf(entry.keepFromId);
+      const deleteCount = keep < 0 ? state.contextMessages.length : keep;
+      return { ...identity, type: 'context-replace', replacements: [{ start: 0, deleteCount, insert: [
+        { role: 'user', content: 'Summary of earlier conversation:\n' + entry.summary, timestamp: Date.parse(timestamp) },
+      ] }] };
+    }
+    const source = this.byId.get(entry.targetId);
+    if (source?.type !== 'message' || !this.branchEntries(parentId).some(({ id }) => id === entry.targetId))
+      throw new Error('Invalid historical context edit');
+    const start = state.contextEntryIds.indexOf(entry.targetId);
+    if (start < 0) return { ...identity, type: 'branch' };
+    const message = state.contextMessages[start];
+    const insert = entry.replacement === null ? [] : [{ ...message, content: entry.replacement } as NativeMessage];
+    return { ...identity, type: 'context-replace', replacements: [{ start, deleteCount: 1, insert, preserveSource: insert.length ? true : undefined }] };
   }
 
   protected advancesBranch(entry: SessionEntry) {
@@ -166,14 +197,6 @@ export class SessionLog extends RecordLog<SessionEvent | HistoricalContextEvent>
       throw new Error('Session run belongs to another conversation');
     if (entry.type === 'task' && entry.task.owner !== 'session:' + this.sessionId)
       throw new Error('Task belongs to another conversation');
-    if (
-      entry.type === 'compaction' &&
-      entry.keepFromId !== null &&
-      !this.branchEntries(entry.parentId).some(
-        (item) => item.id === entry.keepFromId && item.type === 'message',
-      )
-    )
-      throw new Error('Compaction boundary is not a message on the selected branch');
     if (entry.type === 'context-replace') {
       const state = this.context(entry.parentId);
       applyReplacements(state, entry.replacements, entry.id);
@@ -183,15 +206,6 @@ export class SessionLog extends RecordLog<SessionEvent | HistoricalContextEvent>
     }
     if (entry.type === 'model-attempt' && this.byId.get(entry.requestId)?.type !== 'model-request')
       throw new Error('Model attempt references a missing request');
-    if (entry.type === 'context-edit') {
-      const target = this.branchEntries(entry.parentId).find(
-        (item) => item.id === entry.targetId && item.type === 'message',
-      );
-      if (target?.type !== 'message')
-        throw new Error('Context edit target is not a message on the selected branch');
-      if (entry.replacement !== null)
-        validateNativeMessage({ ...target.message, content: entry.replacement } as typeof target.message);
-    }
   }
 
   protected recordAdded(entry: SessionEntry) {
@@ -202,7 +216,10 @@ export class SessionLog extends RecordLog<SessionEvent | HistoricalContextEvent>
       else this.cachedContext = undefined;
     }
     if (!operational(entry) || run) this.cachedProjection = undefined;
-    if (entry.type === 'session-setting') this.settings.set(entry.owner, entry.value);
+    if (entry.type === 'session-setting') {
+      if (entry.value == null) this.settings.delete(entry.owner);
+      else this.settings.set(entry.owner, entry.value);
+    }
     if (run) this.runEvents.push({ seq: entry.seq, parentId: entry.parentId, run });
     if (entry.type === 'tool-schema') this.schemas.set(entry.hash, entry.tools);
     if (entry.type === 'inbox-paused') this.paused = true;
@@ -248,11 +265,6 @@ export class SessionLog extends RecordLog<SessionEvent | HistoricalContextEvent>
     const raw = this.byId.get(id);
     return raw?.type === 'tool-execution' ? raw.result : undefined;
   };
-
-  hasAttachments(id: string) {
-    const entry = this.byId.get(id);
-    return entry?.type === 'message' && Boolean(entry.presentation?.attachments.length);
-  }
 
   originalMessage(id: string, raw = false) {
     const entry = this.byId.get(id);
@@ -341,7 +353,7 @@ export class SessionLog extends RecordLog<SessionEvent | HistoricalContextEvent>
     }
     if (
       cursor !== recovery.leaf ||
-      tail.some(({ type }) => type === 'context-replace' || type === 'compaction' || type === 'context-edit')
+      tail.some(({ type }) => type === 'context-replace')
     ) {
       recovery.checker = new RequestMessages();
       recovery.checker.append(this.contextAt(leaf).contextMessages);
@@ -439,7 +451,7 @@ function queueEntry(item: InboxItem): QueueEntry {
   };
 }
 
-function validateEvent(event: SessionEvent | HistoricalContextEvent) {
+function validateEvent(event: SessionEvent) {
   switch (event.type) {
     case 'message':
       validateNativeMessage(event.message);
@@ -515,19 +527,6 @@ function validateEvent(event: SessionEvent | HistoricalContextEvent) {
       return;
     case 'session-setting':
       if (!pluginIdPattern.test(event.owner)) throw new Error('Invalid session setting owner');
-      return;
-    case 'compaction':
-      if (typeof event.summary !== 'string' || (event.keepFromId !== null && !entryId.test(event.keepFromId)))
-        throw new Error('Invalid session compaction');
-      return;
-    case 'context-edit':
-      if (
-        !entryId.test(event.targetId) ||
-        (event.replacement !== null &&
-          typeof event.replacement !== 'string' &&
-          !Array.isArray(event.replacement))
-      )
-        throw new Error('Invalid context edit');
       return;
     case 'inbox-enqueued':
       if (
@@ -639,7 +638,7 @@ function storedEntry(entry: StoredEntry): SessionEntry {
   };
 }
 
-function operational(entry: SessionEvent | HistoricalContextEvent) {
+function operational(entry: SessionEvent) {
   return (
     entry.type === 'run' ||
     entry.type === 'task' ||

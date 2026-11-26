@@ -6,7 +6,6 @@ import type {
   NativeUsage,
 } from '@mini-harness/llm/api';
 import type { ProviderModel } from '@mini-harness/models/catalog';
-import type { SessionContext } from '@mini-harness/sessions/log-api';
 import type { ContextOccupancy } from '../shared/state.ts';
 
 export function textTokens(text: string) {
@@ -50,7 +49,7 @@ export class TokenMeter {
   private readonly costs = new WeakMap<NativeMessage, number>();
   private readonly calibrations = new WeakMap<LlmAdapter, Map<string, number>>();
 
-  message(message: NativeMessage, _revision?: string): number {
+  message(message: NativeMessage): number {
     let tokens = this.costs.get(message);
     if (tokens === undefined) {
       tokens = messageTokens(message);
@@ -63,7 +62,6 @@ export class TokenMeter {
     request: LlmRequest,
     capabilities?: ProviderModel,
     adapter?: LlmAdapter | null,
-    projection?: SessionContext,
     count = true,
   ): Promise<ContextOccupancy> {
     let measured;
@@ -81,16 +79,11 @@ export class TokenMeter {
     let counts;
     if (exact && measured) counts = measured;
     else {
-      const revisions =
-        projection &&
-        new Map(
-          projection.contextMessages.map((message, index) => [message, projection.contextRevisions[index]]),
-        );
       counts = {
         system: Math.ceil(textTokens(request.systemPrompt) * scale),
         tools: request.tools?.length ? Math.ceil(textTokens(JSON.stringify(request.tools)) * scale) : 0,
         messages: Math.ceil(
-          request.messages.reduce((sum, message) => sum + this.message(message, revisions?.get(message)), 0) *
+          request.messages.reduce((sum, message) => sum + this.message(message), 0) *
             scale,
         ),
       };

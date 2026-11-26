@@ -95,12 +95,7 @@ export type SessionEvent<Data = unknown> =
   | ({ type: 'task'; run?: RunDetails } & TaskHistoryRecord)
   | { type: 'branch' };
 
-// Historical logs still decode through the same replacement projection.
-export type HistoricalContextEvent =
-  | { type: 'compaction'; summary: string; keepFromId: string | null }
-  | { type: 'context-edit'; targetId: string; replacement: NativeMessage['content'] | null };
-
-export type SessionEntry<Data = unknown> = LogEntry<SessionEvent<Data> | HistoricalContextEvent>;
+export type SessionEntry<Data = unknown> = LogEntry<SessionEvent<Data>>;
 
 /** Historical run envelopes remain readable; new writes have one canonical task lifecycle. */
 export function runFromEntry(sessionId: string, entry: SessionEntry): RunInfo | undefined {
@@ -128,7 +123,8 @@ export interface SessionProjection extends SessionContext {
 export interface SessionLogPort {
   readonly sessionId: string;
   entries(after?: number): SessionEntry[];
-  hasAttachments(id: string): boolean;
+  /** Read the original durable record by identity. */
+  entry(id: string): SessionEntry | undefined;
   /** Fetch the pre-pruning message or, for tool results, the raw execution before transforms. */
   originalMessage(id: string, raw?: boolean): NativeMessage | undefined;
   setting(owner: string): unknown;

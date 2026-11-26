@@ -1,11 +1,9 @@
 import { createHash } from 'node:crypto';
-import type { ImagePart, NativeMessage, NativeToolMessage, NativeUserMessage } from '@mini-harness/llm/api';
+import type { NativeMessage, NativeToolMessage, NativeUserMessage } from '@mini-harness/llm/api';
 import type { Context } from 'mini-harness/cordis';
-import type {} from '@mini-harness/tools/api';
 import type { ContextReplacement, SessionContext, SessionLogPort } from '@mini-harness/sessions/log-api';
 import { messageTokens } from './meter.ts';
 
-const attachment = /\n\nAttached file: "(?:[^"\\]|\\.)*"\n/;
 const chunks = (content: NativeToolMessage['content'] | NativeUserMessage['content']) =>
   typeof content === 'string' ? [{ type: 'text' as const, text: content }] : content;
 
@@ -41,7 +39,7 @@ export function prune(
   );
   const originals = new Map<string, string>();
   let latestUser = contextMessages.length - 1;
-  while (latestUser >= 0 && contextMessages[latestUser].role !== 'user') latestUser--;
+  while (latestUser >= 0 && (contextMessages[latestUser].role !== 'user' || log.entry(contextEntryIds[latestUser])?.type !== 'message')) latestUser--;
   let latestExchange = contextMessages.length - 1;
   while (latestExchange >= 0) {
     const message = contextMessages[latestExchange];
@@ -59,6 +57,8 @@ export function prune(
     if (message.role === 'assistant') continue;
     const id = contextEntryIds[index];
     const parts = chunks(message.content);
+    const fresh = contextRevisions[index] === id;
+    const imageReferences: { type: 'text'; text: string }[] = [];
     const content = parts.flatMap((part, position) => {
       if (part.type === 'image') {
         const current = imageIndex++;
@@ -67,23 +67,19 @@ export function prune(
             ? current < Math.max(1, Math.ceil(imageCount / 2))
             : options.offload && index < (message.role === 'user' ? latestUser : latestExchange)
         )
-          return [{ type: 'text' as const, text: reference(id, 'Image ' + (position + 1) + ' offloaded') }];
+          {
+            const entry = { type: 'text' as const, text: reference(id, 'Image ' + (position + 1) + ' offloaded') };
+            imageReferences.push(entry);
+            return [entry];
+          }
       }
-      if (
-        part.type === 'text' &&
-        message.role === 'user' &&
-        index < latestUser &&
-        options.offload &&
-        log.hasAttachments(id)
-      ) {
-        const position = part.text.search(attachment);
-        if (position >= 0)
-          return [
-            {
-              type: 'text' as const,
-              text: part.text.slice(0, position) + '\n' + reference(id, 'Inlined attachments offloaded'),
-            },
-          ];
+      if (part.type === 'text' && message.role === 'user' && index < latestUser && options.offload && fresh) {
+        const entry = log.entry(id);
+        if (entry?.type === 'message' && entry.presentation?.attachments.some((file) => !file.mimeType.startsWith('image/'))) {
+          const text = entry.presentation.userText;
+          if (part.text.startsWith(text) && part.text.length > text.length)
+            return [{ type: 'text' as const, text: text + '\n' + reference(id, 'Inlined attachments offloaded') }];
+        }
       }
       return [part];
     });
@@ -91,7 +87,6 @@ export function prune(
     if (message.role === 'toolResult') {
       const tool = tools.get(message.toolName);
       // A replacement revision can never become the original for a second text prune.
-      const fresh = contextRevisions[index] === id;
       let duplicate: string | undefined;
       if (!message.isError && tool?.tags?.includes('readOnly')) {
         let key = signatures.get(id);
@@ -132,11 +127,8 @@ export function prune(
               type: 'text',
               text: [excerpt, reference(id, source), ...outputPaths].filter(Boolean).join('\n'),
             },
-            ...content.filter((part): part is ImagePart => part.type === 'image'),
-            ...content.filter(
-              ({ type, ...part }) =>
-                type === 'text' && 'text' in part && /^\[Image \d+ offloaded\./.test(part.text),
-            ),
+            ...content.filter((part) => part.type === 'image'),
+            ...imageReferences,
           ],
         };
       }

@@ -18,6 +18,7 @@
     "@mini-harness/runs": "workspace:*",
     "@mini-harness/sessions": "workspace:*",
     "@mini-harness/settings": "workspace:*",
+    "@mini-harness/tasks": "workspace:*",
     "@mini-harness/tools": "workspace:*",
     "@mini-harness/transport": "workspace:*",
     "@mini-harness/ui-primitives": "workspace:*",

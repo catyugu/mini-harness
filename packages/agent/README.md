@@ -33,6 +33,8 @@ The executor presents tool schemas, interprets the assistant response and delive
 | `agent/setup`         | Contribute capabilities to the run Context before execution.         |
 | `agent/prepare-input` | Transform prepared user content before acceptance.                   |
 | `agent/model-request` | Transform model-visible content before a request.                    |
+| `agent/prepare-request` | Prepare the final request or recover it after a model input error. |
+| `agent/request-attempt` | Observe a recorded request attempt by session and request ID. |
 | `agent/model-retry`   | Choose whether to retry a failed request before output has streamed. |
 | `agent/tool-result`   | Transform accepted tool content after raw execution is persisted.    |
 

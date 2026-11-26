@@ -1,7 +1,7 @@
 # Native session storage
 
 mini-harness owns conversation history, branching, run state, queued input and
-compaction. The model adapter receives a projection of this history and does not
+context replacements. The model adapter receives a projection of this history and does not
 open or write session files.
 
 ## Files and ownership
@@ -88,7 +88,7 @@ Pending input is read separately through `SessionLogPort.inbox()`; `queue()` als
 
 A `context-replace` event applies one or more ordered splices to the parent branch's effective model messages as one durable write. A splice can preserve source identities for one-for-one edits. Full history continues to use the original records. The effective context is updated incrementally as the branch advances and can be read without building the display timeline.
 
-Model attempts record timing and provider-reported usage separately from assistant messages. Conversation settings store explicit overrides by plugin owner without advancing the branch.
+Model attempts record timing and provider-reported usage separately from assistant messages. Conversation settings store plugin-owned values without advancing the branch; null removes a setting. Historical context-edit and compaction envelopes normalize into generic replacement records when loaded.
 
 User presentation is stored separately from the accepted model input. Preparation can
 change the model-visible content while the interface keeps the submitted text and

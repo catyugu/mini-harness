@@ -106,7 +106,8 @@ export function applyReplacements(
       !Number.isSafeInteger(start) ||
       !Number.isSafeInteger(deleteCount) ||
       start < 0 ||
-      deleteCount < 1 ||
+      deleteCount < 0 ||
+      (deleteCount === 0 && insert.length === 0) ||
       start + deleteCount > end ||
       !Array.isArray(insert) ||
       (preserveSource && insert.length !== deleteCount)
@@ -134,33 +135,6 @@ export function projectContextEntry(state: SessionContext, entry: SessionEntry, 
     return;
   }
   if (entry.type === 'context-replace') applyReplacements(state, entry.replacements, entry.id);
-  if (entry.type === 'compaction' && state.contextMessages.length) {
-    const keep = entry.keepFromId === null ? -1 : state.contextEntryIds.indexOf(entry.keepFromId);
-    const deleteCount = keep < 0 ? state.contextMessages.length : keep;
-    const summary: NativeMessage = {
-      role: 'user',
-      content: 'Summary of earlier conversation:\n' + entry.summary,
-      timestamp: Date.parse(entry.timestamp),
-    };
-    if (deleteCount) applyReplacements(state, [{ start: 0, deleteCount, insert: [summary] }], entry.id);
-    else {
-      state.contextMessages.unshift(summary);
-      state.contextEntryIds.unshift(entry.id);
-      state.contextRevisions.unshift(entry.id);
-    }
-  }
-  if (entry.type === 'context-edit') {
-    const start = state.contextEntryIds.indexOf(entry.targetId);
-    if (start < 0) return;
-    const original = state.contextMessages[start];
-    const insert =
-      entry.replacement === null ? [] : [{ ...original, content: entry.replacement } as NativeMessage];
-    applyReplacements(
-      state,
-      [{ start, deleteCount: 1, insert, preserveSource: insert.length ? true : undefined }],
-      entry.id,
-    );
-  }
 }
 
 /** Read projections are pure and never write synthetic history back into the transcript. */

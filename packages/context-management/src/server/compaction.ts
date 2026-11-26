@@ -6,6 +6,7 @@ import {
 } from '@mini-harness/llm/api';
 import type { Context } from 'mini-harness/cordis';
 import { requestModel } from '@mini-harness/agent/model-request';
+import { DomainError } from '@mini-harness/platform/errors';
 import { scopeTarget } from '@mini-harness/plugin-api/scopes';
 import { prepareModelMessages, selectModel } from '@mini-harness/models/selection';
 import type {} from '@mini-harness/agent/events';
@@ -42,10 +43,9 @@ export function splitPoint(
   projection: SessionContext,
   meter: TokenMeter,
   retain: number,
-  checkpointAtStart: boolean,
   available?: number,
 ) {
-  const { contextMessages, contextRevisions } = projection;
+  const { contextMessages } = projection;
   const blocks = groups(contextMessages);
   let index = contextMessages.length;
   let kept = 0;
@@ -53,14 +53,10 @@ export function splitPoint(
   for (let i = blocks.length - 1; i >= 0; i--) {
     const block = blocks[i];
     index -= block.length;
-    kept += block.reduce(
-      (sum, message, offset) => sum + meter.message(message, contextRevisions[index + offset]),
-      0,
-    );
+    kept += block.reduce((sum, message) => sum + meter.message(message), 0);
     if (kept >= retain) break;
   }
-  if (available !== undefined && kept >= available) return contextMessages.length;
-  if (index === 1 && checkpointAtStart) return 0;
+  if (available !== undefined && (kept >= available || index === 0)) return contextMessages.length;
   return index;
 }
 
@@ -105,7 +101,7 @@ export async function checkpoint(
   const { model } = selectModel(models, { explicit: settings.summaryModel ?? request.model });
   const capability = models.capabilities(model);
   const maxTokens = Math.floor(Math.min(capability?.maxTokens ?? desiredOutput, desiredOutput));
-  if (maxTokens <= 0) throw new Error('There is no output budget for a continuation checkpoint');
+  if (maxTokens <= 0) throw new DomainError('unavailable', 'There is no output budget for a continuation checkpoint');
   const base = {
     ...request,
     model,
@@ -157,7 +153,7 @@ export async function checkpoint(
       answer.content.some(({ type }) => type === 'toolCall') ||
       !summary
     )
-      throw new Error(answer.errorMessage ?? 'Summary model returned an incomplete continuation checkpoint');
+      throw new DomainError('unavailable', answer.errorMessage ?? 'Summary model returned an incomplete continuation checkpoint');
     prior = user(title + summary);
   }
 
@@ -182,7 +178,7 @@ export async function checkpoint(
         low = size + 1;
       } else high = size - 1;
     }
-    if (!best) throw new Error('Summary model has too little input capacity');
+    if (!best) throw new DomainError('unavailable', 'Summary model has too little input capacity');
     await summarize(best);
     from = end;
   }

@@ -192,7 +192,10 @@ test('session overrides inherit defaults, reject invalid ratios and accept unstr
   }
   assert.ok(readFileSync(copy, 'utf8').includes('model-attempt'));
   assert.equal((await request(path + '/context', 'PUT', null)).status, 200);
-  assert.deepEqual((await request(path + '/context')).body.custom, null);
+  const inherited = (await request(path + '/context')).body;
+  assert.equal(inherited.custom, null);
+  assert.equal(inherited.settings.triggerRatio, 0.9);
+  assert.equal(sessionLog.setting('context-management'), undefined);
 });
 
 test('switching to a smaller window uses the configured summary model and segments its input', async (t) => {

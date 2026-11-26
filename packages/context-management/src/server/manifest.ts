@@ -3,6 +3,7 @@ import type { PluginInfo } from '@mini-harness/plugin-api/descriptor';
 import type { LlmRequest } from '@mini-harness/llm/api';
 import type {} from '@mini-harness/agent/events';
 import type {} from '@mini-harness/runs/api';
+import type {} from '@mini-harness/tasks/api';
 import { prepareModelMessages, selectModel } from '@mini-harness/models/selection';
 import type { SessionLogPort } from '@mini-harness/sessions/log-api';
 import { defineTool } from '@mini-harness/tools/api';
@@ -69,7 +70,7 @@ function setup(ctx: Context) {
               });
               const latest = log
                 .entries()
-                .findLast((entry) => entry.type === 'model-request' && !entry.request.purpose);
+                .reverse().find((entry) => entry.type === 'model-request' && !entry.request.purpose);
               const previous = latest && log.requestDefinition(latest.id);
               const rebuild = async (messages: LlmRequest['messages']): Promise<LlmRequest> => ({
                 ...previous,
@@ -118,12 +119,14 @@ function setup(ctx: Context) {
             return {
               settings: manager.configuration(log.setting(owner)),
               stats,
-              occupancy: request && manager.measure(scoped, request, exact ? undefined : projection, false),
+              occupancy: request && manager.occupancy(scoped, log, request, projection.leafId),
             };
           },
           true,
         );
-        const status = manager.status(id);
+        const active = ctx.get('harnessRuns')?.current(id);
+        const manual = active && ctx.harnessTasks.get(active.id)?.type === 'compaction';
+        const status = manual ? { compacting: 'manual' as const } : manager.status(id);
         const settings = result?.settings ?? manager.configuration(undefined);
         return {
           ...settings,
@@ -215,6 +218,7 @@ const plugin: Plugin.Object = {
     'harnessSessions',
     'harnessModels',
     'harnessLlm',
+    'harnessTasks',
     'harnessTools',
     'harnessChanges',
     'harnessProfileConfig',
