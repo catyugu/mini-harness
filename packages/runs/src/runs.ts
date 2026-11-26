@@ -13,7 +13,8 @@ import { defaultMessageMode, messageModes } from '@mini-harness/sessions/queue';
 import type { Attachment, InputSource } from '@mini-harness/input/message';
 import type { CapabilityObservation } from '@mini-harness/plugin-api/observations';
 import { Inbox } from './inbox.ts';
-import { SessionRun } from './session-run.ts';
+import { assertImageInput } from '@mini-harness/models/selection';
+import { selectInputModel, SessionRun } from './session-run.ts';
 import type { StreamEvent, RunEvent } from './stream.ts';
 import { isRunning, projectRun, type RunDetails, type RunInfo } from '@mini-harness/sessions/run-state';
 import { runFromEntry } from '@mini-harness/sessions/log-api';
@@ -234,15 +235,38 @@ export class Runs implements RunPort {
     if ((origin.source === 'user' || origin.source === 'plugin') && log.inbox().length >= 16)
       throw new DomainError('conflict', 'Queue is full');
     validateModelOptions(input.model, input.thinkingLevel);
+    const selection = { mode, origin, model: input.model, thinkingLevel: input.thinkingLevel };
+    const imageCount = Array.isArray(input.attachments)
+      ? input.attachments.filter(
+          (file) => typeof file?.mimeType === 'string' && imageMimeType.test(file.mimeType),
+        ).length
+      : 0;
+    if (imageCount) {
+      let context: Context | undefined;
+      try {
+        context = this.scopes.context(`session:${id}`);
+      } catch (error) {
+        // Lazy scopes resolve their model during delivery.
+        if (!(error instanceof DomainError) || error.code !== 'unavailable') throw error;
+      }
+      const models = context?.get('harnessModels');
+      if (models) {
+        const { model } = selectInputModel(
+          models,
+          selection,
+          log.projection(),
+          this.recent(),
+          this.registry.get(id)?.parentId ?? null,
+        );
+        assertImageInput(models.capabilities(model), imageCount);
+      }
+    }
     log.append({
       type: 'inbox-enqueued',
       item: {
         id: messageId,
-        mode,
+        ...selection,
         ...this.registry.prepareInput(id, input.message, input.attachments),
-        origin,
-        model: input.model,
-        thinkingLevel: input.thinkingLevel,
         ...(origin.source === 'user' && { resume: true }),
       },
     });
@@ -351,37 +375,21 @@ export class Runs implements RunPort {
       const start = entries.findIndex((entry) => matches(entry, 'queued'));
       const end = entries.findIndex((entry, index) => index > start && matches(entry, 'failed'));
       if (start < 0 || end < 0) return;
-      const activity = entries.slice(start + 1, end);
-      const delivered = activity.filter((entry) => entry.type === 'message' && entry.message.role === 'user');
+      const delivered = entries
+        .slice(start + 1, end)
+        .filter((entry) => entry.type === 'message' && entry.message.role === 'user');
       const input =
         run.inputEntryId === undefined
           ? delivered.length === 1 && delivered[0].type === 'message' && delivered[0].submissionId === runId
             ? delivered[0]
             : undefined
           : delivered.find(({ id }) => id === run.inputEntryId);
-      const message =
-        input?.type === 'message' && input.message.role === 'user'
-          ? { content: input.message.content, presentation: input.presentation, selection: input.selection }
-          : undefined;
-      const failed = message ? undefined : activity.reverse().find((entry) => entry.type === 'inbox-failed');
-      const rejected =
-        failed &&
-        entries.find((entry) => entry.type === 'inbox-enqueued' && entry.item.id === failed.inboxId);
-      const pending = rejected?.type === 'inbox-enqueued' ? rejected.item : undefined;
-      const saved =
-        message ??
-        (pending && (!pending.origin || pending.origin.source === 'user')
-          ? {
-              content: [{ type: 'text' as const, text: pending.text }, ...pending.images],
-              presentation: pending.input,
-              selection: pending,
-            }
-          : undefined);
-      if (!saved) return;
-      const { content, presentation, selection } = saved;
+      if (input?.type !== 'message' || input.message.role !== 'user') return;
+      const { message, presentation, selection } = input;
+      const parts = typeof message.content === 'string' ? [] : message.content;
       const attachments: Attachment[] = [],
         missing: string[] = [];
-      for (const { name, mimeType, id: attachmentId, data } of userContent(content, presentation)
+      for (const { name, mimeType, id: attachmentId, data } of userContent(message.content, presentation)
         .attachments) {
         const bytes = attachmentId && this.registry.readAttachment(id, attachmentId);
         if (bytes) attachments.push({ name, mimeType, data: bytes.toString('base64') });
@@ -389,9 +397,9 @@ export class Runs implements RunPort {
         else missing.push(name);
       }
       const text =
-        typeof content === 'string'
-          ? content
-          : content.flatMap((part) => (part.type === 'text' ? [part.text] : [])).join('\n');
+        typeof message.content === 'string'
+          ? message.content
+          : parts.flatMap((part) => (part.type === 'text' ? [part.text] : [])).join('\n');
       return {
         message: presentation?.userText ?? text,
         attachments,

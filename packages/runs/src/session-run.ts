@@ -9,6 +9,7 @@ import { DomainError } from '@mini-harness/platform/errors';
 import { isDeepStrictEqual } from 'node:util';
 import type { SessionCatalog, SessionLifecycle, SessionStore } from '@mini-harness/sessions/records';
 import type { ModelChoice } from '@mini-harness/llm/vocabulary';
+import type { ModelCatalogPort } from '@mini-harness/models/api';
 import type { SessionRecord } from '@mini-harness/sessions/identity';
 import {
   validateNativeMessage,
@@ -20,7 +21,7 @@ import {
 } from '@mini-harness/llm/api';
 import type { AgentEvent } from './stream.ts';
 import type { MessageOrigin, MessageMode } from '@mini-harness/sessions/queue';
-import type { SessionLogPort, InboxItem } from '@mini-harness/sessions/log-api';
+import type { SessionLogPort, InboxItem, SessionProjection } from '@mini-harness/sessions/log-api';
 import { Inbox } from './inbox.ts';
 import { isToolContent, toolResultState } from '@mini-harness/tools/api';
 import { applyTransforms } from './transforms.ts';
@@ -63,6 +64,23 @@ interface SessionPrompt {
     parentId: string | null;
     expectedLeafId: string | null;
   };
+}
+
+export function selectInputModel(
+  models: ModelCatalogPort,
+  item: Pick<InboxItem, 'model' | 'thinkingLevel'> & Partial<Pick<InboxItem, 'mode' | 'origin'>>,
+  previous: Pick<SessionProjection, 'model' | 'thinkingLevel'>,
+  fallback: ModelChoice | undefined,
+  parentId: string | null,
+) {
+  return selectModel(models, {
+    explicit: item.model,
+    stored: previous.model,
+    fallback,
+    preferStored: Boolean(parentId || item.mode === 'steer' || item.origin?.source !== 'user'),
+    thinkingLevel: item.thinkingLevel,
+    inherited: previous.thinkingLevel,
+  });
 }
 
 export class SessionRun {
@@ -119,18 +137,12 @@ export class SessionRun {
     const log = this.sessions.log(id);
     if (!revision) this.closeUnfinishedTools(log);
     const inbox = new Inbox(log);
-    type Input = Pick<InboxItem, 'text' | 'images' | 'input' | 'model' | 'thinkingLevel'>;
+    type Input = Pick<InboxItem, 'text' | 'images' | 'input' | 'model' | 'thinkingLevel'> &
+      Partial<Pick<InboxItem, 'mode' | 'origin'>>;
 
-    const selection = (item: Input, previous = log.projection(), preferStored = true) => {
+    const selection = (item: Input, previous = log.projection()) => {
       const models = requireService(ctx, 'harnessModels');
-      const selected = selectModel(models, {
-        explicit: item.model,
-        stored: previous.model,
-        fallback,
-        preferStored,
-        thinkingLevel: item.thinkingLevel,
-        inherited: previous.thinkingLevel,
-      });
+      const selected = selectInputModel(models, item, previous, fallback, record.parentId);
       assertImageInput(models.capabilities(selected.model), item.images.length);
       validateNativeMessage({
         role: 'user',
@@ -139,12 +151,6 @@ export class SessionRun {
       });
       return selected;
     };
-    const queuedSelection = (item: InboxItem) =>
-      selection(
-        item,
-        log.projection(),
-        Boolean(record.parentId || item.mode === 'steer' || item.origin?.source !== 'user'),
-      );
 
     const prepare = async (item: Input, selected: ReturnType<typeof selection>, origin: MessageOrigin) => {
       const presentation = item.input ?? { userText: item.text, attachments: [] };
@@ -223,7 +229,7 @@ export class SessionRun {
       inbox.deliver(
         modes,
         signal,
-        (item) => prepare(item, queuedSelection(item), originOf(item)),
+        (item) => prepare(item, selection(item), originOf(item)),
         (item, prepared) => commit(item, prepared, originOf(item), item.id),
         requireInput,
       );
@@ -322,7 +328,7 @@ export class SessionRun {
               },
               start(call) {
                 if (signal.aborted) return { outcome: 'skipped', reason: 'Agent run cancelled' };
-                if (inbox.hasValid('steer', queuedSelection))
+                if (inbox.hasValid('steer', selection))
                   return { outcome: 'skipped', reason: 'Skipped because a steering message arrived.' };
                 const tool = advertisedTools.get(call.name);
                 if (tool && ctx.get('harnessToolPolicy')?.(id, tool) === false)

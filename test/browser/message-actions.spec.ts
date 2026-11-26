@@ -209,7 +209,7 @@ export const apply = (ctx) => {
   await expect(assistant.getByRole('button', { name: 'Copy message' })).toBeVisible();
 });
 
-test('retry keeps the attachment when switching to an image-capable model', async ({ page, launch }) => {
+test('image validation keeps the draft available for an image-capable model', async ({ page, launch }) => {
   const { host, mock } = await launch({
     prepare(paths) {
       const file = join(paths.home, 'models.json');
@@ -229,11 +229,12 @@ test('retry keeps the attachment when switching to an image-capable model', asyn
   await expect(attachment).toBeVisible();
   await page.getByRole('textbox', { name: 'Message', exact: true }).fill('Read the picture');
   await page.getByRole('button', { name: 'Send', exact: true }).click();
-  await expect(page.locator('.run-termination[data-state=failed]')).toContainText('Run failed:');
-  await expect(page.locator('.message.error')).toContainText('does not support image input');
+  await expect(page.getByRole('status').filter({ hasText: 'does not support image input' })).toBeVisible();
+  await expect(page.locator('.run-termination')).toHaveCount(0);
   await expect(attachment).toBeVisible();
+  expect(mock.requests).toHaveLength(0);
   await chooseModel(page, 'vision-model');
-  await page.getByRole('button', { name: 'Retry', exact: true }).click();
+  await page.getByRole('button', { name: 'Send', exact: true }).click();
   await expect(page.locator('.message.assistant')).toHaveText('Mock response');
   expect(JSON.stringify(mock.requests.at(-1))).toContain('image_url');
   await expect(
@@ -241,7 +242,6 @@ test('retry keeps the attachment when switching to an image-capable model', asyn
   ).toHaveCount(1);
   await expect(attachment).toHaveCount(0);
   await page.reload();
-  await expect(page.locator('.run-termination[data-state=failed]')).toContainText(
-    'does not support image input',
-  );
+  await expect(page.locator('.message.assistant')).toHaveText('Mock response');
+  await expect(page.locator('.run-termination')).toHaveCount(0);
 });

@@ -56,7 +56,7 @@ export interface RunPort {
         attachments: Attachment[];
         missing: string[];
         model?: ModelChoice;
-        thinkingLevel?: ThinkingLevel | null;
+        thinkingLevel?: ThinkingLevel;
       }
     | undefined;
   info(id: string): RunInfo | undefined;
