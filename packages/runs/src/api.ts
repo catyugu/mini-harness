@@ -2,8 +2,17 @@ import type { ThinkingLevel, ModelChoice } from '@mini-harness/llm/vocabulary';
 import type { Attachment, InputSource } from '@mini-harness/input/message';
 import type { RunEvent, StreamEvent, ToolProgress } from './stream.ts';
 import type { QueueEntry } from '@mini-harness/sessions/queue';
-import type { ExecutionHandle, ExecutionInput } from './execution.ts';
+import type { TaskHandle, TaskOptions } from '@mini-harness/tasks/api';
 import type { RunInfo } from '@mini-harness/sessions/run-state';
+
+export interface RunInput {
+  message: string;
+  model?: ModelChoice;
+  thinkingLevel?: ThinkingLevel | null;
+  attachments?: Attachment[];
+}
+
+export type RunSubmission = Pick<TaskOptions, 'signal' | 'acquire' | 'creator' | 'metadata'>;
 
 export interface RunPort {
   readonly size: number;
@@ -24,7 +33,7 @@ export interface RunPort {
       thinkingLevel?: ThinkingLevel | null;
     },
   ): Promise<string>;
-  submit(id: string, input: ExecutionInput, signal: AbortSignal): ExecutionHandle;
+  submit(id: string, input: RunInput, options?: RunSubmission): TaskHandle<string>;
   startRun(
     id: string,
     prompt: string,
@@ -89,6 +98,8 @@ declare module 'mini-harness/cordis' {
 
 declare module '@mini-harness/plugin-api/observations' {
   interface CapabilityObservations {
+    'run-started': { type: 'run-started'; sessionId: string; run: RunInfo };
+    'run-ended': { type: 'run-ended'; sessionId: string; run: RunInfo };
     'input-accepted': {
       type: 'input-accepted';
       sessionId: string;
