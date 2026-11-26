@@ -63,19 +63,17 @@ export function offloadMessage(message: NativeMessage, id: string): NativeMessag
   return content.every((part, index) => part === parts[index]) ? message : { ...message, content };
 }
 
-/** Under pressure offload historical images; after image rejection offload the oldest remaining group. */
+/** Offload historical images before the first unconsumed user input. */
 export function offloadImages(
   { contextMessages, contextEntryIds }: SessionContext,
-  includeLatest: boolean,
+  before: number,
 ): ContextReplacement[] {
-  const latest = contextMessages.reduce((index, message, i) => (message.role === 'user' ? i : index), -1);
   const result: ContextReplacement[] = [];
   for (const [start, message] of contextMessages.entries()) {
-    if (!includeLatest && start >= latest) break;
+    if (start >= before) break;
     const replacement = offloadMessage(message, contextEntryIds[start]);
     if (replacement === message) continue;
     result.push({ start, deleteCount: 1, preserveSource: true, insert: [replacement] });
-    if (includeLatest) break;
   }
   return result.reverse();
 }

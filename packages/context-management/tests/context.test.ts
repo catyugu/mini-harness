@@ -10,6 +10,8 @@ import { fixture } from '../../../test/support/api-fixture.ts';
 import { sendRun } from '../../../test/support/runs.ts';
 import { SessionLog } from '../../sessions/src/log.ts';
 import type { SessionLogPort } from '@mini-harness/sessions/log-api';
+import { estimate, totalTokens } from '../src/server/meter.ts';
+import { splitPoint } from '../src/server/compaction.ts';
 import type { MockProvider } from '../../../test/helpers/mock-provider.ts';
 
 const settings = {
@@ -20,12 +22,12 @@ const settings = {
   summaryModel: null,
 };
 const summary = (content?: string) => content?.startsWith('Write a continuation checkpoint');
-const withUsage = (text: string) => ({
+const withUsage = (text: string, input: number) => ({
   text,
   usage: {
-    prompt_tokens: 100,
+    prompt_tokens: input,
     completion_tokens: 20,
-    total_tokens: 120,
+    total_tokens: input + 20,
     prompt_tokens_details: { cached_tokens: 80 },
   },
 });
@@ -37,13 +39,49 @@ function assertPaired(log: SessionLogPort, mock: MockProvider) {
   for (const request of requests) validateRequestSnapshot(log.requestSnapshot(request.id));
 }
 
+test('retention includes the complete latest exchange even when it exceeds the minimum', () => {
+  const messages = [
+    { role: 'user', content: 'History', timestamp: 0 },
+    { role: 'assistant', content: [{ type: 'toolCall', id: 'probe', name: 'probe', arguments: {} }], timestamp: 0 },
+    { role: 'toolResult', toolCallId: 'probe', toolName: 'probe', content: [{ type: 'text', text: 'diagnostics '.repeat(1000) }], isError: false, timestamp: 0 },
+  ] satisfies import('@mini-harness/llm/api').NativeMessage[];
+  assert.equal(splitPoint(messages, 10), 1);
+});
+
+test('provider input usage calibrates the next request without compounding previous estimates', async (t) => {
+  const { app, request } = await fixture(t, () => withUsage('Done', 1600));
+  const ctx = app.runtime.plugins.ctx;
+  const { body: session } = await request('/sessions', 'POST', {});
+  for (const text of ['First', 'Second', 'Third']) await sendRun(ctx.harnessRuns, session.id, text);
+  const log = ctx.harnessSessions.log(session.id);
+  const recorded = log.entries().filter((entry) => entry.type === 'model-request');
+  assert.equal(recorded.length, 3);
+  for (let index = 1; index < recorded.length; index++) {
+    const previous = log.requestSnapshot(recorded[index - 1].id);
+    const current = log.requestSnapshot(recorded[index].id);
+    const scale = 1600 / totalTokens(estimate(previous));
+    const raw = estimate(current);
+    assert.ok(current.inputMeasurement?.estimated);
+    assert.deepEqual(
+      { system: current.inputMeasurement.system, tools: current.inputMeasurement.tools, messages: current.inputMeasurement.messages },
+      { system: Math.ceil(raw.system * scale), tools: Math.ceil(raw.tools * scale), messages: Math.ceil(raw.messages * scale) },
+    );
+  }
+});
+
 test('a single user turn supports repeated token-budget compaction while tools execute once', async (t) => {
   let calls = 0;
   let checkpoints = 0;
+  let input = 0;
   const { app, mock, request } = await fixture(t, ({ messages }) => {
+    const report = (text: string) => {
+      const count = Math.max(100, Math.ceil(messages.reduce((sum, message) => sum + message.content.length + 16, 0) / 4));
+      input += count;
+      return withUsage(text, count);
+    };
     if (summary(messages.at(-1)?.content)) {
       checkpoints++;
-      return withUsage(checkpointFixture);
+      return report(checkpointFixture + '\nComplete the task and preserve the constraints');
     }
     if (calls < 7)
       return {
@@ -52,7 +90,7 @@ test('a single user turn supports repeated token-budget compaction while tools e
         callId: 'probe-' + calls,
         text: 'Important diagnostics. '.repeat(1250),
       };
-    return withUsage('Long task completed');
+    return report('Long task completed');
   });
   const ctx = app.runtime.plugins.ctx;
   t.after(
@@ -102,7 +140,7 @@ test('a single user turn supports repeated token-budget compaction while tools e
   assert.equal(state.steps, 8);
   assert.equal(state.toolMs, 84);
   assert.deepEqual(state.usage, {
-    input: 20 * (checkpoints + 1),
+    input: input - 80 * (checkpoints + 1),
     cacheRead: 80 * (checkpoints + 1),
     output: 20 * (checkpoints + 1),
   });
@@ -251,13 +289,13 @@ test('switching to a smaller window uses the configured summary model and segmen
   assert.ok(state.occupancy.total < state.occupancy.budget);
 });
 
-test('an image limit offloads the oldest image and an irreducible overflow exits with a reason', async (t) => {
+test('image rejection offloads all historical images and an irreducible overflow exits with a reason', async (t) => {
   let imageRequests = 0;
   const { app, request } = await fixture(
     t,
     ({ messages }) => {
       const text = messages.at(-1)?.content;
-      if (text === 'Second image' && ++imageRequests === 1) return { overflow: 'image' };
+      if (text === 'Latest image' && ++imageRequests === 1) return { overflow: 'image' };
       if (text === 'Always overflow') return { overflow: 'context' };
       return 'Done';
     },
@@ -271,8 +309,9 @@ test('an image limit offloads the oldest image and an irreducible overflow exits
   const ctx = app.runtime.plugins.ctx;
   const { body: session } = await request('/sessions', 'POST', {});
   const attachment = { name: 'sample.png', mimeType: 'image/png', data: 'iVBORw0KGgo=' };
-  await sendRun(ctx.harnessRuns, session.id, 'First image', undefined, { attachments: [attachment] });
-  await sendRun(ctx.harnessRuns, session.id, 'Second image', undefined, { attachments: [attachment] });
+  for (const text of ['First image', 'Second image', 'Third image', 'Fourth image'])
+    await sendRun(ctx.harnessRuns, session.id, text, undefined, { attachments: [attachment] });
+  await sendRun(ctx.harnessRuns, session.id, 'Latest image', undefined, { attachments: [attachment] });
   assert.equal(imageRequests, 2);
   const log = ctx.harnessSessions.log(session.id);
   const images = (content: ReturnType<typeof log.context>['contextMessages']) =>
@@ -281,7 +320,10 @@ test('an image limit offloads the oldest image and an irreducible overflow exits
     );
   assert.equal(images(log.context().contextMessages).length, 1);
   const requests = log.entries().filter(({ type }) => type === 'model-request');
-  assert.equal(images(log.requestSnapshot(requests[1].id).messages).length, 2);
+  const rejected = log.requestSnapshot(requests.at(-2)!.id);
+  const repaired = log.requestSnapshot(requests.at(-1)!.id);
+  assert.equal(images(rejected.messages).length, 5);
+  assert.deepEqual(repaired.messages.at(-1), rejected.messages.at(-1));
   const { body: plain } = await request('/sessions', 'POST', {});
   assert.equal(
     (await request('/sessions/' + plain.id + '/context', 'PUT', { ...settings, autoCompact: false })).status,
@@ -291,6 +333,35 @@ test('an image limit offloads the oldest image and an irreducible overflow exits
   const failed = ctx.harnessSessions.log(plain.id);
   assert.equal(failed.context().contextMessages.filter(({ role }) => role === 'user').length, 1);
   assert.equal(failed.entries().filter(({ type }) => type === 'model-attempt').length, 1);
+});
+
+test('disabled automatic compaction still retries context overflow after deterministic image offloading', async (t) => {
+  let attempts = 0;
+  const { app, request } = await fixture(t, ({ messages }) => {
+    if (summary(messages.at(-1)?.content)) assert.fail('Automatic summary is disabled');
+    if (messages.at(-1)?.content === 'Latest input' && ++attempts === 1) return { overflow: 'context' };
+    return 'Done';
+  }, (paths) => {
+    const file = join(paths.home, 'models.json');
+    const models = JSON.parse(readFileSync(file, 'utf8'));
+    models.providers['local-mock'].models[0].input.push('image');
+    writeFileSync(file, JSON.stringify(models));
+  });
+  const ctx = app.runtime.plugins.ctx;
+  const { body: session } = await request('/sessions', 'POST', {});
+  const endpoint = '/sessions/' + session.id + '/context';
+  assert.equal((await request(endpoint, 'PUT', { ...settings, autoCompact: false })).status, 200);
+  const attachment = { name: 'sample.png', mimeType: 'image/png', data: 'iVBORw0KGgo=' };
+  await sendRun(ctx.harnessRuns, session.id, 'Earlier input', undefined, { attachments: [attachment] });
+  await sendRun(ctx.harnessRuns, session.id, 'Latest input', undefined, { attachments: [attachment] });
+  assert.equal(attempts, 2);
+  const log = ctx.harnessSessions.log(session.id);
+  const records = log.entries().filter((entry) => entry.type === 'model-request');
+  assert.equal(records.length, 3);
+  const rejected = log.requestSnapshot(records[1].id);
+  const repaired = log.requestSnapshot(records[2].id);
+  assert.deepEqual(repaired.messages.at(-1), rejected.messages.at(-1));
+  assert.ok(totalTokens(repaired.inputMeasurement!) < totalTokens(rejected.inputMeasurement!));
 });
 
 test('cancelling a manual checkpoint keeps the active branch and releases the conversation lane', async (t) => {

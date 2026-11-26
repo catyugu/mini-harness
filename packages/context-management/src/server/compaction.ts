@@ -23,11 +23,10 @@ const user = (content: string): NativeUserMessage & { content: string } => ({
 export function splitPoint(messages: NativeMessage[], retain: number) {
   let cut = messages.length,
     kept = 0;
-  while (cut > 0) {
+  while (cut > 0 && kept < retain) {
     let start = cut - 1;
     while (start > 0 && messages[start].role === 'toolResult') start--;
     const cost = messages.slice(start, cut).reduce((sum, message) => sum + messageTokens(message), 0);
-    if (kept + cost > retain) break;
     cut = start;
     kept += cost;
   }
@@ -66,6 +65,7 @@ export async function checkpoint(
   adapter: LlmAdapter,
   messages: NativeMessage[],
   execute: (request: LlmRequest) => Promise<NativeAssistantMessage>,
+  scale: number,
 ) {
   const assemble = (segment: NativeMessage[]) =>
     measure(
@@ -75,6 +75,7 @@ export async function checkpoint(
       },
       capability,
       adapter,
+      scale,
     );
   async function summarize(outgoing: Awaited<ReturnType<typeof assemble>>) {
     const answer = await execute(outgoing);
@@ -104,7 +105,7 @@ export async function checkpoint(
   for (let from = 0; from < text.length; ) {
     const prefix = prior ? [prior] : [];
     const overhead = (await assemble(prefix)).inputMeasurement;
-    const length = tokenPrefix(text.slice(from), overhead.budget - totalTokens(overhead) - 4);
+    const length = tokenPrefix(text.slice(from), (overhead.budget - totalTokens(overhead)) / scale - 4);
     if (!length) throw new DomainError('unavailable', 'Summary model has too little input capacity');
     const outgoing = await assemble([...prefix, user(text.slice(from, from + length))]);
     if (totalTokens(outgoing.inputMeasurement) > outgoing.inputMeasurement.budget)

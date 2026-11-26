@@ -177,6 +177,7 @@ function mountStats(ctx: Context) {
       const run = detail('Run statistics', signal);
       const usage = detail('Token usage', signal);
       const context = detail('Context usage', signal);
+      context.trigger.title = 'Last measured input / model window';
       const speed = document.createElement('span');
       speed.className = 'context-speed';
       const runList = document.createElement('dl'),
@@ -226,7 +227,7 @@ function mountStats(ctx: Context) {
         const ratio = occupancy ? occupancy.total / occupancy.window : undefined;
         ring.style.setProperty('--context-fill', ratio === undefined ? '0%' : percent(Math.min(1, ratio)));
         windowRatio.textContent =
-          ratio === undefined ? '—' : (occupancy?.estimated ? '~' : '') + percent(ratio);
+          ratio === undefined ? '—' : 'Last ' + (occupancy?.estimated ? '~' : '') + percent(ratio);
         showOccupancy(contextList, bar, state);
       }
       updates.addEventListener('change', render, { signal });

@@ -62,10 +62,9 @@ function setup(ctx: Context) {
             await run.harnessRuns.runTask(params.id, 'compaction', async (scoped, signal, taskId) => {
               const log = sessions.log(params.id);
               const projection = log.context();
-              if (!projection.contextMessages.length || !projection.model)
+              if (!projection.contextMessages.length)
                 throw new HttpError('invalid_input', 'Nothing to compact in this conversation');
               const { harnessModels: models } = scoped;
-              const { model } = selectModel(models, { explicit: projection.model });
               const ancestors = new Set(log.branch().map(({ id }) => id));
               const latest = log
                 .entries()
@@ -79,24 +78,27 @@ function setup(ctx: Context) {
                 );
               if (!latest)
                 throw new HttpError('invalid_input', 'No model request has been prepared for this branch');
-              const { systemPrompt, tools } = log.requestDefinition(latest.id);
+              const { model: choice, systemPrompt, tools, thinkingLevel, maxTokens } = log.requestDefinition(latest.id);
+              const { model } = selectModel(models, { explicit: choice });
               const rebuild = async (messages: LlmRequest['messages']): Promise<LlmRequest> => ({
                 model,
                 systemPrompt,
                 tools,
-                thinkingLevel: projection.thinkingLevel,
+                thinkingLevel,
+                maxTokens,
                 messages: prepareModelMessages(models.capabilities(model), messages),
                 signal,
               });
               const manager = createManager(scoped, params.id);
               const request = await manager.prune(log, await rebuild(projection.contextMessages), rebuild);
-              await manager.compact(
+              const compacted = await manager.compact(
                 log,
                 request,
                 rebuild,
                 configuration(log.setting(owner), defaults()).settings,
                 taskId,
               );
+              if (!compacted) throw new HttpError('invalid_input', 'Nothing to compact within the recent-context budget');
             });
             return { ok: true };
           } catch (error) {

@@ -1,10 +1,12 @@
 import type {
   InputMeasurement,
+  InputTokenCounts,
   LlmAdapter,
   LlmRequest,
   NativeContent,
   NativeMessage,
 } from '@mini-harness/llm/api';
+import type { SessionLogPort } from '@mini-harness/sessions/log-api';
 import type { ProviderModel } from '@mini-harness/models/catalog';
 import { DomainError } from '@mini-harness/platform/errors';
 
@@ -54,7 +56,35 @@ export function messageTokens(message: NativeMessage) {
   );
 }
 
-export const totalTokens = (counts: InputMeasurement) => counts.system + counts.tools + counts.messages;
+export const totalTokens = (counts: InputTokenCounts) => counts.system + counts.tools + counts.messages;
+
+export function estimate(request: Pick<LlmRequest, 'systemPrompt' | 'tools' | 'messages'>): InputTokenCounts {
+  return {
+    system: textTokens(request.systemPrompt),
+    tools: request.tools?.length ? textTokens(JSON.stringify(request.tools)) : 0,
+    messages: request.messages.reduce((sum, message) => sum + messageTokens(message), 0),
+  };
+}
+
+/** Use the newest usable same-model input observation. The raw estimate is reconstructed
+ * once from its exact snapshot so calibration never compounds a previous correction. */
+export function calibration(log: Pick<SessionLogPort, 'entries' | 'requestSnapshot'>, model: LlmRequest['model']) {
+  const inputs = new Map<string, number>();
+  for (const entry of log.entries().reverse()) {
+    if (entry.type === 'model-attempt' && entry.usage && !inputs.has(entry.requestId)) {
+      const { input, cacheRead, cacheWrite } = entry.usage;
+      const actual = input + cacheRead + cacheWrite;
+      if (Number.isFinite(actual) && actual > 0) inputs.set(entry.requestId, actual);
+    }
+    if (entry.type !== 'model-request' || !entry.request.inputMeasurement?.estimated ||
+        entry.request.model.provider !== model.provider || entry.request.model.id !== model.id) continue;
+    const actual = inputs.get(entry.id);
+    if (actual === undefined) continue;
+    const raw = totalTokens(estimate(log.requestSnapshot(entry.id)));
+    if (raw > 0) return actual / raw;
+  }
+  return 1;
+}
 
 export type MeasuredRequest = LlmRequest & { maxTokens: number; inputMeasurement: InputMeasurement };
 
@@ -62,6 +92,7 @@ export async function measure(
   request: LlmRequest,
   capability: ProviderModel,
   adapter: LlmAdapter,
+  scale = 1,
 ): Promise<MeasuredRequest> {
   const window = capability.contextWindow;
   const maxTokens = request.maxTokens ?? capability.maxTokens;
@@ -83,10 +114,11 @@ export async function measure(
     ![exact.system, exact.tools, exact.messages].every((count) => Number.isSafeInteger(count) && count >= 0)
   )
     throw new Error('Invalid adapter input token counts');
+  const raw = exact ?? estimate(request);
   const counts = exact ?? {
-    system: textTokens(request.systemPrompt),
-    tools: request.tools?.length ? textTokens(JSON.stringify(request.tools)) : 0,
-    messages: request.messages.reduce((sum, message) => sum + messageTokens(message), 0),
+    system: Math.ceil(raw.system * scale),
+    tools: Math.ceil(raw.tools * scale),
+    messages: Math.ceil(raw.messages * scale),
   };
   const budget = window - maxTokens - Math.min(4096, Math.max(16, Math.ceil(window * (exact ? 0.01 : 0.04))));
   if (budget <= 0) throw new DomainError('invalid_input', 'No input capacity after reserving model output');
