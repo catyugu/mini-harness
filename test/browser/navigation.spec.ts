@@ -100,7 +100,10 @@ test('desktop navigation resizes within bounds and remembers its width', async (
   await toggle.click();
   await expect(sidebar).toHaveCSS('width', '300px');
   await expect(handle).toBeHidden();
-  await page.getByRole('button', { name: 'Close navigation', exact: true }).click();
+  await page
+    .getByRole('dialog', { name: 'Conversations' })
+    .getByRole('button', { name: 'Close navigation', exact: true })
+    .click();
   await page.setViewportSize({ width: 1440, height: 900 });
   await expect(sidebar).toHaveCSS('width', '380px');
 });
