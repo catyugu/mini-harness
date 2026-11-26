@@ -1,17 +1,23 @@
-# Add a settings page
+# Add plugin settings
 
-Use the Entry's native Config schema as the source of truth. For ordinary plugin settings, a schema and metadata are sufficient to render configuration fields. The [greeting-service example](../examples/greeting-service/plugin.ts) demonstrates the server schema.
+Use the native Entry Config schema as the source of truth. The plugin editor can generate ordinary fields directly from that schema. Add a custom settings contribution when the interaction needs more than generated fields.
 
-```ts
-import { defineConfig } from 'mini-harness/configuration';
+## 1. Define and validate configuration
 
-export const Config = defineConfig({
-  type: 'object',
-  properties: { label: { type: 'string', default: 'Notes' } },
-  additionalProperties: false,
-});
-```
+The [Greeting service](../examples/greeting-service/plugin.ts) defines a prefix with `defineConfig` from `mini-harness/configuration`. [Task notes](../examples/task-notes/plugin.ts) adds a label with a default and a refinement that rejects blank strings. Native schema validation supplies the effective config before activation.
 
-For richer UI, a browser entry injects `miniSettingsRegistry` and registers a `SettingsContribution` with the owning Entry configuration returned by `browserPluginSettings(ctx)`. Use the supplied `bind` helper to keep controls synchronized and report validation errors. The [Task notes settings implementation](../examples/task-notes/web.ts) is a working example of a bound text control.
+For a non-live plugin, read the validated `config` argument in `apply`. For a live plugin, read the current Entry configuration or react to the native update event; do not capture a stale initial value. Task notes reads `harnessPluginSettings.get('label')` when it needs the current label. See [Plugin API](../../packages/plugin-api/README.md) for configuration contracts.
 
-Declare `live: true` in the Profile only when the plugin supports in-place changes. Test a valid update, an invalid update, and removal. Do not add a separate preference store for Entry configuration. See [Plugin API](../../packages/plugin-api/README.md), [Settings](../../packages/settings/README.md), and [configuration](../configuration.md).
+## 2. Bind a custom control
+
+The [Task notes browser entry](../examples/task-notes/web.ts) injects `miniSettingsRegistry` and `miniPrimitives`. It obtains its identity with `browserPluginId(ctx)` and its Entry configuration with `browserPluginSettings(ctx)` from `mini-harness/ui-runtime/plugin-settings`.
+
+Register a `SettingsContribution` with that configuration, inside `ctx.effect`. The contribution's `render({ bind })` creates a labeled input and binds it to `label`. The returned error element displays failed validation, and the supplied lifecycle keeps the control synchronized until the view is removed. Use primitives for controls and field layout, and the render context's signal for additional listeners.
+
+## 3. Enable and verify the example
+
+Build and activate [Task notes](../examples/task-notes/README.md). Its Profile entry declares `client: true` and `live: true`. Open Settings → Extensions and change **Task note label**. New notes should use the accepted value without restarting the plugin. Enter a blank label: validation should reject it, show an error and retain the prior accepted config. Reload the application and confirm the accepted value persists; disable the plugin and confirm its settings contribution disappears.
+
+The Profile composition path reconciles changes before the Host persists its user layer. A settings renderer does not own another preference file. Store service credentials with `harnessPluginSecrets`; browser entries receive their config, so secrets do not belong in those fields.
+
+[Settings](../../packages/settings/README.md) documents registration and binding lifetimes. [Profiles](../profiles.md) owns layer precedence and `live` declarations; [live-settings tests](../../test/system/live-settings.test.ts) cover update behavior.

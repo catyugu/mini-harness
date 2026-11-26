@@ -25,6 +25,6 @@ A caller may retain a handle rather than await it. For independent work use an e
 
 ## Failure and recovery
 
-Cancellation is cooperative and admission is held until settlement. On restart, Sessions records unfinished retained work as interrupted; it does not resurrect execution. Unknown tool effects are not automatically retried. See [Sessions](sessions.md) and [the record format](../session-log.md).
+Cancellation is cooperative. An exclusive lane stays occupied until settlement; pool capacity can be yielded at whole-task waits and is released before draining remaining children. When reopening a log, Sessions records its unfinished tasks as interrupted; it does not resurrect execution. Generic tasks without a durable domain binding have no restart history. Unknown tool effects are not automatically retried. See [Sessions](sessions.md) and [the record format](../session-log.md).
 
 See the [Tasks API](../../packages/tasks/README.md) for scheduler guarantees and the [tool cookbook](../cookbook/adding-a-tool.md) for extensions.

@@ -10,6 +10,6 @@ The native log has a single append sequence and a selected conversation branch. 
 
 New work resolves session/workspace identity and configured scopes before using services. Editing a persisted user message checks its branch identity and selects a new branch. Queued messages have stable delivery IDs. A browser may reconnect to live run replay without creating new work.
 
-Session deletion marks affected resources unavailable, drains work, removes configured scopes, commits catalog removal and deletes log/attachment files. Workspace removal cascades through its sessions but does not delete project directories. There is no archive operation. See the owning packages for lifecycle contracts.
+Session deletion marks affected resources unavailable and drains work, then commits catalog removal with a deletion journal before removing configured scopes and log/attachment files. Recovery finishes journaled cleanup. Workspace removal cascades through its sessions but does not delete project directories. There is no archive operation. See the owning packages for lifecycle contracts.
 
 User-facing actions are contributed by [Conversation](../../packages/conversation/README.md) and [Session Helper](../../packages/session-helper/README.md).

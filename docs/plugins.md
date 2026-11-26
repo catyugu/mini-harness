@@ -8,7 +8,9 @@ Install dependencies and declare entries through the [Profile reference](profile
 
 Metadata supplies display information, not scope or authority. Any plugin may declare `browser`, `browserDirectory`, and ordered `browserStyles` relative to its distribution root. Package exports can also declare `./client` as the browser entry. Only the explicitly declared entry, styles and public build directory are published. If styles are omitted, CSS files in the public directory are discovered. Entries and their resources use versioned URLs regardless of their origin. Publish only dedicated browser build output. Browser entries receive their configuration directly; independent client entries have their own config. Keep credentials in `harnessPluginSecrets`.
 
-The CLI and browser accept native Cordis declarations. The host resolves installed server imports to the active mini-harness installation. Browser imports use the published browser-safe import map. Use the root [exports](../package.json) for actual public specifiers and [Cordis](cordis.md) for activation and cleanup.
+The CLI and browser accept native Cordis declarations. The host resolves installed server imports to the active mini-harness installation. Browser imports use the published browser-safe import map. Use the root [exports](../package.json) for actual public specifiers and [Cordis](cordis.md) for activation and cleanup. Private `@mini-harness/*` workspace import paths are not installed SDK exports; the similarly named shipped Profile modules identify activations, not separately published packages.
+
+The local-directory examples use the loader's `plugin.js` server and `web.js` browser conventions. For an npm package, declare its entry points explicitly and include a compatible `mini-harness` peer dependency, as in [Task notes package.json](examples/task-notes/package.json). A plugin's native `Config` validates its Entry configuration; see [Plugin API](../packages/plugin-api/README.md) and the [settings cookbook](cookbook/adding-a-settings-page.md).
 
 ## Find the owning contract
 
@@ -23,4 +25,4 @@ The CLI and browser accept native Cordis declarations. The host resolves install
 | HTTP and projection updates                                      | [Transport](../packages/transport/README.md), [UI Runtime](../packages/ui-runtime/README.md)                                                                                                                                                 |
 | Browser contributions                                            | [UI Slots](../packages/ui-slots/README.md), [UI Layout](../packages/ui-layout/README.md), [Conversation](../packages/conversation/README.md), [File Preview](../packages/file-preview/README.md), [Settings](../packages/settings/README.md) |
 
-The [package index](../packages/README.md) lists the rest of the shipped capabilities. The [examples](examples/README.md) use the public SDK; use them instead of importing private workspace modules.
+The [package index](packages.md) lists the rest of the shipped capabilities. The [examples](examples/README.md) use the public SDK; use them instead of importing private workspace modules.

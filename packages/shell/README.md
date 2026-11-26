@@ -1,31 +1,38 @@
-# @mini-harness/shell
+# Shell
 
-Provides the shell tool and command result rendering.
+Shell contributes the `sandbox_shell` tool and its command-result renderer. It owns workspace command construction, approval policy, timeout and bounded output. [Process Execution](../process-execution/README.md) owns the child process; [Sandbox](../sandbox/README.md) prepares isolation.
 
-## Responsibilities
+## Activation and configuration
 
-Owns the shell tool and its UI. Uses Approvals for decisions, resolves the working directory and attachment directory, and passes the command to Process Execution. In isolated mode Shell asks Sandbox to mount attachments read-only at `/attachments`.
+Shell is disabled in the base Profile. Enable the `shell` entry in Plugins, then choose its execution mode. The [schema](src/manifest.ts) defines:
 
-## Structure
+| Setting          | Behavior                                                                                                                                              |
+| ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `mode`           | `isolated` uses Linux bubblewrap; `host` executes with the application's host permissions. The initial default depends on detected isolation support. |
+| `timeoutSeconds` | Command timeout, default 60 seconds, allowed range 1–300.                                                                                             |
 
-`src/server/setup.ts` registers the tool and requests confirmation through the public Approvals interface. `src/browser/` renders command details.
+Configuration belongs to the Shell entry. Conversation permission determines whether confirmation is required and whether tool policy permits execution; it does not change the configured isolation mode.
 
-## API
+The `sandbox_shell` tool accepts a nonempty command string and is exposed only for conversations bound to a workspace. It is serial by default. Plugins can resolve the same definition through Tools and invoke it through `startTool`; there is no separate public Shell SDK.
 
-Contributes the `sandbox_shell` tool and the Conversation tool renderer.
+## Approval and execution
 
-## Dependencies
+Standard conversations request confirmation through [Approvals](../approvals/README.md). Full access skips the prompt for that conversation and can release an opted-in pending request. Policy is checked again before execution. Repeating a denied command within the same run does not reopen an identical approval.
 
-Depends on [Approvals](../approvals/README.md), [Process Execution](../process-execution/README.md) and [Conversation](../conversation/README.md).
+In isolated mode, Shell requires a canonical workspace separate from protected application storage, mounts it at `/workspace`, and mounts attachments read-only at `/attachments`. It uses a limited environment and configured resource limits. Failure to prepare isolation is an error; it never silently retries on the host.
 
-## Lifecycle
+Host mode uses `/bin/sh` on POSIX or `cmd.exe` on Windows with the host environment. `MINI_HARNESS_ATTACHMENTS` points to available attachment storage. See [SECURITY.md](../../SECURITY.md) for the consequences of host execution and Full access.
 
-The `shell` application plugin owns the tool lease and browser contribution. Cancellation follows the run lifetime.
+## Output, cancellation and ownership
 
-## Configuration
+Shell drains stdout and stderr concurrently, records their channels in task output and bounds combined captured output to 1 MiB. Timeout, caller cancellation or excess output terminates the process. The result exposes exit status, stdout/stderr, a termination reason and truncation status; callers inspect these fields rather than treating every resolved tool result as a successful command.
 
-Enable Shell in Plugins. Conversation permissions determine the applicable approval and isolation policy.
+Inline calls follow their enclosing Task. An explicit independent invocation uses its supplied resource owner and retention policy. For retained invocations, output lives in task channels without duplicating it in the compact task result. Pending confirmation still follows the [approval request lifetime](../approvals/README.md#ownership-and-lifetime). Unloading the tool registration cancels and drains active calls.
 
-## Testing
+Shell invalidates the workspace file projection after execution. Its browser contribution renders command details through Conversation; it does not own a second process or file store.
 
-`tests/approval-api.test.ts` exercises approvals, commands and cancellation.
+## Dependencies and verification
+
+The server requires Sessions, application state, Approval Requests, Process Execution, Tools and change notifications. Sandbox is required only when isolated mode executes.
+
+[Approval tests](tests/approval-api.test.ts) cover decisions, permissions, cancellation, repeated denial and independent calls. [Process tests](../process-execution/tests/sandbox.test.ts) cover limits and isolation. See [execution](../../docs/subsystems/execution.md) and the [package index](../../docs/packages.md).

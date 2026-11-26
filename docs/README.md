@@ -10,7 +10,7 @@
 ## Develop mini-harness
 
 - [Architecture](architecture.md): start here.
-- [Package index](../packages/README.md): locate the owning service or feature.
+- [Package index](packages.md): locate the owning service or feature.
 - [Engineering conventions](conventions.md)
 - [Development workflow](development.md)
 - [Cordis in mini-harness](cordis.md)

@@ -1,0 +1,4 @@
+{
+  "title": "Example echo provider",
+  "description": "A local model catalog and streaming adapter for the provider cookbook."
+}

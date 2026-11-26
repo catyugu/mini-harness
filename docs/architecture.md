@@ -24,12 +24,12 @@ flowchart TD
   Layout --> Slots
 ```
 
-This is a selected capability dependency map, not a complete import graph. Arrows point from consumer to provider. The [package index](../packages/README.md) covers every source package. The framework and platform libraries provide generic mechanisms; the domain layers compose them into execution and persistent conversations; presentation and optional feature plugins consume those contracts.
+This is a selected capability dependency map, not a complete import graph. Arrows point from consumer to provider. The [package index](packages.md) covers every source package. The framework and platform libraries provide generic mechanisms; the domain layers compose them into execution and persistent conversations; presentation and optional feature plugins consume those contracts.
 
 ## Application composition
 
 ```mermaid
-flowchart LR
+flowchart TD
   CLI --> Profile[Named Profile and layers]
   Profile --> Host[Host and module resolver]
   Host --> Server[Server Cordis Entry Tree]
@@ -62,23 +62,23 @@ A Run is a Task with a conversation-specific lane and durable projection. Agent 
 
 ## State ownership
 
-| State or resource                                                              | Owner                      |
-| ------------------------------------------------------------------------------ | -------------------------- |
-| Profile layer composition and accepted configuration                           | Host / Profile composition |
-| Service activation, injection, effects and Entry lifecycle                     | Cordis                     |
-| Plugin resolution, configured scope bindings and browser asset graph           | Plugins                    |
-| Workspace identity and canonical roots                                         | Workspaces                 |
-| Conversation identity, ancestry, branch history, inbox records and attachments | Sessions                   |
-| Live task state, exclusive lanes, capacity and settlement                      | Tasks                      |
-| Conversation admission policy, model selection for a run, transient replay     | Runs                       |
-| Tool registrations and invocation contract                                     | Tools                      |
-| Provider credentials/catalog, recent application model                         | Models                     |
-| Pending confirmations                                                          | Approvals                  |
-| HTTP registrations and projection revisions                                    | Transport                  |
-| Selected conversation and composer drafts                                      | Conversation               |
-| Workspace-owned open tabs and page/dialog contributions                        | UI Layout                  |
-| Slot declarations, contributions and renderer lifetime                         | UI Slots                   |
-| Theme configuration and visual tokens                                          | UI Theme                   |
+| State or resource                                                                  | Owner        |
+| ---------------------------------------------------------------------------------- | ------------ |
+| Profile layer loading and accepted YAML persistence                                | Host         |
+| Service activation, injection, effects and Entry lifecycle                         | Cordis       |
+| Configuration reconciliation, plugin resolution, scope bindings and browser assets | Plugins      |
+| Workspace identity and canonical roots                                             | Workspaces   |
+| Conversation identity, ancestry, branch history, inbox records and attachments     | Sessions     |
+| Live task state, exclusive lanes, capacity and settlement                          | Tasks        |
+| Conversation admission policy, model selection for a run, transient replay         | Runs         |
+| Tool registrations and invocation contract                                         | Tools        |
+| Provider credentials/catalog, recent application model                             | Models       |
+| Pending confirmations                                                              | Approvals    |
+| HTTP registrations and projection revisions                                        | Transport    |
+| Selected conversation and composer drafts                                          | Conversation |
+| Workspace-owned open tabs and page/dialog contributions                            | UI Layout    |
+| Slot registry, contributions and renderer lifetime                                 | UI Slots     |
+| Theme configuration and visual tokens                                              | UI Theme     |
 
 The owner exposes the authoritative contract; a derived view, historical record or transport projection is not another mutable owner.
 
@@ -86,4 +86,4 @@ The owner exposes the authoritative contract; a derived view, historical record 
 
 Plugins declare the services they consume and contribute or replace capabilities at existing extension points. Public SDK specifiers belong to the owning packages. Runtime resource scopes inherit from the configured ancestors. Browser code imports only the published browser-safe modules and shares no server objects. For workspace files and previews see [frontend](subsystems/frontend.md); for HTTP and projection synchronization see [transport](subsystems/transport.md).
 
-Start with [plugin development](cookbook/creating-a-plugin.md), the [SDK reference](plugins.md), or the [package index](../packages/README.md).
+Start with [plugin development](cookbook/creating-a-plugin.md), the [SDK reference](plugins.md), or the [package index](packages.md).

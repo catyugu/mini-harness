@@ -2,7 +2,7 @@
 
 ## Working loop
 
-Use Node.js 22.19 or later and pnpm. Dependencies and versions are declared in [package.json](../package.json) and [pnpm-lock.yaml](../pnpm-lock.yaml).
+Use Node.js 22.19 or later and the pnpm version recorded in the root `packageManager` field. Install that version directly or use Corepack when available (`corepack pnpm` selects the declared version). Dependencies and versions are declared in [package.json](../package.json) and [pnpm-lock.yaml](../pnpm-lock.yaml).
 
 ```sh
 pnpm install --frozen-lockfile
@@ -33,6 +33,6 @@ The root build compiles strict TypeScript, resolves imports, copies assets, prun
 
 ## CI
 
-CI runs `format` once before the Node and browser jobs. A formatting failure blocks those jobs. The independent Autofix workflow runs alongside CI on same-repository pull requests (except Dependabot). It formats the exact PR head, verifies the result, and pushes a formatting-only commit to the PR branch only when tracked files change. A clean tree produces no commit, so the subsequent PR event does not cause a push loop. Fork PRs and pushes to `main` are check-only. A concurrent push is not overwritten.
+The [CI workflow](../.github/workflows/ci.yml) runs `format:check` in its `format` job before the Node, browser and installed-plugin jobs. A formatting failure blocks those jobs. The independent [Autofix workflow](../.github/workflows/autofix.yml) runs alongside CI on same-repository pull requests (except Dependabot). It formats the exact PR head, verifies the result, and pushes a formatting-only commit to the PR branch only when tracked files change. A clean tree produces no commit, so the subsequent PR event does not cause a push loop. Fork PRs and pushes to `main` are check-only. A concurrent push is not overwritten.
 
-Require the `format` status check in the `main` branch rules to enforce this gate at merge time. Configure the Actions secret `FORMAT_AUTOFIX_TOKEN` with a fine-grained personal access token with Contents write access (and Workflows write access if formatting changes workflow files). This allows the autofix push to trigger CI automatically on the new PR head. A missing or invalid token fails writeback rather than falling back to the built-in token.
+For repository administrators: require the `format` status check in the `main` branch rules to enforce this gate at merge time. Configure the Actions secret `FORMAT_AUTOFIX_TOKEN` with a fine-grained personal access token with Contents write access (and Workflows write access if formatting changes workflow files). This allows the autofix push to trigger CI automatically on the new PR head. A missing or invalid token fails writeback rather than falling back to the built-in token.

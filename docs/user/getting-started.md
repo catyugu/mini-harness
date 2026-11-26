@@ -1,53 +1,80 @@
 # Using mini-harness
 
-Requires Node.js 22.19 or later. Install the package:
+## Install and start
+
+Requires Node.js 22.19 or later, with npm available for plugin installation.
 
 ```sh
 npm install -g mini-harness
 mini-harness --detached
 ```
 
-To run from source, use `pnpm install --frozen-lockfile && pnpm run build`, then `node dist/bin/mini-harness.js --detached`.
+Open the URL printed by the detached command. Foreground startup (`mini-harness`) opens the browser automatically; `--no-open` keeps it closed. The server listens on `127.0.0.1`, and the browser keeps the access token in tab storage. For a source checkout, follow the [development guide](../development.md).
 
-Ordinary foreground startup opens the browser; use `--no-open` to keep it closed. Detached startup prints the URL without opening a browser. The server listens on `127.0.0.1`; the browser keeps the access token in tab storage. Configuration lives in `~/.mini-harness`, or `MINI_HARNESS_HOME`.
+Configuration and conversation data live in `~/.mini-harness`, or the directory selected by `MINI_HARNESS_HOME`. One process owns that directory at a time. The default application uses the Web [Profile](../profiles.md).
 
-```text
-mini-harness [--cwd path] [--port 3837]
-mini-harness --detached
-mini-harness --no-open
-mini-harness status
-mini-harness stop
-```
+| Command                               | Effect                                                                                      |
+| ------------------------------------- | ------------------------------------------------------------------------------------------- |
+| `mini-harness --cwd /path/to/project` | Start with a selected workspace directory                                                   |
+| `mini-harness --port 3838`            | Use a different Web port                                                                    |
+| `mini-harness --detached`             | Start independently of the current terminal                                                 |
+| `mini-harness status`                 | Show whether the instance is running and any discovered conversation-log errors             |
+| `mini-harness stop`                   | Stop the instance                                                                           |
+| `mini-harness reset-token`            | Stop the instance and revoke its browser credential; restart and open the newly printed URL |
 
-One process owns each configuration directory. An open tab reconnects after a restart on the same port and configuration directory. Run `mini-harness reset-token` to stop the instance and revoke its browser credential. `mini-harness status` lists conversation-log errors discovered when a conversation is opened or searched.
+An open tab reconnects after restart on the same port and configuration directory. Closing the terminal does not stop a detached instance.
 
-## Use
+## Configure a model and workspace
 
-- Choose a configured model under the message input. The next main conversation message uses the global selection; sending remembers the actual model across navigation and restarts. Child agents have their own inherited or explicit model and do not change that selection.
-- Add or edit a provider in Settings → Model. API keys are stored privately in `auth.json`; custom endpoints and model definitions live in `models.json`. Credential status reports local configuration. The provider validates access when a request is made.
-- Register local directories from Workspaces in the sidebar. Browse or start conversations in any registered directory while other conversations keep running. Removing a workspace deletes its conversation trees and histories while preserving the directory and project files.
-- Open the workspace panel to browse folders, preview files, inspect Git changes and view paths written by the current turn. Each workspace keeps its own open tabs across conversation switches.
-- Paste images, drop files, choose the attachment button or type `/file` to upload local files (up to 8 files, 6 MiB each and 12 MiB total per message). Uploads are stored with the conversation and deleted with it. Image-capable models receive supported images; UTF-8 files up to 1 MiB become message text. Other files are available to enabled Shell commands via `MINI_HARNESS_ATTACHMENTS` (read-only in isolated mode). Use `@` to reference workspace files without copying them and `/` to discover skills and commands.
-- While a task runs, queue a message. Settings → General → Add instructions controls whether queued messages steer the running task or follow up after its current answer. The native inbox commits it before acknowledging it. Steering takes effect at the next safe boundary and skips tool calls that have not started; follow-ups run after the current answer. Identical text and different attachments retain distinct delivery identities.
-- New conversation stays a draft until the first send. Search and rename conversations, copy messages, retry errors, and edit/resend from a persisted message. A revision creates a new active branch; exports retain every branch.
-- Refreshing, disconnecting or changing conversations leaves tasks running. Reopen a conversation to reconnect, or use Stop to cancel the selected run and its inline work. Independently owned child conversations continue running. Restart marks unfinished runs interrupted; acknowledged pending inbox items remain visible and are consumed by a later explicit run. Unknown tool outcomes are never automatically retried.
-- Child agents default to one level and four concurrent executions. Plugins → Subagents exposes depth 0–8 and concurrency 1–16. A provider/model selected by the delegating model overrides registered child defaults, which override the parent model. Delegation returns a child Session ID and Task ID immediately, even when queued. A child explicitly waiting for a task yields its slot. Lowering concurrency lets existing work finish before admitting more children.
-- Expand the conversation tree to view children. Use checkboxes for bulk export or permanent deletion. Selecting a parent includes descendants. Export contains native JSONL and metadata; deletion cancels the selected trees, waits for their runs, and removes their files.
-- Toggle Files, Skills, Subagents, Shell, Session helper and installed plugins. Session helper owns message copy and edit/resend under one switch. Changes to tool availability are reflected at the next model turn. Unloading a tool revokes its outstanding calls; unrelated runs continue.
+Open **Settings → Model** to add a provider or custom endpoint. Credential status reports local configuration; the provider validates access when a request is made. Choose a configured model under the message input. Sending a main conversation message remembers the actual model across navigation and restarts; child agents keep their own selected or inherited model.
 
-Skills scans four directories in ascending priority.
+Use **Workspaces** in the sidebar to register local directories. You can browse or start conversations in one workspace while conversations elsewhere keep running. Removing a workspace permanently deletes its conversation trees and histories while preserving the project directory and files.
+
+The workspace panel has separate **Workspace files** and **Git changes** entries. Browse folders, preview resources, inspect changes and open paths written by the current turn. Each workspace keeps its own open tabs across conversation switches.
+
+## Send messages and attachments
+
+A new conversation stays a draft until its first send. Paste images, drop files, choose the attachment button or type `/file` to add uploads. A message accepts up to 8 files, 6 MiB each and 12 MiB total. Image-capable models receive supported images; eligible UTF-8 text files up to 1 MiB are included in model context. [Input](../../packages/input/README.md) defines the file eligibility rules. Other uploads are available to enabled Shell commands through `MINI_HARNESS_ATTACHMENTS`. Uploads belong to the conversation and are deleted with it.
+
+Use `@` to reference a workspace file without copying it, and `/` to discover skills and commands. Click an attachment or workspace reference to preview it. Reference text remains in the message; a workspace reference opens the current file rather than a stored snapshot.
+
+While a run is active, queue another message. **Settings → General → Add instructions** selects steering or follow-up delivery. Steering takes effect at the next safe boundary and skips tool calls that have not started. Follow-ups run after the current answer. Acknowledged queued input is stored durably, including its attachments and separate delivery identity.
+
+Refreshing, disconnecting or switching conversations leaves runs active. Reopen a conversation to reconnect, or choose **Stop** to cancel that run and its inline work. Independently owned child conversations continue. Restart marks unfinished work interrupted and never retries unknown tool outcomes automatically. Pending follow-ups remain for a later explicit run; steering targeted at the interrupted run is recorded as failed.
+
+## Manage conversation history and child agents
+
+Search or rename conversations, copy messages, retry errors, and edit/resend a persisted user message. A revision starts a new active branch; exports retain every branch. Long conversations compact automatically. Manual compaction keeps recent context plus a summary while preserving visible history and message identities.
+
+With Subagents enabled, the model can delegate work to child conversations. **Plugins → Subagents** controls maximum depth, concurrency and the optional default model. Defaults are one child level and four concurrent executions. An explicit provider/model selected by the delegating model takes precedence; see [Subagents](../../packages/subagents/README.md) for selection and limit details. Delegation returns identifiers immediately, including when the child is queued. Lowering concurrency lets current work finish before admitting more children.
+
+Expand the conversation tree to view descendants. Use checkboxes for bulk export or permanent deletion; selecting a parent includes its descendants. Stop active conversations before exporting. Exports contain metadata, the complete native JSONL histories and original attachments. Deletion drains affected work and removes the selected trees and their owned files. There is no archive state.
+
+## Enable tools and set permissions
+
+Use Plugins to toggle Files, Skills, Subagents, Shell, Session helper and installed extensions. Session helper supplies message copy and edit/resend actions. Tool availability updates at the next model turn. Unloading a tool revokes its outstanding invocations while unrelated work can continue.
+
+Choose permissions from the left side of the composer:
+
+| Permission  | Behavior                                                                                                                   |
+| ----------- | -------------------------------------------------------------------------------------------------------------------------- |
+| Read-only   | Select tools that declare read-only access; descendants inherit the restriction                                            |
+| Standard    | Apply normal tool policy and per-command Shell approval                                                                    |
+| Full access | Bypass Shell approval, including pending requests, while keeping inherited read-only restrictions and configured isolation |
+
+Permission changes apply to work that has not started and persist per conversation. They do not enable disabled plugins. Shell starts disabled. Its isolated mode requires supported Linux isolation facilities; trusted host mode runs with your user permissions. Review the [security model](../../SECURITY.md) and [Shell configuration](../../packages/shell/README.md) before enabling command execution.
+
+## Load skills and instructions
+
+Place a skill in a directory containing `SKILL.md`, then use `/skill:name` to attach it to a message. Models can also call `load_skill` while Skills is enabled. Roots are listed below from lowest to highest priority; a valid higher-priority skill replaces the same name:
 
 1. `~/.agents/skills/`
 2. `~/.mini-harness/skills/` or `$MINI_HARNESS_HOME/skills/`
 3. `<workspace>/.agents/skills/`
 4. `<workspace>/.mini-harness/skills/`
 
-The highest-priority valid skill wins when names match. Skill directories and `SKILL.md` can be links, including links to locations outside the workspace. Use `/skill:name` to attach instructions to your message. Models can use `load_skill` while Skills is enabled. Native prompts also read regular, unlinked `AGENTS.md` files in the configuration directory and workspace root. Skills discovery and all instruction reads have size and resource limits.
+Skill directories and instruction files may be links to locations outside the workspace. Review their targets and instructions before loading them. Native prompts also read regular, unlinked `AGENTS.md` files in the configuration directory and workspace root. Reads and discovery are bounded; see [Skills](../../packages/skills/README.md) for the file format and limits.
 
-Long conversations compact automatically. Manual compaction keeps two recent turns plus a summary for model context while preserving all message identities and history. Advanced users can set `maxTurns` (default 128) in `core:agent` and `autoCompact` (default `true`) in `core:compaction` in `cordis.patch.yml`.
+## Customize configuration
 
-Conversation permissions can be changed at any time from the left side of the composer. Read-only selects tools that declare read-only access, including built-in file reading, search and skill loading. It applies to descendant conversations. Standard applies the regular tool and approval rules. Full access bypasses per-command Shell approval while inherited read-only mode still applies. Choosing Full access also releases Shell approvals already pending in that conversation. The choice persists per conversation and applies to calls that have not started. Shell starts disabled and, unless a conversation is set to Full access, asks for approval for every command. File tools restrict access to the active workspace; Linux isolated Shell requires bubblewrap and `prlimit`. Trusted host Shell and reviewed JavaScript plugins run with your user permissions. See [SECURITY.md](../../SECURITY.md).
-
-The default Web application is composed from the base and Web bundles in the independent package at `~/.mini-harness/profiles/web/`. See [Profiles](../profiles.md) for custom startup and configuration. The workspace panel has separate **Workspace files** and **Git changes** entries. Click an attachment or a workspace reference to preview the resource.
-
-For configuration ownership and advanced settings, see [configuration](../configuration.md).
+Settings and Plugins edit the selected Profile's user layer. For custom startup, plugin installation, YAML overrides and separate compositions, use the [Profile reference](../profiles.md). The [configuration map](../configuration.md) identifies the owner of model credentials, plugin settings, workspace roots and conversation data. Developers can start with the [plugin cookbook](../cookbook/creating-a-plugin.md).

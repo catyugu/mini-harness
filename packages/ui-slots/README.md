@@ -1,39 +1,49 @@
-# @mini-harness/ui-slots
+# UI Slots
 
-Registers browser slot owners and their contributions.
+Mounts browser contributions into named outlets. The registry owns selection, ordering and renderer lifetime; the feature declaring an outlet owns its placement and meaning. It does not own conversation state, navigation or configuration.
 
-## Responsibilities
+## Usage and public API
 
-Owns ordered and keyed mounting, replacement, restoration and renderer disposal.
+Import types from [`mini-harness/ui-slots`](src/browser/api.ts) and inject `miniSlots` in a browser plugin. `define(name, container, kind)` declares an empty outlet; `register(name, contribution, options)` contributes an element or renderer. Both return a disposer, which belongs in a Cordis effect.
 
-## Implementation
+For example, a plugin can contribute a control to a Layout outlet:
 
-`src/browser/api.ts` defines typed slots. `registry.ts` implements mounting, and `setup.ts` registers the browser service.
+```ts
+import type { Context } from 'mini-harness/cordis';
+import type {} from 'mini-harness/ui-layout';
+import type {} from 'mini-harness/ui-slots';
 
-## Public API
+export const inject = ['miniSlots'];
 
-`miniSlots` and `SlotMap` are available through the browser SDK.
+export function apply(ctx: Context) {
+  ctx.effect(() =>
+    ctx.miniSlots.register(
+      'sidebar.actions',
+      () => {
+        const node = document.createElement('p');
+        node.textContent = 'Extension ready';
+        return node;
+      },
+      { key: 'example-status', order: 20 },
+    ),
+  );
+}
+```
 
-## Dependencies
+Features declare additional names by augmenting `SlotMap`. A `single` outlet accepts at most one selected key; `list` is the default and accepts multiple keys. The [composer replacement example](../../docs/examples/browser-panel/web/composer.ts) shows replacing a native renderer while sharing the existing controller.
 
-Uses [UI Runtime](../ui-runtime/README.md) to associate contributions with their originating browser plugins.
+## Selection and lifetime
 
-## Lifecycle and ownership
+- Each name has one outlet owner. Duplicate owners and nonempty outlet containers are rejected.
+- Contributions may register before their outlet exists. Removing the outlet unmounts views but preserves contributions for a later owner.
+- `key` identifies alternatives for the same contribution; without a key, the element or renderer itself is the identity. Higher `priority` wins for that key, and equal priorities conflict. `order` sorts the selected contributions in ascending display order independently of priority.
+- Removing a winning replacement restores the next eligible contribution. A renderer receives a fresh `AbortSignal` for each mount and may return either an element or `{ node, dispose }`. Replacement, outlet removal and unregistration abort the signal, call the optional disposer and remove the node.
+- Failed registration removes that candidate and restores eligible contributions. A renderer must release its own external work through its signal or disposer; the registry cannot recover arbitrary side effects outside that lifetime.
 
-`core:slots` owns its browser registry. Each mounted renderer receives a disposal signal.
+The built-in `core:slots` Entry in the [web Profile](../../profiles/web.yml) provides `miniSlots`. It has no configuration. The registry uses UI Runtime's internal keyed-selection utility; it has no feature-service dependencies.
 
-Keyed registrations use `order` for display and `priority` for selection (higher wins, equal priorities conflict). Each selected renderer gets a fresh signal and releases it when replaced or removed.
+## Implementation and verification
 
-## Testing
+[`registry.ts`](src/browser/registry.ts) implements outlet ownership and mounting. [Registry tests](tests/registry.test.ts) cover early contributions, duplicate identities, single-outlet conflicts, priority, replacement, restoration and failed render cleanup.
 
-`tests/registry.test.ts` covers order, replacement, disposal and staged failures.
-
-## Usage
-
-Import [`mini-harness/ui-slots`](src/browser/api.ts). Define an empty outlet with `miniSlots.define(name, container, kind)` (list by default); register a node or renderer with `miniSlots.register(name, contribution, options)`. Both return disposers. Contributions can precede the outlet. Order sorts ascending and higher priority wins for the same key; equal priorities conflict. Removing a replacement restores the prior contribution. Each renderer owns its view signal and may return a node plus a disposer.
-
-See the [composer replacement example](../../docs/examples/browser-panel/web/composer.ts).
-
-## Related documentation
-
-[Package index](../README.md) · [Frontend](../../docs/subsystems/frontend.md)
+See [UI Layout](../ui-layout/README.md) for application outlets and [frontend composition](../../docs/subsystems/frontend.md) for the browser ownership model.

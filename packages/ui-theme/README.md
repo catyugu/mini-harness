@@ -1,31 +1,27 @@
-# @mini-harness/ui-theme
+# UI Theme
 
-Owns visual tokens and applies the selected browser color scheme.
+Owns the application's visual tokens and selected color scheme. Controls and feature styles consume those tokens; Theme does not own their layout or behavior.
 
-## Responsibilities
+## Configuration and activation
 
-Publishes theme variables and contributes its own appearance controls when Settings is installed.
+The [web Profile](../../profiles/web.yml) enables the native `@mini-harness/ui-theme` plugin as the live Entry `core:theme`. Its [configuration schema](src/manifest.ts) accepts `appearance: system | light | dark`, with `system` as the default. A Profile Entry can set the scheme explicitly:
 
-## Structure
+```yaml
+- id: core:theme
+  name: '@mini-harness/ui-theme'
+  live: true
+  config:
+    appearance: dark
+```
 
-`src/manifest.ts` declares appearance defaults and the stylesheet. `src/browser/` applies theme changes.
+This is an Entry fragment for the Profile's `plugins` list. See [Profiles](../../docs/profiles.md) for editing an existing Entry and layer precedence.
 
-## API
+## Browser behavior and ownership
 
-Appearance uses the theme Entry's native configuration and the Settings contribution API.
+[`setup.ts`](src/browser/setup.ts) reads the Entry configuration, applies `data-theme` to the document root and subscribes to accepted updates. The [stylesheet](src/browser/style.css) defines the tokens and system-color-scheme behavior. There is no separate theme service or public SDK module.
 
-## Dependencies
+When `miniSettingsRegistry` is available, Theme contributes the Appearance section and binds its selector to the same Entry configuration. Theme activation and changes also work without Settings. Unloading Theme releases the subscription, removes the document attribute and removes its Entry-owned stylesheet; the optional Settings contribution follows its injected lifetime.
 
-[UI Primitives](../ui-primitives/README.md) and [UI Layout](../ui-layout/README.md) consume these tokens.
+## Verification
 
-## Lifecycle
-
-The theme applies independently of Settings. Its selected scheme and stylesheet are released at browser unmount.
-
-## Configuration
-
-`core:theme.appearance` defaults to `system`. Settings can switch to light or dark live.
-
-## Testing
-
-[Settings browser tests](../../test/browser/settings.spec.ts) cover live theme changes.
+[Settings tests](../../test/browser/settings.spec.ts) cover live theme changes, persistence and reachable controls across viewport sizes. [File-view tests](../../test/browser/files.spec.ts) exercise themed responsive panels. See [UI Primitives](../ui-primitives/README.md) for shared controls and [Settings](../settings/README.md) for the contribution contract.

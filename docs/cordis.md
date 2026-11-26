@@ -12,7 +12,7 @@ An effect owns registrations and their disposers: `ctx.effect(() => service.regi
 
 Each activation has a cancellation signal (`ctx.fiber.signal`). Use `ctx.fiber.run(work, requestSignal)` for asynchronous work whose completion must be drained during disposal. Teardown aborts and drains tracked work, then releases effects. Injected services stay available while their dependents dispose.
 
-Entry Trees reconcile named entries against a new configuration. Native Config schemas validate effective configuration; the Entry holds raw and effective values. Live entries can receive `internal/update`; other config changes restart the activation. Nested fibers read their owning Entry's configuration but retain their own lifetime.
+Entry Trees reconcile named entries against a new configuration. Native Config schemas validate effective configuration; the Entry holds raw and effective values. Loaded Fibers receive `internal/update` and a listener can handle or reject the candidate. Without a handling listener, the default behavior accepts live updates in place and restarts non-live activations. Nested fibers read their owning Entry's configuration but retain their own lifetime.
 
 For differences from upstream, see the [vendored source and local changes](../vendor/cordis/README.md) and [framework tests](../test/framework/cordis.test.ts).
 

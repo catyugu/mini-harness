@@ -15,6 +15,7 @@
     "browser-panel/**/*.ts",
     "greeting-service/**/*.ts",
     "greeting-route/**/*.ts",
+    "model-provider/**/*.ts",
     "process-preview/**/*.ts",
     "scoped-tool/**/*.ts"
   ]

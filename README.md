@@ -17,7 +17,7 @@ Configure a model in Settings → Model, register a workspace and start a conver
 
 - [Documentation index](docs/README.md)
 - [Configuration and Profiles](docs/configuration.md)
-- [Architecture](docs/architecture.md) and [package index](packages/README.md)
+- [Architecture](docs/architecture.md) and [package index](docs/packages.md)
 - [Plugin development](docs/cookbook/creating-a-plugin.md) and [examples](docs/examples/README.md)
 - [Development](docs/development.md) and [contributing](CONTRIBUTING.md)
 - [Security and trust model](SECURITY.md)

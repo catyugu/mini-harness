@@ -6,7 +6,7 @@ The Web interface is a separate Cordis graph. Server services publish a bootstra
 | -------------------------------------------------------------- | ------------------------------------------------------- |
 | Visual tokens and scheme                                       | [UI Theme](../../packages/ui-theme/README.md)           |
 | Controls, icons and sanitized Markdown                         | [UI Primitives](../../packages/ui-primitives/README.md) |
-| Outlet declarations and renderer selection                     | [UI Slots](../../packages/ui-slots/README.md)           |
+| Outlet registry and renderer selection                         | [UI Slots](../../packages/ui-slots/README.md)           |
 | Responsive frame, pages, dialogs and workspace tabs            | [UI Layout](../../packages/ui-layout/README.md)         |
 | Conversation selection, drafts, history and composer contracts | [Conversation](../../packages/conversation/README.md)   |
 | Configuration UI contributions                                 | [Settings](../../packages/settings/README.md)           |

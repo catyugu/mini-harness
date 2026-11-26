@@ -1,10 +1,22 @@
 # Add a model provider
 
-Start with [create a plugin](creating-a-plugin.md). A complete provider contributes discovery and streaming together; a transport-only adapter deliberately reuses existing catalog capabilities.
+A provider pairs model discovery with a streaming adapter. The complete [local echo example](../examples/model-provider/plugin.ts) uses public SDK imports and runs without a network service or credentials. It demonstrates registration and native events; it does not perform inference or call tools.
 
-Import `ModelSource` from `mini-harness/models` and `LlmAdapter` from `mini-harness/llm`. Implement the source's `list`, `resolve` and `capabilities` methods (and optional `available`); implement the adapter's `accepts` predicate and async `stream` generator. Translate provider messages and streaming events into the native message contract, honor request cancellation, and keep provider credentials and continuation details inside the adapter.
+## 1. Define discovery and capabilities
 
-With those two implementations, mount the paired registration:
+Implement `ModelSource` from `mini-harness/models`. The example advertises `example/echo` through `list`, resolves only that exact provider/model pair, and supplies text-only capabilities through `capabilities`. `available` is optional when discovery does not need asynchronous work.
+
+Use the catalog to publish choices and capabilities. Keep connection details and credentials in the provider implementation. [Models](../../packages/models/README.md) owns catalog selection and the relationship between model sources and adapters.
+
+## 2. Translate the native stream
+
+Implement `LlmAdapter` from `mini-harness/llm`. Its `accepts` predicate checks only the requested choice; it must not call the aggregate catalog or adapter selector. The example reads the last user message, emits a `text-delta`, then a `done` event containing the complete native assistant message.
+
+For a real provider, pass the request signal through to network I/O, translate tool calls and reasoning explicitly, and preserve required provider continuation/signature data. A terminal message includes the full response, not only its final chunk. Do not emit a completed answer after cancellation. [LLM](../../packages/llm/README.md) defines the supported content and failure contracts.
+
+## 3. Register and enable it
+
+The example injects `harnessModels` and binds the pair to one activation:
 
 ```ts
 import type { Context } from 'mini-harness/cordis';
@@ -16,6 +28,18 @@ export function registerProvider(ctx: Context, source: ModelSource, adapter: Llm
 }
 ```
 
-The plugin must inject `harnessModels`. This snippet is the registration step, not a complete provider. Do not call the aggregate catalog from `accepts`. Add the built plugin to the Profile, choose a model from its catalog and send a message. Test selection, stream completion, cancellation and removal; the [extension integration tests](../../test/plugins/extensions.test.ts) demonstrate alternate adapters and catalog sources.
+Build the repository, then add this entry to the example Profile created in [create a plugin](creating-a-plugin.md):
 
-See [Models](../../packages/models/README.md) for paired discovery and [LLM](../../packages/llm/README.md) for protocol and selection. Use [scoped providers](../scoped-providers.md) to replace services for one resource without affecting siblings.
+```yaml
+plugins:
+  - id: example-provider
+    name: /absolute/path/to/mini-harness/dist/docs/examples/model-provider
+```
+
+Start the Profile and choose **Example echo** in the model selector. Sending `Hello` produces `Echo: Hello`. Disable the entry and confirm its model disappears from discovery. The effect unregisters discovery and transport together.
+
+## 4. Adapt and verify the provider
+
+Replace the deterministic stream with your provider's API while keeping the public contracts. Check a completed response, provider failure, cancellation and disabling the Entry during streaming. Calling the registration's disposer removes future selection; disposing the provider Fiber cancels its in-flight streams. Use [extension tests](../../test/plugins/extensions.test.ts) for examples of native tool calls, retry hooks and scoped adapter replacement. The build compiles the echo example; compilation alone does not verify an external provider's protocol.
+
+A transport-only override can register with `harnessLlm` when it deliberately reuses an existing catalog's capabilities. Use [scoped composition](../scoped-providers.md) to target a workspace or session. Registering a model source does not require implementing the built-in Pi provider store or its settings UI.

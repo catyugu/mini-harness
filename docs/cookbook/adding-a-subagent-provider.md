@@ -1,11 +1,28 @@
 # Run a child agent with a selected provider
 
-There is no separate public subagent-provider registry in the current implementation. Child agents are ordinary sessions and runs using the same [model providers](adding-a-model-provider.md).
+Child agents use ordinary sessions, Runs and model providers. The current SDK has no separate subagent-provider registry. To supply another backend, first [register a model provider](adding-a-model-provider.md), then select it for delegation or an explicitly submitted child run.
 
-For normal model-driven delegation, enable Subagents, set a child default model in its plugin configuration if desired, and let the model call `delegate` with an optional provider/model override. See [Subagents](../../packages/subagents/README.md) for precedence and limits.
+## Configure model-driven delegation
 
-An extension can also create a child explicitly using `harnessSessions.create({ parentId, title })` and submit `harnessRuns.submit(child.id, { message, model })`. Both services are declared through native Cordis injection. The resulting handle is a normal Task Handle. If the work must survive a short-lived caller, choose a suitable provider lifetime, resource ownership and cancellation policy; do not retain a run context accidentally.
+Enable Subagents in Plugins. An explicit `provider` in a `delegate` call selects that provider and its optional requested `model`. Otherwise, the configured child model takes precedence over the parent model, and an explicit `model` changes the ID within that inherited provider. See [Subagents](../../packages/subagents/README.md) for provider-default resolution and depth/concurrency limits.
 
-The runnable [Task notes follow-up endpoint](../examples/task-notes/plugin.ts) checks the parent, prepares its configured scope, resolves the model and creates a child. That example waits for the result with the request signal. For independent work, return the handle ID instead of awaiting it and do not bind cancellation to a short-lived request.
+Ask a tool-capable model to delegate a task using the registered choice. For the echo example, specify both `provider: "example"` and `model: "echo"`: a provider-only call supplies an empty model ID, and default-model resolution depends on that provider's implementation. Delegation returns a child session ID and task ID immediately, including while queued. Open the child in the conversation tree to inspect its work. Parent-run cancellation does not cancel this independently owned child; deleting the parent conversation removes the descendant tree.
 
-Read [execution](../subsystems/execution.md) before changing delegation or concurrency behavior. The generic runtime and Runs must not acquire delegation-specific scheduling policy.
+## Submit a child from a plugin
+
+The complete [Task notes follow-up endpoint](../examples/task-notes/plugin.ts) demonstrates this sequence:
+
+1. Inject Sessions, Runs, Models and Profile Scopes through Cordis.
+2. Validate the parent and message; prepare `session:<parentId>` before resolving scoped model services.
+3. Read the parent's committed model and verify it resolves in that composition.
+4. If requested, await `harnessApprovalRequests.request`; denial rejects.
+5. Create the child with `harnessSessions.create({ parentId, title })` and submit `harnessRuns.submit(child.id, { message, model }, options)`.
+6. Observe the returned Task Handle and report the child ID, run ID and result.
+
+After enabling Task notes and sending a parent message with a configured model, call its authenticated `POST /api/extensions/task-notes/follow-up` endpoint with `parentId` and `message`. The response waits for the result. Its request signal is passed to the child submission, so disconnecting this particular request cancels that work. This is a deliberate request-bound example, distinct from the independently owned built-in delegation path.
+
+For independent work, return the IDs after admission, select a provider Context that outlives the request, and leave request cancellation out of the submission. Observe task failure and settlement through the [Tasks contract](../../packages/tasks/README.md). If several children share a capacity limit, use one task pool owned by the delegating plugin; follow the built-in [delegation implementation](../../packages/subagents/src/server/delegation.ts).
+
+## Check lifecycle behavior
+
+Verify model selection, queued admission, cancellation, plugin removal and parent deletion. A serial task-control wait yields the enclosing run's pool capacity while retaining its exclusive session lane. The [execution reference](../subsystems/execution.md) explains the relationship between independent children and structured inline tasks. Keep delegation policy in the delegating plugin, with generic scheduling in Tasks.
