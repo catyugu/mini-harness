@@ -214,6 +214,7 @@ export function createRightTabs(
     }
     if (visible().includes(tab)) {
       layout.closeDrawer(false);
+      if (!layout.panelOpen()) shown = undefined;
       layout.setPanel(true, true);
       activate(tab);
     } else {
