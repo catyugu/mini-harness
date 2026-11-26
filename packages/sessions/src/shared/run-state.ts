@@ -1,6 +1,13 @@
-import type { TaskData, TaskState } from '@mini-harness/tasks/api';
+import type { TaskData, TaskSnapshot, TaskState } from '@mini-harness/tasks/api';
 
-export interface RunInfo {
+/** Only conversation-specific facts; lifecycle state belongs to the task. */
+export interface RunDetails {
+  inputEntryId?: string | null;
+  sequence: number;
+  changedFiles?: string[];
+}
+
+export interface RunInfo extends RunDetails {
   id: string;
   sessionId: string;
   state: TaskState;
@@ -11,10 +18,21 @@ export interface RunInfo {
   taskMetadata?: Readonly<Record<string, TaskData>>;
   finishedAt?: string;
   error?: string;
-  /** User message responsible for the current turn, null while input is being accepted. */
-  inputEntryId?: string | null;
-  sequence: number;
-  changedFiles?: string[];
+}
+
+export function projectRun(sessionId: string, task: TaskSnapshot, details: RunDetails): RunInfo {
+  return {
+    ...details,
+    id: task.id,
+    sessionId,
+    state: task.state,
+    startedAt: task.createdAt,
+    executedAt: task.startedAt,
+    finishedAt: task.finishedAt,
+    creator: task.creator,
+    taskMetadata: task.metadata,
+    error: task.error,
+  };
 }
 
 export interface RunTermination {

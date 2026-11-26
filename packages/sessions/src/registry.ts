@@ -2,6 +2,7 @@ import { displayRecord } from './projection.ts';
 import type { RecordAppend } from './shared/display-record.ts';
 import { userContent } from './user-content.ts';
 import type { RunInfo } from './shared/run-state.ts';
+import { runFromEntry } from './log-api.ts';
 import type { SessionEntry, SessionLogPort } from './log-api.ts';
 import { DomainError } from '@mini-harness/platform/errors';
 import { randomUUID } from 'node:crypto';
@@ -269,7 +270,8 @@ export class SessionRegistry implements SessionStore {
     const { id } = record;
     const writable = mode !== 'read';
     const onChange = (entry: SessionEntry) => {
-      if (entry.type === 'run') this.latestRuns.set(id, entry.run);
+      const run = runFromEntry(id, entry);
+      if (run) this.latestRuns.set(id, run);
       const inbox = entry.type.startsWith('inbox-');
       if (inbox || (entry.type === 'message' && entry.inboxId)) this.notify(id, false, true);
       if (!inbox && entry.type !== 'model-request' && entry.type !== 'tool-schema')

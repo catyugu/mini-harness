@@ -125,16 +125,12 @@ test('ownership, not creation, controls cancellation and deletion', async () => 
 });
 
 test('a durable projection fault cannot acknowledge a successful task', async () => {
-  const runtime = new TaskRuntime();
-  const task = runtime.start(
-    {
-      owner: 'session:one',
-      record(snapshot) {
-        if (snapshot.state === 'completed') throw new Error('write failed');
-      },
+  const runtime = new TaskRuntime({
+    record({ task }) {
+      if (task.state === 'completed') throw new Error('write failed');
     },
-    async () => 'not acknowledged',
-  );
+  });
+  const task = runtime.start({ owner: 'session:one' }, async () => 'not acknowledged');
   await assert.rejects(task.result, /write failed/);
   assert.equal(runtime.get(task.id)?.state, 'failed');
 });

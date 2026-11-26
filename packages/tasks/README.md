@@ -17,8 +17,8 @@ terminal snapshots, subject also to a 16 MiB aggregate observation/output budget
 serializable observation result independently of the actual JavaScript value returned by the handle.
 
 Resource domains may handle the Cordis `tasks/admit`, `tasks/record` and `tasks/history` events.
-Sessions owns long-term history in SessionLog, including retained background task facts and existing
-Run records. `list` returns active and recent tasks; `get` and `readOutput` can also retrieve a durable
+Sessions owns long-term history in SessionLog, including retained background tasks and conversation runs.
+Every retained task uses the same synchronous durable transition hook; observers run only after commit. `list` returns active and recent tasks; `get` and `readOutput` can also retrieve a durable
 record by ID. Recovery records interrupted work rather than restarting unknown side effects.
 
 `removeOwner` excludes new work until removal settles. The resource domain is responsible for

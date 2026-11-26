@@ -1,6 +1,7 @@
 # @mini-harness/runs
 
-Admits session runs and projects Task Runtime lifecycle into conversation history and bounded replay.
+Admits session runs and projects Task Runtime lifecycle into bounded replay. Sessions persists the
+same Task snapshot plus conversation-specific run details; the runtime owns the lifecycle.
 
 `harnessRuns.submit(id, input, options)` returns the original Task Handle. The Task ID is the Run ID.
 Runs owns the one-active-run-per-session constraint, model selection, input preparation, inbox

@@ -103,9 +103,11 @@ test(
       .trim()
       .split('\n')
       .map((line) => JSON.parse(line));
-    const persistedRun = durable.filter((entry) => entry.type === 'run').at(-1);
+    const persistedRun = durable.filter((entry) => entry.type === 'task' && entry.run).at(-1);
     assert.ok(persistedRun);
-    assert.equal(persistedRun.run.state, 'completed');
+    assert.equal(persistedRun.task.state, 'completed');
+    assert.equal(persistedRun.task.id, finishedRun.id);
+    assert.equal(persistedRun.run.state, undefined);
   },
 );
 

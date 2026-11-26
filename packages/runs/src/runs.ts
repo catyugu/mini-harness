@@ -5,7 +5,7 @@ import { tagScope, scopeTarget } from '@mini-harness/plugin-api/scopes';
 import type { ThinkingLevel, ModelChoice } from '@mini-harness/llm/vocabulary';
 import type { ProfileScopes } from '@mini-harness/plugin-api/configuration';
 import { DomainError } from '@mini-harness/platform/errors';
-import { terminal, type TaskHandle, type TaskPort, type TaskSnapshot } from '@mini-harness/tasks/api';
+import { terminal, type TaskEvent, type TaskHandle, type TaskPort, type TaskSnapshot } from '@mini-harness/tasks/api';
 import { imageMimeType } from '@mini-harness/input/prepare';
 import { validateModelOptions } from '@mini-harness/llm/options';
 import type { Attachment, InputSource } from '@mini-harness/input/message';
@@ -13,7 +13,8 @@ import type { CapabilityObservation } from '@mini-harness/plugin-api/observation
 import { Inbox } from './inbox.ts';
 import { SessionRun } from './session-run.ts';
 import type { StreamEvent, RunEvent } from './stream.ts';
-import { isRunning, type RunInfo } from '@mini-harness/sessions/run-state';
+import { isRunning, projectRun, type RunDetails, type RunInfo } from '@mini-harness/sessions/run-state';
+import { runFromEntry } from '@mini-harness/sessions/log-api';
 import { RunEvents } from './events.ts';
 import type { RunInput, RunPort, RunSubmission } from './api.ts';
 import type { SessionStore } from '@mini-harness/sessions/records';
@@ -30,6 +31,7 @@ interface Activity {
   task?: TaskHandle;
   events?: RunEvents;
   context?: Context;
+  emit?: (event: StreamEvent) => void;
 }
 
 export class Runs implements RunPort {
@@ -94,6 +96,75 @@ export class Runs implements RunPort {
     return activity;
   }
 
+  private publish(activity: Activity, event: StreamEvent) {
+    const item = activity.events!.publish(event);
+    try {
+      activity.emit?.(item);
+    } catch {
+      /* An observer cannot terminate the run. */
+    }
+  }
+
+  /** Contribution to the session's one durable task record, before runtime settlement. */
+  taskDetails(id: string, task: TaskSnapshot): RunDetails | undefined {
+    const activity = this.work.get(id);
+    if (task.type !== 'agent-run' || !activity) return;
+    const info = activity.events?.info;
+    if (!info) return { sequence: 0, inputEntryId: null };
+    if (info.id !== task.id) return;
+    if (terminal(task.state)) {
+      const inbox = new Inbox(this.registry.log(id));
+      if (task.state === 'cancelled') inbox.cancel('Run cancelled');
+      else
+        inbox.failPending(
+          'steer',
+          task.state === 'interrupted'
+            ? 'The target run was interrupted before delivery'
+            : 'The target run ended before delivery',
+        );
+    }
+    return {
+      inputEntryId: info.inputEntryId,
+      changedFiles: info.changedFiles,
+      sequence: info.sequence + 1 + Number(task.state === 'failed' && Boolean(task.error)),
+    };
+  }
+
+  taskChanged({ type, task }: TaskEvent) {
+    if (task.type !== 'agent-run' || !task.resourceId) return;
+    const id = task.resourceId;
+    const activity = this.work.get(id);
+    if (!activity) return;
+    if (type === 'created') {
+      activity.events = new RunEvents(projectRun(id, task, { sequence: 0, inputEntryId: null }));
+      return;
+    }
+    if (type !== 'transition') return;
+    const events = activity.events;
+    if (!events || events.info.id !== task.id) return;
+    const info = events.info;
+    const firstAdmission = !info.executedAt && task.state === 'running';
+    const ended = terminal(task.state);
+    try {
+      if (task.state === 'failed' && task.error) this.publish(activity, { type: 'error', error: task.error });
+      const next = projectRun(id, task, {
+        inputEntryId: info.inputEntryId,
+        changedFiles: info.changedFiles,
+        sequence: info.sequence + 1,
+      });
+      Object.assign(info, next, { sequence: info.sequence });
+      this.publish(activity, { type: 'run', run: next });
+      if (firstAdmission) this.observe({ type: 'run-started', sessionId: id, run: next }, activity.task?.signal);
+      if (ended) this.observe({ type: 'run-ended', sessionId: id, run: next });
+    } finally {
+      if (ended) {
+        this.work.delete(id);
+        events.close();
+      }
+      this.changed(id);
+    }
+  }
+
   private launch(
     id: string,
     prompt: string,
@@ -113,6 +184,7 @@ export class Runs implements RunPort {
     reserved?: Activity,
   ) {
     const activity = reserved ?? this.reserve(id);
+    activity.emit = emit;
     try {
       validateModelOptions(model, thinkingLevel);
       const fallback = this.recent();
@@ -120,17 +192,9 @@ export class Runs implements RunPort {
       if (!record) throw new DomainError('not_found', 'Conversation not found');
       signal?.throwIfAborted();
       const prepared = this.registry.prepareInput(id, prompt, attachments);
-      const log = this.registry.log(id);
-      let info: RunInfo;
-      let events: RunEvents;
       const publish = (event: StreamEvent) => {
-        if (event.type === 'user') info.inputEntryId = event.message.id;
-        const item = events.publish(event);
-        try {
-          emit?.(item);
-        } catch {
-          /* An observer cannot terminate the run. */
-        }
+        if (event.type === 'user') activity.events!.info.inputEntryId = event.message.id;
+        this.publish(activity, event);
         if (event.type === 'user') {
           this.observe({
             type: 'input-accepted',
@@ -140,32 +204,6 @@ export class Runs implements RunPort {
             runSource: source ?? 'user',
             model: event.model,
           });
-        }
-      };
-      const project = (task: TaskSnapshot, extraEvents = 0): RunInfo => ({
-        ...info,
-        state: task.state,
-        executedAt: task.startedAt,
-        finishedAt: task.finishedAt,
-        error: task.error,
-        sequence: info.sequence + 1 + extraEvents,
-      });
-      const apply = (next: RunInfo, error?: string) => {
-        const firstAdmission = !info.executedAt && next.state === 'running';
-        const ended = terminal(next.state);
-        try {
-          if (error) publish({ type: 'error', error });
-          Object.assign(info, next, { sequence: info.sequence });
-          publish({ type: 'run', run: next });
-          if (firstAdmission)
-            this.observe({ type: 'run-started', sessionId: id, run: next }, activity.task?.signal);
-          if (ended) this.observe({ type: 'run-ended', sessionId: id, run: next });
-        } finally {
-          if (ended) {
-            this.work.delete(id);
-            events.close();
-          }
-          this.changed(id);
         }
       };
       const task = this.tasks.start(
@@ -179,38 +217,6 @@ export class Runs implements RunPort {
           signal,
           acquire,
           projectResult: (answer) => answer,
-          record(snapshot) {
-            if (!info) {
-              info = {
-                id: snapshot.id,
-                sessionId: id,
-                state: snapshot.state,
-                startedAt: snapshot.createdAt,
-                creator: snapshot.creator,
-                taskMetadata: snapshot.metadata,
-                sequence: 0,
-                inputEntryId: null,
-              };
-              log.append({ type: 'run', run: info });
-              events = activity.events = new RunEvents(info);
-              return;
-            }
-            if (terminal(snapshot.state)) {
-              const inbox = new Inbox(log);
-              if (snapshot.state === 'cancelled') inbox.cancel('Run cancelled');
-              else
-                inbox.failPending(
-                  'steer',
-                  snapshot.state === 'interrupted'
-                    ? 'The target run was interrupted before delivery'
-                    : 'The target run ended before delivery',
-                );
-            }
-            const error = snapshot.state === 'failed' ? snapshot.error : undefined;
-            const next = project(snapshot, error ? 1 : 0);
-            log.append({ type: 'run', run: next });
-            return () => apply(next, error);
-          },
         },
         async (task) => {
           try {
@@ -218,7 +224,7 @@ export class Runs implements RunPort {
               this.sessionRun.prompt(ctx, record, prepared.text, publish, {
                 fallback,
                 beginSubmission: () => {
-                  info.inputEntryId = null;
+                  activity.events!.info.inputEntryId = null;
                 },
                 signal,
                 source,
@@ -230,6 +236,7 @@ export class Runs implements RunPort {
                 thinkingLevel,
                 revision,
                 changed: (path) => {
+                  const info = activity.events!.info;
                   info.changedFiles = [...new Set([...(info.changedFiles ?? []), path])];
                 },
               }),
@@ -241,19 +248,8 @@ export class Runs implements RunPort {
         },
       );
       activity.task = task;
-      // Only a failed durable commit bypasses the normal postcommit projection.
-      void task.result
-        .catch((error) => {
-          if (terminal(info.state)) return;
-          const snapshot = this.tasks.get(task.id);
-          if (!snapshot) return;
-          const message =
-            this.registry.logError(id) ?? (error instanceof Error ? error.message : String(error));
-          apply(project(snapshot, 1), message);
-        })
-        .catch(() => {});
       this.changed(id);
-      return { info: info!, task };
+      return { info: activity.events!.info, task };
     } catch (error) {
       activity.task?.cancel(error);
       this.work.delete(id);
@@ -337,13 +333,12 @@ export class Runs implements RunPort {
       throw new DomainError('conflict', 'This run is no longer the failed conversation run');
     return this.registry.inspectLog(id, (log) => {
       const entries = log.entries();
-      const start = entries.findIndex(
-        (entry) => entry.type === 'run' && entry.run.id === runId && entry.run.state === 'queued',
-      );
-      const end = entries.findIndex(
-        (entry, index) =>
-          index > start && entry.type === 'run' && entry.run.id === runId && entry.run.state === 'failed',
-      );
+      const matches = (entry: (typeof entries)[number], state: RunInfo['state']) => {
+        const item = runFromEntry(id, entry);
+        return item?.id === runId && item.state === state;
+      };
+      const start = entries.findIndex((entry) => matches(entry, 'queued'));
+      const end = entries.findIndex((entry, index) => index > start && matches(entry, 'failed'));
       if (start < 0 || end < 0) return;
       const delivered = entries
         .slice(start + 1, end)

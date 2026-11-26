@@ -14,7 +14,10 @@ export function bindTaskHistory(ctx: Context, sessions: SessionStore) {
   });
   ctx.on('tasks/record', ({ task, output }) => {
     const id = sessionId(task.owner);
-    if (id !== undefined) sessions.log(id).append({ type: 'task', task, output });
+    if (id === undefined) return;
+    const run = ctx.bail('sessions/task-details', id, task);
+    // The assistant answer already exists in the message log.
+    sessions.log(id).append({ type: 'task', task: run ? { ...task, result: undefined } : task, output, run });
   });
   ctx.on('tasks/history', (id): TaskHistoryRecord | undefined => {
     for (const session of sessions.list()) {
@@ -22,44 +25,24 @@ export function bindTaskHistory(ctx: Context, sessions: SessionStore) {
         const entries = log.entries();
         for (let i = entries.length - 1; i >= 0; i--) {
           const entry = entries[i];
-          if (entry.type === 'task' && entry.task.id === id)
-            return { task: entry.task, output: entry.output };
-          if (entry.type === 'run' && entry.run.id === id) {
-            const run = entry.run;
-            const start = entries.findIndex(
-              (item) => item.type === 'run' && item.run.id === id && item.run.state === 'queued',
-            );
-            const answer =
-              run.state === 'completed' && start >= 0
-                ? entries
-                    .slice(start + 1, i)
-                    .reverse()
-                    .find((item) => item.type === 'message' && item.message.role === 'assistant')
-                : undefined;
-            const result =
-              answer?.type === 'message' && answer.message.role === 'assistant'
-                ? answer.message.content.flatMap((part) => (part.type === 'text' ? [part.text] : [])).join('')
-                : undefined;
-            return {
-              task: {
-                id,
-                owner: 'session:' + session.id,
-                resourceId: session.id,
-                type: 'agent-run',
-                creator: run.creator,
-                metadata: run.taskMetadata,
-                state: run.state,
-                createdAt: run.startedAt,
-                startedAt: run.executedAt,
-                finishedAt: run.finishedAt,
-                cancellationRequested: run.state === 'cancelled' || run.state === 'interrupted',
-                outputCursor: 0,
-                retained: true,
-                error: run.error,
-                result,
-              },
-            };
-          }
+          if (entry.type !== 'task' || entry.task.id !== id) continue;
+          const task = entry.task;
+          if (!entry.run || task.state !== 'completed') return { task, output: entry.output };
+          const start = entries.findIndex(
+            (item) => item.type === 'task' && item.task.id === id && item.task.state === 'queued',
+          );
+          const answer =
+            start >= 0
+              ? entries
+                  .slice(start + 1, i)
+                  .reverse()
+                  .find((item) => item.type === 'message' && item.message.role === 'assistant')
+              : undefined;
+          const result =
+            answer?.type === 'message' && answer.message.role === 'assistant'
+              ? answer.message.content.flatMap((part) => (part.type === 'text' ? [part.text] : [])).join('')
+              : undefined;
+          return { task: { ...task, result }, output: entry.output };
         }
       });
       if (found) return found;

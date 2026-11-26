@@ -34,8 +34,6 @@ export interface TaskOptions<T = unknown> {
   retain?: boolean;
   /** Select a serializable result for subsequent observation. The handle always returns the original value. */
   projectResult?(result: T): TaskData;
-  /** Persist a transition; optionally return a projection callback to run after the runtime commits it. */
-  record?(task: TaskSnapshot): void | (() => void);
 }
 
 export interface TaskSnapshot {
@@ -59,7 +57,7 @@ export interface TaskSnapshot {
 }
 
 export type TaskEvent = {
-  type: 'created' | 'updated' | 'output' | 'deleted';
+  type: 'created' | 'transition' | 'updated' | 'output' | 'deleted';
   task: TaskSnapshot;
 };
 

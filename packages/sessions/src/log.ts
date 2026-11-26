@@ -1,7 +1,8 @@
 import { isThinkingLevel, type ToolSchema } from '@mini-harness/llm/vocabulary';
 import { pluginIdPattern, isScopeAddress } from '@mini-harness/plugin-api/selection';
 import { isRunning } from './shared/run-state.ts';
-import { terminal, type TaskHistoryRecord } from '@mini-harness/tasks/api';
+import { terminal } from '@mini-harness/tasks/api';
+import { runFromEntry } from './log-api.ts';
 import { isDeepStrictEqual } from 'node:util';
 import {
   RequestMessages,
@@ -165,8 +166,9 @@ export class SessionLog extends RecordLog<SessionEvent> implements SessionLogPor
   }
 
   protected recordAdded(entry: SessionEntry) {
-    if (!operational(entry) || entry.type === 'run') this.cachedProjection = undefined;
-    if (entry.type === 'run') this.runEvents.push(entry);
+    const run = runFromEntry(this.sessionId, entry);
+    if (!operational(entry) || run) this.cachedProjection = undefined;
+    if (run) this.runEvents.push({ ...entry, type: 'run', run });
     if (entry.type === 'tool-schema') this.schemas.set(entry.hash, entry.tools);
     if (entry.type === 'inbox-enqueued') {
       this.inboxIds.add(entry.item.id);
@@ -319,9 +321,20 @@ export class SessionLog extends RecordLog<SessionEvent> implements SessionLogPor
 
   /** Opening an existing log resolves interrupted work before it becomes writable. */
   recover() {
-    const tasks = new Map<string, TaskHistoryRecord>();
+    const previous = this.latestRun;
+    if (isRunning(previous)) {
+      for (const item of this.pendingInbox.values()) {
+        if (item.mode === 'steer')
+          this.append({
+            type: 'inbox-failed',
+            inboxId: item.id,
+            reason: 'The target run was interrupted before delivery',
+          });
+      }
+    }
+    const tasks = new Map<string, Extract<SessionEntry, { type: 'task' }>>();
     for (const entry of this.records) if (entry.type === 'task') tasks.set(entry.task.id, entry);
-    for (const { task, output } of tasks.values()) {
+    for (const { task, output, run } of tasks.values()) {
       if (!terminal(task.state))
         this.append({
           type: 'task',
@@ -332,18 +345,11 @@ export class SessionLog extends RecordLog<SessionEvent> implements SessionLogPor
             error: 'Task interrupted before a terminal state was recorded',
           },
           output,
+          run,
         });
     }
     const run = this.latestRun;
     if (run && isRunning(run)) {
-      for (const item of this.pendingInbox.values()) {
-        if (item.mode === 'steer')
-          this.append({
-            type: 'inbox-failed',
-            inboxId: item.id,
-            reason: 'The target run was interrupted before delivery',
-          });
-      }
       this.append({
         type: 'run',
         run: {

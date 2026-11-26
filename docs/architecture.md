@@ -18,7 +18,7 @@ Each activation has an abort signal. Teardown aborts and drains work registered 
 
 ## Execution
 
-Tasks supplies the common asynchronous runtime. A caller starts one task and chooses whether to await its handle; the resource owner and executing Cordis fiber constrain its lifetime. Runs supplies session admission and durable Run projections, Tools supplies model protocol delivery, and Subagents supplies recursion and capacity policy. The optional task-control plugin operates on any task. Shell streams process output into the tool task. Sessions persists retained task facts and recovers interrupted work without retaining historical execution handles.
+Tasks supplies the common asynchronous runtime. A caller starts one task and chooses whether to await its handle; the resource owner and executing Cordis fiber constrain its lifetime. Runs supplies session admission and conversation-specific projections, Tools supplies model protocol delivery, and Subagents supplies recursion and capacity policy. The optional task-control plugin operates on any task. Shell streams process output into the tool task. Sessions persists retained task facts and recovers interrupted work without retaining historical execution handles.
 
 ## File interaction
 

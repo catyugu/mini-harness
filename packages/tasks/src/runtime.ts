@@ -78,7 +78,6 @@ export class TaskRuntime implements TaskPort {
       signal: lifetime,
       provider,
       acquire,
-      record,
       retain = true,
       projectResult,
       ...metadata
@@ -103,33 +102,25 @@ export class TaskRuntime implements TaskPort {
       outputCursor: 0,
       retained: retain,
     };
-    const persist = (next: TaskSnapshot, output?: TaskOutput) => {
-      if (record) return record(clone(next));
-      else if (retain) this.domain.record?.({ task: clone(next), output });
+    const persist = (task: TaskSnapshot, output?: TaskOutput) => {
+      if (retain) this.domain.record?.({ task: clone(task), output });
     };
-    const accepted = persist(snapshot);
+    persist(snapshot);
     let release: (() => void) | undefined;
     const relinquish = () => {
       const held = release;
       release = undefined;
       held?.();
     };
-    const update = (
-      patch: Partial<TaskSnapshot>,
-      type: TaskEvent['type'] = 'updated',
-      committed?: void | (() => void),
-    ) => {
+    const update = (patch: Partial<TaskSnapshot>, type: TaskEvent['type'] = 'updated') => {
       if (terminal(snapshot.state)) return;
       Object.assign(snapshot, clone(patch));
-      this.notify(type, snapshot, committed);
+      this.notify(type, snapshot);
     };
     const transition = (patch: Partial<TaskSnapshot>) => {
       const next = { ...snapshot, ...patch };
-      const committed = persist(
-        next,
-        terminal(next.state) && next.outputCursor ? entry.output.read() : undefined,
-      );
-      update(patch, 'updated', committed);
+      persist(next, terminal(next.state) && next.outputCursor ? entry.output.read() : undefined);
+      update(patch, 'transition');
     };
     const enter = async () => {
       signal.throwIfAborted();
@@ -221,7 +212,7 @@ export class TaskRuntime implements TaskPort {
           failure ? { state, error: describe(reason), finishedAt } : { state, result: projected, finishedAt },
         );
       } catch (error) {
-        update({ state: 'failed', error: describe(error), finishedAt });
+        update({ state: 'failed', error: describe(error), finishedAt }, 'transition');
         throw error;
       } finally {
         entry.handle = undefined;
@@ -258,7 +249,7 @@ export class TaskRuntime implements TaskPort {
     this.entries.set(handle.id, entry);
     signal.addEventListener('abort', cancelled, { once: true });
     void result.catch(() => {});
-    this.notify('created', snapshot, accepted);
+    this.notify('created', snapshot);
     return handle;
   }
 
@@ -317,12 +308,7 @@ export class TaskRuntime implements TaskPort {
     };
   }
 
-  private notify(type: TaskEvent['type'], snapshot: TaskSnapshot, committed?: void | (() => void)) {
-    try {
-      committed?.();
-    } catch {
-      /* The transition is already committed. */
-    }
+  private notify(type: TaskEvent['type'], snapshot: TaskSnapshot) {
     for (const listener of [...this.listeners]) {
       try {
         listener({ type, task: clone(snapshot) });
