@@ -64,7 +64,6 @@
     "@mini-harness/plugin-api": "workspace:*",
     "@mini-harness/plugins": "workspace:*",
     "@mini-harness/runs": "workspace:*",
-    "@mini-harness/sandbox": "workspace:*",
     "@mini-harness/sessions": "workspace:*",
     "@mini-harness/settings": "workspace:*",
     "@mini-harness/tasks": "workspace:*",
