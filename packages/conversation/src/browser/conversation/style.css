@@ -971,9 +971,6 @@ button.file-card:hover {
   max-height: 210px;
   color: var(--ink);
 }
-.composer .cm-placeholder {
-  color: var(--muted);
-}
 .composer .cm-content {
   min-height: 2.7em;
 }

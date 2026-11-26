@@ -11,7 +11,7 @@ interface Tab {
   owner: TabScope;
   title: string;
   create(scope: TabScope, signal: AbortSignal): HTMLElement;
-  view?: { node: HTMLElement; controller: AbortController };
+  view?: { node: HTMLElement; controller: AbortController; scroll?: { top: number; left: number } };
   stop?: () => void;
 }
 
@@ -117,6 +117,10 @@ export function createRightTabs(
         if (!tab.view) continue;
         tab.view.node.hidden = tab !== active;
         if (tab.view.node.parentElement !== view.body) view.body.append(tab.view.node);
+        if (tab === active && tab.view.scroll) {
+          tab.view.node.scrollTo(tab.view.scroll);
+          tab.view.scroll = undefined;
+        }
       }
     if (focus)
       (active
@@ -138,7 +142,12 @@ export function createRightTabs(
     const open = layout.panelOpen();
     if (workspace) {
       workspace.open = open;
-      for (const tab of workspace.tabs) if (tab.view) tab.view.node.hidden = true;
+      for (const tab of workspace.tabs) {
+        if (!tab.view) continue;
+        const { node } = tab.view;
+        if (!node.hidden) tab.view.scroll = { top: node.scrollTop, left: node.scrollLeft };
+        node.remove();
+      }
     }
     const openedBeforeSelection = !scope && open;
     scope = workspaceId ? { workspaceId } : undefined;

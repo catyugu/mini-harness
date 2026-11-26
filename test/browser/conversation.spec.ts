@@ -182,6 +182,12 @@ test('drafts isolate attachments and discover workspace files and skills', async
     await page.getByRole('button', { name: title, exact: true }).click();
     await expect(draft).toHaveText('Keep this draft');
     await expect(page.getByRole('button', { name: 'Remove private.txt' })).toBeVisible();
+    await page.getByRole('button', { name: 'Open workspace panel', exact: true }).click();
+    await expect(panel.getByRole('tab', { name: 'notes.md', exact: true })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
+    await panel.getByRole('button', { name: 'Close workspace panel' }).click();
     await page.locator('.session-row').filter({ hasText: 'Different conversation' }).hover();
     await page
       .getByRole('button', { name: 'Delete Different conversation @"notes.md"', exact: true })

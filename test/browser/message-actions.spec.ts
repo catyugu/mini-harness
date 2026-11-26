@@ -231,10 +231,6 @@ test('retry keeps the attachment when switching to an image-capable model', asyn
   await page.getByRole('button', { name: 'Send', exact: true }).click();
   await expect(page.locator('.run-termination[data-state=failed]')).toContainText('Run failed:');
   await expect(page.locator('.message.error')).toContainText('does not support image input');
-  await page.reload();
-  await expect(page.locator('.run-termination[data-state=failed]')).toContainText(
-    'does not support image input',
-  );
   await expect(attachment).toBeVisible();
   await chooseModel(page, 'vision-model');
   await page.getByRole('button', { name: 'Retry', exact: true }).click();
@@ -244,4 +240,8 @@ test('retry keeps the attachment when switching to an image-capable model', asyn
     page.locator('.message-row.user .message-attachments').getByRole('img', { name: 'icon-192.png' }),
   ).toHaveCount(1);
   await expect(attachment).toHaveCount(0);
+  await page.reload();
+  await expect(page.locator('.run-termination[data-state=failed]')).toContainText(
+    'does not support image input',
+  );
 });

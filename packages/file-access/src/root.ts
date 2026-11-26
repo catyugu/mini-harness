@@ -88,7 +88,14 @@ export class RootedFiles implements RootedFileAccess {
           }
         }
         if (linux) {
-          const nextHandle = await open(next, directories);
+          const nextHandle = await open(next, directories).catch(async (error: NodeJS.ErrnoException) => {
+            if (error.code === 'ENOTDIR') {
+              // O_NOFOLLOW with O_DIRECTORY reports ENOTDIR for both links and ordinary files.
+              if ((await lstat(next)).isSymbolicLink()) throw denied();
+              throw new FileTypeError('not-directory');
+            }
+            throw error;
+          });
           const previous = handle;
           handle = nextHandle;
           dir = descriptor(handle);

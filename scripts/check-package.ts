@@ -253,7 +253,7 @@ async function checkPackage() {
         const conversation: ConversationController = ctx.miniConversation;
         const primitives: BrowserPrimitives = ctx.miniPrimitives;
         const tabs: RightTabsPort = ctx.miniTabs;
-        tabs.onScopeChange(() => {}, signal);
+        tabs.onWorkspaceChange(() => {}, signal);
         model.setText('Write a review');
         model.choose({ provider: 'local', id: 'example-model' });
         model.chooseThinking(null);
