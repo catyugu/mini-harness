@@ -14,7 +14,7 @@ export interface MockProvider {
 type MockAnswer =
   | string
   | AsyncIterable<string>
-  | { tool: string; args: Record<string, unknown>; text?: string; callId?: string };
+  | { tool: string; args: Record<string, unknown>; text?: string; thinking?: string; callId?: string };
 
 export async function createMockProvider(
   reply?: (request: { messages: { role: string; content: string }[] }) => MockAnswer | Promise<MockAnswer>,
@@ -62,6 +62,10 @@ export async function createMockProvider(
         for await (const content of answer) res.write('data: ' + item({ content }, null) + '\n\n');
         res.write('data: ' + item({}, 'stop') + '\n\n');
       } else {
+        if (answer.thinking)
+          res.write(
+            'data: ' + item({ role: 'assistant', reasoning_content: answer.thinking }, null) + '\n\n',
+          );
         if (answer.text)
           res.write('data: ' + item({ role: 'assistant', content: answer.text }, null) + '\n\n');
         res.write(

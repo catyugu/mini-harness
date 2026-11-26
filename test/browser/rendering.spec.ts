@@ -41,7 +41,13 @@ test('renders Markdown and tool results, and stops a pending reply', async ({ pa
       return { tool: 'read', args: { path: 'sample.txt' }, callId: 'reused-tool' };
     if (last.role === 'tool' && last.content === 'A second tool result') return 'The second tool finished';
     if (last.role === 'user')
-      return { tool: 'ls', args: { path: '.' }, text: 'Checking the workspace', callId: 'reused-tool' };
+      return {
+        tool: 'ls',
+        args: { path: '.' },
+        text: 'Checking the workspace',
+        thinking: last.content === 'Show a result' ? 'Inspect the workspace first.' : undefined,
+        callId: 'reused-tool',
+      };
     return '### Workspace\n\n```text\nExample\n```\n\n<img src=x onerror="alert(1)">\n\n<p class="overlay">A tool note</p>';
   });
   const { root, paths } = createFixturePaths(mock.url);
@@ -154,6 +160,28 @@ export const apply = (ctx) => {
     await expect(page.getByText('A tool note')).toBeVisible();
     await expect(page.locator('.tool-card summary')).toContainText('ls');
     await expect(page.locator('.tool-card summary')).toContainText('Done');
+    const reasoning = turn.locator('.assistant-reasoning');
+    const reasonHeader = reasoning.locator('summary');
+    const toolHeader = turn.locator('.tool-card summary');
+    await expect(reasonHeader).toHaveText('Reasoning');
+    await expect(reasonHeader.locator('svg')).toHaveCount(1);
+    await expect(reasonHeader).toHaveCSS(
+      'min-height',
+      await toolHeader.evaluate((node) => getComputedStyle(node).minHeight),
+    );
+    const toolLabel = toolHeader.locator('strong');
+    const reasonLabel = reasonHeader.locator('span');
+    await expect(reasonLabel).toHaveCSS(
+      'font-family',
+      await toolLabel.evaluate((node) => getComputedStyle(node).fontFamily),
+    );
+    await expect(reasonLabel).toHaveCSS('font-weight', '400');
+    await expect(reasoning.locator('p')).toBeHidden();
+    await reasonHeader.click();
+    await expect(reasoning.locator('p')).toHaveText('Inspect the workspace first.');
+    await expect(reasoning.locator('p')).toBeVisible();
+    await reasonHeader.click();
+    await expect(reasoning.locator('p')).toBeHidden();
     expect(failures.length).toBeGreaterThan(0);
     expect(failures.length).toBeLessThanOrEqual(4);
     expect(unhandled).toEqual([]);

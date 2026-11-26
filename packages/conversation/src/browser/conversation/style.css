@@ -180,8 +180,8 @@
   color: var(--muted);
   font-size: var(--font-ui);
 }
-.assistant-reasoning p {
-  margin: 4px 0 0;
+.assistant-reasoning > p {
+  margin: 0;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
@@ -224,22 +224,26 @@
   overflow: auto;
   font: var(--font-code) / 1.5 var(--font-mono);
 }
-.tool-card {
+:is(.tool-card, .assistant-reasoning) {
   min-width: 0;
   border: 0;
   border-radius: 0;
   background: transparent;
 }
-.tool-card summary {
+:is(.tool-card, .assistant-reasoning) > summary {
   color: var(--muted);
   font-size: var(--font-meta);
 }
-.tool-card summary strong {
+.tool-card > summary > strong,
+.assistant-reasoning > summary > span {
   color: var(--ink);
-  font: 600 var(--font-code) var(--font-mono);
+  font: var(--font-code) var(--font-mono);
   min-width: 0;
   overflow-wrap: anywhere;
   margin-right: auto;
+}
+.tool-card > summary > strong {
+  font-weight: 600;
 }
 .tool-duration,
 .tool-exit-code {
@@ -266,7 +270,8 @@
   :is(.tool-state, .tool-exit-code) {
   color: var(--warning);
 }
-.tool-content:not(:empty) {
+.tool-content:not(:empty),
+.assistant-reasoning > p {
   padding: 5px 0 8px 20px;
 }
 .tool-content pre {
