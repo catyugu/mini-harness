@@ -59,7 +59,7 @@ function setup(ctx: Context) {
       run.effect(() =>
         routes.register('POST', '/api/sessions/:id/compact', async ({ params }) => {
           try {
-            await run.harnessRuns.runTask(params.id, 'compaction', async (scoped, signal, taskId) => {
+            const compacted = await run.harnessRuns.runTask(params.id, 'compaction', async (scoped, signal, taskId) => {
               const log = sessions.log(params.id);
               const projection = log.context();
               if (!projection.contextMessages.length)
@@ -104,10 +104,9 @@ function setup(ctx: Context) {
                 configuration(log.setting(owner), defaults()).settings,
                 taskId,
               );
-              if (!compacted)
-                throw new HttpError('invalid_input', 'Nothing to compact within the recent-context budget');
+              return Boolean(compacted);
             });
-            return { ok: true };
+            return { ok: true, compacted };
           } catch (error) {
             if (error instanceof Error && error.name === 'AbortError') return { cancelled: true };
             throw error;
