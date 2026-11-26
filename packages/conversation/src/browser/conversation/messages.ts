@@ -183,10 +183,11 @@ export function createMessageView(
   ) {
     const item = card ?? document.createElement('details');
     toolItems.set(item, data);
-    item.className = 'tool-card ui-disclosure';
+    item.className = 'tool-card process-disclosure ui-disclosure';
     item.dataset.state = data.state;
     const summary = document.createElement('summary');
     const name = document.createElement('strong');
+    name.className = 'process-label';
     name.textContent = data.name.replaceAll('_', ' ');
     name.title = data.name;
     const status = document.createElement('span');
@@ -265,7 +266,7 @@ export function createMessageView(
     const origin = message.origin;
     const notification = notificationLabel(origin, message.inboxId);
     const entry = document.createElement(notification ? 'details' : 'div');
-    entry.className = notification ? 'async-message ui-disclosure' : 'message-row user';
+    entry.className = notification ? 'async-message process-disclosure ui-disclosure' : 'message-row user';
     const text = textOf(message.content);
     const attachments = message.attachments ?? [];
     const bubble = document.createElement('article');
@@ -274,7 +275,10 @@ export function createMessageView(
       const summary = document.createElement('summary');
       const sender = origin?.senderSessionId;
       const title = sender ? ctx.get('harnessBrowser')?.session(sender)?.title : undefined;
-      summary.append(icon('chevron'), document.createTextNode(notification + (title ? ' · ' + title : '')));
+      const label = document.createElement('span');
+      label.className = 'process-label';
+      label.textContent = notification + (title ? ' · ' + title : '');
+      summary.append(icon('chevron'), label);
       entry.append(summary);
     }
     const list = document.createElement('div');
@@ -458,9 +462,10 @@ export function createMessageView(
         case 'thinking':
           return retain('thinking:' + part.id, part.text, () => {
             const details = document.createElement('details');
-            details.className = 'assistant-reasoning ui-disclosure';
+            details.className = 'assistant-reasoning process-disclosure ui-disclosure';
             const summary = document.createElement('summary');
             const label = document.createElement('span');
+            label.className = 'process-label';
             label.textContent = 'Reasoning';
             summary.append(icon('chevron'), label);
             const body = document.createElement('p');

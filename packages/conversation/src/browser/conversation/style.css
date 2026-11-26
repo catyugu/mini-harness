@@ -178,11 +178,8 @@
 }
 .assistant-reasoning > p {
   margin: 0;
-  color: var(--muted);
-  font-size: var(--font-meta);
   line-height: var(--line-ui);
   white-space: pre-wrap;
-  overflow-wrap: anywhere;
 }
 .run-termination .hint {
   margin: 0;
@@ -224,13 +221,13 @@
   color: var(--muted);
   font: var(--font-meta) / 1.5 var(--font-mono);
 }
-:is(.tool-card, .assistant-reasoning) {
+.process-disclosure {
   min-width: 0;
   border: 0;
   border-radius: 0;
   background: transparent;
 }
-:is(.tool-card, .assistant-reasoning) > summary {
+.process-disclosure > summary {
   min-height: 24px;
   gap: 6px;
   padding: 2px 0;
@@ -239,20 +236,19 @@
   line-height: var(--line-ui);
 }
 @media (hover: hover) {
-  :is(.tool-card, .assistant-reasoning) > summary:hover {
+  .process-disclosure > summary:hover {
     background: transparent;
     color: var(--ink);
   }
 }
-.tool-card > summary > strong,
-.assistant-reasoning > summary > span {
+.process-disclosure > summary > .process-label {
   color: inherit;
   font: var(--font-meta) / var(--line-ui) var(--font-mono);
   min-width: 0;
   overflow-wrap: anywhere;
   margin-right: auto;
 }
-.tool-card > summary > strong {
+.tool-card > summary > .process-label {
   font-weight: 500;
 }
 .tool-duration,
@@ -281,8 +277,15 @@
   color: var(--warning);
 }
 .tool-content:not(:empty),
-.assistant-reasoning > p {
+.assistant-reasoning > p,
+.async-message-body {
   padding: 5px 0 8px 20px;
+}
+.assistant-reasoning > p,
+.async-message-body {
+  color: var(--muted);
+  font-size: var(--font-meta);
+  overflow-wrap: anywhere;
 }
 .tool-content pre {
   max-height: 300px;
@@ -787,30 +790,6 @@ button.file-card:hover {
 #messageMode {
   margin: 0;
   max-width: 105px;
-}
-.async-message {
-  min-width: 0;
-  color: var(--muted);
-  font-size: var(--font-meta);
-}
-.async-message > summary {
-  overflow-wrap: anywhere;
-}
-.async-message-body {
-  margin: 2px 0 4px 18px;
-  padding: 8px 12px;
-  border-left: 2px solid var(--border);
-  color: var(--ink);
-  overflow-wrap: anywhere;
-}
-.async-message-body .markdown {
-  font-size: var(--font-ui);
-}
-.async-message-body .markdown > :first-child {
-  margin-top: 0;
-}
-.async-message-body .markdown > :last-child {
-  margin-bottom: 0;
 }
 @media (max-width: 560px) {
   .composer-footer {
