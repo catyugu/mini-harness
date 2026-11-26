@@ -106,18 +106,15 @@ test('plugin schema controls, recursive tree navigation, batch export and perman
     await expect(tasks.getByRole('heading', { name: 'Subagents', exact: true })).toBeVisible();
     await expect(tasks.getByRole('button', { name: 'Open conversation: Child task', exact: true })).toHaveCount(1);
     await expect(tasks.locator('.task-output')).toHaveCount(0);
-    await tasks.getByRole('button', { name: 'Open conversation: Child task', exact: true }).click();
-    await expect(page.locator('#conversationTitle')).toHaveText('Child task');
-    const instruction = page.locator('details.async-message').filter({ hasText: 'Agent message' }).first();
-    await expect(instruction.locator('article')).toBeHidden();
-    await instruction.locator('summary').click();
-    await expect(instruction.locator('.markdown')).toContainText('Child task');
-    await page.getByRole('navigation', { name: 'Parent conversations' }).getByRole('button', { name: 'Parent task', exact: true }).click();
-    await expect(page.locator('#conversationTitle')).toHaveText('Parent task');
+    await page.locator('.background-tasks').getByRole('button', { name: 'Tasks', exact: true }).click();
     await page.getByRole('button', { name: 'Expand Parent task', exact: true }).click();
     await page.getByRole('button', { name: 'Expand Child task', exact: true }).click();
     await page.getByRole('button', { name: 'Leaf task', exact: true }).click();
     await expect(page.locator('.message.assistant')).toHaveText('Leaf result');
+    const instruction = page.locator('details.async-message').filter({ hasText: 'Agent message' }).first();
+    await expect(instruction.locator('article')).toBeHidden();
+    await instruction.locator('summary').click();
+    await expect(instruction.locator('.markdown')).toContainText('Leaf task');
     const ancestors = page.getByRole('navigation', { name: 'Parent conversations' });
     await expect(ancestors.getByRole('button')).toHaveText(['Parent task', 'Child task']);
     await expect
@@ -134,7 +131,8 @@ test('plugin schema controls, recursive tree navigation, batch export and perman
       .toBe(true);
     await ancestors.getByRole('button', { name: 'Child task', exact: true }).click();
     await expect(page.locator('#conversationTitle')).toHaveText('Child task');
-    await page.getByRole('button', { name: 'Leaf task', exact: true }).click();
+    await page.locator('.background-tasks').getByRole('button', { name: 'Tasks', exact: true }).click();
+    await tasks.getByRole('button', { name: 'Open conversation: Leaf task', exact: true }).click();
     await expect(page.locator('#conversationTitle')).toHaveText('Leaf task');
     await page.reload();
     await expect(page.locator('#conversationTitle')).toHaveText('Leaf task');

@@ -302,12 +302,14 @@ export function createMessageView(
     if (list.childElementCount) bubble.append(list);
     if (text) {
       const body = document.createElement('div');
-      body.className = 'user-text';
       if (notification) renderMarkdown(body, text);
-      else renderReferences(body, text, (path) => {
-        if (workspaceId)
-          ctx.get('miniFilePreview')?.open({ kind: 'workspace', workspaceId, path }, 'sidebar');
-      });
+      else {
+        body.className = 'user-text';
+        renderReferences(body, text, (path) => {
+          if (workspaceId)
+            ctx.get('miniFilePreview')?.open({ kind: 'workspace', workspaceId, path }, 'sidebar');
+        });
+      }
       bubble.append(body);
     }
     entry.append(bubble);

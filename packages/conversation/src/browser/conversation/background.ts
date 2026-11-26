@@ -155,6 +155,7 @@ function setup(ctx: Context) {
       show(next);
       if (fetching || lifetime.signal.aborted || next.outputCursor <= cursor) return;
       fetching = true;
+      const requestedCursor = cursor;
       try {
         const data = await browserRequest<TaskOutput>(ctx,
           path(sessionId) + '/' + encodeURIComponent(task.id) + '/output?after=' + cursor,
@@ -178,7 +179,7 @@ function setup(ctx: Context) {
         const latest = tasks.find(({ id }) => id === task.id);
         if (!lifetime.signal.aborted && latest) {
           show(latest);
-          if (!failure && cursor < latest.outputCursor) void update(latest);
+          if (!failure && cursor > requestedCursor && cursor < latest.outputCursor) void update(latest);
         }
       }
     }
