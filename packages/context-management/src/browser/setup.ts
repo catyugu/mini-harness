@@ -2,6 +2,7 @@ import type { Context } from 'mini-harness/cordis';
 import type {} from '@mini-harness/conversation/browser/composer-api';
 import type {} from '@mini-harness/conversation/browser/conversation-api';
 import type {} from '@mini-harness/conversation/browser/history-api';
+import type {} from '@mini-harness/conversation/browser/navigation-api';
 import type {} from '@mini-harness/settings/browser/api';
 import type {} from '@mini-harness/ui-slots/browser/api';
 import type {} from '@mini-harness/ui-runtime/projection-api';
@@ -106,10 +107,26 @@ function showOccupancy(list: HTMLElement, bar: HTMLElement, state: ContextState)
   );
 }
 
+function profileSettings(ctx: Context) {
+  const configuration = browserPluginSettings(ctx);
+  const read = (): ContextSettings => ({
+    autoCompact: configuration.get('autoCompact'),
+    triggerRatio: configuration.get('triggerRatio'),
+    targetRatio: configuration.get('targetRatio'),
+    retainRatio: configuration.get('retainRatio'),
+    summaryModel: configuration.get('summaryModel'),
+  });
+  return { configuration, read };
+}
+
 function mountStats(ctx: Context) {
   const { miniConversation: conversation } = ctx;
   const signal = ctx.fiber.signal;
   const updates = new EventTarget();
+  const drafts = new Map<string, ContextSettings>();
+  const { read: defaults } = profileSettings(ctx);
+  const workspace = () => ctx.harnessBrowser.workspace()?.workspaceId;
+  let draftWorkspace = workspace();
   let state: ContextState | undefined;
   let id: string | undefined;
   let controller = new AbortController();
@@ -152,7 +169,21 @@ function mountStats(ctx: Context) {
     void refresh();
   }
   conversation.subscribe(['session'], select, signal);
-  conversation.subscribe(['run', 'interaction'], publish, signal);
+  conversation.subscribe(['interaction'], publish, signal);
+  ctx.harnessBrowser.onConversationChange(() => {
+    const next = workspace();
+    if (next !== draftWorkspace) {
+      draftWorkspace = next;
+      publish();
+    }
+  }, signal);
+  ctx.on('conversation/initialize', async (workspaceId, sessionId) => {
+    const settings = drafts.get(workspaceId);
+    if (!settings) return;
+    await browserRequest(ctx, path(sessionId), payload('PUT', settings));
+    drafts.delete(workspaceId);
+    if (id === sessionId) await refresh();
+  });
   ctx.effect(() =>
     ctx.miniProjections.register('context-management', {
       async sync(_revision, _reset, changed) {
@@ -163,7 +194,14 @@ function mountStats(ctx: Context) {
   select();
 
   const write = async (values: ContextSettings | null) => {
-    if (!id) return;
+    if (!id) {
+      const key = workspace();
+      if (!key) throw new Error('Choose a workspace first.');
+      if (values) drafts.set(key, values);
+      else drafts.delete(key);
+      publish();
+      return;
+    }
     const request = controller;
     await browserRequest(ctx, path(id), { ...payload('PUT', values), signal: request.signal });
     if (!request.signal.aborted) await refresh();
@@ -239,13 +277,19 @@ function mountStats(ctx: Context) {
   const compactConversation = async () => {
     if (!id) throw new Error('Open a conversation to compact it.');
     const sessionId = id;
-    const result = await browserRequest<{ cancelled?: boolean }>(
+    const result = await browserRequest<{ cancelled?: boolean; compacted?: boolean }>(
       ctx,
       '/sessions/' + encodeURIComponent(sessionId) + '/compact',
       payload('POST', {}),
     );
     if (id === sessionId && (await conversation.activate(sessionId, false)))
-      conversation.report(result.cancelled ? 'Compaction cancelled.' : 'Conversation compacted.');
+      conversation.report(
+        result.cancelled
+          ? 'Compaction cancelled.'
+          : result.compacted
+            ? 'Conversation compacted.'
+            : 'Nothing to compact.',
+      );
   };
 
   ctx.effect(() =>
@@ -259,10 +303,15 @@ function mountStats(ctx: Context) {
       panel.setAttribute('aria-label', 'Context settings');
       node.append(trigger, panel);
       const position = bindPopover(trigger, panel, signal, { width: 300, prefer: 'above' });
+      const draft = () => {
+        const key = workspace();
+        return key ? drafts.get(key) : undefined;
+      };
+      const currentSettings = () => state?.settings ?? draft() ?? defaults();
       trigger.onclick = () => {
         if (panel.matches(':popover-open')) panel.hidePopover();
-        else if (state) {
-          form.update(state.settings);
+        else {
+          form.update(currentSettings());
           panel.showPopover();
           position();
         }
@@ -272,37 +321,21 @@ function mountStats(ctx: Context) {
       reset.onclick = () =>
         void write(null)
           .then(() => {
-            if (state) form.update(state.settings);
+            form.update(currentSettings());
           })
           .catch(conversation.report);
-      const compact = uiButton('Compact now');
-      compact.onclick = () => {
-        if (state?.compacting === 'manual' && id)
-          void browserRequest(
-            ctx,
-            '/sessions/' + encodeURIComponent(id) + '/cancel',
-            payload('POST', {}),
-          ).catch(conversation.report);
-        else void compactConversation().catch(conversation.report);
-      };
-      panel.append(form.node, reset, compact);
+      panel.append(form.node, reset);
+      let shownId = id;
+      let shownWorkspace = workspace();
       const render = () => {
-        node.hidden = !state;
-        if (!state) {
+        const key = workspace();
+        trigger.disabled = Boolean(id && !state) || Boolean(conversation.get().interaction.operation);
+        if (shownId !== id || shownWorkspace !== key) {
+          shownId = id;
+          shownWorkspace = key;
           if (panel.matches(':popover-open')) panel.hidePopover();
-          return;
         }
-        reset.disabled = !state.customized;
-        const current = conversation.get();
-        compact.disabled =
-          state.compacting !== 'manual' &&
-          Boolean(
-            current.interaction.operation ||
-              current.run?.state === 'running' ||
-              current.run?.state === 'queued' ||
-              current.run?.state === 'waiting',
-          );
-        compact.textContent = state.compacting ? 'Cancel compaction' : 'Compact now';
+        reset.disabled = !(id ? state?.customized : draft());
       };
       updates.addEventListener('change', render, { signal });
       render();
@@ -343,9 +376,9 @@ function mountStats(ctx: Context) {
 }
 
 function setup(ctx: Context) {
-  ctx.inject(['miniConversation', 'miniModels', 'miniSlots', 'miniProjections'], mountStats);
+  ctx.inject(['miniConversation', 'miniModels', 'miniSlots', 'miniProjections', 'harnessBrowser'], mountStats);
   ctx.inject(['miniSettingsRegistry', 'miniModels'], (settings) => {
-    const configuration = browserPluginSettings(ctx);
+    const { configuration, read } = profileSettings(ctx);
     settings.effect(() =>
       settings.miniSettingsRegistry.register(
         browserPluginId(ctx),
@@ -355,17 +388,10 @@ function setup(ctx: Context) {
           order: 10,
           render({ signal }) {
             const form = settingsForm(settings, signal, (value) => configuration.patch({ ...value }));
-            const read = () =>
-              form.update({
-                autoCompact: configuration.get('autoCompact'),
-                triggerRatio: configuration.get('triggerRatio'),
-                targetRatio: configuration.get('targetRatio'),
-                retainRatio: configuration.get('retainRatio'),
-                summaryModel: configuration.get('summaryModel'),
-              });
+            const update = () => form.update(read());
             for (const key of ['autoCompact', 'triggerRatio', 'targetRatio', 'retainRatio', 'summaryModel'])
-              signal.addEventListener('abort', configuration.subscribe(key, read), { once: true });
-            read();
+              signal.addEventListener('abort', configuration.subscribe(key, update), { once: true });
+            update();
             return form.node;
           },
         },
