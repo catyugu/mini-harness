@@ -54,7 +54,7 @@ export interface ConversationController {
   subscribe(parts: readonly (keyof ConversationState)[], listener: () => void, signal: AbortSignal): void;
   activate(id: string, revealWorkspace?: boolean): Promise<boolean>;
   clear(): void;
-  report(error: Error): void;
+  report(message: string | Error): void;
   submit(
     input: ConversationSubmission,
     created?: (sessionId: string) => void,

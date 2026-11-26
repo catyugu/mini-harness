@@ -238,8 +238,13 @@ function mountStats(ctx: Context) {
   const compactConversation = async () => {
     if (!id) throw new Error('Open a conversation to compact it.');
     const sessionId = id;
-    await browserRequest(ctx, '/sessions/' + encodeURIComponent(sessionId) + '/compact', payload('POST', {}));
-    if (id === sessionId) await conversation.activate(sessionId, false);
+    const result = await browserRequest<{ cancelled?: boolean }>(
+      ctx,
+      '/sessions/' + encodeURIComponent(sessionId) + '/compact',
+      payload('POST', {}),
+    );
+    if (id === sessionId && (await conversation.activate(sessionId, false)))
+      conversation.report(result.cancelled ? 'Compaction cancelled.' : 'Conversation compacted.');
   };
 
   ctx.effect(() =>

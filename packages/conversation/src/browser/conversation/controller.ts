@@ -56,7 +56,8 @@ export function createConversationController(ctx: Context): ConversationControll
     if (state.interaction.status !== text || Boolean(state.interaction.error) !== error)
       interact({ status: text, error });
   };
-  const report = (error: Error) => status(error.message, true);
+  const report = (message: string | Error) =>
+    typeof message === 'string' ? status(message) : status(message.message, true);
   function begin() {
     visit.abort();
     visit = new AbortController();
