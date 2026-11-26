@@ -6,7 +6,12 @@ import type {} from '@mini-harness/conversation/browser/navigation-api';
 import type {} from '@mini-harness/settings/browser/api';
 import type {} from '@mini-harness/ui-slots/browser/api';
 import type {} from '@mini-harness/ui-runtime/projection-api';
-import { bindPopover, button as uiButton, iconButton, recordRow } from '@mini-harness/ui-primitives/primitives';
+import {
+  bindPopover,
+  button as uiButton,
+  iconButton,
+  recordRow,
+} from '@mini-harness/ui-primitives/primitives';
 import { renderMarkdown } from '@mini-harness/ui-primitives/markdown';
 import { browserRequest, payload } from '@mini-harness/ui-runtime/http';
 import { browserPluginId, browserPluginSettings } from '@mini-harness/ui-runtime/plugin-settings';
@@ -374,12 +379,14 @@ function mountStats(ctx: Context) {
 
 function setup(ctx: Context) {
   ctx.inject(['miniMessages'], (history) => {
-    history.effect(() => history.miniMessages.registerRecord('context-management', 'checkpoint', (record) => {
-      if (typeof record.content !== 'string') throw new Error('Invalid checkpoint summary');
-      const body = document.createElement('div');
-      renderMarkdown(body, record.content);
-      return recordRow(record.title, body);
-    }));
+    history.effect(() =>
+      history.miniMessages.registerRecord('context-management', 'checkpoint', (record) => {
+        if (typeof record.content !== 'string') throw new Error('Invalid checkpoint summary');
+        const body = document.createElement('div');
+        renderMarkdown(body, record.content);
+        return recordRow(record.title, body);
+      }),
+    );
   });
   ctx.inject(
     ['miniConversation', 'miniModels', 'miniSlots', 'miniProjections', 'harnessBrowser'],

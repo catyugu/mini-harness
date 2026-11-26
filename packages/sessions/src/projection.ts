@@ -4,7 +4,13 @@ import { isRunning, type RunInfo } from './shared/run-state.ts';
 import { toolResultState } from '@mini-harness/tools/api';
 import type { NativeMessage, NativeToolMessage } from '@mini-harness/llm/api';
 import type { MessageContent, ViewMessage } from './shared/message.ts';
-import type { ContextReplacement, SessionContext, SessionEntry, SessionEvent, SessionProjection } from './log-api.ts';
+import type {
+  ContextReplacement,
+  SessionContext,
+  SessionEntry,
+  SessionEvent,
+  SessionProjection,
+} from './log-api.ts';
 import { applyContentDelta } from './content-delta.ts';
 
 export function projectMessage(

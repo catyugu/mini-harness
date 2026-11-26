@@ -305,17 +305,25 @@ test('display records resolve explicitly selected content on the committed branc
   });
   log.close();
   log = open();
-  assert.deepEqual(log.projection().timeline.filter((entry) => entry.type === 'record'), [{
-    type: 'record',
-    id: record.id,
-    plugin: 'notes',
-    instanceId: 'notes',
-    kind: 'progress',
-    title: 'Progress',
-    content: 'Done',
-  }]);
+  assert.deepEqual(
+    log.projection().timeline.filter((entry) => entry.type === 'record'),
+    [
+      {
+        type: 'record',
+        id: record.id,
+        plugin: 'notes',
+        instanceId: 'notes',
+        kind: 'progress',
+        title: 'Progress',
+        content: 'Done',
+      },
+    ],
+  );
   assert.equal(log.projection(first.id).timeline.filter((entry) => entry.type === 'record').length, 0);
-  assert.deepEqual(log.context().contextMessages.map(({ content }) => content), ['before']);
+  assert.deepEqual(
+    log.context().contextMessages.map(({ content }) => content),
+    ['before'],
+  );
 });
 
 test('recorded requests reuse their tool schema and restore transformed input after reopening', (t) => {

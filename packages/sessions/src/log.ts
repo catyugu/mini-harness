@@ -422,7 +422,8 @@ function validateEvent(event: SessionEvent) {
       typeof display.title !== 'string' ||
       !display.title.trim() ||
       display.title.length > 140 ||
-      (display.source !== undefined && (!Array.isArray(display.source) || !display.source.length || Object.hasOwn(display, 'content')))
+      (display.source !== undefined &&
+        (!Array.isArray(display.source) || !display.source.length || Object.hasOwn(display, 'content')))
     )
       throw new Error('Invalid record presentation');
     displayContent(event);
@@ -480,10 +481,7 @@ function validateEvent(event: SessionEvent) {
       return;
     }
     case 'diagnostic':
-      if (
-        event.code !== 'invalid-tool-calls' &&
-        event.code !== 'executor-response'
-      )
+      if (event.code !== 'invalid-tool-calls' && event.code !== 'executor-response')
         throw new Error('Invalid session diagnostic');
       return;
     case 'context-replace':

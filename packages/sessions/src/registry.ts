@@ -464,7 +464,12 @@ export class SessionRegistry implements SessionStore {
         ) ?? [],
       append: async (data, display) => {
         this.assertAvailable(id);
-        return this.log(id).append({ type: 'plugin-record', owner, data, display: display && { ...display, owner } }).id;
+        return this.log(id).append({
+          type: 'plugin-record',
+          owner,
+          data,
+          display: display && { ...display, owner },
+        }).id;
       },
     };
   }
