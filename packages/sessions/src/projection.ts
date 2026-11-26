@@ -77,17 +77,19 @@ export function displayMessage(
   return view;
 }
 
-export function displayRecord(
-  entry: SessionEntry,
-): SessionDisplayRecord | ContextCheckpoint | undefined {
+export function displayRecord(entry: SessionEntry): SessionDisplayRecord | ContextCheckpoint | undefined {
   if (entry.type === 'context-replace' && entry.measurement)
     return {
       type: 'checkpoint',
       id: entry.id,
       summary: entry.replacements
-        .flatMap(({ insert }) => insert.flatMap(({ content }) =>
-          typeof content === 'string' ? [content] : content.flatMap((part) => part.type === 'text' ? [part.text] : []),
-        ))
+        .flatMap(({ insert }) =>
+          insert.flatMap(({ content }) =>
+            typeof content === 'string'
+              ? [content]
+              : content.flatMap((part) => (part.type === 'text' ? [part.text] : [])),
+          ),
+        )
         .join('\n\n'),
     };
   if (entry.type === 'plugin-record' && entry.display)

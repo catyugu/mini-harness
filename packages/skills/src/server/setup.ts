@@ -64,7 +64,10 @@ export function setup(ctx: Context) {
             signal?.throwIfAborted();
             const skill = await loader.load(sessions.workspacePath(sessionId), name);
             signal?.throwIfAborted();
-            return { content: [{ type: 'text', text: skillInstruction(skill) }], details: { skill: skill.name } };
+            return {
+              content: [{ type: 'text', text: skillInstruction(skill) }],
+              details: { skill: skill.name },
+            };
           },
         }),
     }),

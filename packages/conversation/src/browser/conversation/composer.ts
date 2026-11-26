@@ -184,11 +184,13 @@ export function createComposer(
     const match = /^\/([\w:-]+)$/.exec(editor.value.trim());
     if (!match) return;
     const name = match[1].toLowerCase();
-    return model.matchCommands(name).find((command) =>
-      command.run
-        ? [command.name, ...(command.aliases ?? [])].some((key) => key.toLowerCase() === name)
-        : command.name === match[1],
-    );
+    return model
+      .matchCommands(name)
+      .find((command) =>
+        command.run
+          ? [command.name, ...(command.aliases ?? [])].some((key) => key.toLowerCase() === name)
+          : command.name === match[1],
+      );
   }
 
   function submitCommand() {

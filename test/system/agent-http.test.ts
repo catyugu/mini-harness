@@ -14,7 +14,8 @@ test(
     let lastInput = '';
     const mock = await createMockProvider(({ messages }) => {
       lastInput = messages.at(-1)?.content ?? '';
-      if (lastInput === 'Load verification skill') return { tool: 'load_skill', args: { name: 'verification' } };
+      if (lastInput === 'Load verification skill')
+        return { tool: 'load_skill', args: { name: 'verification' } };
       return 'Mock response';
     });
     t.after(() => mock.close());
