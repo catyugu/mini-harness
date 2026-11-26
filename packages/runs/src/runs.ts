@@ -1,6 +1,6 @@
 import type { RecordAppend } from '@mini-harness/sessions/display-record';
 import { userContent } from '@mini-harness/sessions/user-content';
-import { Service, type Context } from 'mini-harness/cordis';
+import type { Context } from 'mini-harness/cordis';
 import { tagScope, scopeTarget } from '@mini-harness/plugin-api/scopes';
 import type { ThinkingLevel, ModelChoice } from '@mini-harness/llm/vocabulary';
 import type { ProfileScopes } from '@mini-harness/plugin-api/configuration';
@@ -98,8 +98,7 @@ export class Runs implements RunPort {
     id: string,
     prompt: string,
     emit: ((event: StreamEvent) => void) | undefined,
-    { signal, source, model, attachments, thinkingLevel, revision, acquire, creator, metadata }: RunOptions,
-    tasks = this.tasks,
+    { signal, source, model, attachments, thinkingLevel, revision, acquire, creator, metadata, provider }: RunOptions,
     reserved?: Activity,
   ) {
     const activity = reserved ?? this.reserve(id);
@@ -139,13 +138,14 @@ export class Runs implements RunPort {
         error: task.error,
         sequence: info.sequence + 1,
       });
-      const task = tasks.start(
+      const task = this.tasks.start(
         {
           owner: 'session:' + id,
           resourceId: id,
           type: 'agent-run',
           creator,
           metadata,
+          provider,
           signal,
           acquire,
           record(snapshot) {
@@ -206,7 +206,8 @@ export class Runs implements RunPort {
         },
       );
       activity.task = task;
-      const unsubscribe = tasks.subscribe((snapshot) => {
+      const unsubscribe = this.tasks.subscribe(({ type, task: snapshot }) => {
+        if (type === 'deleted') return;
         if (snapshot.id !== task.id || snapshot.state === info.state) return;
         const ended = terminal(snapshot.state);
         try {
@@ -304,7 +305,6 @@ export class Runs implements RunPort {
             thinkingLevel: input.thinkingLevel,
             revision: { parentId: target.parentId, expectedLeafId: input.expectedLeafId },
           },
-          this.tasks,
           reservation,
         ).info,
       };

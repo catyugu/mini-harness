@@ -1,3 +1,4 @@
+import type { Context } from 'mini-harness/cordis';
 import type { RunPort } from '@mini-harness/runs/api';
 import type { SessionStore } from '@mini-harness/sessions/records';
 import type { ModelChoice } from '@mini-harness/llm/vocabulary';
@@ -95,6 +96,7 @@ export class Delegation {
     private readonly sessions: SessionStore,
     private readonly runs: RunPort,
     private readonly settings: () => SubagentPolicy,
+    private readonly provider: Context,
   ) {
     this.semaphore = new Semaphore(settings().maxParallel);
   }
@@ -122,7 +124,8 @@ export class Delegation {
       record.id,
       { message: request.task, model },
       {
-        acquire: (cancellation) => this.semaphore.acquire(cancellation),
+        provider: this.provider,
+      acquire: (cancellation) => this.semaphore.acquire(cancellation),
       },
     );
     return { sessionId: record.id, taskId: task.id, state: 'queued' as const };
