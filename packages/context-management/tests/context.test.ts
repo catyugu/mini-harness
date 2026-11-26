@@ -464,7 +464,7 @@ test('cancelling a manual checkpoint keeps the active branch and releases the co
   const ctx = app.runtime.plugins.ctx;
   const { body: session } = await request('/sessions', 'POST', {});
   await sendRun(ctx.harnessRuns, session.id, 'First analysis. '.repeat(150));
-  await sendRun(ctx.harnessRuns, session.id, 'Next request');
+  await sendRun(ctx.harnessRuns, session.id, 'Next request. '.repeat(100));
   const log = ctx.harnessSessions.log(session.id);
   const before = log.context();
   const endpoint = '/sessions/' + session.id;
