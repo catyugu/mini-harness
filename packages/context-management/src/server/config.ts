@@ -2,7 +2,7 @@ import { DomainError } from '@mini-harness/platform/errors';
 import { defineConfig } from '@mini-harness/plugin-api/configuration';
 import { Type } from 'typebox';
 import { Check } from 'typebox/value';
-import type { ContextSettings } from '../shared/state.ts';
+import { ratioIssue, type ContextSettings } from '../shared/state.ts';
 
 const fields = {
   autoCompact: Type.Boolean({ default: true }),
@@ -25,11 +25,6 @@ const fields = {
 };
 
 const schema = Type.Object(fields, { additionalProperties: false });
-
-function ratioIssue({ retainRatio, targetRatio, triggerRatio }: ContextSettings) {
-  if (retainRatio >= targetRatio || targetRatio >= triggerRatio)
-    return 'Use 0 < retain < target < trigger < 100%.';
-}
 
 export const Config = defineConfig(schema, (config) =>
   Check(schema, config) ? ratioIssue(config) : 'Invalid context settings',

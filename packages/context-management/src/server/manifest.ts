@@ -59,55 +59,58 @@ function setup(ctx: Context) {
       run.effect(() =>
         routes.register('POST', '/api/sessions/:id/compact', async ({ params }) => {
           try {
-            await run.harnessRuns.runTask(params.id, 'compaction', async (scoped, signal, taskId) => {
-              const log = sessions.log(params.id);
-              const projection = log.context();
-              if (!projection.contextMessages.length)
-                throw new HttpError('invalid_input', 'Nothing to compact in this conversation');
-              const { harnessModels: models } = scoped;
-              const ancestors = new Set(log.branch().map(({ id }) => id));
-              const latest = log
-                .entries()
-                .reverse()
-                .find(
-                  (entry) =>
-                    entry.type === 'model-request' &&
-                    !entry.request.purpose &&
-                    entry.parentId !== null &&
-                    ancestors.has(entry.parentId),
+            const compacted = await run.harnessRuns.runTask(
+              params.id,
+              'compaction',
+              async (scoped, signal, taskId) => {
+                const log = sessions.log(params.id);
+                const projection = log.context();
+                if (!projection.contextMessages.length)
+                  throw new HttpError('invalid_input', 'Nothing to compact in this conversation');
+                const { harnessModels: models } = scoped;
+                const ancestors = new Set(log.branch().map(({ id }) => id));
+                const latest = log
+                  .entries()
+                  .reverse()
+                  .find(
+                    (entry) =>
+                      entry.type === 'model-request' &&
+                      !entry.request.purpose &&
+                      entry.parentId !== null &&
+                      ancestors.has(entry.parentId),
+                  );
+                if (!latest)
+                  throw new HttpError('invalid_input', 'No model request has been prepared for this branch');
+                const {
+                  model: choice,
+                  systemPrompt,
+                  tools,
+                  thinkingLevel,
+                  maxTokens,
+                } = log.requestDefinition(latest.id);
+                const { model } = selectModel(models, { explicit: choice });
+                const rebuild = async (messages: LlmRequest['messages']): Promise<LlmRequest> => ({
+                  model,
+                  systemPrompt,
+                  tools,
+                  thinkingLevel,
+                  maxTokens,
+                  messages: prepareModelMessages(models.capabilities(model), messages),
+                  signal,
+                });
+                const manager = createManager(scoped, params.id);
+                const request = await manager.prune(log, await rebuild(projection.contextMessages), rebuild);
+                const compacted = await manager.compact(
+                  log,
+                  request,
+                  rebuild,
+                  configuration(log.setting(owner), defaults()).settings,
+                  taskId,
                 );
-              if (!latest)
-                throw new HttpError('invalid_input', 'No model request has been prepared for this branch');
-              const {
-                model: choice,
-                systemPrompt,
-                tools,
-                thinkingLevel,
-                maxTokens,
-              } = log.requestDefinition(latest.id);
-              const { model } = selectModel(models, { explicit: choice });
-              const rebuild = async (messages: LlmRequest['messages']): Promise<LlmRequest> => ({
-                model,
-                systemPrompt,
-                tools,
-                thinkingLevel,
-                maxTokens,
-                messages: prepareModelMessages(models.capabilities(model), messages),
-                signal,
-              });
-              const manager = createManager(scoped, params.id);
-              const request = await manager.prune(log, await rebuild(projection.contextMessages), rebuild);
-              const compacted = await manager.compact(
-                log,
-                request,
-                rebuild,
-                configuration(log.setting(owner), defaults()).settings,
-                taskId,
-              );
-              if (!compacted)
-                throw new HttpError('invalid_input', 'Nothing to compact within the recent-context budget');
-            });
-            return { ok: true };
+                return Boolean(compacted);
+              },
+            );
+            return { ok: true, compacted };
           } catch (error) {
             if (error instanceof Error && error.name === 'AbortError') return { cancelled: true };
             throw error;

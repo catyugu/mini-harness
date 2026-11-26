@@ -290,6 +290,11 @@ test('session overrides inherit defaults, reject invalid ratios and accept unstr
     ),
   );
   assert.ok(sessionLog.context().contextMessages.length < before.contextMessages.length);
+  const checkpoint = sessionLog
+    .entries()
+    .find((entry) => entry.type === 'model-request' && entry.request.purpose === 'summary');
+  assert.ok(checkpoint);
+  assert.equal(sessionLog.requestSnapshot(checkpoint.id).maxTokens, 1024);
   const compactedContext = sessionLog.context();
   assert.ok(sessionLog.entries().some(({ type }) => type === 'model-attempt'));
   await app.close();

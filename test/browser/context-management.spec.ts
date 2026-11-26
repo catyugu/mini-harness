@@ -26,6 +26,17 @@ test('context settings and statistics stay usable at desktop and mobile widths',
     await expect(page.getByRole('spinbutton', { name: 'Trigger threshold (%)' })).toHaveValue('80');
     await page.getByRole('button', { name: 'Close settings' }).click();
 
+    const settings = page.getByRole('button', { name: 'Context settings', exact: true });
+    const config = page.getByRole('dialog', { name: 'Context settings' });
+    const auto = config.getByRole('switch', { name: 'Auto compaction' });
+    await settings.click();
+    await expect(auto).toBeChecked();
+    await expect(config.getByRole('button', { name: 'Compact now' })).toHaveCount(0);
+    await auto.uncheck();
+    await config.getByRole('button', { name: 'Apply' }).click();
+    await expect(auto).toBeEnabled();
+    await page.keyboard.press('Escape');
+
     await page
       .getByRole('textbox', { name: 'Message', exact: true })
       .fill('Measure the conversation. '.repeat(40));
@@ -54,13 +65,8 @@ test('context settings and statistics stay usable at desktop and mobile widths',
     await expect(panel.getByText('Model window', { exact: true })).toBeVisible();
     await expect(panel.getByRole('switch')).toHaveCount(0);
     await page.keyboard.press('Escape');
-    const settings = page.getByRole('button', { name: 'Context settings', exact: true });
     await settings.click();
-    const config = page.getByRole('dialog', { name: 'Context settings' });
-    const auto = config.getByRole('switch', { name: 'Auto compaction' });
-    await auto.uncheck();
-    await config.getByRole('button', { name: 'Apply' }).click();
-    await expect(auto).toBeEnabled();
+    await expect(auto).not.toBeChecked();
     await page.reload();
     await settings.click();
     await expect(auto).not.toBeChecked();

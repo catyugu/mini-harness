@@ -242,6 +242,7 @@ export function createConversationController(ctx: Context): ConversationControll
         created?.(id);
         await sessions.refresh();
         if (!signal.aborted) select(item);
+        await ctx.parallel('conversation/initialize', workspace, id);
       }
       const { permission: _permission, revision, ...message } = input;
       const receipt = revision
