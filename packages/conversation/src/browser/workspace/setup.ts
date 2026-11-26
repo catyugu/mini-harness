@@ -25,7 +25,8 @@ const setup = (ctx: Context) => {
     for (const { node, label, slot } of badges) {
       label.textContent = selected?.path ?? '';
       node.title = selected?.path ?? '';
-      node.hidden = !selected || (slot === 'header.context' ? !select.activeConversation : !!select.activeConversation);
+      node.hidden =
+        !selected || (slot === 'header.context' ? !select.activeConversation : !!select.activeConversation);
     }
     tabs.selectWorkspace(selected?.id);
     tabs.prune(new Set(workspaces.get().map(({ id }) => id)));
