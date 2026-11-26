@@ -386,8 +386,13 @@ export function createConversationController(ctx: Context): ConversationControll
         throw new Error('Wait for the current operation to finish.');
       interact({ operation: 'compact', status: 'Compacting conversation…' });
       try {
-        await browserRequest(ctx, path(id, '/compact'), payload('POST', {}));
-        if (!signal.aborted && (await activate(id, false))) status('Conversation compacted.');
+        const result = await browserRequest<{ cancelled?: boolean }>(
+          ctx,
+          path(id, '/compact'),
+          payload('POST', {}),
+        );
+        if (!signal.aborted && (await activate(id, false)))
+          status(result.cancelled ? 'Compaction cancelled.' : 'Conversation compacted.');
       } finally {
         if (!signal.aborted) interact({ operation: undefined });
       }

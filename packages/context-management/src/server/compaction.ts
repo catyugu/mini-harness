@@ -35,7 +35,12 @@ function groups(messages: NativeMessage[]) {
   return groups;
 }
 
-export function splitPoint(projection: SessionContext, meter: TokenMeter, retain: number, force: boolean) {
+export function splitPoint(
+  projection: SessionContext,
+  meter: TokenMeter,
+  retain: number,
+  force?: { available: number },
+) {
   const { contextMessages, contextRevisions } = projection;
   const blocks = groups(contextMessages);
   let index = contextMessages.length;
@@ -51,7 +56,7 @@ export function splitPoint(projection: SessionContext, meter: TokenMeter, retain
     if (kept >= retain) break;
   }
   if (index > 0 && !force && index === 1 && isCheckpoint(contextMessages[0])) return 0;
-  if (index === 0 && force && contextMessages.length) return contextMessages.length;
+  if (force && (index === 0 || kept >= force.available)) return contextMessages.length;
   return index;
 }
 
@@ -86,8 +91,12 @@ function transcript(group: NativeMessage[]) {
 }
 
 function validSummary(text: string) {
-  return (
-    text.trim() && headings.every((heading) => new RegExp('^#{1,6} ' + heading + '\\s*$', 'm').test(text))
+  const sections = text.trim().split(/^## +/m).slice(1);
+  return headings.every((heading) =>
+    sections.some((section) => {
+      const end = section.indexOf('\n');
+      return end > 0 && section.slice(0, end).trim() === heading && Boolean(section.slice(end).trim());
+    }),
   );
 }
 

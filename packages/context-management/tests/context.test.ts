@@ -161,7 +161,7 @@ test('session overrides inherit defaults, reject invalid ratios and preserve con
   assert.equal((await request(path + '/context', 'PUT', { targetRatio: 0.85 })).status, 400);
   assert.equal((await request(path + '/context', 'PUT', { autoCompact: false })).status, 200);
   await app.runtime.configuration.update({
-    entries: { 'core:context-management': { config: { triggerRatio: 0.9 } } },
+    entries: { 'context-management': { config: { triggerRatio: 0.9 } } },
   });
   const { body: configured } = await request(path + '/context');
   assert.deepEqual(configured.overrides, { autoCompact: false });
@@ -178,7 +178,7 @@ test('session overrides inherit defaults, reject invalid ratios and preserve con
   const restored = new SessionLog(copy, session.id);
   try {
     assert.deepEqual(restored.context(), sessionLog.context());
-    assert.deepEqual(restored.setting('core:context-management'), { autoCompact: false });
+    assert.deepEqual(restored.setting('context-management'), { autoCompact: false });
   } finally {
     restored.close();
   }
@@ -259,4 +259,47 @@ test('an image limit offloads the oldest image and an irreducible overflow exits
   const failed = ctx.harnessSessions.log(plain.id);
   assert.equal(failed.context().contextMessages.filter(({ role }) => role === 'user').length, 1);
   assert.equal(failed.entries().filter(({ type }) => type === 'model-attempt').length, 1);
+});
+
+test('cancelling a manual checkpoint keeps the active branch and releases the conversation lane', async (t) => {
+  let started!: () => void;
+  let release!: () => void;
+  const entered = new Promise<void>((resolve) => {
+    started = resolve;
+  });
+  const hold = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const { app, request } = await fixture(t, async ({ messages }) => {
+    if (summary(messages.at(-1)?.content)) {
+      started();
+      await hold;
+      return checkpointFixture;
+    }
+    return 'Finished';
+  });
+  const ctx = app.runtime.plugins.ctx;
+  const { body: session } = await request('/sessions', 'POST', {});
+  await sendRun(ctx.harnessRuns, session.id, 'First analysis. '.repeat(150));
+  await sendRun(ctx.harnessRuns, session.id, 'Next request');
+  const log = ctx.harnessSessions.log(session.id);
+  const before = log.context();
+  const endpoint = '/sessions/' + session.id;
+  const compact = request(endpoint + '/compact', 'POST');
+  try {
+    await Promise.race([
+      entered,
+      compact.then(() => {
+        throw new Error('Compaction settled before cancellation');
+      }),
+    ]);
+    assert.equal((await request(endpoint + '/context')).body.compacting, 'manual');
+    assert.equal((await request(endpoint + '/cancel', 'POST')).body.cancelled, true);
+    assert.deepEqual((await compact).body, { cancelled: true });
+    assert.deepEqual(log.context(), before);
+    assert.equal((await request(endpoint + '/context')).body.compacting, undefined);
+    assert.equal(await sendRun(ctx.harnessRuns, session.id, 'Continue'), 'Finished');
+  } finally {
+    release();
+  }
 });

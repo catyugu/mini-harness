@@ -866,7 +866,7 @@ test('native compaction reduces context and preserves message identities and his
     messages.at(-1)?.content.startsWith('Write a continuation checkpoint') ? checkpointFixture : 'Done',
   );
   await app.runtime.configuration.update({
-    entries: { 'core:context-management': { config: { autoCompact: false } } },
+    entries: { 'context-management': { config: { autoCompact: false } } },
   });
   const { body: session } = await request('/sessions', 'POST', {});
   const compact = () => request('/sessions/' + session.id + '/compact', 'POST');

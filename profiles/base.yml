@@ -15,7 +15,7 @@ plugins:
     name: '@mini-harness/agent'
   - id: core:tool-executor
     name: '@mini-harness/tool-executor'
-  - id: core:context-management
+  - id: context-management
     name: '@mini-harness/context-management'
     live: true
   - id: core:prompt

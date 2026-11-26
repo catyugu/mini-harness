@@ -212,7 +212,15 @@ function mountStats(ctx: Context) {
       const controls = document.createElement('div');
       controls.className = 'context-buttons';
       controls.append(compact, reset);
-      compact.onclick = () => void conversation.compact().catch(conversation.report);
+      compact.onclick = () => {
+        if (state?.compacting === 'manual' && id) {
+          void browserRequest(
+            ctx,
+            '/sessions/' + encodeURIComponent(id) + '/cancel',
+            payload('POST', {}),
+          ).catch(conversation.report);
+        } else void conversation.compact().catch(conversation.report);
+      };
       reset.onclick = () => void write({}).catch(conversation.report);
       run.panel.append(runList);
       usage.panel.append(usageList);
@@ -254,14 +262,21 @@ function mountStats(ctx: Context) {
         showOccupancy(contextList, bar, state);
         form.update(state.settings, state.overrides);
         const current = conversation.get();
-        compact.disabled = Boolean(
-          state.compacting ||
-            current.interaction.operation ||
-            current.run?.state === 'running' ||
-            current.run?.state === 'queued' ||
-            current.run?.state === 'waiting',
-        );
-        compact.textContent = state.compacting ? 'Compacting…' : 'Compact now';
+        compact.disabled =
+          state.compacting !== 'manual' &&
+          Boolean(
+            state.compacting ||
+              current.interaction.operation ||
+              current.run?.state === 'running' ||
+              current.run?.state === 'queued' ||
+              current.run?.state === 'waiting',
+          );
+        compact.textContent =
+          state.compacting === 'manual'
+            ? 'Cancel compaction'
+            : state.compacting
+              ? 'Compacting…'
+              : 'Compact now';
         reset.disabled = !Object.keys(state.overrides).length;
       }
       updates.addEventListener('change', render, { signal });

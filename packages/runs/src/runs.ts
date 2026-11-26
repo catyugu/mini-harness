@@ -279,12 +279,12 @@ export class Runs implements RunPort {
   stop(id: string) {
     this.assertOpen();
     this.registry.assertAvailable(id);
-    const log = this.registry.log(id);
-    if (!log.inboxPaused()) log.append({ type: 'inbox-paused' });
-    return (
-      this.streams.has(id) &&
-      (this.current(id)?.cancel(new DOMException('Stopped by the user', 'AbortError')) ?? false)
-    );
+    const current = this.current(id);
+    if (!current || this.streams.has(id)) {
+      const log = this.registry.log(id);
+      if (!log.inboxPaused()) log.append({ type: 'inbox-paused' });
+    }
+    return current?.cancel(new DOMException('Stopped by the user', 'AbortError')) ?? false;
   }
 
   private wake(id: string, previous?: ReadonlySet<string>, interrupted = false) {

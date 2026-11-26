@@ -242,6 +242,13 @@ test('compaction and context edits change model context without deleting convers
   assert.equal(log.projection().contextEntryIds[1], keep.id);
   assert.notEqual(log.context().contextRevisions[1], keep.id);
   assert.equal(log.projection().contextEntryIds.length, log.projection().contextMessages.length);
+  const compacted = log.context();
+  log.revise(user('new branch'), keep.id, compacted.leafId);
+  assert.deepEqual(
+    log.context().contextMessages.map(({ content }) => content),
+    ['old context', 'recent context', 'new branch'],
+  );
+  assert.deepEqual(log.context(compacted.leafId), compacted);
 });
 
 test('attachments retain full model input while display keeps the submitted text and labels', (t) => {

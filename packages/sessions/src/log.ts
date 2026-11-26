@@ -81,7 +81,7 @@ export class SessionLog extends RecordLog<SessionEvent | HistoricalContextEvent>
     sessionId: this.sessionId,
     entries: (after) => this.entries(after),
     hasAttachments: (id) => this.hasAttachments(id),
-    originalMessage: (id) => this.originalMessage(id),
+    originalMessage: (id, raw) => this.originalMessage(id, raw),
     setting: (owner) => this.setting(owner),
     inbox: () => this.inbox(),
     hasInbox: (id) => this.hasInbox(id),
@@ -254,11 +254,11 @@ export class SessionLog extends RecordLog<SessionEvent | HistoricalContextEvent>
     return entry?.type === 'message' && Boolean(entry.presentation?.attachments.length);
   }
 
-  originalMessage(id: string) {
+  originalMessage(id: string, raw = false) {
     const entry = this.byId.get(id);
     if (!entry) return;
     return structuredClone(
-      entry.type === 'tool-accepted'
+      raw && entry.type === 'tool-accepted'
         ? this.execution(entry.executionId)
         : projectMessage(entry, this.execution),
     );

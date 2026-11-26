@@ -60,6 +60,17 @@ test('context settings and statistics stay usable at desktop and mobile widths',
     await expect(auto).not.toBeChecked();
     await panel.getByRole('button', { name: 'Reset to defaults' }).click();
     await expect(auto).toBeChecked();
+    await page.keyboard.press('Escape');
+    await page.getByRole('button', { name: 'Toggle navigation' }).click();
+    await page.getByRole('button', { name: 'Settings', exact: true }).click();
+    await settingsSection(page, 'Built-in plugins').click();
+    const plugin = page.getByRole('switch', { name: 'Context Management', exact: true });
+    await plugin.uncheck();
+    await expect(plugin).toBeEnabled();
+    await expect(status).toHaveCount(0);
+    await page.getByRole('button', { name: 'All settings' }).click();
+    await settingsSection(page, 'General').click();
+    await expect(page.getByRole('heading', { name: 'Context Management' })).toHaveCount(0);
   } finally {
     await service.stop();
     await mock.close();

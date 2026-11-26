@@ -2,9 +2,9 @@ import type { NativeUsage } from '@mini-harness/llm/api';
 import type { ModelAttempt, SessionEntry, SessionLogPort } from '@mini-harness/sessions/log-api';
 import type { ContextState, TokenTotals } from '../shared/state.ts';
 
-type Request = { id: string; parentId: string | null };
+type Request = { id: string; parentId: string | null; transformed?: true };
 type Observation = { id: string; parentId: string | null } & (
-  | { type: 'model-request' }
+  | ({ type: 'model-request' } & Request)
   | ({ type: 'model-attempt' } & ModelAttempt)
   | { type: 'user' }
   | { type: 'assistant'; usage?: NativeUsage; attemptsRecorded?: true }
@@ -34,7 +34,8 @@ function knownUsage(usage: NativeUsage | undefined): TokenTotals | undefined {
 function observe(entry: SessionEntry): Observation | undefined {
   const { id, parentId } = entry;
   if (entry.type === 'model-attempt') return entry;
-  if (entry.type === 'model-request' && !entry.request.purpose) return { id, parentId, type: entry.type };
+  if (entry.type === 'model-request' && !entry.request.purpose)
+    return { id, parentId, type: entry.type, transformed: entry.request.messagesPatch ? true : undefined };
   if (entry.type !== 'message') return;
   const { message } = entry;
   switch (message.role) {
@@ -149,11 +150,12 @@ class BranchStatistics {
   }
 }
 
-type StatisticsLog = Pick<SessionLogPort, 'entries' | 'originalMessage'>;
+type StatisticsLog = Pick<SessionLogPort, 'entries'>;
 
 export class Statistics {
   private cursor = 0;
   private readonly links = new Map<string, { seq: number; parentId: string | null }>();
+  private readonly toolDurations = new Map<string, number>();
   private readonly observations: Observation[] = [];
   private aggregate = new BranchStatistics();
   private leaf: string | null = null;
@@ -169,10 +171,11 @@ export class Statistics {
       this.cursor = seq;
       const observation = observe(entry);
       if (observation) this.observations.push(observation);
+      if (entry.type === 'tool-execution' && entry.result.elapsedMs !== undefined)
+        this.toolDurations.set(id, entry.result.elapsedMs);
       if (entry.type === 'tool-accepted') {
-        const raw = this.log.originalMessage(id);
-        if (raw?.role === 'toolResult' && raw.elapsedMs !== undefined)
-          this.observations.push({ id, parentId, type: 'tool', elapsedMs: raw.elapsedMs });
+        const elapsedMs = this.toolDurations.get(entry.executionId);
+        if (elapsedMs !== undefined) this.observations.push({ id, parentId, type: 'tool', elapsedMs });
       }
     }
     const ancestry = new Set<string | null>();

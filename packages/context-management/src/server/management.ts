@@ -14,7 +14,7 @@ import { resolveSettings } from './config.ts';
 import { TokenMeter } from './meter.ts';
 import { prune } from './prune.ts';
 
-export const owner = 'core:context-management';
+export const owner = 'context-management';
 
 export class ContextManagement {
   private readonly signatures = new WeakMap<SessionLogPort, Map<string, string | null>>();
@@ -150,12 +150,18 @@ export class ContextManagement {
                 : minimum,
           ),
         );
-        const cut = splitPoint(
+        const force = repair || (budget !== undefined && occupancy.total > budget);
+        let cut = splitPoint(
           projection,
           this.meter,
           retain,
-          Boolean(repair || (budget && occupancy.total > budget)),
+          force
+            ? {
+                available: Math.max(0, (budget ?? occupancy.total) - occupancy.system - occupancy.tools - 96),
+              }
+            : undefined,
         );
+        if (!cut && manual) cut = splitPoint(projection, this.meter, 1);
         if (!cut) {
           if (reduced || (pruned && (manual || repair))) break;
           fail('Nothing to compact within the recent-context budget');

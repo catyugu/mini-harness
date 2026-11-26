@@ -24,7 +24,7 @@ function setup(ctx: Context) {
     () => ctx.fiber.effectiveConfig as unknown as ContextSettings,
     notify,
   );
-  const statistics = new WeakMap<Pick<SessionLogPort, 'entries' | 'originalMessage'>, Statistics>();
+  const statistics = new WeakMap<Pick<SessionLogPort, 'entries'>, Statistics>();
   ctx.provide('harnessContextManagement', manager);
   ctx.effect(() => changes.register('context-management'));
   ctx.effect(() => ctx.harnessProfileConfig.subscribe(() => notify()));
@@ -41,8 +41,13 @@ function setup(ctx: Context) {
     web.inject(['harnessRuns'], (run) => {
       run.effect(() =>
         routes.register('POST', '/api/sessions/:id/compact', async ({ params }) => {
-          await run.harnessRuns.compact(params.id);
-          return { ok: true };
+          try {
+            await run.harnessRuns.compact(params.id);
+            return { ok: true };
+          } catch (error) {
+            if (error instanceof Error && error.name === 'AbortError') return { cancelled: true };
+            throw error;
+          }
         }),
       );
     });
@@ -61,7 +66,7 @@ function setup(ctx: Context) {
               statistics.set(log, entry);
             }
             const { stats, latestRequest } = entry.read(projection.leafId);
-            const exact = latestRequest?.parentId === projection.leafId;
+            const exact = latestRequest?.transformed && latestRequest.parentId === projection.leafId;
             const definition = latestRequest && log.requestDefinition(latestRequest.id);
             const request: LlmRequest | undefined = projection.model && {
               ...definition,
@@ -128,11 +133,14 @@ function setup(ctx: Context) {
               offset: Type.Optional(Type.Integer({ minimum: 0, maximum: 1_073_741_824 })),
               limit: Type.Optional(Type.Integer({ minimum: 128, maximum: 12_000 })),
               image: Type.Optional(Type.Integer({ minimum: 1 })),
+              raw: Type.Optional(
+                Type.Boolean({ description: 'Read the raw tool execution before result transforms.' }),
+              ),
             },
             { additionalProperties: false },
           ),
-          async execute({ entry, offset = 0, limit = 2400, image }) {
-            const message = sessions.log(id).originalMessage(entry);
+          async execute({ entry, offset = 0, limit = 2400, image, raw }) {
+            const message = sessions.log(id).originalMessage(entry, raw);
             if (!message)
               return { isError: true, content: [{ type: 'text', text: 'Original message not found' }] };
             const parts =

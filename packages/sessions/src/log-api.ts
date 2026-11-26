@@ -129,7 +129,8 @@ export interface SessionLogPort {
   readonly sessionId: string;
   entries(after?: number): SessionEntry[];
   hasAttachments(id: string): boolean;
-  originalMessage(id: string): NativeMessage | undefined;
+  /** Fetch the pre-pruning message or, for tool results, the raw execution before transforms. */
+  originalMessage(id: string, raw?: boolean): NativeMessage | undefined;
   setting(owner: string): unknown;
   inbox(): InboxItem[];
   hasInbox(id: string): boolean;
@@ -161,7 +162,6 @@ export type SessionLogReader = Pick<
   SessionLogPort,
   | 'entries'
   | 'setting'
-  | 'originalMessage'
   | 'context'
   | 'requestDefinition'
   | 'requestSnapshot'
