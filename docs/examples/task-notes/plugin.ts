@@ -71,7 +71,7 @@ export function apply(ctx: Context) {
             properties: { note: { type: 'string', maxLength: 512 } },
             required: ['note'],
           },
-          async execute(_call, input) {
+          async execute(input) {
             const note = String(input.note);
             const records: SessionRecords = ctx.harnessSessions.records(sessionId, {
               pluginId: 'task-notes',
