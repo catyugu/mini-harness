@@ -8,4 +8,7 @@ A registration is no longer available once replaced or removed. Removal cancels 
 
 `mini-harness/tools/execution` supplies the executor contract, `executeTools` and `startTool`. The native executor decides serial/parallel dispatch, validates calls and delivers exactly one result per call. An optional consumer policy can acknowledge a background task without waiting for completion. Tools that suspend their owning run must be serial.
 
+The optional `@mini-harness/task-control` plugin registers `task_control` independently of
+Subagents. It only uses the Task Runtime contract.
+
 Sessions may supply a tool policy, but registration and execution require no Session service.

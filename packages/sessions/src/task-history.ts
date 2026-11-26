@@ -26,6 +26,19 @@ export function bindTaskHistory(ctx: Context, sessions: SessionStore) {
             return { task: entry.task, output: entry.output };
           if (entry.type === 'run' && entry.run.id === id) {
             const run = entry.run;
+            const start = entries.findIndex(
+              (item) => item.type === 'run' && item.run.id === id && item.run.state === 'queued',
+            );
+            const answer =
+              run.state === 'completed' && start >= 0
+                ? entries.slice(start + 1, i).reverse().find(
+                    (item) => item.type === 'message' && item.message.role === 'assistant',
+                  )
+                : undefined;
+            const result =
+              answer?.type === 'message' && answer.message.role === 'assistant'
+                ? answer.message.content.flatMap((part) => (part.type === 'text' ? [part.text] : [])).join('')
+                : undefined;
             return {
               task: {
                 id,
@@ -42,6 +55,7 @@ export function bindTaskHistory(ctx: Context, sessions: SessionStore) {
                 outputCursor: 0,
                 retained: true,
                 error: run.error,
+                result,
               },
             };
           }

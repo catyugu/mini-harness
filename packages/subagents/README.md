@@ -8,8 +8,8 @@ the selected run, not independently owned child conversations. Child sessions re
 subsequent runs. Deleting a session recursively drains and deletes its descendants.
 
 `task_control` inspects, waits for or cancels a Task by ID. Waiting is a serial tool call and releases
-the current Agent Task's admission slot while waiting. The final child answer is read from SessionLog,
-not duplicated into a second result database.
+the current Agent Task's admission slot while waiting. The optional task-control plugin supplies this tool independently of delegation. Historical child
+answers are recovered by Sessions, not by the tool.
 
 The browser contributes a child conversation link to the delegation receipt and a parent navigation
 trail. Configuration retains live `maxDepth`, `maxParallel` and child model defaults.

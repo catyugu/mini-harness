@@ -16,7 +16,8 @@
     ],
     "profileModules": {
       "@mini-harness/tools": "./src/manifest.ts",
-      "@mini-harness/tool-executor": "./src/execution.ts#executor"
+      "@mini-harness/tool-executor": "./src/execution.ts#executor",
+      "@mini-harness/task-control": "./src/task-control.ts"
     }
   },
   "dependencies": {

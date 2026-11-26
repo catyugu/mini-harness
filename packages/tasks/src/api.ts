@@ -66,6 +66,7 @@ export type TaskEvent = {
 export interface TaskHandle<T = unknown> {
   readonly id: string;
   readonly signal: AbortSignal;
+  readonly state: TaskState;
   readonly result: Promise<T>;
   cancel(reason?: unknown): boolean;
 }
@@ -104,7 +105,7 @@ export interface TaskPort {
   /** Active tasks and bounded recent history; older durable records remain queryable by ID. */
   list(owner?: string): TaskSnapshot[];
   cancel(id: string, reason?: unknown): boolean;
-  wait(id: string, predicate?: (task: TaskSnapshot) => boolean, signal?: AbortSignal): Promise<TaskSnapshot>;
+  wait(id: string, signal?: AbortSignal): Promise<TaskSnapshot>;
   subscribe(listener: (event: TaskEvent) => void): () => void;
   readOutput(id: string, after?: number): TaskOutput | undefined;
   /** Exclude new work during removal, drain tasks and delete their history. The domain owns resource existence. */

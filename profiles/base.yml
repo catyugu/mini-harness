@@ -40,6 +40,8 @@ plugins:
     name: '@mini-harness/files'
   - id: skills
     name: '@mini-harness/skills'
+  - id: task-control
+    name: '@mini-harness/task-control'
   - id: subagents
     name: '@mini-harness/subagents'
     live: true

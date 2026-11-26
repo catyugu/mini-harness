@@ -23,13 +23,18 @@ test('durable retained tasks recover by ID without reconstructing execution hand
   assert.equal(await done.result, 'finished');
   const run = ctx.harnessRuns.submit(session.id, { message: 'A run' });
   await run.result;
+  let entered!: () => void;
+  const running = new Promise<void>((resolve) => {
+    entered = resolve;
+  });
   const unfinished = ctx.harnessTasks.start({ owner }, async ({ signal }) => {
     signal.throwIfAborted();
+    entered();
     await new Promise<void>((_, reject) => {
       signal.addEventListener('abort', () => reject(signal.reason), { once: true });
     });
   });
-  await ctx.harnessTasks.wait(unfinished.id, ({ state }) => state === 'running');
+  await running;
   // Simulate a committed task acceptance whose executor was lost without settlement.
   const lost = 'lost-task';
   ctx.harnessSessions.log(session.id).append({

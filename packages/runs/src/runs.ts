@@ -178,6 +178,7 @@ export class Runs implements RunPort {
           provider,
           signal,
           acquire,
+          projectResult: (answer) => answer,
           record(snapshot) {
             if (!info) {
               info = {

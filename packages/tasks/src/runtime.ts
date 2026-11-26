@@ -32,7 +32,6 @@ export class TaskRuntime implements TaskPort {
   private readonly entries = new Map<string, Entry>();
   private readonly listeners = new Set<(event: TaskEvent) => void>();
   private readonly removing = new Map<string, Promise<void>>();
-  private readonly waiters = new Map<string, Set<(task: TaskSnapshot) => void>>();
   private closing = false;
 
   constructor(
@@ -52,9 +51,9 @@ export class TaskRuntime implements TaskPort {
       get: runtime.get.bind(runtime),
       list: runtime.list.bind(runtime),
       cancel: runtime.cancel.bind(runtime),
-      wait(id, predicate, signal) {
+      wait(id, signal) {
         const lifetime = Service.caller(this).fiber.signal;
-        return runtime.wait(id, predicate, signal ? AbortSignal.any([signal, lifetime]) : lifetime);
+        return runtime.wait(id, signal ? AbortSignal.any([signal, lifetime]) : lifetime);
       },
       subscribe(listener) {
         const caller = Service.caller(this);
@@ -176,7 +175,7 @@ export class TaskRuntime implements TaskPort {
       },
     };
     const cancelled = () => update({ cancellationRequested: true });
-    const result = Promise.resolve().then(async () => {
+    const run = async () => {
       let value: T;
       let failure: { error: unknown } | undefined;
       let projected: TaskSnapshot['result'];
@@ -217,7 +216,6 @@ export class TaskRuntime implements TaskPort {
         : 'completed';
       const finishedAt = new Date().toISOString();
       // Keep the bounded output available to readers; release execution resources at settlement.
-      entry.handle = undefined;
       try {
         transition(
           failure ? { state, error: describe(reason), finishedAt } : { state, result: projected, finishedAt },
@@ -226,6 +224,7 @@ export class TaskRuntime implements TaskPort {
         update({ state: 'failed', error: describe(error), finishedAt });
         throw error;
       } finally {
+        entry.handle = undefined;
         if (!retain) this.forgetTree(entry);
         else {
           entry.retainedBytes =
@@ -235,10 +234,19 @@ export class TaskRuntime implements TaskPort {
       }
       if (failure) throw reason;
       return value!;
-    });
+    };
+    // Fiber.run owns execution, including cleanup. If activation ends before
+    // its callback starts, settle using the already-aborted task signal.
+    let executing: Promise<T> | undefined;
+    const result = provider
+      ? provider.fiber.run(() => (executing = run())).catch(() => executing ?? run())
+      : Promise.resolve().then(run);
     const handle: TaskHandle<T> = {
       id: snapshot.id,
       signal,
+      get state() {
+        return snapshot.state;
+      },
       result,
       cancel(reason = new Error('Task cancelled')) {
         if (terminal(snapshot.state) || signal.aborted) return false;
@@ -250,7 +258,6 @@ export class TaskRuntime implements TaskPort {
     this.entries.set(handle.id, entry);
     signal.addEventListener('abort', cancelled, { once: true });
     void result.catch(() => {});
-    if (provider) void provider.fiber.run(() => result).catch(() => {});
     this.notify('created', snapshot, accepted);
     return handle;
   }
@@ -280,36 +287,26 @@ export class TaskRuntime implements TaskPort {
     return this.entries.get(id)?.handle?.cancel(reason) ?? false;
   }
 
-  wait(id: string, predicate = (task: TaskSnapshot) => terminal(task.state), signal?: AbortSignal) {
-    return new Promise<TaskSnapshot>((resolve, reject) => {
+  wait(id: string, signal?: AbortSignal): Promise<TaskSnapshot> {
+    const entry = this.entries.get(id);
+    if (!entry?.handle || terminal(entry.snapshot.state)) {
       const current = this.get(id);
-      if (!current) return reject(new Error('Task not found: ' + id));
-      if (signal?.aborted && !terminal(current.state)) return reject(signal.reason);
-      const group = this.waiters.get(id) ?? new Set<(task: TaskSnapshot) => void>();
-      this.waiters.set(id, group);
-      const cleanup = () => {
-        group.delete(check);
-        if (!group.size && this.waiters.get(id) === group) this.waiters.delete(id);
+      return current ? Promise.resolve(current) : Promise.reject(new Error('Task not found: ' + id));
+    }
+    const { handle, snapshot } = entry;
+    return new Promise((resolve, reject) => {
+      const finish = () => {
         signal?.removeEventListener('abort', cancel);
+        resolve(clone(snapshot));
       };
       const cancel = () => {
-        cleanup();
+        if (terminal(snapshot.state)) return finish();
+        signal?.removeEventListener('abort', cancel);
         reject(signal?.reason);
       };
-      const check = (task: TaskSnapshot) => {
-        try {
-          const view = clone(task);
-          if (!terminal(view.state) && !predicate(view)) return;
-          cleanup();
-          resolve(view);
-        } catch (error) {
-          cleanup();
-          reject(error);
-        }
-      };
-      group.add(check);
+      if (signal?.aborted) return cancel();
       signal?.addEventListener('abort', cancel, { once: true });
-      check(current);
+      void handle.result.then(finish, finish);
     });
   }
 
@@ -321,9 +318,6 @@ export class TaskRuntime implements TaskPort {
   }
 
   private notify(type: TaskEvent['type'], snapshot: TaskSnapshot, committed?: void | (() => void)) {
-    if (type !== 'deleted') {
-      for (const waiter of [...(this.waiters.get(snapshot.id) ?? [])]) waiter(snapshot);
-    }
     try {
       committed?.();
     } catch {
@@ -376,9 +370,11 @@ export class TaskRuntime implements TaskPort {
     let remaining = history.length;
     for (const entry of history) {
       if (remaining <= 256 && bytes <= 16 * 1024 * 1024) break;
+      if (!this.entries.has(entry.snapshot.id)) continue;
       this.forgetTree(entry);
-      remaining--;
-      bytes -= entry.retainedBytes ?? 0;
+      const retained = history.filter((item) => this.entries.has(item.snapshot.id));
+      remaining = retained.length;
+      bytes = retained.reduce((sum, item) => sum + (item.retainedBytes ?? 0), 0);
     }
   }
 

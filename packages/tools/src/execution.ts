@@ -1,6 +1,6 @@
 import type { Context } from 'mini-harness/cordis';
-import { type ToolDefinition, type ToolInvocation, type ToolUpdate } from './api.ts';
-import type { TaskContext, TaskPort } from '@mini-harness/tasks/api';
+import { type ToolDefinition, type ToolInvocation, type ToolResult, type ToolUpdate } from './api.ts';
+import type { TaskContext, TaskHandle, TaskPort } from '@mini-harness/tasks/api';
 import { startTool } from './invocation.ts';
 export { startTool } from './invocation.ts';
 import { Check } from 'typebox/value';
@@ -128,12 +128,12 @@ async function executeTool(
       'skipped',
     );
   const start = performance.now();
-  let taskSignal = signal;
+  let task: TaskHandle<ToolResult> | undefined;
   try {
     if (!tool) throw new Error('Tool is no longer available: ' + call.name);
     if (invalid) throw new Error('Invalid arguments for ' + call.name + ': ' + invalid);
     const background = execution.background?.(call);
-    const task = startTool(
+    task = startTool(
       execution.tasks,
       tool,
       call.id,
@@ -153,7 +153,6 @@ async function executeTool(
             onUpdate: (update) => execution.update?.(call, update),
           },
     );
-    taskSignal = task.signal;
     if (background) {
       const accepted = { taskId: task.id, state: 'queued' };
       return {
@@ -178,10 +177,7 @@ async function executeTool(
       elapsedMs: result.elapsedMs ?? performance.now() - start,
     };
   } catch (error) {
-    const cancelled =
-      taskSignal.aborted &&
-      (error === taskSignal.reason ||
-        (error instanceof Error && (error.name === 'AbortError' || error.cause === taskSignal.reason)));
+    const cancelled = task ? task.state === 'cancelled' || task.state === 'interrupted' : signal.aborted;
     return {
       ...toolFailure(
         call,

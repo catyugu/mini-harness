@@ -60,7 +60,7 @@ test('suspending releases admission and resumes only after reacquisition', async
   });
   await ready.promise;
   assert.equal(held, 0);
-  assert.equal((await runtime.wait(task.id, ({ state }) => state === 'waiting')).state, 'waiting');
+  assert.equal(runtime.get(task.id)?.state, 'waiting');
   wake.release();
   assert.equal(await task.result, 42);
   assert.equal(held, 0);
@@ -220,7 +220,7 @@ test('output uses UTF-8 byte offsets and preserves channel and Unicode boundarie
   assert.equal(runtime.readOutput(handle.id, 1200000)?.chunks[0].text, '完');
 });
 
-test('terminal waiters settle before observers can cancel their wait', async () => {
+test('terminal observation cannot retroactively cancel a wait', async () => {
   const runtime = new TaskRuntime();
   const cancel = new AbortController();
   const gatekeeper = gate();
@@ -230,7 +230,7 @@ test('terminal waiters settle before observers can cancel their wait', async () 
   runtime.subscribe(({ task: snapshot }) => {
     if (snapshot.id === task.id && snapshot.state === 'completed') cancel.abort();
   });
-  const result = runtime.wait(task.id, undefined, cancel.signal);
+  const result = runtime.wait(task.id, cancel.signal);
   gatekeeper.release();
   assert.equal((await result).state, 'completed');
 });
