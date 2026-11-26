@@ -64,7 +64,8 @@ export class Approvals {
             this.denials.set(runId, previous);
           }
           reject(new ApprovalDenied('Operation denied by user'));
-        } else reject(new Error(decision === 'expired' ? 'User approval expired' : 'Operation cancelled'));
+        } else if (decision === 'expired') reject(new Error('User approval expired'));
+        else reject(new DOMException('Operation cancelled', 'AbortError'));
       };
       const abort = () => finish('cancelled');
       const timer = setTimeout(() => finish('expired'), 5 * 60 * 1000);

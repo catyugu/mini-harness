@@ -15,7 +15,7 @@ export interface ToolResult extends ToolUpdate {
   outcome?: NativeToolMessage['outcome'];
   elapsedMs?: number;
 }
-export type ToolResultState = 'finished' | 'error' | 'skipped' | 'denied';
+export type ToolResultState = 'finished' | 'error' | NonNullable<NativeToolMessage['outcome']>;
 
 export function toolResultState(result: NativeToolMessage): ToolResultState {
   if (result.outcome) return result.outcome;

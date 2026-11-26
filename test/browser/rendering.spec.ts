@@ -34,6 +34,7 @@ test('renders Markdown and tool results, and stops a pending reply', async ({ pa
       return { tool: 'ls', args: { path: '.' } };
     }
     if (last.content === 'Change course') return 'Steering accepted';
+    if (last.content === 'Stop this tool') return { tool: 'wait_for_stop', args: {} };
     if (last.role === 'user' && last.content.startsWith('user: Show a result'))
       return 'Summarized the earlier tool call.';
     if (last.content === 'Reuse the tool ID')
@@ -50,8 +51,15 @@ test('renders Markdown and tool results, and stops a pending reply', async ({ pa
     'bad-renderer',
     {},
     `
-export const inject = ["harnessSessions"];
+export const inject = ["harnessSessions", "harnessTools"];
 export const apply = (ctx) => {
+      ctx.effect(() => ctx.harnessTools.register({
+        name: "wait_for_stop", description: "Wait until cancelled", parameters: { type: "object", properties: {} },
+        async execute(_id, _args, signal) {
+          signal.throwIfAborted();
+          await new Promise((_, reject) => signal.addEventListener("abort", () => reject(signal.reason), { once: true }));
+        }
+      }));
       ctx.on("agent/tool-result", async (_content, { sessionId, tool }) => {
         if (tool === 'ls') await ctx.harnessSessions.records(sessionId, {
           pluginId: 'bad-renderer', instanceId: 'bad-renderer'
@@ -207,6 +215,19 @@ export const apply = (ctx) => {
     await expect(finishedTools.last()).not.toHaveAttribute('open', '');
     await page.reload();
     await expect(finishedTools.locator('summary strong')).toHaveText(['ls', 'read']);
+
+    await prompt.fill('Stop this tool');
+    await page.getByRole('button', { name: 'Send', exact: true }).click();
+    await expect(page.locator('.tool-card[data-state=running]')).toContainText('wait for stop');
+    await page.getByRole('button', { name: 'Stop response' }).click();
+    const cancelled = page.locator('.tool-card[data-state=cancelled]');
+    await expect(cancelled.locator('.tool-state')).toHaveText('Cancelled');
+    const yellow = /rgb\((138, 101, 0|245, 204, 101)\)/;
+    await expect(cancelled.locator('.tool-state')).toHaveCSS('color', yellow);
+    await expect(skipped.locator('.tool-state')).toHaveCSS('color', yellow);
+    await page.reload();
+    await expect(cancelled.locator('.tool-state')).toHaveText('Cancelled');
+    await expect(cancelled.locator('.tool-state')).toHaveCSS('color', yellow);
   } finally {
     release();
     resumeSteering();

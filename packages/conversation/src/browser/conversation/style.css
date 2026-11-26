@@ -299,6 +299,10 @@
 .tool-card[data-state='error'] .tool-state {
   color: var(--danger);
 }
+.tool-card:is([data-state='denied'], [data-state='skipped'], [data-state='cancelled'])
+  :is(.tool-state, .tool-exit-code) {
+  color: var(--warning);
+}
 .tool-content:not(:empty) {
   padding: 5px 0 8px 20px;
 }

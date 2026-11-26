@@ -67,6 +67,8 @@ export function instanceCredential(home: string, reset = false) {
   return token;
 }
 
+export const authenticationMetadata = { title: 'Web Authentication' };
+
 export const authentication = {
   inject: ['harnessState', 'harnessLaunch'],
   provide: ['harnessWebToken'],

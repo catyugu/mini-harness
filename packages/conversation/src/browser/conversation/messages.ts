@@ -189,6 +189,7 @@ export function createMessageView(
       approval: 'Waiting for approval',
       denied: 'Denied',
       skipped: 'Skipped',
+      cancelled: 'Cancelled',
       error: 'Failed',
     };
     status.textContent = labels[data.state] ?? data.state;

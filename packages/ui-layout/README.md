@@ -26,4 +26,4 @@ Uses [UI Slots](../ui-slots/README.md) for mounting and [UI Primitives](../ui-pr
 
 [Browser tests](../../test/browser/) cover navigation, panels and responsive layout.
 
-Panel entries and tab types are registered with the caller’s Cordis lifetime. Each tab has a stable key, a workspace or conversation owner, and a typed payload; a scope change supplies a fresh access context.
+Panel entries and tab types are registered with the caller’s Cordis lifetime. Each tab has a stable key, a workspace owner, and a typed payload. Tabs remain open across conversation switches and are restored when returning to their workspace.

@@ -20,7 +20,7 @@ Each activation has an abort signal. Teardown aborts and drains work registered 
 
 File Access opens an explicit directory and enforces path containment. Workspace routes and Agent tools resolve the directory and scoped service before opening it. Files and Shell publish changes with workspace IDs as projection resource IDs. Files owns file browsing, search and composer completion. File Preview renders workspace resources, stored attachments and draft bytes. Git Diff owns the Git changes list and diff tabs. Sessions owns the stored attachment bytes and their conversation identity.
 
-Layout registers typed views and opens tabs by their stable key and workspace or conversation owner. File Preview renders the selected resource in a tab or a media dialog. Conversation keeps the normalized reference in raw draft and history text while rendering it as an inline action.
+Layout registers typed views and opens tabs by their stable key and workspace owner. File Preview renders the selected resource in a tab or a media dialog. Conversation keeps the normalized reference in raw draft and history text while rendering it as an inline action.
 
 ## Plugin SDK
 

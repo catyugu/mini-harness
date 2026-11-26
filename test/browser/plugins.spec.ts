@@ -156,6 +156,7 @@ export function apply(ctx) {
     await page.getByRole('button', { name: 'Browse plugins', exact: true }).click();
     for (const [id, title] of [
       ['core:transport', 'Transport'],
+      ['core:web-auth', 'Web Authentication'],
       ['core:plugins-runtime', 'Plugin Runtime'],
       ['core:tool-executor', 'Tool Executor'],
       ['core:compaction', 'Context Compaction'],

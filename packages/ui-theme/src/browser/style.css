@@ -6,6 +6,7 @@
     system-ui,
     sans-serif;
   --danger: #a12c39;
+  --warning: #8a6500;
   --radius: 10px;
   --radius-lg: 16px;
   --control: 36px;
@@ -36,6 +37,7 @@
 :root[data-theme='dark'] {
   color-scheme: dark;
   --danger: #fca5ae;
+  --warning: #f5cc65;
   --bg: #1b1b1d;
   --panel: #151517;
   --surface: #232326;
@@ -55,6 +57,7 @@
   :root:not([data-theme]) {
     color-scheme: dark;
     --danger: #fca5ae;
+    --warning: #f5cc65;
     --bg: #1b1b1d;
     --panel: #151517;
     --surface: #232326;

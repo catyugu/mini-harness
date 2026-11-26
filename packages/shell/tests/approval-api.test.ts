@@ -110,6 +110,11 @@ test('shell approval gates execution, handles rejection and cancellation', async
   await request('/sessions/' + session.id + '/cancel', 'POST', {});
   await finish(session.id);
   assert.deepEqual((await request('/approvals')).body, []);
+  const cancelled = (await request('/sessions/' + session.id)).body.timeline
+    .filter((message: { role: string }) => message.role === 'toolResult')
+    .at(-1);
+  assert.equal(cancelled.toolState, 'cancelled');
+  assert.equal(cancelled.isError, true);
 });
 
 test('full access bypasses Shell prompts only for its conversation and applies to pending approvals', async (t) => {
