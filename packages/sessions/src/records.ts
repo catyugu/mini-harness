@@ -55,7 +55,18 @@ export interface SessionHistory {
   inspectLog<T>(
     id: string,
     read: (
-      log: Pick<SessionLogPort, 'entries' | 'branch' | 'projection' | 'queue' | 'inbox' | 'inboxPaused'>,
+      log: Pick<
+        SessionLogPort,
+        | 'entries'
+        | 'setting'
+        | 'requestDefinition'
+        | 'requestSnapshot'
+        | 'branch'
+        | 'projection'
+        | 'queue'
+        | 'inbox'
+        | 'inboxPaused'
+      >,
     ) => T,
     strict?: boolean,
   ): T | undefined;

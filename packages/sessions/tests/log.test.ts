@@ -219,8 +219,14 @@ test('compaction and context edits change model context without deleting convers
   const log = open();
   log.append(user('old context'));
   const keep = log.append(user('recent context'));
-  log.append({ type: 'compaction', summary: 'Summary', keepFromId: keep.id, tokensBefore: 100 });
-  log.append({ type: 'context-edit', targetId: keep.id, replacement: 'redacted recent context' });
+  log.append({
+    type: 'context-replace',
+    replacements: [
+      { start: 1, deleteCount: 1, insert: [user('redacted recent context').message], preserveSource: true },
+      { start: 0, deleteCount: 1, insert: [user('Summary of earlier conversation:\nSummary').message] },
+    ],
+  });
+  assert.equal(log.originalMessage(keep.id)?.content, 'recent context');
   log.append(user('new question'));
   assert.deepEqual(
     log
@@ -234,6 +240,7 @@ test('compaction and context edits change model context without deleting convers
     ['Summary of earlier conversation:\nSummary', 'redacted recent context', 'new question'],
   );
   assert.equal(log.projection().contextEntryIds[1], keep.id);
+  assert.notEqual(log.context().contextRevisions[1], keep.id);
   assert.equal(log.projection().contextEntryIds.length, log.projection().contextMessages.length);
 });
 

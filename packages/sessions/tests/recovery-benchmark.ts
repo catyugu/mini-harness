@@ -23,7 +23,17 @@ try {
       return id;
     }
     for (let turn = 0; turn < turns; turn++) {
-      if (turn === turns / 2) append({ type: 'compaction', summary: 'Earlier work', keepFromId: null });
+      if (turn === turns / 2)
+        append({
+          type: 'context-replace',
+          replacements: [
+            {
+              start: 0,
+              deleteCount: 3 * turn,
+              insert: [{ role: 'user', content: 'Earlier work', timestamp: turn }],
+            },
+          ],
+        });
       if (turn === (turns * 3) / 4) {
         leaf = leaves[Math.floor(turns / 3)];
         append({ type: 'branch' });

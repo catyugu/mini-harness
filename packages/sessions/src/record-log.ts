@@ -166,8 +166,8 @@ export abstract class RecordLog<Event extends { type: string }> {
     return this.currentLeafId;
   }
 
-  entries() {
-    return structuredClone(this.records);
+  entries(after = 0) {
+    return structuredClone(this.records.slice(after));
   }
 
   protected branchEntries(leafId: string | null = this.leafId) {

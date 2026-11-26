@@ -65,8 +65,7 @@ it never retries an unknown tool outcome automatically.
 ## Conversation branches and projections
 
 The event stream has one append sequence and a selected conversation branch.
-Messages, model choices, thinking settings, plugin records, internal audit records, compactions, context
-edits and branch selections advance the conversation leaf. Run and inbox records
+Messages, model choices, thinking settings, plugin records, context replacements and branch selections advance the conversation leaf. Run, inbox, model-attempt and session-setting records
 advance only the sequence. Operational changes therefore cannot invalidate a
 user's edit merely because a run was reserved or another input was queued.
 
@@ -79,19 +78,17 @@ conversation deletion removes the entire log, including every branch.
 The read projection exposes:
 
 - `timeline`: the selected branch's visible messages and display records, plus applicable run terminations, with stable identities and presentation metadata.
-- `contextMessages`: the model transcript after the latest applicable compaction
-  and context edits.
-- `contextEntryIds`: source IDs aligned with model messages, including the
-  compaction event ID for a summary.
+- `contextMessages`: effective model messages after applying the branch's context replacements.
+- `contextEntryIds`: source IDs aligned with model messages. A checkpoint uses its replacement record's ID.
+- `contextRevisions`: identities for the effective content, including content changes that retain the same original source.
 - `model`, `thinkingLevel` and `leafId`: the selected branch's settings and identity.
 - `run`: the latest operational run state, reduced in append order.
 
 Pending input is read separately through `SessionLogPort.inbox()`; `queue()` also exposes failed deliveries for the UI. See [the source contract](../packages/sessions/src/log-api.ts) for the exact projection fields.
 
-Compaction stores a summary and a retained-entry boundary. It changes model
-context without deleting or renumbering the visible conversation. Context edits
-can replace or omit a message's contribution to model context while preserving
-the original message in the conversation projection. Plugin records have a single explicit instance owner and follow the selected branch.
+A `context-replace` event applies one or more ordered splices to the parent branch's effective model messages as one durable write. A splice can preserve source identities for one-for-one edits. Full history continues to use the original records. The effective context is updated incrementally as the branch advances and can be read without building the display timeline.
+
+Model attempts record timing and provider-reported usage separately from assistant messages. Conversation settings store explicit overrides by plugin owner without advancing the branch.
 
 User presentation is stored separately from the accepted model input. Preparation can
 change the model-visible content while the interface keeps the submitted text and
