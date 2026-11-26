@@ -900,3 +900,35 @@ test('attachments enforce encoding, format and byte limits without creating file
   assert.deepEqual(binary.files[0].bytes, Buffer.from([0, 1, 2]));
   assert.throws(() => prepareInput('a', new Array(9).fill({})), /eight/);
 });
+
+test('background tool execution delivers only one receipt and survives its submitting run', async () => {
+  const tasks = new TaskRuntime();
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => { release = resolve; });
+  const tool = defineTool({
+    name: 'background',
+    description: 'Work independently',
+    parameters: Type.Object({}),
+    async execute() {
+      await gate;
+      return { content: [{ type: 'text', text: 'complete' }] };
+    },
+  });
+  const results: import('@mini-harness/llm/api').NativeToolMessage[] = [];
+  const controller = new AbortController();
+  await nativeExecutor.execute([call('bg', tool.name)], new Map([[tool.name, tool]]), {
+    tasks,
+    signal: controller.signal,
+    background: () => ({ owner: 'session:one' }),
+    async deliver(result) { results.push(result); },
+  });
+  assert.equal(results.length, 1);
+  const id = String(results[0].details?.taskId);
+  assert.equal(tasks.get(id)?.owner, 'session:one');
+  controller.abort();
+  release();
+  const finished = await tasks.wait(id);
+  assert.equal(finished.state, 'completed');
+  assert.equal(results.length, 1);
+  assert.deepEqual(finished.result, { content: [{ type: 'text', text: 'complete' }] });
+});

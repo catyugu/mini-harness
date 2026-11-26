@@ -79,5 +79,5 @@ export function startTool(
 ) {
   return 'start' in tool && typeof tool.start === 'function'
     ? (tool as RegisteredTool).start(callId, args, options)
-    : invokeTool(tasks, tool, callId, args, options);
+    : invokeTool(tasks, tool, callId, args, { ...options, provider: options.context });
 }

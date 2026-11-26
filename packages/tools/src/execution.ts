@@ -1,5 +1,5 @@
 import type { Context } from 'mini-harness/cordis';
-import { type ToolDefinition, type ToolUpdate } from './api.ts';
+import { type ToolDefinition, type ToolInvocation, type ToolUpdate } from './api.ts';
 import type { TaskContext, TaskPort } from '@mini-harness/tasks/api';
 import { startTool } from './invocation.ts';
 export { startTool } from './invocation.ts';
@@ -24,6 +24,8 @@ export interface ToolExecution {
   readonly tasks: TaskPort;
   readonly ownerTask?: TaskContext;
   readonly resourceId?: string;
+  /** Optional consumer policy: accept the call now and retain its independent task for later. */
+  background?(call: ToolCallPart): (ToolInvocation & { owner: string }) | undefined;
   /** Decides whether to start the call. A rejection still produces a model-visible result. */
   start?(call: ToolCallPart): { outcome: 'skipped' | 'denied'; reason: string } | undefined;
   update?(call: ToolCallPart, result: ToolUpdate): void;
@@ -126,15 +128,38 @@ async function executeTool(
       'skipped',
     );
   const start = performance.now();
+  let taskSignal = signal;
   try {
     if (!tool) throw new Error('Tool is no longer available: ' + call.name);
     if (invalid) throw new Error('Invalid arguments for ' + call.name + ': ' + invalid);
-    const task = startTool(execution.tasks, tool, call.id, call.arguments, {
-      signal,
-      ownerTask: execution.ownerTask,
-      resourceId: execution.resourceId,
-      onUpdate: (update) => execution.update?.(call, update),
-    });
+    const background = execution.background?.(call);
+    const task = startTool(execution.tasks, tool, call.id, call.arguments, background
+      ? {
+          ...background,
+          ownerTask: undefined,
+          creator: execution.ownerTask?.id,
+          resourceId: background.resourceId ?? execution.resourceId,
+          retain: true,
+        }
+      : {
+          signal,
+          ownerTask: execution.ownerTask,
+          resourceId: execution.resourceId,
+          onUpdate: (update) => execution.update?.(call, update),
+        });
+    taskSignal = task.signal;
+    if (background) {
+      const accepted = { taskId: task.id, state: 'queued' };
+      return {
+        role: 'toolResult',
+        toolCallId: call.id,
+        toolName: call.name,
+        content: [{ type: 'text', text: JSON.stringify(accepted) }],
+        details: accepted,
+        timestamp: Date.now(),
+        elapsedMs: performance.now() - start,
+      };
+    }
     const result = await task.result;
     return {
       ...result,
@@ -147,9 +172,9 @@ async function executeTool(
     };
   } catch (error) {
     const cancelled =
-      signal.aborted &&
-      (error === signal.reason ||
-        (error instanceof Error && (error.name === 'AbortError' || error.cause === signal.reason)));
+      taskSignal.aborted &&
+      (error === taskSignal.reason ||
+        (error instanceof Error && (error.name === 'AbortError' || error.cause === taskSignal.reason)));
     return {
       ...toolFailure(
         call,
