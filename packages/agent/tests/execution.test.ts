@@ -342,10 +342,15 @@ test('cancellation closes the whole tool batch durably and never executes later 
   );
   const events: AgentEvent[] = [];
   await assert.rejects(
-    agent.prompt(ctx, record, 'Run tools', (event) => events.push(event), {
-      fallback: model,
-      signal: controller.signal,
-    }),
+    agent.prompt(
+      ctx,
+      record,
+      'Run tools',
+      (event) => {
+        events.push(event);
+      },
+      { fallback: model, signal: controller.signal },
+    ),
     /Stopped by test/,
   );
   const results = sessions
