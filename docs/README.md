@@ -12,6 +12,7 @@
 - [Architecture](architecture.md): start here.
 - [Package index](packages.md): locate the owning service or feature.
 - [Engineering conventions](conventions.md)
+- [TypeScript nullability and invariants](code-style/typescript-nullability.md)
 - [Development workflow](development.md)
 - [Cordis in mini-harness](cordis.md)
 - [Documentation rules](AGENTS.md)
