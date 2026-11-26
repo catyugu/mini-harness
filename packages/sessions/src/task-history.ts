@@ -31,9 +31,10 @@ export function bindTaskHistory(ctx: Context, sessions: SessionStore) {
             );
             const answer =
               run.state === 'completed' && start >= 0
-                ? entries.slice(start + 1, i).reverse().find(
-                    (item) => item.type === 'message' && item.message.role === 'assistant',
-                  )
+                ? entries
+                    .slice(start + 1, i)
+                    .reverse()
+                    .find((item) => item.type === 'message' && item.message.role === 'assistant')
                 : undefined;
             const result =
               answer?.type === 'message' && answer.message.role === 'assistant'

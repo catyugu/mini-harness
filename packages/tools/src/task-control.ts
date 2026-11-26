@@ -31,10 +31,7 @@ const plugin: Plugin.Object = {
               const waiter = context?.owner ?? context?.task;
               task = waiter
                 ? await waiter.suspend((ownerSignal) =>
-                    tasks.wait(
-                      taskId,
-                        signal ? AbortSignal.any([signal, ownerSignal]) : ownerSignal,
-                    ),
+                    tasks.wait(taskId, signal ? AbortSignal.any([signal, ownerSignal]) : ownerSignal),
                   )
                 : await tasks.wait(taskId, signal);
             } else task = tasks.get(taskId) ?? task;
