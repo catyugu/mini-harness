@@ -237,8 +237,8 @@ function pluginCatalog(
     const focused = (document.activeElement as HTMLElement)?.dataset.pluginToggle;
     builtinList.replaceChildren(
       ...[
-        { title: 'Core plugins', plugins: plugins.filter((plugin) => !optional(plugin)), toggle: false },
         { title: 'Optional plugins', plugins: plugins.filter(optional), toggle: true },
+        { title: 'Core plugins', plugins: plugins.filter((plugin) => !optional(plugin)), toggle: false },
       ].map((group) => {
         const list = fromMarkup('<div class="builtin-group"><h4></h4></div>');
         required(list.querySelector('h4')).textContent = group.title;

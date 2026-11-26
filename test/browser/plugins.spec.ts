@@ -156,6 +156,7 @@ export function apply(ctx) {
     await expect(page.getByText('Plugin settings', { exact: true })).toBeVisible();
     await settingsSection(page, 'Built-in plugins').click();
     const builtins = page.locator('.builtin-plugins');
+    await expect(builtins.getByRole('heading')).toHaveText(['Optional plugins', 'Core plugins']);
     for (const title of ['Transport', 'Web Authentication', 'Plugin Runtime', 'Tool Executor']) {
       await expect(builtins.getByText(title, { exact: true })).toBeVisible();
       await expect(builtins.getByRole('switch', { name: title, exact: true })).toHaveCount(0);

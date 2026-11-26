@@ -2,13 +2,25 @@ import { DomainError } from '@mini-harness/platform/errors';
 import { defineConfig } from '@mini-harness/plugin-api/configuration';
 import { Type } from 'typebox';
 import { Check } from 'typebox/value';
-import { ratioIssue, type ContextSettings } from '../shared/state.ts';
+import { defaultContextSettings, ratioIssue, type ContextSettings } from '../shared/state.ts';
 
 const fields = {
-  autoCompact: Type.Boolean({ default: true }),
-  triggerRatio: Type.Number({ default: 0.8, exclusiveMinimum: 0, exclusiveMaximum: 1 }),
-  targetRatio: Type.Number({ default: 0.6, exclusiveMinimum: 0, exclusiveMaximum: 1 }),
-  retainRatio: Type.Number({ default: 0.16, exclusiveMinimum: 0, exclusiveMaximum: 1 }),
+  autoCompact: Type.Boolean({ default: defaultContextSettings.autoCompact }),
+  triggerRatio: Type.Number({
+    default: defaultContextSettings.triggerRatio,
+    exclusiveMinimum: 0,
+    exclusiveMaximum: 1,
+  }),
+  targetRatio: Type.Number({
+    default: defaultContextSettings.targetRatio,
+    exclusiveMinimum: 0,
+    exclusiveMaximum: 1,
+  }),
+  retainRatio: Type.Number({
+    default: defaultContextSettings.retainRatio,
+    exclusiveMinimum: 0,
+    exclusiveMaximum: 1,
+  }),
   summaryModel: Type.Union(
     [
       Type.Null(),
@@ -20,7 +32,7 @@ const fields = {
         { additionalProperties: false },
       ),
     ],
-    { default: null },
+    { default: defaultContextSettings.summaryModel },
   ),
 };
 
