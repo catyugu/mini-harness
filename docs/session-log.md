@@ -85,7 +85,7 @@ The read projection exposes:
 
 Pending input is read separately through `SessionLogPort.inbox()`; `queue()` also exposes failed deliveries for the UI. See [the source contract](../packages/sessions/src/log-api.ts) for the exact projection fields.
 
-A `context-replace` event applies one or more ordered splices to the parent branch's effective model messages as one durable write. A splice can preserve source identities for one-for-one edits. Full history continues to use the original records. The effective context is updated incrementally as the branch advances and can be read without building the display timeline.
+A `context-replace` event applies one or more ordered splices to the parent branch's effective model messages as one durable write. A splice can preserve source identities for one-for-one edits. Full history continues to use the original records. A summarizing replacement carries the resulting request measurement and projects a checkpoint row whose summary is read directly from the inserted message. Unmeasured pruning and image offloading do not produce checkpoint rows. The effective context is updated incrementally as the branch advances and can be read without building the display timeline.
 
 Model requests may record their measured input counts and budget. Model attempts record timing and provider-reported usage by request ID, separately from assistant messages. Conversation settings store plugin-owned values without advancing the branch; null removes a setting.
 
