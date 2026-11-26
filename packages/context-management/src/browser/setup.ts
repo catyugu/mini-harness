@@ -282,14 +282,10 @@ function mountStats(ctx: Context) {
       '/sessions/' + encodeURIComponent(sessionId) + '/compact',
       payload('POST', {}),
     );
-    if (id === sessionId && (await conversation.activate(sessionId, false)))
-      conversation.report(
-        result.cancelled
-          ? 'Compaction cancelled.'
-          : result.compacted
-            ? 'Conversation compacted.'
-            : 'Nothing to compact.',
-      );
+    if (id === sessionId && (await conversation.activate(sessionId, false))) {
+      if (result.cancelled) conversation.report('Compaction cancelled.');
+      else if (!result.compacted) conversation.report('Nothing to compact.');
+    }
   };
 
   ctx.effect(() =>
