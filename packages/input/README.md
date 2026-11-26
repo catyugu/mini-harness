@@ -34,6 +34,6 @@ Preparation preserves the submitted user text for display independently from aug
 
 ## Testing and dependencies
 
-Input depends only on generic platform errors and Node's byte/hash operations. It has no plugin entry, mutable shared service or Config schema.
+Input depends only on generic platform errors and Node's byte/hash operations. Its browser entry owns the local file chooser and `/file` command; it contributes through the composer slot and command registry. It has no mutable shared service or Config schema.
 
 [Input tests](tests/prepare.test.ts) cover encoding, image signatures and attachment limits. [Run execution tests](../runs/tests/agent-execution.test.ts) cover model-capability handling. [API feature tests](../../test/system/api-features.test.ts) cover original upload storage and retrieval, including conversations without a workspace. [Session log tests](../sessions/tests/log.test.ts) cover the separation of model input and original presentation.

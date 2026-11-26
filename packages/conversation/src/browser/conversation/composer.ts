@@ -114,16 +114,6 @@ export function createComposer(
     },
     { capture: true, signal },
   );
-  const input = document.createElement('input');
-  input.type = 'file';
-  input.name = 'attachments';
-  input.multiple = true;
-  input.hidden = true;
-  input.onchange = () => {
-    void addFiles([...(input.files ?? [])]);
-    input.value = '';
-  };
-  form.append(input);
   type Token = { start: number; end: number; query: string; kind: string };
   let token: Token | undefined;
   let completeSelected: (() => void)[] = [];
@@ -384,16 +374,6 @@ export function createComposer(
     render,
     resetSuggestions: hide,
     submitCommand,
-    openFiles: () => input.click(),
-    attachmentButton() {
-      const button = document.createElement('button');
-      button.type = 'button';
-      button.className = 'icon-button';
-      button.setAttribute('aria-label', 'Attach files');
-      button.append(icon('attach'));
-      button.onclick = () => input.click();
-      return button;
-    },
     refresh,
   };
 }

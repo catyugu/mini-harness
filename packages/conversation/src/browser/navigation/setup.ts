@@ -1,5 +1,6 @@
 import type { Context } from 'mini-harness/cordis';
 import { sessionNavigation } from '../navigation.ts';
+import { exportSessions } from '../session-client.ts';
 
 const setup = (ctx: Context) => {
   const {
@@ -10,6 +11,18 @@ const setup = (ctx: Context) => {
     miniWorkspaces: workspaces,
     miniWorkspace: workspace,
   } = ctx;
+  ctx.inject(['miniComposer', 'miniConversation'], (composer) => {
+    composer.effect(() => composer.miniComposer.command({
+      name: 'export',
+      group: 'Conversation',
+      description: 'Export the current conversation',
+      run() {
+        const id = composer.miniConversation.get().session?.id;
+        if (!id) throw new Error('Open a conversation to export it.');
+        return exportSessions([id], composer.fiber.signal);
+      },
+    }));
+  });
   sessionNavigation(ctx, {
     state,
     sessions,

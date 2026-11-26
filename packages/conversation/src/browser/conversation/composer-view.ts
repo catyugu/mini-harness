@@ -1,6 +1,5 @@
 import type { Context } from 'mini-harness/cordis';
 import type { ConversationPermission } from '@mini-harness/sessions/identity';
-import type { ThinkingLevel } from '@mini-harness/llm/vocabulary';
 import { bindPopover, fromMarkup, required, scopedElements } from '@mini-harness/ui-primitives/primitives';
 import { messageModes, type MessageMode } from '@mini-harness/sessions/queue';
 import { modeLabel } from './queue-view.ts';
@@ -8,8 +7,6 @@ import { icon } from '@mini-harness/ui-primitives/icons';
 import { promptEditor } from './prompt-editor.ts';
 import { createComposer } from './composer.ts';
 import { isRunning } from '@mini-harness/sessions/run-state';
-import { createModelPicker } from '@mini-harness/models/browser/model-picker';
-import { createThinkingPicker } from './thinking-picker.ts';
 
 export function mountComposer(ctx: Context, signal: AbortSignal) {
   const { miniConversation: control, miniComposer: model } = ctx;
@@ -21,13 +18,11 @@ export function mountComposer(ctx: Context, signal: AbortSignal) {
           <div class="composer-footer">
             <div id="composerExtensions" class="composer-tools"></div>
             <button id="permissionSelect" class="permission-select" type="button" aria-haspopup="listbox" aria-expanded="false" aria-controls="permissionResults"></button>
-            <div id="permissionPicker" class="ui-popover model-picker permission-picker" popover="auto">
+            <div id="permissionPicker" class="ui-popover permission-picker" popover="auto">
               <div id="permissionResults" role="listbox" aria-label="Conversation permissions"></div>
             </div>
             <div id="composerOptions" class="composer-tools"></div>
-            <button id="modelSelect" class="model-select" type="button">Choose model</button>
-            <button id="thinkingLevel" class="model-select" type="button" aria-haspopup="listbox" aria-expanded="false" aria-controls="thinkingResults" hidden>Default</button>
-            <div id="thinkingPicker" class="ui-popover model-picker thinking-picker" popover="auto"><div id="thinkingResults" role="listbox" aria-label="Thinking levels"></div></div>
+            <div id="composerTrailing" class="composer-trailing"></div>
             <select id="messageMode" class="small-button" aria-label="Message sending mode" hidden></select>
             <button id="stop" type="button" aria-label="Stop response" hidden data-icon="stop"></button>
             <button id="send" type="submit" aria-label="Send" data-icon="send"></button>
@@ -47,29 +42,12 @@ export function mountComposer(ctx: Context, signal: AbortSignal) {
   );
   const prompt = editor.element;
   const ui = createComposer(ctx, composer, editor, model, control.report, signal);
-  const modelPicker = createModelPicker(element<'button'>('modelSelect'), model.choose, signal);
-  const thinkingPicker = createThinkingPicker(composer, model.chooseThinking, signal);
   const removeToolbar = ctx.miniSlots.define('conversation.composer', element('composerExtensions'));
   signal.addEventListener('abort', removeToolbar, { once: true });
   const removeOptions = ctx.miniSlots.define('conversation.composer-options', element('composerOptions'));
   signal.addEventListener('abort', removeOptions, { once: true });
-  const removeAttachment = ctx.miniSlots.register('conversation.composer', ui.attachmentButton());
-  signal.addEventListener('abort', removeAttachment, { once: true });
-  const removeFileCommand = model.command({
-    name: 'file',
-    aliases: ['attach', 'upload'],
-    group: 'Add',
-    description: 'Upload files from your device',
-    run: ui.openFiles,
-  });
-  signal.addEventListener('abort', removeFileCommand, { once: true });
-  const removeModelCommand = model.command({
-    name: 'model',
-    group: 'Conversation',
-    description: 'Choose a configured model',
-    run: modelPicker.open,
-  });
-  signal.addEventListener('abort', removeModelCommand, { once: true });
+  const removeTrailing = ctx.miniSlots.define('conversation.composer-trailing', element('composerTrailing'));
+  signal.addEventListener('abort', removeTrailing, { once: true });
   const permissionButton = element<'button'>('permissionSelect');
   const permissionPopup = element('permissionPicker');
   const permissionResults = element('permissionResults');
@@ -144,15 +122,11 @@ export function mountComposer(ctx: Context, signal: AbortSignal) {
     }
   };
 
-  let previousCatalog: ReturnType<typeof ctx.miniModels.get> | undefined;
-  let previousModel: ReturnType<typeof model.draft>['model'],
-    previousThinking: ThinkingLevel | null | undefined;
   let previousDraftScope = '';
   function render(focus = false) {
     const current = model.draft(),
       state = control.get();
     const running = isRunning(state.run);
-    const sending = running || state.interaction.operation === 'submit';
     const draftScope = state.session?.id ?? 'workspace:' + ctx.miniSelection.selectedWorkspace;
     if (previousDraftScope !== draftScope || editor.value !== current.text) {
       previousDraftScope = draftScope;
@@ -172,31 +146,6 @@ export function mountComposer(ctx: Context, signal: AbortSignal) {
     element<'button'>('stop').disabled = Boolean(state.interaction.cancelling);
     ui.render(Boolean(state.interaction.operation));
     renderPermission();
-    const catalog = ctx.miniModels.get();
-    const choice = current.model ?? (sending ? state.session?.model : undefined) ?? catalog.recent;
-    const same = choice.provider === state.session?.model?.provider && choice.id === state.session.model.id;
-    const thinking =
-      current.thinkingLevel === undefined
-        ? same
-          ? state.session?.thinkingLevel
-          : undefined
-        : current.thinkingLevel;
-    if (
-      previousCatalog !== catalog ||
-      previousModel?.provider !== choice.provider ||
-      previousModel.id !== choice.id ||
-      previousThinking !== thinking
-    ) {
-      previousCatalog = catalog;
-      previousModel = choice;
-      previousThinking = thinking;
-      const selected = modelPicker.update(catalog.models, catalog.providers, choice);
-      const advertised = selected?.thinkingLevels ?? [];
-      const levels: ThinkingLevel[] = advertised.length
-        ? ['off', ...advertised.filter((level) => level !== 'off')]
-        : [];
-      thinkingPicker.update(levels, thinking);
-    }
     if (focus) {
       editor.focus();
       editor.select(model.cursor());
@@ -207,11 +156,7 @@ export function mountComposer(ctx: Context, signal: AbortSignal) {
     if (control.get().interaction.operation || model.draft().awaitingAcceptance) return;
     if (!model.draft().text.trim() && !model.draft().attachments.length) return;
     if (ui.submitCommand()) return;
-    if (!isRunning(control.get().run) && !modelPicker.selected()) {
-      control.report(new Error('Choose a configured model before sending.'));
-      modelPicker.open();
-      return;
-    }
+    if (ctx.bail('composer/before-send') === false) return;
     try {
       await model.send();
     } catch (error) {
@@ -250,7 +195,6 @@ export function mountComposer(ctx: Context, signal: AbortSignal) {
   }, signal);
   control.subscribe(['session', 'run', 'interaction', 'mode'], () => render(), signal);
   ctx.miniSelection.addEventListener('focus-composer', () => editor.focus(), { signal });
-  ctx.miniModels.subscribe(() => render(), signal);
   render();
   return composer;
 }

@@ -82,6 +82,7 @@ declare module '@mini-harness/ui-slots/browser/api' {
     'workspace.welcome': { kind: 'single' };
     'conversation.composer': { kind: 'list' };
     'conversation.composer-options': { kind: 'list' };
+    'conversation.composer-trailing': { kind: 'list' };
     'conversation.composer-footer': { kind: 'list' };
     'conversation.composer-view': { kind: 'single' };
     'conversation.history': { kind: 'single' };

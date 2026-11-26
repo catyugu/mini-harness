@@ -74,4 +74,7 @@ declare module 'mini-harness/cordis' {
   interface Context {
     miniComposer: ComposerModel;
   }
+  interface Events {
+    'composer/before-send'(): false | undefined;
+  }
 }
