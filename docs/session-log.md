@@ -53,13 +53,13 @@ its containing directory on platforms that support directory synchronization.
 
 On open, the reader verifies the header, checksums, sequence, unique entry IDs,
 event payloads and ancestry. A final record without its terminating newline is
-an unacknowledged partial write and is truncated after the complete prefix has
-been verified. Invalid complete lines, invalid checksums, unknown events and
+an unacknowledged partial write. Writable recovery truncates it after the complete prefix has
+been verified; read-only inspection validates and ignores the incomplete tail without modifying the file. Invalid complete lines, invalid checksums, unknown events and
 invalid ancestry stop loading without rewriting the history.
 
-Startup converts a `queued` or `running` run into a durable `interrupted` record.
+Recovery converts unfinished work recorded in that log, including `queued`, `running` and `waiting` tasks, into a durable `interrupted` record.
 It does not resume model requests or execute tools. Before a later agent turn,
-the agent closes any unfinished tool calls with explicit interrupted results;
+Runs closes any unfinished tool calls with explicit interrupted results;
 it never retries an unknown tool outcome automatically.
 
 ## Conversation branches and projections
@@ -78,14 +78,15 @@ conversation deletion removes the entire log, including every branch.
 
 The read projection exposes:
 
-- `messages`: the selected branch's original conversation messages, with stable
-  entry identities and presentation metadata.
+- `timeline`: the selected branch's visible messages and display records, plus applicable run terminations, with stable identities and presentation metadata.
 - `contextMessages`: the model transcript after the latest applicable compaction
   and context edits.
 - `contextEntryIds`: source IDs aligned with model messages, including the
   compaction event ID for a summary.
 - `model`, `thinkingLevel` and `leafId`: the selected branch's settings and identity.
-- `run` and `inbox`: the latest global operational state, reduced in append order.
+- `run`: the latest operational run state, reduced in append order.
+
+Pending input is read separately through `SessionLogPort.inbox()`; `queue()` also exposes failed deliveries for the UI. See [the source contract](../packages/sessions/src/log-api.ts) for the exact projection fields.
 
 Compaction stores a summary and a retained-entry boundary. It changes model
 context without deleting or renumbering the visible conversation. Context edits
@@ -107,8 +108,7 @@ message that also names the inbox ID; message creation and delivery
 acknowledgement therefore share one durable record. An already consumed delivery
 ID cannot create a second user message.
 
-An interrupted or failed run leaves undelivered input visible. Restart does not
-execute that input by itself. A subsequent explicit run can consume it. Explicit
+An interrupted or failed run leaves undelivered input inspectable. Recovery marks steering targeted at an unfinished run as failed; pending follow-ups remain queued for a later explicit run. Failed steering requires explicit retry. Restart does not execute input by itself. Explicit
 cancellation records the cancelled delivery IDs and removes them from the pending
 projection. No content-string matching or process-local queue is needed to
 reconstruct delivery state.
@@ -124,7 +124,11 @@ Deletion first marks the selected tree as unavailable, drains registered partici
 cascades through its conversations while retaining the user's project files.
 There is no archive state.
 
+## Extension records and historical envelopes
+
 Plugin records use a typed payload (`PluginRecord<Data>` / `SessionRecords<Data>`) in the same record log with an explicit owner (plugin ID and instance ID), data, and optional display metadata. The storage reader converts old custom record envelopes after validating their original checksums, retaining IDs, parents and payloads. An unscoped historical plugin record belongs to the application instance. Unmapped historical envelopes remain available as diagnostic records in native exports. New records use explicit plugin owners or diagnostic codes. The browser receives the explicitly supplied display data and the preceding message identity on the selected branch. Model context omits these records. Deleting its owning conversation removes both the records and private data for that session’s plugin instances.
+
+## Retained tasks and retry identity
 
 A failed run records the stable entry ID for its active input, including inbox deliveries. An explicit retry can retrieve that input from the native log. A null ID indicates the run failed before accepting the current submission. Older records with ambiguous input or missing attachment content require user input before resubmission.
 

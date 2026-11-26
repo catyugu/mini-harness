@@ -1,33 +1,50 @@
-# @mini-harness/plugins
+# Plugins
 
-Resolves declared Profile entries and publishes configured Cordis entries and browser assets.
+Plugins resolves explicit Profile entries, coordinates their Cordis compositions, and publishes the catalog and browser assets. It implements scoped configuration, plugin-private storage and the plugin manager. [Host](../host/README.md) owns the Profile files; [Cordis](../../docs/cordis.md) owns service activation and Fiber lifetime.
 
-## Responsibilities
+## Activation and services
 
-Owns catalog resolution, scoped entry composition, diagnostics, browser asset publication and the plugin settings UI.
+The shipped base Profile mounts `core:plugins-runtime` as `@mini-harness/plugins-runtime`. The Web Profile separately mounts the management interface. External modules enter the same native Cordis path through a Profile entry:
 
-## Structure
+```yaml
+plugins:
+  - id: greeting
+    name: ./plugins/greeting/plugin.js
+```
 
-`src/server/` owns resolution, configuration transactions, and asset publication. `src/shared/metadata.ts` defines catalog rows. `src/browser/` renders the plugin manager.
+The path is relative to the YAML that declares it. Installing a package or copying files into a directory does not activate a plugin. Follow [plugin development](../../docs/plugins.md) for supported module exports, metadata and browser output, and [Profiles](../../docs/profiles.md) for activation and npm commands.
 
-## API
+The runtime provides:
 
-`PluginHost` is used by the composition root. `harnessPluginCatalog` exposes metadata, diagnostics and browser bootstrap. External callers use the plugin SDK.
+| Service                                     | Responsibility                                                                                          |
+| ------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| `harnessProfileConfig`                      | Serialized configuration updates, committed state subscriptions and removal of deleted resource scopes. |
+| `harnessProfileScopes`                      | Resource-address resolution, prepared scoped compositions and their Contexts.                           |
+| `harnessPluginCatalog`                      | Metadata, diagnostics, browser bootstrap entries and declared browser assets.                           |
+| `harnessPluginSettings`                     | The calling Entry's validated configuration handle.                                                     |
+| `harnessPluginData`, `harnessPluginSecrets` | Private data and credentials bound to the calling Entry and scope.                                      |
+| `harnessPluginChanges`                      | Publication requests for the calling plugin's data.                                                     |
 
-## Dependencies
+The public service types come from [Plugin API](../plugin-api/README.md). `PluginHost`, catalog classes and the internal runtime entry are implementation details, not external SDK constructors.
 
-[Cordis](../../vendor/cordis/README.md) owns entries and fibers. [Settings](../settings/README.md) commits configuration. The browser runtime consumes the published bootstrap entries. Scope owners contribute scope choices through the native Cordis `settings/scopes` event; model providers and other UI plugins contribute dynamic schema options through `settings/options`. The catalog does not depend on specific domain implementations.
+## Configuration transactions and scopes
 
-## Lifecycle
+[manager.ts](src/server/manager.ts) serializes updates. It builds and validates the candidate descriptors, reconciles the server and configured child graphs, prepares browser publication, then asks the Profile owner to persist the accepted result. A rejected update restores the previous entries; a restoration failure is reported together with the original error. Listeners observe committed changes.
 
-Enabled entries are mounted by Cordis. Child contexts isolate only explicitly configured services; changed scoped entries are prepared before configuration commits. Transactions cannot replace the services they are using. Server cleanup stops admission and drains plugin-owned HTTP, scoped and upgrade handlers before disposing their instances. Browser resource URLs follow the published bootstrap entries.
+Configuration writes during plugin setup and reentrant updates during graph reconciliation are rejected. The runtime cannot replace its own active transaction owner through that transaction. Loaded entries receive `internal/update`; the default behavior restarts non-live entries and accepts live entries in place. A listener can handle an update or reject a change that requires a Profile restart.
 
-## Configuration
+Domain owners register resource resolvers and publish their scope choices through `settings/scopes`. Dynamic configuration choices use `settings/options`. These events let the manager remain independent of Sessions, Workspaces and Models. [Scoped providers](../../docs/scoped-providers.md) owns the hierarchy and replacement rules. Configured scopes mount when their resource is available; historical resources do not each require a permanently mounted graph.
 
-The active YAML Profile enables entries by scope. Installed plugins declare dependency injection in their Cordis entry. Native Cordis `Config` defines validation and defaults; `plugin.json` optionally describes presentation and browser build output. Plugin detail pages display domain-owned settings contributions.
+## Private data and browser publication
 
-Scoped requests target a mounted plugin address and use its invocation lease. Resolution checks npm peer ranges, and mounted plugins may export a synchronous semantic validator.
+[Data services](src/server/data.ts) derive their namespace from the calling Entry ID and its persistent scope address. Data reads return the supplied fallback when absent; JSON writes replace the file atomically. Secret values use private files and Windows CurrentUser protection on Windows. Keep credentials in `harnessPluginSecrets`: effective plugin configuration can be published to the browser. Forgetting a deleted resource's scope removes its scoped plugin data after graph reconciliation.
 
-## Testing
+[Descriptor resolution](src/server/descriptor.ts) combines optional static metadata with native module metadata and schemas. Declared `mini-harness` peer ranges are checked. Disabled entries can be listed without importing their executable module.
 
-[Plugin integration tests](../../test/plugins/) cover installation, precedence, runtime failures and cleanup.
+[Browser publication](src/server/browser-assets.ts) exposes declared build resources under versioned URLs. The browser receives its own Cordis entry graph and serializable effective configuration; it does not share server Contexts or objects. Disabling or replacing an entry disposes its server and browser registrations through their respective owners. A package's `/client` export can be activated as a separate browser entry.
+
+## Testing and related documentation
+
+[Composition](../../test/plugins/composition.test.ts), [installation](../../test/plugins/installation.test.ts), [lifecycle](../../test/plugins/lifecycle.test.ts) and [extensions](../../test/plugins/extensions.test.ts) tests cover native loading, scoped providers, private services, browser publication and cleanup. [Live-settings tests](../../test/system/live-settings.test.ts) cover transaction acceptance and rollback.
+
+See [composition](../../docs/subsystems/composition.md) for the startup sequence, [frontend](../../docs/subsystems/frontend.md) for browser graph ownership, and the [Task notes example](../../docs/examples/task-notes/README.md) for a complete external consumer.

@@ -1,29 +1,49 @@
-# @mini-harness/ui-layout
+# UI Layout
 
-Owns the responsive application frame, sidebar, tabs and dialogs.
+Owns the responsive application frame: navigation drawer, main page area, header, workspace panel, tabs and dialog mounting. Features contribute content through its services and slots. Conversation selection belongs to Conversation; Layout stores only presentation state and workspace-owned tabs.
 
-## Responsibilities
+## Public services and usage
 
-Defines the page, header and right-panel contributions used by feature UI.
+Browser plugins import [`mini-harness/ui-layout`](src/browser/api.ts) and inject the services they use:
 
-## Structure
+| Service       | Contract                                                                                                      |
+| ------------- | ------------------------------------------------------------------------------------------------------------- |
+| `miniPages`   | Register a page, contribute a page with navigation, and open a registered page or return to the conversation. |
+| `miniTabs`    | Register a typed tab renderer, contribute a workspace-panel entry, and open or inspect content.               |
+| `miniDialogs` | Create a mounted dialog and an explicit disposer.                                                             |
+| `miniHeader`  | Set the conversation title and workspace-header visibility.                                                   |
+| `miniLayout`  | Close the navigation drawer.                                                                                  |
 
-`src/browser/` contains setup, layout, tabs, styles and API contracts. `src/manifest.ts` declares feature dependencies and styles.
+The [browser panel example](../../docs/examples/browser-panel/web.ts) is a build-checked example of a page and dialog. For a workspace tab, register the type once in the plugin's lifetime and retain the returned handle:
 
-## API
+```ts
+const notes = ctx.miniTabs.register<{ text: string }>('example-notes', {
+  title: () => 'Notes',
+  create(data) {
+    const node = document.createElement('p');
+    node.textContent = data.text;
+    return node;
+  },
+});
 
-`miniPages`, `miniTabs` and `miniDialogs` own pages, tabs and dialogs.
+// workspaceId comes from the workspace being displayed.
+notes.open({ owner: { workspaceId }, key: 'notes', data: { text: 'Ready' } });
+```
 
-## Dependencies
+The fragment assumes a browser plugin injecting `miniTabs` and a valid workspace ID. Use the renderer's `signal` for listeners and requests when the view needs them.
 
-Uses [UI Slots](../ui-slots/README.md) for mounting and [UI Primitives](../ui-primitives/README.md) for controls.
+## Ownership and lifecycle
 
-## Lifecycle
+`core:layout` in the [web Profile](../../profiles/web.yml) injects `miniSlots` and `miniPrimitives` and publishes the frame services. It declares application outlets such as `sidebar.actions`, `conversation.header`, `conversation.body` and `dialog.root`; see the [slot declarations](src/browser/api.ts) for names and cardinality.
 
-`core:layout` mounts the frame and releases its listeners and styles during browser unmount.
+Page IDs are unique. `miniPages.register` and `contribute` return disposers; register them with `ctx.effect`. Removing the selected page returns to the conversation. A dialog is mounted at creation, opened with its element's `showModal()`, and released with its returned disposer.
 
-## Testing
+Tab types and panel entries automatically belong to the calling Cordis fiber. A tab is identified by its registered type, workspace owner and stable key. Opening that identity again selects the existing tab rather than replacing its payload. Optional `signal` gives a tab a shorter lifetime. Closing a tab, unloading its provider or pruning its workspace aborts the view's signal and removes the view.
 
-[Browser tests](../../test/browser/) cover navigation, panels and responsive layout.
+Tabs survive conversation switches. Switching workspaces detaches their views and retains the workspace's tab selection, panel state and scroll position for a return visit. This state is in browser memory, not durable session storage. A failing tab renderer displays its error after aborting that attempted view's lifetime.
 
-Panel entries and tab types are registered with the caller’s Cordis lifetime. Each tab has a stable key, a workspace owner, and a typed payload. Tabs remain open across conversation switches and are restored when returning to their workspace.
+Layout has no plugin configuration. Its responsive behavior and resize state are implemented in [`layout.ts`](src/browser/layout.ts); typed tab ownership is implemented in [`right-tabs.ts`](src/browser/right-tabs.ts).
+
+## Verification
+
+[File-view tests](../../test/browser/files.spec.ts) cover tabs, responsive panels and viewport constraints; [navigation tests](../../test/browser/navigation.spec.ts) and [plugin tests](../../test/browser/plugins.spec.ts) exercise contributions and cleanup. See [UI Slots](../ui-slots/README.md) for replacement semantics and [frontend composition](../../docs/subsystems/frontend.md) for shared view state.

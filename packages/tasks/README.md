@@ -1,41 +1,57 @@
-# @mini-harness/tasks
+# Tasks
 
-A business-independent asynchronous scheduler. Start an arbitrary async function, await the
-returned handle for inline execution, or keep the ID for independent work.
+Tasks is the business-independent asynchronous runtime. It owns live task state, admission, cancellation and settlement. An opaque owner identifies a resource lifetime; Tasks does not interpret sessions, tool names or other domain metadata.
+
+## Public API and usage
+
+Import [`mini-harness/tasks`](src/api.ts) and inject `harnessTasks`. The base Profile mounts `core:tasks`. Use the same `start` API for inline and independent work:
 
 ```ts
-const pool = tasks.pool(4);
-const work = tasks.start(
-  { owner: 'resource', lane: 'exclusive-operation', pool, project: (value: string) => value },
-  async (task) => {
+import type { Context } from 'mini-harness/cordis';
+import 'mini-harness/tasks';
+
+export function startWork(ctx: Context) {
+  return ctx.harnessTasks.start({ owner: 'example', project: (value: string) => value }, async (task) => {
     task.signal.throwIfAborted();
     task.write('started');
     return 'done';
-  },
-);
-await work.result;
+  });
+}
 ```
 
-An opaque owner groups resource lifetimes; `parentId` defines structured child cancellation and
-settlement. A provider Cordis fiber owns executing code. A lane is exclusive through settlement,
-even while a task waits. A resizable pool bounds running work. At a whole-task waiting point,
-`suspend` and `waitFor(id)` release pool capacity and reacquire it before resumption without
-releasing the lane. `waitFor` detects circular task dependencies. `batch` implements bounded
-parallelism, serial barriers and cancellation/drain on failure.
+Await `handle.result` for the executor's actual JavaScript value, or retain `handle.id` for later observation. A retained snapshot contains only the serializable value returned by `project`, not the executor's objects or closures. `retain: false` releases observations after settlement and result delivery.
 
-Cancellation is cooperative: a task remains active until execution and children settle.
-`active(lane)` returns its live handle; `removeOwner` excludes new work during cancellation
-and drain, then removes its recent observations. The owner of the resource determines whether
-it still exists.
+## Ownership and admission
 
-`subscribe` observes runtime activity; an optional per-task `onEvent` observes its own execution.
-Output has absolute UTF-8 byte cursors and channel names. `retain: false` discards observations
-after settlement; otherwise a bounded cache holds at most 256 recent terminal snapshots and
-16 MiB of observations/output, without execution promises or closures. An optional `project`
-function produces the serializable result from the executor's actual returned value.
+| Mechanism  | Contract                                                                                     |
+| ---------- | -------------------------------------------------------------------------------------------- |
+| `owner`    | Groups work for resource deletion; resource existence belongs to the domain.                 |
+| `parentId` | Creates an inline child, cancelled and drained before its parent settles.                    |
+| `provider` | Identifies the Cordis Fiber whose code executes the work; defaults to the submitting caller. |
+| `lane`     | Admits one task from submission through settlement; another submission fails while occupied. |
+| `pool`     | Bounds running work; changing `limit` affects admission without preempting admitted work.    |
+| `signal`   | Adds a caller-controlled cancellation lifetime.                                              |
 
-Storage is optional. A task can supply a synchronous `commit` function to record transitions
-before their observation. `registerHistory` attaches a read-only history source; `get` and
-`readOutput` can retrieve its records, never recreate historical execution handles. `list`
-contains only active and recently settled tasks. Tasks does not interpret owner keys, task types,
-or metadata, and has no dependency on Sessions, Runs, Tools or Agent.
+Independent work omits `parentId`; pass a long-lived provider when the submitting plugin or run can end sooner than the work. Creating a task does not establish a parent relationship by itself.
+
+Cancellation is a request, reflected by `cancellationRequested`. The task stays active until execution and inline children finish cleanup. A queued cancelled task never invokes user code. Provider disposal and runtime shutdown cancel and drain owned work; shutdown records interruption rather than successful completion. Arbitrary async functions must cooperate with their signal.
+
+`removeOwner` excludes new admission during cancellation and drain, then removes recent observations. The domain remains responsible for deleting the resource and its durable records.
+
+## Waiting and batches
+
+Inside an executor, `task.suspend(wait)` and `task.waitFor(id)` mark a whole-task waiting point, release pool capacity and reacquire it before normal resumption or a caught wait failure. A lane remains occupied throughout. These calls must be awaited and cannot run concurrently with other work in the same task. Circular task waits are rejected.
+
+External observers use `tasks.wait(id, signal)`; it observes settlement without yielding another task's pool capacity. Cancelling an observer does not cancel the observed task.
+
+`batch` executes concurrency-safe jobs up to a limit and treats serial jobs as barriers. Failure cancels and drains active jobs before returning.
+
+## Observations and persistence
+
+`get`, `list`, `subscribe` and `readOutput` expose snapshots and output. Output cursors are absolute UTF-8 byte offsets; callers check `truncated` when older chunks have been evicted. The terminal cache is bounded, so `list` is not a durable task inventory.
+
+A retained task can supply synchronous `commit` to persist transitions before observers receive them. A failed commit cannot acknowledge successful execution. `registerHistory` adds a read-only source for historical snapshots and output; it never reconstructs execution handles or replays side effects. [Sessions](../sessions/README.md) supplies the conversation-specific durable adapter.
+
+## Verification
+
+[Runtime tests](tests/runtime.test.ts) cover admission, ownership, waits, cancellation, UTF-8 output and persistence failures. See [execution](../../docs/subsystems/execution.md), [Tools](../tools/README.md) and the [package index](../../docs/packages.md).

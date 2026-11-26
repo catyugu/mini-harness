@@ -1,29 +1,28 @@
-# @mini-harness/ui-primitives
+# UI Primitives
 
-Provides reusable browser controls, icons and sanitized Markdown rendering.
+Provides shared browser controls, icons and the internal Markdown renderer used by feature views. It owns presentation helpers and their base styles. Layout owns placement, Theme owns visual tokens, and each caller owns the state and event handlers of its controls.
 
-## Responsibilities
+## Using shared controls
 
-Owns base controls and styles, icon hydration, Markdown parsing and sanitization.
+Browser plugins import [`BrowserPrimitives` from `mini-harness/ui-primitives`](src/browser/api.ts) and inject `miniPrimitives`. The service creates buttons, labelled fields, dialogs, status messages, menus and icons. For example, inside a plugin's `apply(ctx)`:
 
-## Structure
+```ts
+const input = document.createElement('input');
+const field = ctx.miniPrimitives.field('Label', input);
+const save = ctx.miniPrimitives.button('Save', 'primary');
+field.append(save);
+```
 
-`src/browser/` contains control helpers, icons, Markdown, the browser setup and stylesheet. The build copies the pinned Markdown and sanitizer vendors.
+Mount the returned nodes through a page, dialog or slot contribution and attach listeners with that view's signal. Creating a primitive does not register or persist it. The [browser panel example](../../docs/examples/browser-panel/web.ts) demonstrates controls together with Layout, Settings and message actions.
 
-## API
+`icon` accepts a symbolic icon name or a custom SVG path specification. The [API source](src/browser/api.ts) defines the supported control variants; the [icon implementation](src/browser/icons.ts) owns the icon vocabulary.
 
-`miniPrimitives` supplies controls. Internal feature modules also import the browser helpers.
+## Markdown and lifecycle
 
-## Dependencies
+The internal [`renderMarkdown`](src/browser/markdown.ts) helper parses with the pinned Marked distribution and sanitizes the result with DOMPurify. It allows a defined subset of elements and attributes, removes arbitrary classes, gives external links safe new-window attributes, and wraps tables for horizontal scrolling. Interactive rendering adds copy controls to code blocks. This helper is used by native views; it is not a method of the public `miniPrimitives` service or a separate SDK export.
 
-Uses [UI Theme](../ui-theme/README.md) for visual tokens and the pinned Marked and DOMPurify distributions.
+The `core:primitives` browser Entry is enabled by the [web Profile](../../profiles/web.yml). Its MutationObserver hydrates icons in newly contributed DOM and disconnects on unload. Its stylesheet follows the browser Entry lifetime. It has no configuration or server service, and does not require Settings to render controls.
 
-## Lifecycle
+## Verification
 
-`core:primitives` hydrates icons and cleans up browser resources when disposed.
-
-Browser plugins can use `miniPrimitives.icon` with a symbolic name or a custom SVG path, including for conversation message actions.
-
-## Testing
-
-[Rendering browser tests](../../test/browser/rendering.spec.ts) exercise Markdown and unsafe input.
+[Rendering tests](../../test/browser/rendering.spec.ts) exercise Markdown, unsafe input and tool output. [File-view tests](../../test/browser/files.spec.ts) cover the shared controls in responsive panels. See [UI Theme](../ui-theme/README.md), [UI Layout](../ui-layout/README.md), and the [UI component cookbook](../../docs/cookbook/adding-a-ui-component.md).

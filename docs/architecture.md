@@ -1,33 +1,89 @@
 # Architecture
 
-The Web application is assembled from [YAML Profile entries](profiles.md) and Cordis plugins. The launcher provides a context, process controls and paths. It resolves the requested modules and starts an Entry Tree. The Web HTTP listener and browser gateway are Profile plugins with their own dependencies.
+mini-harness is a native agent harness distributed as one npm package. The application is a composition of Cordis plugins rather than a fixed product kernel. The private packages define source ownership; the root package.json defines the public installed SDK.
 
-| Boundary | Responsibilities                                                                                               |
-| -------- | -------------------------------------------------------------------------------------------------------------- |
-| Profile  | Entry identities, module resolution, configuration layers, and browser projections                             |
-| Cordis   | Contexts, service isolation, injection, Entry Tree reconciliation, Fiber activation, typed events and disposal |
-| Product  | Conversation identity and persistence, Agent execution, tool authorization, transport, and UI                  |
+## Boundaries and dependency direction
 
-Shipped and installed plugins declare `inject`, `provide` and `apply(ctx, config)`. Shipped modules export the actual Cordis plugin and separate optional presentation metadata; browser-only entries do not allocate a server Fiber. Cordis activates consumers when the requested services are available. Workspaces and Sessions own identity and ancestry, and the plugin manager represents scoped entries as Cordis Contexts and Entry Groups. The browser loads its entries with the same Cordis implementation.
+```mermaid
+flowchart TD
+  Host --> Plugins
+  Plugins --> Cordis
+  Agent --> LLM
+  Agent --> Tools
+  Agent --> Tasks
+  Tools --> Tasks
+  Runs --> Agent
+  Runs --> Sessions
+  Runs --> Tasks
+  Subagents --> Runs
+  Subagents --> Sessions
+  Subagents --> Tasks
+  Conversation --> Runs
+  Conversation --> Sessions
+  Conversation --> Layout
+  Layout --> Slots
+```
 
-## Configuration and lifecycle
+This is a selected capability dependency map, not a complete import graph. Arrows point from consumer to provider. The [package index](packages.md) covers every source package. The framework and platform libraries provide generic mechanisms; the domain layers compose them into execution and persistent conversations; presentation and optional feature plugins consume those contracts.
 
-The Profile composition owner serializes configuration edits and applies each candidate to the Entry Tree before persisting it. A rejected candidate restores the prior entries. Run startup waits for scope preparation. Active runs release their work with the owning Fiber, and unloaded tool registrations invalidate their leases. Live configuration can update a running Fiber, and configuration subscribers read committed values from the owning Entry. Nested fibers keep their own lifetime while reading their Entry's configuration.
+## Application composition
 
-Each activation has an abort signal. Teardown aborts and drains work registered with `fiber.run()` and then releases effects. Cordis retains injected services while dependents dispose. Transport routes, long-running work and browser views also have lifetimes owned by their domains.
+```mermaid
+flowchart TD
+  CLI --> Profile[Named Profile and layers]
+  Profile --> Host[Host and module resolver]
+  Host --> Server[Server Cordis Entry Tree]
+  Server --> Gateway[Web gateway]
+  Gateway --> Browser[Browser Cordis Entry Tree]
+  Server --> Services[Feature services]
+  Browser --> Views[Layout and UI contributions]
+```
 
-## Execution
+The launcher supplies paths, process controls and the Profile. Native declarations are mounted through Cordis dependency injection, with scoped replacements in child Contexts. The browser composes its own graph from the published bootstrap. Configuration updates reconcile a candidate before committing it. Disposal follows activation ownership and drains affected work; see [composition](subsystems/composition.md) and [Cordis](cordis.md).
 
-Tasks supplies the common asynchronous runtime. A caller starts one task and chooses whether to await its handle; the resource owner and executing Cordis fiber constrain its lifetime. Task Runtime owns exclusive lanes, resizable pools and serial/parallel batch dispatch. Runs selects a conversation lane and supplies conversation-specific projections, Tools declares batch policy and supplies model protocol delivery, and Subagents supplies recursion and pool capacity policy. The optional task-control plugin operates on any task. Shell streams process output into the tool task. Storage is an explicit submission policy: Runs commits its own conversation records, and Sessions supplies optional task bindings and indexed historical reads. Tasks does not interpret business identities or call domain events.
+## Message execution
 
-## File interaction
+```mermaid
+flowchart TD
+  UI[Client input] --> Runs[Runs admits a conversation]
+  Runs --> Tasks[Task Runtime]
+  Tasks --> Agent[Agent turn loop]
+  Agent --> LLM[Selected LLM adapter]
+  LLM --> Agent
+  Agent --> Tools[Tool Executor]
+  Tools --> Tasks
+  Runs --> Log[SessionLog]
+  Runs --> Replay[Run replay]
+  Log --> UI
+  Replay --> UI
+```
 
-File Access opens an explicit directory and enforces path containment. Workspace routes and Agent tools resolve the directory and scoped service before opening it. Files and Shell publish changes with workspace IDs as projection resource IDs. Files owns file browsing, search and composer completion. File Preview renders workspace resources, stored attachments and draft bytes. Git Diff owns the Git changes list and diff tabs. Sessions owns the stored attachment bytes and their conversation identity.
+A Run is a Task with a conversation-specific lane and durable projection. Agent executes native model turns; the LLM adapter translates the protocol and Tools dispatches calls via Tasks. Subagents submit independent child conversation runs through the same contracts. The client reads durable history and transient replay without owning execution. See [execution](subsystems/execution.md) and [sessions](subsystems/sessions.md).
 
-Layout registers typed views and opens tabs by their stable key and workspace owner. File Preview renders the selected resource in a tab or a media dialog. Conversation keeps the normalized reference in raw draft and history text while rendering it as an inline action.
+## State ownership
 
-## Plugin SDK
+| State or resource                                                                  | Owner        |
+| ---------------------------------------------------------------------------------- | ------------ |
+| Profile layer loading and accepted YAML persistence                                | Host         |
+| Service activation, injection, effects and Entry lifecycle                         | Cordis       |
+| Configuration reconciliation, plugin resolution, scope bindings and browser assets | Plugins      |
+| Workspace identity and canonical roots                                             | Workspaces   |
+| Conversation identity, ancestry, branch history, inbox records and attachments     | Sessions     |
+| Live task state, exclusive lanes, capacity and settlement                          | Tasks        |
+| Conversation admission policy, model selection for a run, transient replay         | Runs         |
+| Tool registrations and invocation contract                                         | Tools        |
+| Provider credentials/catalog, recent application model                             | Models       |
+| Pending confirmations                                                              | Approvals    |
+| HTTP registrations and projection revisions                                        | Transport    |
+| Selected conversation and composer drafts                                          | Conversation |
+| Workspace-owned open tabs and page/dialog contributions                            | UI Layout    |
+| Slot registry, contributions and renderer lifetime                                 | UI Slots     |
+| Theme configuration and visual tokens                                              | UI Theme     |
 
-The single npm package exports Cordis and domain contracts directly, including `mini-harness/agent`, `mini-harness/llm`, `mini-harness/tools`, `mini-harness/tasks`, `mini-harness/runs`, `mini-harness/sessions` and `mini-harness/ui-slots`. Plugins import the services and events they consume. Browser modules use an import map restricted to public browser-safe modules.
+The owner exposes the authoritative contract; a derived view, historical record or transport projection is not another mutable owner.
 
-See the [plugin guide](plugins.md), [scoped providers](scoped-providers.md) and [session log](session-log.md).
+## Extension model
+
+Plugins declare the services they consume and contribute or replace capabilities at existing extension points. Public SDK specifiers belong to the owning packages. Runtime resource scopes inherit from the configured ancestors. Browser code imports only the published browser-safe modules and shares no server objects. For workspace files and previews see [frontend](subsystems/frontend.md); for HTTP and projection synchronization see [transport](subsystems/transport.md).
+
+Start with [plugin development](cookbook/creating-a-plugin.md), the [SDK reference](plugins.md), or the [package index](packages.md).

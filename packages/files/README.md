@@ -1,33 +1,36 @@
-# @mini-harness/files
+# Files
 
-Provides workspace file tools, the file tree and `@` completion. File Preview and Git Diff contribute their own independent views.
+Files supplies workspace file tools, a browser directory tree and `@` path completion. It owns file inspection and edit behavior. [File Preview](../file-preview/README.md) and [Git Diff](../git-diff/README.md) own their separate views.
 
-## Responsibilities
+## Usage and activation
 
-Owns text reads, writes, edits and file inspection results, including tree, search, preview and diff. Uses the file access service for policy.
+The shipped Profile enables the `files` entry. Users can disable it in Plugins. When a conversation has a workspace, its model can use the registered tools:
 
-## Structure
+| Tool    | Observable behavior                                                                                                                                                        |
+| ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `read`  | Read UTF-8 text with 1-based line offsets, or a supported image. Directories produce a message directing the caller to `ls`.                                               |
+| `write` | Create or replace a UTF-8 file and create missing parent directories.                                                                                                      |
+| `edit`  | Apply an ordered list of exact replacements. Each `oldText` must occur exactly once in the current intermediate text; all replacements are checked before the final write. |
+| `ls`    | List directory entries.                                                                                                                                                    |
+| `find`  | Find workspace-relative paths by glob.                                                                                                                                     |
+| `grep`  | Search UTF-8 files with a literal or RE2 pattern.                                                                                                                          |
 
-`src/server/` contains the tools, routes and inspection logic. `src/browser/setup.ts` contributes the file panel and file-path completions.
+The [tool definitions](src/server/tools.ts) own the argument schemas and limits. For example, `read` accepts `{ "path": "README.md", "offset": 1, "limit": 80 }`, and `edit` accepts `{ "path": "notes.txt", "edits": [{ "oldText": "draft", "newText": "reviewed" }] }`. Read and search tools carry the `readOnly` tag; `write` and `edit` do not.
 
-## API
+The browser entry registers a workspace-owned directory tab and composer path completion. Open tabs and their lifetime are handled by [UI Layout](../ui-layout/README.md). Files does not own the selected conversation or a second workspace catalog.
 
-Registers tools with `harnessTools` and contributes the browser panel and completions at the owning extension points.
+## Policy and extension points
 
-## Dependencies
+Server activation requires File Access, application paths, Workspaces, Sessions, Tools, projection changes and Profile scopes. Each tool factory resolves the conversation's workspace and looks up `harnessFileAccess` through the caller's scoped Context. Missing workspaces hide the tools; a missing selected provider produces an unavailable error.
 
-Uses [File Access](../file-access/README.md) and [Workspaces](../workspaces/README.md) to constrain paths. File-reading and search tools declare read-only access.
+The feature opens a confined view that excludes the application's private state directory. Links are governed by [File Access](../file-access/README.md). Search respects `.gitignore`, skips link traversal and uses bounded traversal and output; direct reads and edits are explicit path operations. UTF-8 text validation, supported image detection, truncation and search budgets live in [tools.ts](src/server/tools.ts) and [search.ts](src/server/search.ts).
 
-## Lifecycle
+Optional HTTP registrations expose `/api/workspaces/:id/files/tree` and `/api/workspaces/:id/files/search`. They use the same prepared workspace/session scope and File Access provider as other workspace views. Successful writes invalidate the `files` projection and return a workspace-relative `changedPath` for consumers.
 
-The `files` application plugin owns tool and route registrations, its projection domain and browser contributions.
+There is no public `mini-harness/files` SDK constructor or Files Config schema. Extensions register their own tools through [Tools](../tools/README.md), provide a File Access implementation, or contribute a view through [UI Layout](../ui-layout/README.md). They should not import this package's private tool factory.
 
-## Configuration
+## Lifetime and testing
 
-Enable or disable `files` in Plugins. Workspace file policy comes from the selected conversation and its provider.
+The plugin's Cordis lifetime owns its tool registrations, HTTP routes, projection domain, tabs and completion handlers. Tool invocations use their Task cancellation signal; file mutations rely on File Access's atomic publication. Unloading the feature removes its contributions without changing workspace files.
 
-File tool bindings read visible session information and resolve the selected File Access provider via the public server SDK.
-
-## Testing
-
-`tests/` covers inspection, access policy and writes. The [Files browser suite](../../test/browser/files.spec.ts) exercises the panel.
+[Policy tests](tests/policy.test.ts) cover shared read/search/write access rules and atomic writes. [Write API tests](tests/write-api.test.ts) cover durable edit information. [Files browser tests](../../test/browser/files.spec.ts) cover directory navigation and preview interactions. See [frontend coordination](../../docs/subsystems/frontend.md) for the neighboring view owners.
