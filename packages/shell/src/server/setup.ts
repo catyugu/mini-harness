@@ -24,7 +24,14 @@ export function setup(ctx: Context) {
       projectResult(result) {
         if (result.details?.exitCode === undefined) return JSON.parse(JSON.stringify(result));
         const { stdout: _stdout, stderr: _stderr, ...details } = result.details;
-        return JSON.parse(JSON.stringify({ details, isError: result.isError, outcome: result.outcome, elapsedMs: result.elapsedMs }));
+        return JSON.parse(
+          JSON.stringify({
+            details,
+            isError: result.isError,
+            outcome: result.outcome,
+            elapsedMs: result.elapsedMs,
+          }),
+        );
       },
       execute: async (_id, args, signal, update, context): Promise<ToolResult> => {
         const cwd = workspace.workspacePath(sessionId);

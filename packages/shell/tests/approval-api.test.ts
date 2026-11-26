@@ -287,17 +287,32 @@ test('repeating a denied command in the same run does not open a new approval', 
 test('independent shell calls use one task, retain output channels and do not duplicate process output', async (t) => {
   const { app } = await fixture(t);
   const ctx = app.runtime.plugins.ctx;
-  await app.runtime.configuration.update({ entries: { shell: { disabled: false, config: { mode: 'host' } } } });
+  await app.runtime.configuration.update({
+    entries: { shell: { disabled: false, config: { mode: 'host' } } },
+  });
   const session = ctx.harnessSessions.create({ permission: 'fullAccess' });
-  const tool = ctx.harnessTools.list({ resourceId: session.id, scope: ctx.harnessSessions.runScope(session.id) }).find(({ name }) => name === 'sandbox_shell');
+  const tool = ctx.harnessTools
+    .list({ resourceId: session.id, scope: ctx.harnessSessions.runScope(session.id) })
+    .find(({ name }) => name === 'sandbox_shell');
   assert.ok(tool);
-  const handle = tool.start('background-shell', { command: 'echo task-output' }, { owner: 'session:' + session.id, retain: true });
+  const handle = tool.start(
+    'background-shell',
+    { command: 'echo task-output' },
+    { owner: 'session:' + session.id, retain: true },
+  );
   const result = await handle.result;
   assert.equal(result.details?.exitCode, 0);
   const task = ctx.harnessTasks.get(handle.id);
   assert.equal(task?.state, 'completed');
   assert.equal(ctx.harnessTasks.list('session:' + session.id).length, 1);
-  assert.match(ctx.harnessTasks.readOutput(handle.id)?.chunks.filter(({ channel }) => channel === 'stdout').map(({ text }) => text).join('') ?? '', /task-output/);
+  assert.match(
+    ctx.harnessTasks
+      .readOutput(handle.id)
+      ?.chunks.filter(({ channel }) => channel === 'stdout')
+      .map(({ text }) => text)
+      .join('') ?? '',
+    /task-output/,
+  );
   assert.doesNotMatch(JSON.stringify(task?.result), /task-output/);
   await ctx.harnessSessions.delete([session.id]);
   assert.equal(ctx.harnessTasks.get(handle.id), undefined);

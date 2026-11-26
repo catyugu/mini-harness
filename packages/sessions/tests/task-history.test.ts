@@ -35,7 +35,9 @@ test('durable retained tasks recover by ID without reconstructing execution hand
   app = await createMiniHarnessServer(paths);
   ctx = app.runtime.plugins.ctx;
   assert.equal(ctx.harnessTasks.get(done.id)?.result, 'finished');
-  assert.deepEqual(ctx.harnessTasks.readOutput(done.id)?.chunks, [{ start: 0, end: 5, channel: 'stdout', text: 'hello' }]);
+  assert.deepEqual(ctx.harnessTasks.readOutput(done.id)?.chunks, [
+    { start: 0, end: 5, channel: 'stdout', text: 'hello' },
+  ]);
   assert.equal(ctx.harnessTasks.get(run.id)?.state, 'completed');
   assert.equal(ctx.harnessTasks.get(unfinished.id)?.state, 'interrupted');
   assert.equal(ctx.harnessTasks.cancel(done.id), false);
