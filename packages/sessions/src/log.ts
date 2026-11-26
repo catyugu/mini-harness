@@ -1,6 +1,6 @@
 import { isThinkingLevel, type ToolSchema } from '@mini-harness/llm/vocabulary';
 import { pluginIdPattern, isScopeAddress } from '@mini-harness/plugin-api/selection';
-import { isRunning } from './shared/run-state.ts';
+import { isRunning, type RunInfo } from './shared/run-state.ts';
 import { terminal } from '@mini-harness/tasks/api';
 import { runFromEntry } from './log-api.ts';
 import { isDeepStrictEqual } from 'node:util';
@@ -59,7 +59,7 @@ export class SessionLog extends RecordLog<SessionEvent> implements SessionLogPor
   private readonly inboxIds = new Set<string>();
   private readonly pendingInbox = new Map<string, InboxItem>();
   private readonly inboxFailures: QueueEntry[] = [];
-  private readonly runEvents: Extract<SessionEntry, { type: 'run' }>[] = [];
+  private readonly runEvents: { seq: number; parentId: string | null; run: RunInfo }[] = [];
   private cachedProjection?: SessionProjection;
   private recovery = { leaf: null as string | null, checker: new RequestMessages() };
 
@@ -168,7 +168,7 @@ export class SessionLog extends RecordLog<SessionEvent> implements SessionLogPor
   protected recordAdded(entry: SessionEntry) {
     const run = runFromEntry(this.sessionId, entry);
     if (!operational(entry) || run) this.cachedProjection = undefined;
-    if (run) this.runEvents.push({ ...entry, type: 'run', run });
+    if (run) this.runEvents.push({ seq: entry.seq, parentId: entry.parentId, run });
     if (entry.type === 'tool-schema') this.schemas.set(entry.hash, entry.tools);
     if (entry.type === 'inbox-enqueued') {
       this.inboxIds.add(entry.item.id);
@@ -486,7 +486,12 @@ function validateEvent(event: SessionEvent) {
         ) ||
         !Number.isFinite(Date.parse(event.task.createdAt)) ||
         !Number.isSafeInteger(event.task.outputCursor) ||
-        event.task.outputCursor < 0
+        event.task.outputCursor < 0 ||
+        (event.run !== undefined &&
+          (!event.run || !Number.isSafeInteger(event.run.sequence) || event.run.sequence < 0 ||
+            (event.run.inputEntryId != null && !entryId.test(event.run.inputEntryId)) ||
+            (event.run.changedFiles !== undefined &&
+              (!Array.isArray(event.run.changedFiles) || event.run.changedFiles.some((path) => typeof path !== 'string')))))
       )
         throw new Error('Invalid task record');
       return;

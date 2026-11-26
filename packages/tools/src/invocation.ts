@@ -25,6 +25,7 @@ export function toolAvailable(tool: ToolDefinition) {
 
 export function prepareTool(tool: ToolDefinition, args: Record<string, unknown>, context?: Context) {
   const binding = (tool as BoundTool)[bindingKey];
+  if (binding && !binding.available()) throw new Error('Tool is no longer available: ' + tool.name);
   const definition = context && binding ? binding.resolve(context) : tool;
   if (!Check(definition.parameters, args))
     throw new Error('Invalid arguments for ' + definition.name + ': Schema mismatch');
@@ -70,14 +71,14 @@ export function invokeTool(
         signal: task.signal,
         owner: ownerTask,
         update(update) {
-          task.update(JSON.parse(JSON.stringify(update)) as TaskData);
+          task.update(update as unknown as TaskData);
           onUpdate?.(update);
         },
       });
       if (!result || !isToolContent(result.content))
         throw new Error('Invalid result from tool: ' + tool.name);
       if (retain)
-        task.setResult(tool.projectResult?.(result) ?? (JSON.parse(JSON.stringify(result)) as TaskData));
+        task.setResult(tool.projectResult ? tool.projectResult(result) : (result as unknown as TaskData));
       return result;
     },
   );

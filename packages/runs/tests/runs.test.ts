@@ -171,14 +171,19 @@ test('startup durably interrupts runs, fails stale steering, and recovers idempo
   const parent = registry.create(),
     child = registry.create({ parentId: parent.id });
   registry.log(child.id).append({
-    type: 'run',
-    run: {
+    type: 'task',
+    task: {
       id: 'fixture-run',
-      sessionId: child.id,
+      owner: 'session:' + child.id,
+      type: 'agent-run',
       state: 'running',
+      createdAt: new Date().toISOString(),
       startedAt: new Date().toISOString(),
-      sequence: 1,
+      cancellationRequested: false,
+      outputCursor: 0,
+      retained: true,
     },
+    run: { sequence: 1 },
   });
   registry.log(child.id).append({
     type: 'inbox-enqueued',

@@ -71,13 +71,13 @@ export const executeTools: ToolExecutorPort['execute'] = async (calls, tools, ex
   for (const call of calls) {
     if (failure) break;
     const tool = tools.get(call.name);
-    let invalid = call.argumentsError;
+    let invalid = call.argumentsError && 'Invalid arguments for ' + call.name + ': ' + call.argumentsError;
     let prepared: ReturnType<typeof prepareTool> | undefined;
     if (!invalid && tool) {
       try {
         prepared = prepareTool(tool, call.arguments);
-      } catch {
-        invalid = 'Schema mismatch';
+      } catch (error) {
+        invalid = error instanceof Error ? error.message : String(error);
       }
     }
     let parallel = false;
@@ -138,7 +138,7 @@ async function executeTool(
   let task: TaskHandle<ToolResult> | undefined;
   try {
     if (!tool) throw new Error('Tool is no longer available: ' + call.name);
-    if (invalid) throw new Error('Invalid arguments for ' + call.name + ': ' + invalid);
+    if (invalid) throw new Error(invalid);
     const background = execution.background?.(call);
     task = invokeTool(
       execution.tasks,

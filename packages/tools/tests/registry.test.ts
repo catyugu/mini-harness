@@ -1,6 +1,7 @@
 import { startTool, toolAvailable } from '../src/execution.ts';
 import { Context } from 'mini-harness/cordis';
 import toolsPlugin from '../src/manifest.ts';
+import taskControlPlugin from '../src/task-control.ts';
 import { createScopeKey } from '@mini-harness/plugin-api/scopes';
 import { expectPresent } from '../../../test/support/required.ts';
 import test from 'node:test';
@@ -162,4 +163,28 @@ test('a registered tool uses one task for inline and independent background call
   await background.result;
   assert.equal(tasks.get(background.id)?.state, 'completed');
   assert.deepEqual(tasks.get(background.id)?.result, { content: [{ type: 'text', text: 'done' }] });
+});
+
+test('task control can inspect and await standalone work without Sessions or Subagents', async () => {
+  const ctx = new Context();
+  const tasks = new TaskRuntime();
+  ctx.provide('harnessTasks', tasks.service());
+  const toolsFiber = ctx.plugin(toolsPlugin);
+  await toolsFiber;
+  const controlFiber = ctx.plugin(taskControlPlugin);
+  try {
+    await controlFiber;
+    const tool = expectPresent(ctx.harnessTools.list().find(({ name }) => name === 'task_control'), 'task control');
+    const work = tasks.start({ owner: 'resource' }, async (task) => {
+      task.setResult('done');
+    });
+    const result = await startTool(ctx.harnessTasks, tool, 'wait', { action: 'wait', taskId: work.id }).result;
+    assert.deepEqual(result.content, [{
+      type: 'text',
+      text: JSON.stringify({ taskId: work.id, state: 'completed', result: 'done', cancellationRequested: false }),
+    }]);
+  } finally {
+    await controlFiber.dispose();
+    await toolsFiber.dispose();
+  }
 });

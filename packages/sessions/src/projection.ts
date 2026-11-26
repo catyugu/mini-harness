@@ -1,6 +1,6 @@
 import { userContent } from './user-content.ts';
 import type { SessionDisplayRecord } from './shared/display-record.ts';
-import { isRunning } from './shared/run-state.ts';
+import { isRunning, type RunInfo } from './shared/run-state.ts';
 import { toolResultState } from '@mini-harness/tools/api';
 import type { NativeMessage, NativeToolMessage } from '@mini-harness/llm/api';
 import type { MessageContent, ViewMessage } from './shared/message.ts';
@@ -93,7 +93,7 @@ export function displayRecord(
 export function projectLog(
   branch: SessionEntry[],
   execution: (id: string) => NativeToolMessage | undefined,
-  runs: readonly Extract<SessionEntry, { type: 'run' }>[],
+  runs: readonly { seq: number; parentId: string | null; run: RunInfo }[],
 ): SessionProjection {
   const state: SessionProjection = {
     leafId: branch.at(-1)?.id ?? null,

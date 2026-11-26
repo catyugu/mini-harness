@@ -95,7 +95,7 @@ function fixture(
   const record = sessions.create();
   type Prompt = Parameters<SessionRun['prompt']>;
   const agent = {
-    prompt(
+    async prompt(
       ctx: Prompt[0],
       record: Prompt[1],
       text: Prompt[2],

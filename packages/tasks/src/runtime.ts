@@ -13,13 +13,14 @@ import {
   type TaskSnapshot,
 } from './api.ts';
 import { TaskOutputRing, readTaskOutput } from './output.ts';
+import { RecentTasks } from './history.ts';
 
 interface Entry {
   snapshot: TaskSnapshot;
-  handle?: TaskHandle;
+  handle: TaskHandle;
   output: TaskOutputRing;
   finishing: boolean;
-  retainedBytes?: number;
+  ancestors: string[];
 }
 
 const describe = (error: unknown) => (error instanceof Error ? error.message : String(error));
@@ -29,6 +30,7 @@ const jsonData = <T>(value: T): T => (value === undefined ? value : JSON.parse(J
 
 export class TaskRuntime implements TaskPort {
   private readonly entries = new Map<string, Entry>();
+  private readonly recent = new RecentTasks();
   private readonly listeners = new Set<(event: TaskEvent) => void>();
   private readonly removing = new Map<string, Promise<void>>();
   private closing = false;
@@ -80,7 +82,7 @@ export class TaskRuntime implements TaskPort {
     if (options.parentId && (!parent || parent.finishing || terminal(parent.snapshot.state)))
       throw new Error('Task owner has ended');
     const controller = new AbortController();
-    const signals = [controller.signal, lifetime, provider?.fiber.signal, parent?.handle?.signal].filter(
+    const signals = [controller.signal, lifetime, provider?.fiber.signal, parent?.handle.signal].filter(
       (signal): signal is AbortSignal => signal !== undefined,
     );
     const signal = AbortSignal.any(signals);
@@ -210,12 +212,13 @@ export class TaskRuntime implements TaskPort {
         update({ state: 'failed', error: describe(error), finishedAt }, 'transition');
         throw error;
       } finally {
-        entry.handle = undefined;
-        if (!retain) this.forgetTree(entry);
-        else {
-          entry.retainedBytes =
-            Buffer.byteLength(JSON.stringify(snapshot)) + Math.min(snapshot.outputCursor, 1024 * 1024);
-          this.prune();
+        this.entries.delete(snapshot.id);
+        if (retain) {
+          const record = { task: snapshot, output: snapshot.outputCursor ? entry.output.read() : undefined };
+          for (const removed of this.recent.add(record, entry.ancestors)) this.notify('deleted', removed);
+        } else {
+          this.forgetTree(snapshot.id);
+          this.notify('deleted', snapshot);
         }
       }
       if (failure) throw reason;
@@ -240,7 +243,13 @@ export class TaskRuntime implements TaskPort {
         return true;
       },
     };
-    const entry: Entry = { snapshot, handle, output: new TaskOutputRing(), finishing: false };
+    const entry: Entry = {
+      snapshot,
+      handle,
+      output: new TaskOutputRing(),
+      finishing: false,
+      ancestors: parent ? [...parent.ancestors, parent.snapshot.id] : [],
+    };
     this.entries.set(handle.id, entry);
     signal.addEventListener('abort', cancelled, { once: true });
     void result.catch(() => {});
@@ -251,7 +260,7 @@ export class TaskRuntime implements TaskPort {
   get(id: string) {
     const entry = this.entries.get(id);
     if (entry) return clone(entry.snapshot);
-    const historical = this.domain.history?.(id)?.task;
+    const historical = (this.recent.get(id) ?? this.domain.history?.(id))?.task;
     if (!historical) return;
     // A durable record without an executor cannot represent live work.
     return terminal(historical.state)
@@ -264,18 +273,18 @@ export class TaskRuntime implements TaskPort {
   }
 
   list(owner?: string) {
-    return [...this.entries.values()]
-      .filter(({ snapshot }) => owner === undefined || snapshot.owner === owner)
-      .map(({ snapshot }) => clone(snapshot));
+    return [...Array.from(this.entries.values(), ({ snapshot }) => snapshot), ...this.recent.snapshots()]
+      .filter((task) => owner === undefined || task.owner === owner)
+      .map(clone);
   }
 
   cancel(id: string, reason?: unknown) {
-    return this.entries.get(id)?.handle?.cancel(reason) ?? false;
+    return this.entries.get(id)?.handle.cancel(reason) ?? false;
   }
 
   wait(id: string, signal?: AbortSignal): Promise<TaskSnapshot> {
     const entry = this.entries.get(id);
-    if (!entry?.handle || terminal(entry.snapshot.state)) {
+    if (!entry || terminal(entry.snapshot.state)) {
       const current = this.get(id);
       return current ? Promise.resolve(current) : Promise.reject(new Error('Task not found: ' + id));
     }
@@ -316,7 +325,7 @@ export class TaskRuntime implements TaskPort {
   readOutput(id: string, after = 0) {
     const entry = this.entries.get(id);
     if (entry) return entry.output.read(after);
-    const history = this.domain.history?.(id);
+    const history = this.recent.get(id) ?? this.domain.history?.(id);
     if (!history) return;
     return readTaskOutput(
       history.output ?? {
@@ -337,32 +346,14 @@ export class TaskRuntime implements TaskPort {
   }
 
   private async drain(entries: Entry[], reason?: unknown) {
-    const handles = entries.flatMap(({ handle }) => (handle ? [handle] : []));
+    const handles = entries.map(({ handle }) => handle);
     for (const handle of handles) handle.cancel(reason);
     await Promise.allSettled(handles.map(({ result }) => result));
   }
 
-  private forgetTree(entry: Entry) {
-    // All descendants have settled before an owning task can reach terminal state.
-    for (const child of this.children(entry.snapshot.id)) this.forgetTree(child);
-    this.forget(entry);
-  }
-
-  private forget(entry: Entry) {
-    if (this.entries.delete(entry.snapshot.id)) this.notify('deleted', entry.snapshot);
-  }
-
-  private prune() {
-    const history = [...this.entries.values()].filter(({ snapshot }) => terminal(snapshot.state));
-    // Only retained snapshots/output remain here, not execution promises. Long-term history is domain-owned.
-    let bytes = history.reduce((sum, entry) => sum + (entry.retainedBytes ?? 0), 0);
-    let remaining = history.length;
-    for (const entry of history) {
-      if (remaining <= 256 && bytes <= 16 * 1024 * 1024) break;
-      this.forget(entry);
-      remaining--;
-      bytes -= entry.retainedBytes ?? 0;
-    }
+  private forgetTree(id: string) {
+    for (const task of this.recent.remove((task, ancestors) => task.id === id || ancestors.includes(id)))
+      this.notify('deleted', task);
   }
 
   removeOwner(owner: string): Promise<void> {
@@ -371,7 +362,7 @@ export class TaskRuntime implements TaskPort {
     const operation = Promise.resolve()
       .then(async () => {
         await this.drain(this.owned(owner));
-        for (const entry of this.owned(owner)) this.forgetTree(entry);
+        for (const task of this.recent.snapshots()) if (task.owner === owner) this.forgetTree(task.id);
       })
       .finally(() => this.removing.delete(owner));
     this.removing.set(owner, operation);

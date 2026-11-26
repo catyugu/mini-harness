@@ -34,6 +34,7 @@ interface RunOptions extends RunSubmission {
 }
 
 interface Activity {
+  run?: boolean;
   task?: TaskHandle;
   events?: RunEvents;
   context?: Context;
@@ -114,7 +115,7 @@ export class Runs implements RunPort {
   /** Contribution to the session's one durable task record, before runtime settlement. */
   taskDetails(id: string, task: TaskSnapshot): RunDetails | undefined {
     const activity = this.work.get(id);
-    if (task.type !== 'agent-run' || !activity) return;
+    if (task.type !== 'agent-run' || !activity?.run) return;
     const info = activity.events?.info;
     if (!info) return { sequence: 0, inputEntryId: null };
     if (info.id !== task.id) return;
@@ -140,8 +141,9 @@ export class Runs implements RunPort {
     if (task.type !== 'agent-run' || !task.owner.startsWith('session:')) return;
     const id = task.owner.slice(8);
     const activity = this.work.get(id);
-    if (!activity) return;
+    if (!activity?.run) return;
     if (type === 'created') {
+      if (activity.events) return;
       activity.events = new RunEvents(projectRun(id, task, { sequence: 0, inputEntryId: null }));
       return;
     }
@@ -180,6 +182,7 @@ export class Runs implements RunPort {
     reserved?: Activity,
   ) {
     const activity = reserved ?? this.reserve(id);
+    activity.run = true;
     activity.emit = emit;
     try {
       validateModelOptions(model, thinkingLevel);
@@ -202,7 +205,7 @@ export class Runs implements RunPort {
           });
         }
       };
-      const task = this.tasks.start(
+      const task = this.tasks.start<string>(
         {
           owner: 'session:' + id,
           type: 'agent-run',

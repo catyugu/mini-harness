@@ -1,5 +1,6 @@
 import { expectPresent } from '../../../test/support/required.ts';
 import test from 'node:test';
+import { startTool } from '@mini-harness/tools/execution';
 import assert from 'node:assert/strict';
 import { mkdirSync, renameSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
@@ -41,11 +42,11 @@ test('recent main model survives child overrides and a restart through the nativ
       .find(({ name }) => name === 'delegate'),
     'delegate tool',
   );
-  const child = await delegate.execute('override', {
+  const child = await startTool(runtime.plugins.ctx.harnessTasks, delegate, 'override', {
     task: 'Child override',
     provider: 'local-mock',
     model: 'mock-model',
-  });
+  }).result;
   await runtime.plugins.ctx.harnessRuns.completion(String(child.details?.sessionId));
   assert.equal(runtime.plugins.ctx.harnessModelPreference.recent().id, 'second-model');
   runtime.plugins.ctx.harnessSessions.log(other.id).append({
