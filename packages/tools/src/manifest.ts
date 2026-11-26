@@ -8,10 +8,9 @@ export const metadata: PluginInfo = {
 };
 
 const plugin: Plugin.Object = {
-  inject: ['harnessTasks'],
   provide: ['harnessTools'],
   apply(ctx) {
-    ctx.provide('harnessTools', new ToolRegistry(ctx.harnessTasks).service());
+    ctx.provide('harnessTools', new ToolRegistry().service());
   },
 };
 

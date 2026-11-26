@@ -120,7 +120,7 @@ test('a durable message acknowledges inbox delivery exactly once and restart ret
   log.append({ type: 'inbox-enqueued', item: { id: 'delivered', mode: 'steer', text: 'first', images: [] } });
   log.append({ ...user('first'), inboxId: 'delivered' });
   assert.throws(() => log.append({ ...user('duplicate'), inboxId: 'delivered' }), /not pending/);
-  log.append({ type: 'inbox-enqueued', item: { id: 'pending', mode: 'followUp', text: 'next', images: [] } });
+  log.append({ type: 'inbox-enqueued', item: { id: 'pending', mode: 'queue', text: 'next', images: [] } });
   log.append({
     type: 'run',
     run: {

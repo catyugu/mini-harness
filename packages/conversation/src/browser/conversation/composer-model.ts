@@ -123,13 +123,12 @@ export function createComposerModel(ctx: Context): ComposerModel {
     }),
   );
 
-  async function send(queued = false) {
+  async function send() {
     const origin = key(),
       owner = entry(),
       current = draft();
     if (owner.submission) throw new Error('Wait for the submitted input to be accepted.');
     if (current.loading) throw new Error('Files are still loading');
-    if (queued && current.revision) throw new Error('Finish editing before queuing a message');
     const { revision, version, text } = current;
     const attachments = current.attachments
       .filter(({ originalIndex }) => originalIndex === undefined)
@@ -142,16 +141,11 @@ export function createComposerModel(ctx: Context): ComposerModel {
     if (!text.trim() && !attachments.length && (revision?.images?.length ?? 0) === removedImages.length)
       return;
     const input = { message: text, attachments, model: current.model, thinkingLevel: current.thinkingLevel };
-    if (queued) {
-      await control.queue(input);
-      clearAccepted(owner, current, version);
-      return;
-    }
     const submission: NonNullable<DraftOwner['submission']> = { draft: current, version, retryable: true };
     owner.submission = submission;
     change();
     try {
-      const run = await control.submit(
+      const receipt = await control.submit(
         {
           ...input,
           permission: owner.permission,
@@ -162,8 +156,13 @@ export function createComposerModel(ctx: Context): ComposerModel {
           if (drafts.get(origin) === owner) drafts.delete(origin);
         },
       );
-      submission.runId = run.id;
-      reconcileSubmission();
+      if (revision && receipt.run) {
+        submission.runId = receipt.run.id;
+        reconcileSubmission();
+      } else {
+        delete owner.submission;
+        clearAccepted(owner, current, version);
+      }
     } catch (error) {
       delete owner.submission;
       if (entry() === owner) change();

@@ -10,8 +10,6 @@ flowchart TD
   Plugins --> Cordis
   Agent --> LLM
   Agent --> Tools
-  Agent --> Tasks
-  Tools --> Tasks
   Runs --> Agent
   Runs --> Sessions
   Runs --> Tasks
@@ -45,20 +43,19 @@ The launcher supplies paths, process controls and the Profile. Native declaratio
 
 ```mermaid
 flowchart TD
-  UI[Client input] --> Runs[Runs admits a conversation]
+  UI[Client input] --> Runs[Runs commits Inbox input]
   Runs --> Tasks[Task Runtime]
   Tasks --> Agent[Agent turn loop]
   Agent --> LLM[Selected LLM adapter]
   LLM --> Agent
   Agent --> Tools[Tool Executor]
-  Tools --> Tasks
   Runs --> Log[SessionLog]
   Runs --> Replay[Run replay]
   Log --> UI
   Replay --> UI
 ```
 
-A Run is a Task with a conversation-specific lane and durable projection. Agent executes native model turns; the LLM adapter translates the protocol and Tools dispatches calls via Tasks. Subagents submit independent child conversation runs through the same contracts. The client reads durable history and transient replay without owning execution. See [execution](subsystems/execution.md) and [sessions](subsystems/sessions.md).
+A Run is a Task with a conversation-specific lane and durable projection. Agent executes native model turns; the LLM adapter translates the protocol and Tools invokes the selected tool provider through its Cordis Fiber. Subagents submit independent child conversation runs through the same contracts. The client reads durable history and transient replay without owning execution. See [execution](subsystems/execution.md) and [sessions](subsystems/sessions.md).
 
 ## State ownership
 

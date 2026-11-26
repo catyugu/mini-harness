@@ -87,7 +87,6 @@ export class Approvals {
   }
   finishRun(runId: string) {
     this.denials.delete(runId);
-    for (const { info, settle } of this.pending.values()) if (info.runId === runId) settle('cancelled');
   }
   cancelSession(id: string) {
     for (const { info, settle } of this.pending.values()) if (info.sessionId === id) settle('cancelled');

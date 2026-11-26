@@ -32,7 +32,7 @@ The [public contract](src/records.ts) groups four kinds of operation:
 - Persistence: append through the log port, prepare and retain original input attachments, read stored attachments, and create owner-specific record access.
 - Lifetime: availability checks, deletion participants, export and recursive deletion.
 
-`log(id)` returns a record-operation port. The registry retains ownership of the underlying writer and its close/recovery lifecycle; plugins must not open a second writer for the same log. `inspectLog` supports observation without exposing writer ownership. History returns defensive projections rather than mutable backing records.
+`log(id)` returns a record-operation port. The registry retains ownership of the underlying writer and its close/recovery lifecycle; plugins must not open a second writer for the same log. `inspectLog` supports observation without exposing writer ownership. History returns defensive projections rather than mutable backing records. The same log holds Inbox delivery IDs, message origins and the automatic wake pause.
 
 `task(id)` supplies a Task `owner` and synchronous durable `commit` callback. It first opens or recovers the log so admission does not create work with an unavailable history owner. Pass that binding to `harnessTasks.start`; use the Tasks contract for retention, result projection, cancellation and waiting. Historical task lookup recovers observations by ID without recreating executable handles.
 

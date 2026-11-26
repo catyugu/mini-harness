@@ -20,7 +20,7 @@ export const metadata: PluginInfo = {
 
 const plugin: Plugin.Object = {
   Config,
-  inject: ['harnessLlm', 'harnessTasks'],
+  inject: ['harnessLlm'],
   provide: ['harnessAgent'],
   apply(ctx) {
     ctx.provide(

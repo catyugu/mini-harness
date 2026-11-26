@@ -404,7 +404,9 @@ export class SessionRegistry implements SessionStore {
 
   inspectLog<T>(
     id: string,
-    read: (log: Pick<SessionLogPort, 'entries' | 'branch' | 'projection' | 'queue'>) => T,
+    read: (
+      log: Pick<SessionLogPort, 'entries' | 'branch' | 'projection' | 'queue' | 'inbox' | 'inboxPaused'>,
+    ) => T,
     strict = false,
   ): T | undefined {
     const existing = this.logs.get(id);

@@ -138,13 +138,14 @@ export const apply = (ctx) => {
   const log = registry.log(session.id);
   log.append({
     type: 'inbox-enqueued',
-    item: { id: 'blocked', mode: 'followUp', text: 'Blocked', images: [] },
+    item: { id: 'blocked', mode: 'queue', text: 'Blocked', images: [] },
   });
   log.append({
     type: 'inbox-enqueued',
-    item: { id: 'recovered', mode: 'followUp', text: 'Recovered', images: [] },
+    item: { id: 'recovered', mode: 'queue', text: 'Recovered', images: [] },
   });
-  await sendRun(plugins.ctx.harnessRuns, session.id, 'Manual');
+  await sendRun(plugins.ctx.harnessRuns, session.id, 'Manual', undefined, { mode: 'queue' });
+  await plugins.ctx.harnessRuns.current(session.id)?.result;
   assert.deepEqual(readFileSync(trace, 'utf8').trimEnd().split('\n'), [
     'prepare Blocked',
     'prepare Recovered',

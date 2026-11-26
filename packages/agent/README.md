@@ -1,25 +1,22 @@
 # Agent
 
-Agent executes the native model-and-tool turn loop. The caller supplies an admitted [Task](../tasks/README.md), model input and tool capabilities; Agent returns the final native assistant message. [Runs](../runs/README.md) adds conversation admission, persistence, model selection and replay.
+Agent executes the native model-and-tool turn loop. The caller supplies a signal, model input and tool capabilities; Agent returns the final native assistant message. [Runs](../runs/README.md) adds conversation admission, persistence, model selection and replay.
 
 ## Public API and usage
 
-[`mini-harness/agent`](src/api.ts) exposes `AgentPort`, `AgentRun`, turn events and the compaction contract. Inject `harnessAgent`, `harnessTasks`, `harnessLlm` and `harnessToolExecutor` to execute an in-memory conversation:
+[`mini-harness/agent`](src/api.ts) exposes `AgentPort`, `AgentRun`, turn events and the compaction contract. Inject `harnessAgent`, `harnessLlm` and `harnessToolExecutor` to execute an in-memory conversation:
 
 ```ts
 import type { Context } from 'mini-harness/cordis';
 import type { LlmRequest } from 'mini-harness/llm';
 import 'mini-harness/agent';
-import 'mini-harness/tasks';
 
-export function respond(ctx: Context, request: Omit<LlmRequest, 'signal'>) {
-  return ctx.harnessTasks.start({ owner: 'example', retain: false }, (task) =>
-    ctx.harnessAgent.run(ctx, { task, signal: task.signal, request, tools: [] }),
-  );
+export function respond(ctx: Context, request: Omit<LlmRequest, 'signal'>, signal: AbortSignal) {
+  return ctx.harnessAgent.run(ctx, { signal, request, tools: [] });
 }
 ```
 
-Await the returned Task Handle's `result` for the assistant message. The fixed `request` form maintains an in-memory transcript. The alternative `prepare(turn)` form supplies a fresh request, executor and tool map for each turn; `deliver` and `afterTurn` let the caller commit results and continue or restart a conversation cycle. Use Runs when the work belongs to a persisted conversation.
+Await the returned Promise for the assistant message. The fixed `request` form maintains an in-memory transcript. The alternative `prepare(turn)` form supplies a fresh request, executor and tool map for each turn; `deliver` and `afterTurn` let the caller commit results and continue or restart a conversation cycle. Use Runs when the work belongs to a persisted conversation.
 
 The executor presents tool schemas, interprets the assistant response and delivers tool results. Agent rejects duplicate call IDs, unmatched results and omitted results before another model turn. Executor implementations and reusable execution helpers belong to [Tools](../tools/README.md).
 
@@ -47,7 +44,7 @@ These hooks are dispatched by conversation orchestration in Runs; a direct `harn
 
 The base Profile mounts separate `core:agent`, `core:prompt`, `core:prompt-defaults` and `core:compaction` entries. [Agent configuration](src/manifests/agent.ts) bounds a run's turns; [compaction configuration](src/manifests/compaction.ts) controls automatic compaction. These capabilities can be replaced independently through Cordis.
 
-The caller's task and signal own cancellation. Agent reports request, assistant-start, text delta and assistant events through `onEvent`; it does not retain observers or store messages. Model errors, invalid tool protocol and exhausting the turn limit reject the run. Retry policy cannot replay an attempt after streamed output.
+The caller's signal owns cancellation. Agent reports phase, request, assistant-start, text delta and assistant events through `onEvent`. Model errors, invalid tool protocol and exhausting the turn limit reject the run. Retry policy cannot replay an attempt after streamed output.
 
 ## Verification
 

@@ -1,4 +1,5 @@
 import type { SessionDisplayRecord } from './display-record.ts';
+import type { MessageOrigin } from './queue.ts';
 import type { RunTermination } from './run-state.ts';
 import type { ToolResultState } from '@mini-harness/tools/api';
 import type { InputAttachment } from '@mini-harness/input/message';
@@ -26,6 +27,8 @@ interface MessageFields {
   runId?: string;
   submissionId?: string;
   inboxId?: string;
+  origin?: MessageOrigin;
+  taskId?: string;
   parentId?: string | null;
   content: MessageContent;
   attachments?: ViewAttachment[];

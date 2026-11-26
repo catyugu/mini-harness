@@ -10,6 +10,7 @@ import assert from 'node:assert/strict';
 import { rmSync } from 'node:fs';
 import { Type } from 'typebox';
 import { AgentLoop } from '../src/agent.ts';
+import { randomUUID } from 'node:crypto';
 import { Inbox } from '../../runs/src/inbox.ts';
 import type { Attachment } from '@mini-harness/input/message';
 import type { InboxItem } from '@mini-harness/sessions/log-api';
@@ -67,7 +68,7 @@ function fixture(
     rmSync(root, { recursive: true, force: true });
   });
   const runtime = new TaskRuntime();
-  const tools = new ToolRegistry(runtime);
+  const tools = new ToolRegistry();
   const ctx = new Context();
   ctx.provide('harnessTasks', runtime.service());
   ctx.provide('harnessTools', tools.service());
@@ -99,13 +100,32 @@ function fixture(
     async prompt(
       ctx: Prompt[0],
       record: Prompt[1],
-      text: Prompt[2],
-      emit: Prompt[3],
-      options: Omit<Prompt[4], 'task'>,
+      text: string,
+      emit: Prompt[2],
+      options: Omit<Prompt[3], 'task' | 'revision'> & {
+        choice?: InboxItem['model'];
+        images?: InboxItem['images'];
+        thinkingLevel?: InboxItem['thinkingLevel'];
+      },
     ) {
-      return runtime.start({ owner: 'session:' + record.id, signal: options.signal, retain: false }, (task) =>
-        sessionRun.prompt(ctx, record, text, emit, { ...options, signal: task.signal, task }),
-      ).result;
+      const log = sessions.log(record.id);
+      log.append({
+        type: 'inbox-enqueued',
+        item: {
+          id: randomUUID(),
+          mode: 'queue',
+          text,
+          images: options.images ?? [],
+          model: options.choice,
+          thinkingLevel: options.thinkingLevel,
+        },
+      });
+      let answer = '';
+      while (log.inbox().length)
+        answer = await runtime.start({ owner: 'session:' + record.id, signal: options.signal }, (task) =>
+          sessionRun.prompt(ctx, record, emit, { ...options, signal: task.signal, task }),
+        ).result;
+      return answer;
     },
   };
   return { agent, ctx, sessions, tools, record };
@@ -120,12 +140,14 @@ function queueInput(
   attachments?: Attachment[],
   options?: Pick<InboxItem, 'model' | 'thinkingLevel'>,
 ) {
-  return new Inbox(sessions.log(id)).enqueue(
-    mode,
-    () => sessions.prepareInput(id, text, attachments),
-    ctx.harnessModels,
-    options,
-  );
+  const log = sessions.log(id);
+  const model = options?.model ?? log.projection().model;
+  if (model) assert.ok(ctx.harnessModels.resolve(model));
+  log.append({
+    type: 'inbox-enqueued',
+    item: { id: randomUUID(), mode, ...sessions.prepareInput(id, text, attachments), ...options, model },
+  });
+  return log.queue();
 }
 
 test('an alternative executor owns the model protocol and executes without the registered implementation', async (t) => {
@@ -405,7 +427,6 @@ test('a concurrent cancellation does not hide a genuine tool failure', async () 
   const states: string[] = [];
   await nativeExecutor.execute([call('one', 'fail'), call('two', 'fail')], new Map([[tool.name, tool]]), {
     signal: controller.signal,
-    tasks: new TaskRuntime(),
     async deliver(result) {
       states.push(toolResultState(result));
     },
@@ -472,10 +493,10 @@ test('identical queued text preserves each attachment identity and is delivered 
   });
   await ready;
   const data = Buffer.from('89504e470d0a1a0a', 'hex').toString('base64');
-  await queueInput(ctx, sessions, record.id, 'Same text', 'followUp', [
+  await queueInput(ctx, sessions, record.id, 'Same text', 'queue', [
     { name: 'first.png', mimeType: 'image/png', data },
   ]);
-  await queueInput(ctx, sessions, record.id, 'Same text', 'followUp', [
+  await queueInput(ctx, sessions, record.id, 'Same text', 'queue', [
     { name: 'second.png', mimeType: 'image/png', data },
   ]);
   release();
@@ -574,13 +595,13 @@ test('steering accepts off, skips deterministic failures and resets incompatible
     },
   });
   await queueInput(ctx, sessions, record.id, 'Actual instruction', 'steer');
-  await queueInput(ctx, sessions, record.id, 'Keep reasoning', 'followUp', undefined, {
+  await queueInput(ctx, sessions, record.id, 'Keep reasoning', 'queue', undefined, {
     thinkingLevel: 'high',
   });
-  await queueInput(ctx, sessions, record.id, 'Switch model', 'followUp', undefined, {
+  await queueInput(ctx, sessions, record.id, 'Switch model', 'queue', undefined, {
     model: { ...model, id: 'new-model' },
   });
-  const queue = await queueInput(ctx, sessions, record.id, 'Cancel me', 'followUp');
+  const queue = await queueInput(ctx, sessions, record.id, 'Cancel me', 'queue');
   new Inbox(log).cancel(
     'User cancelled',
     expectPresent(
@@ -609,7 +630,7 @@ test('steering accepts off, skips deterministic failures and resets incompatible
     [['stale-level', 'failed']],
   );
   assert.ok(log.entries().some(({ type }) => type === 'inbox-cancelled'));
-  assert.equal(log.entries().filter((entry) => entry.type === 'message' && entry.inboxId).length, 3);
+  assert.equal(log.entries().filter((entry) => entry.type === 'message' && entry.inboxId).length, 4);
 });
 
 test(
@@ -749,7 +770,6 @@ test('a fatal pipeline failure stops dispatch and drains active calls', async ()
   await assert.rejects(
     nativeExecutor.execute(calls, tools, {
       signal: new AbortController().signal,
-      tasks: new TaskRuntime(),
       start(call) {
         started.push(call.id);
         return undefined;
@@ -800,7 +820,7 @@ test('a queued follow-up can preselect the next model and thinking level', async
     signal: new AbortController().signal,
   });
   await started;
-  await queueInput(ctx, sessions, record.id, 'Follow up', 'followUp', undefined, {
+  await queueInput(ctx, sessions, record.id, 'Follow up', 'queue', undefined, {
     model: { provider: 'fixture', id: 'next-model' },
     thinkingLevel: 'medium',
   });
@@ -915,40 +935,4 @@ test('attachments enforce encoding, format and byte limits without creating file
   assert.match(binary.text, /Uploaded file: "b.pdf"/);
   assert.deepEqual(binary.files[0].bytes, Buffer.from([0, 1, 2]));
   assert.throws(() => prepareInput('a', new Array(9).fill({})), /eight/);
-});
-
-test('background tool execution delivers only one receipt and survives its submitting run', async () => {
-  const tasks = new TaskRuntime();
-  let release!: () => void;
-  const gate = new Promise<void>((resolve) => {
-    release = resolve;
-  });
-  const tool = defineTool({
-    name: 'background',
-    description: 'Work independently',
-    parameters: Type.Object({}),
-    async execute() {
-      await gate;
-      return { content: [{ type: 'text', text: 'complete' }] };
-    },
-  });
-  const results: import('@mini-harness/llm/api').NativeToolMessage[] = [];
-  const controller = new AbortController();
-  await nativeExecutor.execute([call('bg', tool.name)], new Map([[tool.name, tool]]), {
-    tasks,
-    signal: controller.signal,
-    background: () => ({ owner: 'session:one' }),
-    async deliver(result) {
-      results.push(result);
-    },
-  });
-  assert.equal(results.length, 1);
-  const id = String(results[0].details?.taskId);
-  assert.equal(tasks.get(id)?.owner, 'session:one');
-  controller.abort();
-  release();
-  const finished = await tasks.wait(id);
-  assert.equal(finished.state, 'completed');
-  assert.equal(results.length, 1);
-  assert.deepEqual(finished.result, { content: [{ type: 'text', text: 'complete' }] });
 });

@@ -15,7 +15,8 @@
       "./stream"
     ],
     "profileModules": {
-      "@mini-harness/runs": "./src/manifest.ts"
+      "@mini-harness/runs": "./src/manifest.ts",
+      "@mini-harness/task-control": "./src/background.ts"
     }
   },
   "dependencies": {

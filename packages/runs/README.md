@@ -1,48 +1,35 @@
 # Runs
 
-Runs coordinates persisted conversation execution. It owns input preparation, model selection, inbox delivery, compaction and transient replay. [Tasks](../tasks/README.md) owns the live lifecycle, and [Sessions](../sessions/README.md) owns durable conversation state.
+Runs owns conversation admission, Inbox delivery, model selection and live replay. A Run uses a Task with an exclusive conversation lane. Its Run ID is the Task ID.
 
-## Public API and usage
+## Public API
 
-Import [`mini-harness/runs`](src/api.ts) and inject `harnessRuns`. Submit to an existing conversation:
+Import [`mini-harness/runs`](src/api.ts) and inject `harnessRuns`.
 
 ```ts
-import type { Context } from 'mini-harness/cordis';
-import 'mini-harness/runs';
-
-export function submitMessage(ctx: Context, sessionId: string, message: string) {
-  return ctx.harnessRuns.submit(sessionId, { message });
-}
+const receipt = ctx.harnessRuns.send(sessionId, {
+  message: 'Summarize the open changes.',
+  origin: { source: 'user' },
+  mode: 'interrupt',
+});
 ```
 
-`submit` returns the original Task Handle; its ID is also the Run ID. Await `result` for the answer, cancel through the handle, or keep its ID for observation. Do not wrap submission in another task. `RunInput` can specify a model, thinking level and attachments; `RunSubmission` adds an explicit provider, signal, pool, metadata and observation callback. SDK submissions default to source `plugin`.
+`send` synchronously commits a message and returns its stable ID, the current queue projection and the active Run when available. An explicit message ID makes retrying acceptance idempotent within its Session. Programmatic senders supply an origin when they can identify the sender and related Task.
 
-The base Profile's `core:runs` entry requires Profile scopes, Sessions, Agent, Models, Tool Executor and Tasks. Prompt composition, recent-model preference and HTTP routing are optional capabilities.
+| Mode      | Delivery                                                                                                  |
+| --------- | --------------------------------------------------------------------------------------------------------- |
+| Steer     | At an available model or tool boundary. A pending steering message can skip tools that have yet to start. |
+| Interrupt | Request cancellation immediately and deliver in a new Run after the previous Run drains.                  |
+| Queue     | Deliver in a new Run after completion.                                                                    |
 
-## Admission and lifetime
+`stop` persists a pause before requesting cancellation. Subsequent explicit user input resumes delivery. Notifications accumulate in the Session Log through a pause. `cancelQueue` discards specified pending messages. `reviseAndStart` handles an explicit branch revision, which supplies its own leaf identity.
 
-A run and manual compaction share one exclusive conversation lane. `current(id)` returns whichever Task Handle currently occupies it. A second submission fails while that lane is occupied, including queued or waiting work. Admission persists the task before returning; it does not imply that user input has been delivered or that a model request has started.
+`info`, `activity` and `watch` expose current state and replay. `retryInput` reads the failed Run's input. `compact` uses the same exclusive lane, so incoming messages remain durable through compaction. A stopped process cannot resume an old executor. Startup can start new work for pending Inbox messages in unpaused sessions.
 
-Runs prepares the configured session scope, creates a run Fiber, invokes `agent/setup`, then executes Agent against Session Log. Disposing that Fiber releases run-local contributions. The supplied Task provider and cancellation options determine execution lifetime; a child conversation is not implicitly cancelled with its creator.
+## Independent tools
 
-HTTP admission is separate from event subscription. Disconnecting a subscriber does not stop the run. Session deletion and application shutdown drain work through its task owner.
+The optional `task-control` Profile entry registers `start_background` and `task_control`. An eligible tool declares `background: true`; the shared tool invocation path validates and executes it. The accepted receipt identifies its independent Task. `task_control` lists, inspects, waits for, cancels and reads cursor-based output for owned background tools and direct child Runs.
 
-## Conversation operations
+Background execution holds the registered tool's provider and the Session's resource owner. It can call `report` to send a mid-task message. Progress and ordinary output update task projections. Terminal notifications carry the actual scheduler state and the projected business result. Stable notification IDs make acceptance idempotent across restart.
 
-| Operation          | Observable behavior                                                                                       |
-| ------------------ | --------------------------------------------------------------------------------------------------------- |
-| `info`, `activity` | Read the latest run projection and transient text/tool progress.                                          |
-| `watch`            | Observe a specific Run ID after a cursor; stale or unavailable replay becomes a snapshot where supported. |
-| `queueInput`       | Persist steering or follow-up input for an active execution context.                                      |
-| `cancelQueue`      | Cancel pending inbox items without creating a run.                                                        |
-| `reviseAndStart`   | Validate the source user entry and expected branch leaf before admitting a revised run.                   |
-| `retryInput`       | Recover the accepted input associated with the current failed Run ID, including missing attachments.      |
-| `compact`          | Run manual compaction on the same exclusive lane.                                                         |
-
-Queue delivery and branch changes are committed by Sessions. Failed runs identify accepted input by its stable log entry ID. Restart recovers interrupted state from durable records; it does not resume unknown side effects. See [Session Log](../../docs/session-log.md) for the record and recovery contract.
-
-## Events and extension points
-
-The SDK declares `run-started`, `run-ended` and `input-accepted` capability observations. `events` and `watch` support run projections, while [Agent hooks](../agent/README.md#conversation-hooks) customize conversation execution. Observers do not own task state, and an optional submission `emit` callback cannot terminate the run by throwing.
-
-[Task notes](../../docs/examples/task-notes/plugin.ts) demonstrates normal child submission. [Run tests](tests/runs.test.ts) cover admission, restart, replay, persistence faults and retry identity. See the [execution reference](../../docs/subsystems/execution.md) and [package index](../../docs/packages.md).
+See [execution](../../docs/subsystems/execution.md) and [the Session Log format](../../docs/session-log.md).

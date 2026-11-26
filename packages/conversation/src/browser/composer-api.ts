@@ -62,7 +62,7 @@ export interface ComposerModel {
   setPermission(permission: ConversationPermission): Promise<void>;
   beginDraftMode(mode: DraftMode): () => void;
   cancelEdit(): void;
-  send(queued?: boolean): Promise<void>;
+  send(): Promise<void>;
   retry(): Promise<void>;
   matchCommands(query: string): ComposerCommand[];
   completer(trigger: string): Completer | undefined;

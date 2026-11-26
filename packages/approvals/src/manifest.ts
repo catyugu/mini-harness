@@ -27,22 +27,13 @@ const plugin: Plugin.Object = {
     });
     ctx.provide('harnessApprovals', approvals);
     const requests: ApprovalRequests = Service.track({
-      request(id, prompt, signal) {
+      request(id, prompt, signal, executionId) {
         const caller = Service.caller(this);
         const instanceId = entryFiber(caller)?.entry?.options.id ?? 'fiber:' + caller.fiber.uid;
         ctx.harnessSessions.assertAvailable(id);
         if (!ctx.harnessSessions.get(id)) throw new DomainError('not_found', 'Conversation not found');
-        const run = ctx.harnessRuns.info(id);
-        const active = ctx.harnessRuns.current(id);
         return caller.fiber.run(
-          (lifetime) =>
-            approvals.request(
-              id,
-              isRunning(run) ? run?.id : undefined,
-              instanceId,
-              prompt,
-              active ? AbortSignal.any([active.signal, lifetime]) : lifetime,
-            ),
+          (lifetime) => approvals.request(id, executionId, instanceId, prompt, lifetime),
           signal,
         );
       },

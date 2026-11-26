@@ -13,7 +13,7 @@ Shell is disabled in the base Profile. Enable the `shell` entry in Plugins, then
 
 Configuration belongs to the Shell entry. Conversation permission determines whether confirmation is required and whether tool policy permits execution; it does not change the configured isolation mode.
 
-The `sandbox_shell` tool accepts a nonempty command string and is exposed only for conversations bound to a workspace. It is serial by default. Plugins can resolve the same definition through Tools and invoke it through `startTool`; there is no separate public Shell SDK.
+The `sandbox_shell` tool accepts a nonempty command string and is exposed only for conversations bound to a workspace. It is serial by default. Plugins can resolve the same definition through Tools and invoke it through `runTool`; there is no separate public Shell SDK.
 
 ## Approval and execution
 
@@ -27,7 +27,7 @@ Host mode uses `/bin/sh` on POSIX or `cmd.exe` on Windows with the host environm
 
 Shell drains stdout and stderr concurrently, records their channels in task output and bounds combined captured output to 1 MiB. Timeout, caller cancellation or excess output terminates the process. The result exposes exit status, stdout/stderr, a termination reason and truncation status; callers inspect these fields rather than treating every resolved tool result as a successful command.
 
-Inline calls follow their enclosing Task. An explicit independent invocation uses its supplied resource owner and retention policy. For retained invocations, output lives in task channels without duplicating it in the compact task result. Pending confirmation still follows the [approval request lifetime](../approvals/README.md#ownership-and-lifetime). Unloading the tool registration cancels and drains active calls.
+Foreground calls follow their caller's signal. The tool also accepts independent execution through `start_background`. Background output lives in task channels and the compact result records process status. Pending confirmation still follows the [approval request lifetime](../approvals/README.md#ownership-and-lifetime). Unloading the tool registration cancels and drains active calls.
 
 Shell invalidates the workspace file projection after execution. Its browser contribution renders command details through Conversation; it does not own a second process or file store.
 

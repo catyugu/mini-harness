@@ -7,6 +7,7 @@ import { Runs } from './runs.ts';
 export function setup(ctx: Context) {
   const { harnessSessions: catalog, harnessProfileScopes: scopes } = ctx;
   const runs = new Runs(
+    ctx,
     catalog,
     ctx.harnessTasks,
     scopes,
@@ -15,6 +16,7 @@ export function setup(ctx: Context) {
     new SessionRun(catalog),
   );
   ctx.provide('harnessRuns', runs);
+  ctx.on('harness/start', () => runs.recover());
   ctx.effect(() => {
     const changed = (event: Event) => {
       if (event instanceof CustomEvent && event.detail.record)

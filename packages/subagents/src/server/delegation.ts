@@ -1,6 +1,4 @@
-import type { Context } from 'mini-harness/cordis';
 import type { RunPort } from '@mini-harness/runs/api';
-import type { TaskPool } from '@mini-harness/tasks/api';
 import type { SessionStore } from '@mini-harness/sessions/records';
 import type { ModelChoice } from '@mini-harness/llm/vocabulary';
 
@@ -42,8 +40,6 @@ export class Delegation {
     private readonly sessions: SessionStore,
     private readonly runs: RunPort,
     private readonly settings: () => SubagentPolicy,
-    private readonly provider: Context,
-    private readonly pool: TaskPool,
   ) {}
 
   visible(id: string) {
@@ -66,15 +62,13 @@ export class Delegation {
       workspaceId: parent.workspaceId,
       title: childTitle(request.task),
     });
-    const task = this.runs.submit(
-      record.id,
-      { message: request.task, model },
-      {
-        provider: this.provider,
-        metadata: creator ? { creator } : undefined,
-        pool: this.pool,
-      },
-    );
-    return { sessionId: record.id, taskId: task.id, state: 'queued' as const };
+    const { taskId } = this.runs.send(record.id, {
+      message: request.task,
+      model,
+      origin: { source: 'agent', senderSessionId: parentId, taskId: creator },
+      mode: 'queue',
+    });
+    if (!taskId) throw new Error('Child conversation accepted the task but could not start: ' + record.id);
+    return { sessionId: record.id, taskId, state: 'accepted' as const };
   }
 }

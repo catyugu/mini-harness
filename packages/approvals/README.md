@@ -1,6 +1,6 @@
 # Approvals
 
-Approvals owns pending user confirmations and their resolution. It binds requests to a conversation, the current run when present, and the requesting plugin's lifetime. The operation itself remains owned by the caller, such as [Shell](../shell/README.md).
+Approvals owns pending user confirmations and their resolution. It binds requests to a conversation, the requesting plugin's lifetime and the supplied execution signal. The operation itself remains owned by the caller, such as [Shell](../shell/README.md).
 
 ## Public API and usage
 
@@ -18,11 +18,11 @@ await ctx.harnessApprovalRequests.request(
 
 Resolution means approval. The boolean is `false` for an explicit Allow and `true` when an explicit Full access selection released a request with `followFullAccess: true`; it is not an allow/deny flag. Denial rejects with `ApprovalDenied`. Cancellation and expiration reject rather than approve.
 
-The optional prompt `context` identifies an operation for repeated-denial handling within one run. `followFullAccess` defaults to false: callers explicitly choose whether a later Full access selection may release their pending request. Calling the API does not itself skip confirmation merely because a conversation already has Full access.
+The optional prompt `context` and explicit execution ID identify an operation for repeated-denial handling within one Run. `followFullAccess` defaults to false: callers explicitly choose whether a later Full access selection may release their pending request. Calling the API does not itself skip confirmation merely because a conversation already has Full access.
 
 ## Ownership and lifetime
 
-The service derives plugin identity from the caller's Entry/Fiber and validates the session. A pending request follows the supplied signal, caller Fiber and active run signal. Ending a run, deleting its session or disposing the approvals provider releases associated requests and listeners.
+The service derives plugin identity from the caller's Entry/Fiber and validates the session. A pending request follows the supplied signal and caller Fiber. Session deletion and approvals disposal release outstanding requests. Run settlement clears repeated-denial memory for its explicit execution ID.
 
 Pending requests expire after five minutes. An identical denied operation with the same session, plugin, context and message is rejected within that run without opening another prompt. That denial memory ends with the run.
 

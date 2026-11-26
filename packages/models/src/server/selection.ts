@@ -60,13 +60,11 @@ export function selectModel(
   );
 }
 
-export function assertImageInput(capabilities: Capabilities, count: number, queued = false) {
+export function assertImageInput(capabilities: Capabilities, count: number) {
   if (count && !capabilities?.input.includes('image'))
     throw new DomainError(
       'invalid_input',
-      queued
-        ? 'The selected model does not support queued image input'
-        : 'The selected model does not support image input. Choose an image-capable model and retry.',
+      'The selected model does not support image input. Choose an image-capable model and retry.',
     );
 }
 

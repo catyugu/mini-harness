@@ -2,6 +2,8 @@ import type { Context } from 'mini-harness/cordis';
 import type { ConversationPermission } from '@mini-harness/sessions/identity';
 import type { ThinkingLevel } from '@mini-harness/llm/vocabulary';
 import { fromMarkup, required, scopedElements } from '@mini-harness/ui-primitives/primitives';
+import { messageModes, type MessageMode } from '@mini-harness/sessions/queue';
+import { modeLabel } from './queue-view.ts';
 import { icon } from '@mini-harness/ui-primitives/icons';
 import { promptEditor } from './prompt-editor.ts';
 import { createComposer } from './composer.ts';
@@ -30,12 +32,15 @@ export function mountComposer(ctx: Context, signal: AbortSignal) {
             </div>
             <button id="thinkingLevel" class="model-select" type="button" aria-haspopup="listbox" aria-expanded="false" aria-controls="thinkingResults" hidden>Default</button>
             <div id="thinkingPicker" class="model-picker thinking-picker" popover="auto"><div id="thinkingResults" role="listbox" aria-label="Thinking levels"></div></div>
-            <button id="queueSend" class="small-button" type="button" hidden>Queue</button>
+            <select id="messageMode" class="small-button" aria-label="Message sending mode" hidden></select>
             <button id="stop" type="button" aria-label="Stop response" hidden data-icon="stop"></button>
             <button id="send" type="submit" aria-label="Send" data-icon="send"></button>
           </div>
         </form>`) as HTMLFormElement;
   const { element } = scopedElements(composer);
+  const modeSelect = element<'select'>('messageMode');
+  for (const mode of messageModes) modeSelect.add(new Option(modeLabel[mode], mode));
+  modeSelect.onchange = () => control.chooseMode(modeSelect.value as MessageMode);
   const editor = promptEditor(
     element('promptEditor'),
     (path) => {
@@ -157,8 +162,12 @@ export function mountComposer(ctx: Context, signal: AbortSignal) {
     const banner = element('draftMode');
     banner.hidden = !current.editTitle;
     required(banner.querySelector('span')).textContent = current.editTitle ?? '';
-    element<'button'>('send').hidden = sending;
-    element('queueSend').hidden = !sending;
+    const sendButton = element<'button'>('send');
+    const sendLabel = sending ? 'Send with ' + modeLabel[state.mode] : 'Send';
+    sendButton.setAttribute('aria-label', sendLabel);
+    sendButton.title = sendLabel;
+    modeSelect.hidden = !state.session;
+    modeSelect.value = state.mode;
     element<'button'>('stop').hidden = !isRunning(state.run);
     element<'button'>('stop').disabled = Boolean(state.interaction.cancelling);
     ui.render(Boolean(state.interaction.operation));
@@ -194,16 +203,16 @@ export function mountComposer(ctx: Context, signal: AbortSignal) {
       ui.refresh(true);
     }
   }
-  async function send(queued = false) {
+  async function send() {
     if (control.get().interaction.operation || model.draft().awaitingAcceptance) return;
     if (!model.draft().text.trim() && !model.draft().attachments.length) return;
-    if (!queued && !modelPicker.selected()) {
+    if (!isRunning(control.get().run) && !modelPicker.selected()) {
       control.report(new Error('Choose a configured model before sending.'));
       modelPicker.open();
       return;
     }
     try {
-      await model.send(queued);
+      await model.send();
     } catch (error) {
       control.report(error instanceof Error ? error : new Error(String(error)));
     }
@@ -225,8 +234,7 @@ export function mountComposer(ctx: Context, signal: AbortSignal) {
         event.keyCode !== 229
       ) {
         event.preventDefault();
-        if (isRunning(control.get().run)) void send(true);
-        else composer.requestSubmit();
+        composer.requestSubmit();
       }
     },
     { capture: true, signal },
@@ -234,13 +242,12 @@ export function mountComposer(ctx: Context, signal: AbortSignal) {
   prompt.addEventListener('draft-change', () => model.setText(editor.value, editor.start, editor.end), {
     signal,
   });
-  element('queueSend').onclick = () => void send(true);
   element('stop').onclick = () => void control.cancel().catch(control.report);
   model.subscribe((focus) => {
     render(focus);
     ui.refresh(true);
   }, signal);
-  control.subscribe(['session', 'run', 'interaction'], () => render(), signal);
+  control.subscribe(['session', 'run', 'interaction', 'mode'], () => render(), signal);
   ctx.miniSelection.addEventListener('focus-composer', () => editor.focus(), { signal });
   ctx.miniModels.subscribe(() => render(), signal);
   render();

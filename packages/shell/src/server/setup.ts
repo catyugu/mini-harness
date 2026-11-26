@@ -21,6 +21,7 @@ export function setup(ctx: Context) {
       description:
         'Run a shell command in the workspace. Standard requires approval; Full access skips the approval prompt.',
       parameters: Type.Object({ command: Type.String({ minLength: 1, maxLength: 16000 }) }),
+      background: true,
       projectResult(result) {
         if (result.details?.exitCode === undefined) return JSON.parse(JSON.stringify(result));
         const { stdout: _stdout, stderr: _stderr, ...details } = result.details;
@@ -33,7 +34,7 @@ export function setup(ctx: Context) {
           }),
         );
       },
-      execute: async (args, { signal, update, task }): Promise<ToolResult> => {
+      execute: async (args, { signal, update, write, executionId }): Promise<ToolResult> => {
         const cwd = workspace.workspacePath(sessionId);
         if (!cwd) throw new DomainError('unavailable', 'Shell requires a workspace');
         const allowed = () => caller.get('harnessToolPolicy')?.(sessionId, { name: 'sandbox_shell' }) ?? true;
@@ -54,6 +55,7 @@ export function setup(ctx: Context) {
                   followFullAccess: true,
                 },
                 signal,
+                executionId,
               );
               if (!automatic) break;
             }
@@ -123,11 +125,11 @@ export function setup(ctx: Context) {
         try {
           if (!allowed()) throw new Error('Tool denied by conversation policy: sandbox_shell');
           const startedAt = performance.now();
-          const output = await runShellCommand(execution, command, timeoutSeconds, signal, task.write);
+          const output = await runShellCommand(execution, command, timeoutSeconds, signal, write);
           const cancelled = output.reason === 'cancelled';
           return {
             content: [{ type: 'text', text: JSON.stringify(output) }],
-            isError: cancelled,
+            isError: cancelled || output.code !== 0,
             outcome: cancelled ? 'cancelled' : undefined,
             details: { ...output, exitCode: output.code, approvalMs },
             elapsedMs: performance.now() - startedAt,

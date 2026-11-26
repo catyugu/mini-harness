@@ -1,5 +1,5 @@
 import { sendRun } from '../support/runs.ts';
-import { startTool } from '@mini-harness/tools/execution';
+import { runTool } from '@mini-harness/tools/execution';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
@@ -297,9 +297,7 @@ test('a third-party plugin uses tools, models and subprocesses from a Profile wi
     assert.equal(app.ctx.get('harnessProfileScopes'), undefined);
     const [tool] = app.ctx.harnessTools.list();
     assert.equal(tool.name, 'read_model');
-    assert.deepEqual((await startTool(app.ctx.harnessTasks, tool, 'call', {}).result).content, [
-      { type: 'text', text: 'standalone' },
-    ]);
+    assert.deepEqual((await runTool(tool, 'call', {})).content, [{ type: 'text', text: 'standalone' }]);
     assert.equal(
       app.ctx.harnessModels.list().some(({ provider }) => provider === 'anthropic'),
       false,
@@ -313,18 +311,15 @@ test('a third-party plugin uses tools, models and subprocesses from a Profile wi
       const model = { provider, id: 'fixture' };
       assert.deepEqual(app.ctx.harnessModels.resolve(model), model);
       const signal = AbortSignal.timeout(10000);
-      const result = await app.ctx.harnessTasks.start({ owner: 'agent', signal, retain: false }, (task) =>
-        app.ctx.harnessAgent.run(app.ctx, {
-          signal: task.signal,
-          task,
-          request: {
-            model,
-            systemPrompt: '',
-            messages: [{ role: 'user', content: 'Use the tool', timestamp: Date.now() }],
-          },
-          tools: app.ctx.harnessTools.list(),
-        }),
-      ).result;
+      const result = await app.ctx.harnessAgent.run(app.ctx, {
+        signal,
+        request: {
+          model,
+          systemPrompt: '',
+          messages: [{ role: 'user', content: 'Use the tool', timestamp: Date.now() }],
+        },
+        tools: app.ctx.harnessTools.list(),
+      });
       assert.deepEqual(result.content, [{ type: 'text', text: provider + ': standalone' }]);
     }
   } finally {

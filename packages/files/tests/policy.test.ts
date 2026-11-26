@@ -1,5 +1,4 @@
-import { TaskRuntime } from '@mini-harness/tasks/runtime';
-import { startTool } from '@mini-harness/tools/execution';
+import { runTool } from '@mini-harness/tools/execution';
 import { containsPath } from '@mini-harness/platform/paths';
 import { expectPresent } from '../../../test/support/required.ts';
 import test from 'node:test';
@@ -26,17 +25,15 @@ test('workspace tools share one policy for reads, searches and writes', async (t
   writeFileSync(join(cwd, '.gitignore'), 'hidden.txt\n');
   writeFileSync(join(cwd, 'hidden.txt'), 'marked text');
   const workspace = new RootedFiles(cwd, (path) => containsPath(state, path));
-  const tasks = new TaskRuntime();
   const execute = async (name: string, value: object) =>
-    startTool(
-      tasks,
+    runTool(
       expectPresent(
         fileTools(cwd, () => workspace).find((tool) => tool.name === name),
         'file tool ' + name,
       ),
       'test',
       value as Record<string, unknown>,
-    ).result;
+    );
   assert.match(
     JSON.stringify(await execute('write', { path: 'src/note.txt', content: 'good text' })),
     /wrote/i,

@@ -15,7 +15,7 @@ The [web Profile](../../profiles/web.yml) splits this capability into Entries wi
 | `core:navigation`           | Conversation tree, search, rename, bulk selection, export and deletion controls. |
 | `core:workspace-navigation` | Workspace picker and synchronization with workspace panels.                      |
 
-The [conversation schema](src/manifests/conversation.ts) defines `queueMode`, which defaults to `steer` and can be changed live to `followUp`. It determines the default mode when the composer queues input during a run. Admission and delivery semantics belong to [Runs](../runs/README.md).
+The [conversation schema](src/manifests/conversation.ts) defines the global `messageMode` default. **Add instructions** edits this default. The composer selects a mode for the active conversation. The **Tasks** plugin contributes a removable header panel and live receipt status for independent work. Delivery belongs to [Runs](../runs/README.md).
 
 Server composition requires Sessions, Runs, Workspaces, Approvals, Routes and Changes. Browser dependencies differ by Entry; the declarations in [`manifests/`](src/manifests/) and the corresponding browser setup files are authoritative. Models supplies available model choices, Layout supplies placement, and Slots supplies replaceable outlets.
 

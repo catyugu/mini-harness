@@ -36,13 +36,19 @@ export function createMessageView(
   const preview = document.createElement('div');
   preview.className = 'message assistant';
   let following = true;
+  let followedOffset: number | undefined;
 
   const scrollToEnd = () => {
-    if (following && viewport.clientHeight) viewport.scrollTop = viewport.scrollHeight;
+    if (following && viewport.clientHeight) {
+      viewport.scrollTop = viewport.scrollHeight;
+      followedOffset = viewport.scrollTop;
+    }
   };
   viewport.addEventListener(
     'scroll',
     () => {
+      // The scroll event for our own scroll can arrive after the content grows.
+      if (following && viewport.scrollTop === followedOffset) return;
       if (viewport.clientHeight)
         following = viewport.scrollHeight - viewport.clientHeight - viewport.scrollTop < 8;
     },
@@ -167,6 +173,7 @@ export function createMessageView(
       arguments?: unknown;
       sessionId?: string;
       id?: string;
+      taskId?: string;
       elapsedMs?: number;
       approvalMs?: number;
       exitCode?: number;
@@ -192,7 +199,8 @@ export function createMessageView(
       cancelled: 'Cancelled',
       error: 'Failed',
     };
-    status.textContent = labels[data.state] ?? data.state;
+    status.textContent =
+      data.taskId && data.state === 'finished' ? 'Accepted' : (labels[data.state] ?? data.state);
     summary.append(icon('chevron'), name);
     const elapsed = data.elapsedMs;
     if (elapsed !== undefined && Number.isFinite(elapsed)) {
@@ -254,11 +262,24 @@ export function createMessageView(
 
   function renderUser(message: Extract<ViewMessage, { role: 'user' }>) {
     const entry = document.createElement('div');
-    entry.className = 'message-row user';
+    const origin = message.origin;
+    const asynchronous = origin && origin.source !== 'user';
+    entry.className = asynchronous ? 'message-row async-message' : 'message-row user';
     const text = textOf(message.content);
     const attachments = message.attachments ?? [];
     const bubble = document.createElement('article');
-    bubble.className = 'message user';
+    bubble.className = asynchronous ? 'message' : 'message user';
+    if (asynchronous) {
+      const label = document.createElement('small');
+      label.className = 'hint';
+      label.textContent =
+        origin.source === 'task'
+          ? 'Background task'
+          : origin.source === 'agent'
+            ? 'Agent message'
+            : 'Plugin message';
+      bubble.append(label);
+    }
     const list = document.createElement('div');
     list.className = 'message-attachments';
     list.setAttribute('role', 'group');
@@ -291,11 +312,13 @@ export function createMessageView(
       });
       bubble.append(body);
     }
-    entry.append(
-      bubble,
-      messageActions(entry, { type: 'user-message', message, rawText: text }, message.timestamp),
-    );
-    renderMessageActions(entry);
+    entry.append(bubble);
+    if (!asynchronous) {
+      entry.append(
+        messageActions(entry, { type: 'user-message', message, rawText: text }, message.timestamp),
+      );
+      renderMessageActions(entry);
+    }
     return entry;
   }
 
@@ -329,7 +352,7 @@ export function createMessageView(
     label.textContent =
       run.state === 'failed'
         ? 'Run failed' + (run.error ? ': ' + run.error : '')
-        : run.state === 'interrupted'
+        : run.state === 'interrupted' || run.error === 'Interrupted by a new message'
           ? 'Run interrupted'
           : 'Run cancelled' + (seconds >= 1 ? ' after ' + Math.round(seconds) + ' s' : '');
     node.append(label);
@@ -417,6 +440,7 @@ export function createMessageView(
                 content: part.content,
                 arguments: part.arguments,
                 sessionId: part.sessionId,
+                taskId: part.taskId,
                 elapsedMs: part.elapsedMs,
                 approvalMs: part.approvalMs,
                 exitCode: part.exitCode,

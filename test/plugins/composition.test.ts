@@ -1,5 +1,5 @@
 import { sendRun } from '../support/runs.ts';
-import { startTool } from '@mini-harness/tools/execution';
+import { runTool } from '@mini-harness/tools/execution';
 import { isViewMessage } from '@mini-harness/sessions/message';
 import { conversationTools } from '@mini-harness/runs/tool-selection';
 import { expectPresent } from '../support/required.ts';
@@ -118,9 +118,9 @@ test('Shell delegates to a selected external process provider and still requires
       .find(({ name }) => name === 'sandbox_shell'),
     'shell tool',
   );
-  const execution = startTool(app.runtime.plugins.ctx.harnessTasks, tool, 'preview', {
+  const execution = runTool(tool, 'preview', {
     command: 'Preview command',
-  }).result;
+  });
   const pending = await waitUntil(
     () => request('/approvals'),
     ({ body }) => body.length === 1,
@@ -242,10 +242,7 @@ export const apply = (ctx, config) => {
       .find(({ name }) => name === 'scoped_greeting'),
     'scoped greeting tool',
   );
-  assert.match(
-    JSON.stringify(await startTool(app.runtime.plugins.ctx.harnessTasks, tool, 'scope', {}).result),
-    new RegExp(parent.id),
-  );
+  assert.match(JSON.stringify(await runTool(tool, 'scope', {})), new RegExp(parent.id));
   assert.equal(
     await sendRun(app.runtime.plugins.ctx.harnessRuns, parent.id, 'Run scoped greeting'),
     'Finished greeting',
@@ -333,10 +330,7 @@ export const apply = (ctx) => {
   assert.ok(list(child.id).some(({ name }) => name === 'custom'));
   assert.ok(!list(child.id).some(({ name }) => name === 'write_like'));
   assert.ok(list(parent.id).some(({ name }) => name === 'read'));
-  assert.throws(
-    () => startTool(app.runtime.plugins.ctx.harnessTasks, original, 'old', { path: 'README.md' }),
-    /no longer available/,
-  );
+  assert.throws(() => runTool(original, 'old', { path: 'README.md' }), /no longer available/);
   await sendRun(app.runtime.plugins.ctx.harnessRuns, child.id, 'Continue');
   const sent = expectPresent(mock.requests.at(-1), 'request with tools');
   assert.equal(JSON.stringify(sent.tools).includes('"name":"read"'), true);
@@ -347,10 +341,7 @@ export const apply = (ctx) => {
     list(child.id).find(({ name }) => name === 'custom'),
     'read-only registration',
   );
-  assert.match(
-    JSON.stringify(await startTool(app.runtime.plugins.ctx.harnessTasks, custom, 'read', {}).result),
-    /Authorized local read/,
-  );
+  assert.match(JSON.stringify(await runTool(custom, 'read', {})), /Authorized local read/);
 });
 
 test('explicit Profile composition can replace the default tool policy without a provider whitelist', async (t) => {
@@ -453,10 +444,7 @@ export function apply(ctx) {
     'read tool',
   );
   assert.match(
-    JSON.stringify(
-      (await startTool(app.runtime.plugins.ctx.harnessTasks, tool, 'virtual', { path: 'virtual.txt' }).result)
-        .content,
-    ),
+    JSON.stringify((await runTool(tool, 'virtual', { path: 'virtual.txt' })).content),
     /Provided file content/,
   );
 });
@@ -527,6 +515,7 @@ export const apply = (ctx, config) => { ctx.effect(() => ctx.harnessLlm.register
 test('native file and shell tools use scoped file, process and sandbox services without changing siblings', async (t) => {
   const { app, paths, request } = await fixture(t, ({ messages }) => {
     const last = expectPresent(messages.at(-1), 'model input');
+    if (last.content.startsWith('[agent ')) return 'Observed child update';
     return last.role === 'tool'
       ? 'Completed'
       : last.content.startsWith('read')

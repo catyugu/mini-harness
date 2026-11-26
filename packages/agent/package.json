@@ -29,7 +29,6 @@
     "@mini-harness/input": "workspace:*",
     "@mini-harness/llm": "workspace:*",
     "@mini-harness/plugin-api": "workspace:*",
-    "@mini-harness/tasks": "workspace:*",
     "@mini-harness/tools": "workspace:*"
   }
 }

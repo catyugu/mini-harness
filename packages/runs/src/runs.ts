@@ -1,5 +1,6 @@
 import type { RecordAppend } from '@mini-harness/sessions/display-record';
 import { userContent } from '@mini-harness/sessions/user-content';
+import { randomUUID } from 'node:crypto';
 import type { Context } from 'mini-harness/cordis';
 import { tagScope, scopeTarget } from '@mini-harness/plugin-api/scopes';
 import type { ThinkingLevel, ModelChoice } from '@mini-harness/llm/vocabulary';
@@ -8,32 +9,33 @@ import { DomainError } from '@mini-harness/platform/errors';
 import { terminal, type TaskEvent, type TaskPort, type TaskHistoryRecord } from '@mini-harness/tasks/api';
 import { imageMimeType } from '@mini-harness/input/prepare';
 import { validateModelOptions } from '@mini-harness/llm/options';
-import type { Attachment } from '@mini-harness/input/message';
+import { defaultMessageMode, messageModes } from '@mini-harness/sessions/queue';
+import type { Attachment, InputSource } from '@mini-harness/input/message';
 import type { CapabilityObservation } from '@mini-harness/plugin-api/observations';
 import { Inbox } from './inbox.ts';
-import { SessionRun } from './session-run.ts';
+import { assertImageInput } from '@mini-harness/models/selection';
+import { selectInputModel, SessionRun } from './session-run.ts';
 import type { StreamEvent, RunEvent } from './stream.ts';
 import { isRunning, projectRun, type RunDetails, type RunInfo } from '@mini-harness/sessions/run-state';
 import { runFromEntry } from '@mini-harness/sessions/log-api';
 import { RunEvents } from './events.ts';
-import type { RunInput, RunPort, RunSubmission } from './api.ts';
+import type { RunInput, RunPolicy, RunPort, RunSubmission } from './api.ts';
 import type { SessionStore } from '@mini-harness/sessions/records';
 
-interface RunOptions extends RunSubmission, Omit<RunInput, 'message'> {
-  revision?: { parentId: string | null; expectedLeafId: string | null };
+interface Revision extends RunInput {
+  parentId: string | null;
+  expectedLeafId: string | null;
 }
 
 interface Activity {
   events?: RunEvents;
-  context?: Context;
-  emit?: (event: StreamEvent) => void;
 }
-
 export class Runs implements RunPort {
   readonly events = new EventTarget();
   private readonly streams = new Map<string, Activity>();
 
   constructor(
+    private readonly ctx: Context,
     private readonly registry: SessionStore,
     private readonly tasks: TaskPort,
     private readonly scopes: ProfileScopes,
@@ -76,12 +78,7 @@ export class Runs implements RunPort {
   }
 
   private publish(activity: Activity, event: StreamEvent) {
-    const item = activity.events!.publish(event);
-    try {
-      activity.emit?.(item);
-    } catch {
-      /* An observer cannot terminate the run. */
-    }
+    activity.events!.publish(event);
   }
 
   /** The run owns its domain-specific commit, including inbox settlement. */
@@ -94,17 +91,6 @@ export class Runs implements RunPort {
           sequence: info.sequence + 1 + Number(task.state === 'failed' && Boolean(task.error)),
         }
       : { sequence: 0, inputEntryId: null };
-    if (terminal(task.state)) {
-      const inbox = new Inbox(this.registry.log(id));
-      if (task.state === 'cancelled') inbox.cancel('Run cancelled');
-      else
-        inbox.failPending(
-          'steer',
-          task.state === 'interrupted'
-            ? 'The target run was interrupted before delivery'
-            : 'The target run ended before delivery',
-        );
-    }
     this.registry.log(id).append({ type: 'task', task: { ...task, result: undefined }, output, run });
   }
 
@@ -141,47 +127,31 @@ export class Runs implements RunPort {
     }
   }
 
-  private launch(
-    id: string,
-    prompt: string,
-    {
-      signal,
-      source,
-      emit,
-      model,
-      attachments,
-      thinkingLevel,
-      revision,
-      pool,
-      metadata,
-      provider,
-    }: RunOptions,
-  ) {
+  private launch(id: string, revision?: Revision) {
     this.assertIdle(id);
-    const activity: Activity = { emit };
+    const activity: Activity = {};
+    const fallback = this.recent();
+    const record = this.registry.get(id);
+    if (!record) throw new DomainError('not_found', 'Conversation not found');
+    const prepared = revision && {
+      ...this.registry.prepareInput(id, revision.message, revision.attachments),
+      model: revision.model,
+      thinkingLevel: revision.thinkingLevel,
+      parentId: revision.parentId,
+      expectedLeafId: revision.expectedLeafId,
+    };
+    const { owner } = this.registry.task(id);
+    const context = this.scopes.context(`session:${id}`);
+    const policy: RunPolicy | undefined = context.bail('runs/policy', id);
+    const pending = new Set(
+      this.registry
+        .log(id)
+        .inbox()
+        .map(({ id }) => id),
+    );
+    this.streams.set(id, activity);
+    let runSource: InputSource | undefined;
     try {
-      validateModelOptions(model, thinkingLevel);
-      const fallback = this.recent();
-      const record = this.registry.get(id);
-      if (!record) throw new DomainError('not_found', 'Conversation not found');
-      signal?.throwIfAborted();
-      const prepared = this.registry.prepareInput(id, prompt, attachments);
-      const { owner } = this.registry.task(id);
-      this.streams.set(id, activity);
-      const publish = (event: StreamEvent) => {
-        if (event.type === 'user') activity.events!.info.inputEntryId = event.message.id;
-        this.publish(activity, event);
-        if (event.type === 'user') {
-          this.observe({
-            type: 'input-accepted',
-            sessionId: id,
-            parentId: record.parentId,
-            source: event.source,
-            runSource: source ?? 'user',
-            model: event.model,
-          });
-        }
-      };
       const task = this.tasks.start<string>(
         {
           owner,
@@ -190,40 +160,57 @@ export class Runs implements RunPort {
           project: (answer) => answer,
           type: 'agent-run',
           lane: this.lane(id),
-          metadata,
-          provider,
-          signal,
-          pool,
+          provider: policy?.provider ?? this.ctx,
+          pool: policy?.pool,
+          metadata: policy?.metadata,
         },
-        async (task) => {
-          try {
-            const answer = await this.withAgentContext(id, activity, task.signal, (ctx, signal) =>
-              this.sessionRun.prompt(ctx, record, prepared.text, publish, {
+        (task) =>
+          this.withAgentContext(id, task.signal, (ctx, signal) =>
+            this.sessionRun.prompt(
+              ctx,
+              record,
+              (event) => {
+                if (event.type === 'delta' && record.parentId) task.write(event.text, 'assistant');
+                if (event.type === 'user') {
+                  activity.events!.info.inputEntryId = event.message.id;
+                  runSource ??= event.source;
+                }
+                this.publish(activity, event);
+                if (event.type === 'user')
+                  this.observe({
+                    type: 'input-accepted',
+                    sessionId: id,
+                    parentId: record.parentId,
+                    source: event.source,
+                    runSource: runSource!,
+                    model: event.model,
+                  });
+              },
+              {
                 fallback,
-                beginSubmission: () => {
-                  activity.events!.info.inputEntryId = null;
-                },
                 signal,
-                source,
                 task,
-                submissionId: task.id,
-                choice: model,
-                images: prepared.images,
-                input: prepared.input,
-                thinkingLevel,
-                revision,
+                revision: prepared,
                 changed: (path) => {
                   const info = activity.events!.info;
                   info.changedFiles = [...new Set([...(info.changedFiles ?? []), path])];
                 },
-              }),
-            );
-            return answer;
-          } catch (error) {
+              },
+            ),
+          ).catch((error) => {
             task.signal.throwIfAborted();
             throw error;
-          }
-        },
+          }),
+      );
+      void task.result.then(
+        () => this.wake(id),
+        () =>
+          this.wake(
+            id,
+            pending,
+            task.signal.reason instanceof DOMException &&
+              task.signal.reason.message === 'Interrupted by a new message',
+          ),
       );
       this.changed(id);
       return { info: activity.events!.info, task };
@@ -233,8 +220,101 @@ export class Runs implements RunPort {
     }
   }
 
-  submit(id: string, { message, model, attachments, thinkingLevel }: RunInput, options: RunSubmission = {}) {
-    return this.launch(id, message, { source: 'plugin', ...options, model, attachments, thinkingLevel }).task;
+  send(id: string, input: RunSubmission) {
+    this.assertOpen();
+    this.registry.assertAvailable(id);
+    const origin = input.origin ?? { source: 'plugin' };
+    const mode = input.mode ?? (origin.source === 'user' ? defaultMessageMode : 'queue');
+    if (!messageModes.includes(mode)) throw new DomainError('invalid_input', 'Invalid message mode');
+    const log = this.registry.log(id);
+    const messageId = input.messageId ?? randomUUID();
+    if (typeof messageId !== 'string' || !messageId || messageId.length > 200)
+      throw new DomainError('invalid_input', 'Invalid message ID');
+    if (log.hasInbox(messageId))
+      return { messageId, taskId: this.current(id)?.id, run: this.info(id), queue: log.queue() };
+    if ((origin.source === 'user' || origin.source === 'plugin') && log.inbox().length >= 16)
+      throw new DomainError('conflict', 'Queue is full');
+    validateModelOptions(input.model, input.thinkingLevel);
+    const selection = { mode, origin, model: input.model, thinkingLevel: input.thinkingLevel };
+    const imageCount = Array.isArray(input.attachments)
+      ? input.attachments.filter(
+          (file) => typeof file?.mimeType === 'string' && imageMimeType.test(file.mimeType),
+        ).length
+      : 0;
+    if (imageCount) {
+      let context: Context | undefined;
+      try {
+        context = this.scopes.context(`session:${id}`);
+      } catch (error) {
+        // Lazy scopes resolve their model during delivery.
+        if (!(error instanceof DomainError) || error.code !== 'unavailable') throw error;
+      }
+      const models = context?.get('harnessModels');
+      if (models) {
+        const { model } = selectInputModel(
+          models,
+          selection,
+          log.projection(),
+          this.recent(),
+          this.registry.get(id)?.parentId ?? null,
+        );
+        assertImageInput(models.capabilities(model), imageCount);
+      }
+    }
+    log.append({
+      type: 'inbox-enqueued',
+      item: {
+        id: messageId,
+        ...selection,
+        ...this.registry.prepareInput(id, input.message, input.attachments),
+        ...(origin.source === 'user' && { resume: true }),
+      },
+    });
+    const active = this.current(id);
+    if (active && this.streams.has(id) && mode === 'interrupt' && !log.inboxPaused())
+      active.cancel(new DOMException('Interrupted by a new message', 'AbortError'));
+    const task = active ?? this.wake(id);
+    return { messageId, taskId: task?.id, run: this.info(id), queue: log.queue() };
+  }
+
+  stop(id: string) {
+    this.assertOpen();
+    this.registry.assertAvailable(id);
+    const log = this.registry.log(id);
+    if (!log.inboxPaused()) log.append({ type: 'inbox-paused' });
+    return (
+      this.streams.has(id) &&
+      (this.current(id)?.cancel(new DOMException('Stopped by the user', 'AbortError')) ?? false)
+    );
+  }
+
+  private wake(id: string, previous?: ReadonlySet<string>, interrupted = false) {
+    if (this.tasks.sealed || this.current(id)) return;
+    try {
+      this.registry.assertAvailable(id);
+      const log = this.registry.log(id);
+      const pending = log.inbox();
+      if (log.inboxPaused() || !pending.length) return;
+      // Retry only when the previous executor advanced the inbox or new work arrived.
+      if (
+        !interrupted &&
+        previous &&
+        pending.length === previous.size &&
+        pending.every(({ id }) => previous.has(id))
+      )
+        return;
+      return this.launch(id).task;
+    } catch (error) {
+      if (error instanceof DomainError && (error.code === 'not_found' || error.code === 'conflict')) return;
+      this.ctx.logger.error('Could not wake conversation ' + id, error);
+    }
+  }
+
+  recover() {
+    for (const { id } of this.registry.list()) {
+      const pending = this.registry.inspectLog(id, (log) => !log.inboxPaused() && log.inbox().length > 0);
+      if (pending) this.wake(id);
+    }
   }
 
   /** Revision preparation and task admission happen in one synchronous turn. */
@@ -271,11 +351,13 @@ export class Runs implements RunPort {
       throw new DomainError('invalid_input', 'Reattach the original text files: ' + missing.join(', '));
     const attachments = [...target.images.filter((_, index) => !removed.includes(index)), ...attached];
     return {
-      ...this.launch(id, input.message, {
+      ...this.launch(id, {
+        message: input.message,
         attachments,
         model: input.model,
         thinkingLevel: input.thinkingLevel,
-        revision: { parentId: target.parentId, expectedLeafId: input.expectedLeafId },
+        parentId: target.parentId,
+        expectedLeafId: input.expectedLeafId,
       }).info,
     };
   }
@@ -362,26 +444,6 @@ export class Runs implements RunPort {
     return () => {};
   }
 
-  queueInput(
-    id: string,
-    { message, mode, attachments, model, thinkingLevel }: Parameters<RunPort['queueInput']>[1],
-  ) {
-    this.assertOpen();
-    const activity = this.streams.get(id);
-    const signal = this.current(id)?.signal;
-    if (!activity?.context || !signal || signal.aborted || activity.context.fiber.signal.aborted)
-      throw new DomainError('conflict', 'The agent is not streaming; send a new message');
-    this.registry.assertAvailable(id);
-    const models = activity.context.get('harnessModels');
-    if (!models) throw new DomainError('unavailable', 'Required service is unavailable: harnessModels');
-    return new Inbox(this.registry.log(id)).enqueue(
-      mode,
-      () => this.registry.prepareInput(id, message, attachments),
-      models,
-      { model, thinkingLevel, fallback: this.recent() },
-    );
-  }
-
   async cancelQueue(id: string, itemId?: string, signal?: AbortSignal) {
     signal?.throwIfAborted();
     this.assertOpen();
@@ -394,21 +456,19 @@ export class Runs implements RunPort {
     const task = this.tasks.start(
       { ...this.registry.task(id), type: 'compaction', lane: this.lane(id) },
       ({ signal }) =>
-        this.withAgentContext(id, undefined, signal, (ctx, signal) =>
-          this.sessionRun.compact(ctx, id, signal),
-        ),
+        this.withAgentContext(id, signal, (ctx, signal) => this.sessionRun.compact(ctx, id, signal)),
     );
     this.changed(id);
     try {
       await task.result;
     } finally {
       this.changed(id);
+      this.wake(id);
     }
   }
 
   private async withAgentContext<T>(
     id: string,
-    activity: Activity | undefined,
     signal: AbortSignal,
     work: (ctx: Context, signal: AbortSignal) => Promise<T>,
   ) {
@@ -416,22 +476,17 @@ export class Runs implements RunPort {
     await this.scopes.prepare(key, signal);
     signal.throwIfAborted();
     const scope = this.scopes.context(key);
-    const fiber = tagScope(scope.extend(), this.registry.runScope(id)!).inject(
-      ['harnessAgent', 'harnessTasks'],
-      () => {},
-    );
+    const fiber = tagScope(scope.extend(), this.registry.runScope(id)!).inject(['harnessAgent'], () => {});
     try {
       await fiber;
       if (!fiber.ctx.get('harnessAgent'))
         throw new DomainError('unavailable', 'Required service is unavailable: harnessAgent');
-      if (activity) activity.context = fiber.ctx;
       return await fiber.run(async (signal) => {
         for (const { context, callback } of fiber.ctx.events.listeners('agent/setup', scopeTarget(fiber.ctx)))
           await context.fiber.run((signal) => callback(fiber.ctx, id, signal), signal);
         return work(fiber.ctx, signal);
       }, signal);
     } finally {
-      if (activity) activity.context = undefined;
       await fiber.dispose();
     }
   }

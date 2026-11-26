@@ -1,7 +1,7 @@
 import { sendRun } from '../../../test/support/runs.ts';
 import { expectPresent } from '../../../test/support/required.ts';
 import test from 'node:test';
-import { startTool } from '@mini-harness/tools/execution';
+import { runTool } from '@mini-harness/tools/execution';
 import assert from 'node:assert/strict';
 import { mkdirSync, renameSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
@@ -43,25 +43,26 @@ test('recent main model survives child overrides and a restart through the nativ
       .find(({ name }) => name === 'delegate'),
     'delegate tool',
   );
-  const child = await startTool(runtime.plugins.ctx.harnessTasks, delegate, 'override', {
+  const child = await runTool(delegate, 'override', {
     task: 'Child override',
     provider: 'local-mock',
     model: 'mock-model',
-  }).result;
+  });
   await runtime.plugins.ctx.harnessRuns.current(String(child.details?.sessionId))?.result;
   assert.equal(runtime.plugins.ctx.harnessModelPreference.recent().id, 'second-model');
   runtime.plugins.ctx.harnessSessions.log(other.id).append({
     type: 'inbox-enqueued',
     item: {
       id: 'recovered',
-      mode: 'followUp',
+      mode: 'queue',
       text: 'Recovered user follow-up',
+      origin: { source: 'plugin' },
       images: [],
       model: { provider: 'local-mock', id: 'mock-model' },
     },
   });
   await sendRun(runtime.plugins.ctx.harnessRuns, other.id, 'Scheduled work', undefined, { source: 'plugin' });
-  assert.equal(mock.requests.at(-1)?.model, 'mock-model');
+  assert.ok(mock.requests.some(({ model }) => model === 'mock-model'));
   assert.equal(runtime.plugins.ctx.harnessModelPreference.recent().id, 'second-model');
   await sendRun(runtime.plugins.ctx.harnessRuns, other.id, 'Other conversation');
   assert.equal(mock.requests.at(-1)?.model, 'second-model');
@@ -98,15 +99,12 @@ test('a failed recent-model write does not delay accepted input or terminate exe
   renameSync(config, old);
   mkdirSync(config);
   try {
-    const run = runs.submit(
-      session.id,
-      {
-        message: 'Accept this despite the unwritable setting',
-        model: { provider: 'local-mock', id: 'second-model' },
-      },
-      { source: 'user' },
-    );
-    assert.equal(run.state, 'queued');
+    const run = runs.send(session.id, {
+      message: 'Accept this despite the unwritable setting',
+      model: { provider: 'local-mock', id: 'second-model' },
+      origin: { source: 'user' },
+    });
+    assert.equal(run.run?.state, 'queued');
     await runs.current(session.id)?.result;
     assert.equal(runtime.plugins.ctx.harnessModelPreference.recent().id, 'second-model');
     await sendRun(runs, registry.create().id, 'Use the current preference despite the failed write');

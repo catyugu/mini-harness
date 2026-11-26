@@ -1,4 +1,11 @@
+import type { MessageMode } from '@mini-harness/sessions/queue';
 import type { ConversationView } from '../../shared/api.ts';
+
+export const modeLabel: Record<MessageMode, string> = {
+  steer: 'Steer',
+  interrupt: 'Interrupt',
+  queue: 'Queue',
+};
 
 export function renderQueue(
   panel: HTMLElement,
@@ -11,7 +18,7 @@ export function renderQueue(
     const row = document.createElement('div');
     row.className = 'queue-item';
     const label = document.createElement('span');
-    label.textContent = (item.mode === 'steer' ? 'Instruction: ' : 'Follow up: ') + item.summary;
+    label.textContent = modeLabel[item.mode] + ' · ' + item.summary;
     row.append(label);
     if (item.state === 'failed') {
       const reason = document.createElement('span');

@@ -9,6 +9,8 @@ import type {
   RetryInput,
 } from '../conversation-api.ts';
 import type { RunEvent } from '@mini-harness/runs/stream';
+import type { SendReceipt } from '@mini-harness/runs/api';
+import { defaultMessageMode, type MessageMode } from '@mini-harness/sessions/queue';
 import type { RunInfo } from '@mini-harness/sessions/run-state';
 import type { HistoryEntry } from '@mini-harness/sessions/message';
 import { isRunning } from '@mini-harness/sessions/run-state';
@@ -20,11 +22,16 @@ const path = (id: string, suffix = '') => '/sessions/' + id + suffix;
 
 export function createConversationController(ctx: Context): ConversationController {
   const { miniSelection: selection, miniSessions: sessions } = ctx;
+  const settings = browserPluginSettings(ctx);
+  const modes = new Map<string, MessageMode>();
+  const modeFor = (session?: string) =>
+    (session && modes.get(session)) || settings.get<MessageMode>('messageMode') || defaultMessageMode;
   const subscriptions = new Set<{ parts: readonly (keyof ConversationState)[]; listener: () => void }>();
   let state: ConversationState = {
     partial: '',
     tools: [],
     queue: [],
+    mode: modeFor(),
     interaction: { status: '' },
   };
   let visit = new AbortController(),
@@ -61,6 +68,7 @@ export function createConversationController(ctx: Context): ConversationControll
     update({
       session: 'id' in session ? session : undefined,
       run,
+      mode: modeFor(item?.id),
       history: undefined,
       partial: '',
       tools: [],
@@ -214,9 +222,9 @@ export function createConversationController(ctx: Context): ConversationControll
   }
 
   async function submit(input: ConversationSubmission, created?: (sessionId: string) => void) {
-    if (isRunning(state.run) || state.interaction.operation)
+    if ((input.revision && isRunning(state.run)) || state.interaction.operation)
       throw new Error('Wait for the current operation to finish.');
-    const signal = begin();
+    const signal = visit.signal;
     const workspace = selection.selectedWorkspace;
     interact({ operation: 'submit', status: '' });
     let id = active();
@@ -234,44 +242,43 @@ export function createConversationController(ctx: Context): ConversationControll
         if (!signal.aborted) select(item);
       }
       const { permission: _permission, revision, ...message } = input;
-      const run = await browserRequest<RunInfo>(
-        ctx,
-        path(id, revision ? '/revise' : '/runs'),
-        payload('POST', revision ? { ...message, ...revision } : message),
-      );
+      const receipt = revision
+        ? {
+            run: await browserRequest<RunInfo>(
+              ctx,
+              path(id, '/revise'),
+              payload('POST', { ...message, ...revision }),
+            ),
+          }
+        : await browserRequest<SendReceipt>(
+            ctx,
+            path(id, '/runs'),
+            payload('POST', { ...message, mode: state.mode }),
+          );
       if (!signal.aborted) {
-        update({ run });
-        void activate(id);
+        if ('queue' in receipt) {
+          queueRevision++;
+          update({ queue: receipt.queue });
+        }
+        if (!isRunning(state.run) || revision) void activate(id);
       }
-      return run;
+      return receipt;
     } finally {
       if (!signal.aborted) interact({ operation: undefined });
     }
   }
 
-  async function queue(
-    input: Omit<ConversationSubmission, 'revision' | 'permission'>,
-    mode = browserPluginSettings(ctx).get<'steer' | 'followUp'>('queueMode'),
-  ) {
-    const id = active(),
-      signal = visit.signal;
-    if (!id || !isRunning(state.run) || state.interaction.operation)
-      throw new Error('No running conversation to queue a message.');
-    interact({ operation: 'queue' });
-    try {
-      const entries = await browserRequest<ConversationView['queue']>(
-        ctx,
-        path(id, '/queue'),
-        payload('POST', { ...input, mode }),
-      );
-      if (!signal.aborted) {
-        queueRevision++;
-        update({ queue: entries });
-      }
-    } finally {
-      if (!signal.aborted) interact({ operation: undefined });
-    }
-  }
+  settings.subscribe('messageMode', () => update({ mode: modeFor(active()) }));
+  sessions.subscribe(() => {
+    const latest = sessions.get().find(({ id }) => id === active());
+    if (
+      latest?.run &&
+      latest.run.id !== state.run?.id &&
+      !isRunning(state.run) &&
+      !state.interaction.operation
+    )
+      void refreshBranch().catch(report);
+  }, ctx.fiber.signal);
 
   ctx.effect(() =>
     ctx.miniProjections.register('conversation-records', {
@@ -320,7 +327,11 @@ export function createConversationController(ctx: Context): ConversationControll
     activate,
     report,
     submit,
-    queue,
+    chooseMode(mode) {
+      const id = active();
+      if (id) modes.set(id, mode);
+      update({ mode });
+    },
     retryInput() {
       const { session, run } = state;
       if (!session || run?.state !== 'failed') throw new Error('No failed run to retry.');

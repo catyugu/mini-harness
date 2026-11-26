@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+import { TaskPool, terminal, type TaskSnapshot } from '@mini-harness/tasks/api';
 import type { Context } from 'mini-harness/cordis';
 import { defineTool } from '@mini-harness/tools/api';
 import { Type } from 'typebox';
@@ -12,8 +14,13 @@ export function setup(ctx: Context) {
       throw new DomainError('invalid_input', 'Unknown child model: ' + model.provider + '/' + model.id);
   };
   validate(policy());
-  const pool = ctx.harnessTasks.pool(policy().maxParallel);
-  const delegation = new Delegation(ctx.harnessSessions, ctx.harnessRuns, policy, ctx, pool);
+  const pool = new TaskPool(policy().maxParallel);
+  const delegation = new Delegation(ctx.harnessSessions, ctx.harnessRuns, policy);
+  ctx.on('runs/policy', (id) =>
+    ctx.harnessSessions.get(id)?.parentId
+      ? { pool, provider: ctx, metadata: { reportToParent: true } }
+      : undefined,
+  );
   ctx.on('internal/update', (next) => {
     const config = next as unknown as SubagentPolicy;
     validate(config);
@@ -31,12 +38,93 @@ export function setup(ctx: Context) {
         model: Type.Optional(Type.String({ maxLength: 160 })),
       }),
       isConcurrencySafe: () => true,
-      execute: async (args, { signal, task }) => {
-        const child = delegation.delegate(id, args, signal, task.id);
+      execute: async (args, { signal, executionId }) => {
+        const child = delegation.delegate(id, args, signal, executionId);
         return { content: [{ type: 'text', text: JSON.stringify(child) }], details: child };
       },
     });
   ctx.effect(() =>
     ctx.harnessTools.register({ name: 'delegate', resolve: tool, visible: (id) => delegation.visible(id) }),
   );
+  ctx.effect(() =>
+    ctx.harnessTools.register({
+      name: 'send_message',
+      resolve: (id) =>
+        defineTool({
+          name: 'send_message',
+          label: 'Send message',
+          description:
+            'Send a message to a parent or direct child conversation. Steer is the default. Sending does not end your current run.',
+          parameters: Type.Object({
+            sessionId: Type.String({ minLength: 1, maxLength: 128 }),
+            message: Type.String({ minLength: 1, maxLength: 12000 }),
+            mode: Type.Optional(
+              Type.Union([Type.Literal('steer'), Type.Literal('interrupt'), Type.Literal('queue')]),
+            ),
+          }),
+          isConcurrencySafe: () => true,
+          async execute({ sessionId, message, mode = 'steer' }, { signal, callId, executionId }) {
+            signal.throwIfAborted();
+            const sender = ctx.harnessSessions.get(id);
+            const target = ctx.harnessSessions.get(sessionId);
+            if (!sender || !target || (target.id !== sender.parentId && target.parentId !== sender.id))
+              throw new Error('Choose a direct parent or child conversation');
+            const deliveryId = createHash('sha256')
+              .update(JSON.stringify([id, executionId, callId]))
+              .digest('hex');
+            const { messageId, taskId } = ctx.harnessRuns.send(sessionId, {
+              message,
+              mode,
+              messageId: 'agent:' + deliveryId,
+              origin: { source: 'agent', senderSessionId: id, taskId: executionId },
+            });
+            const receipt = { messageId, taskId };
+            return { content: [{ type: 'text', text: JSON.stringify(receipt) }], details: receipt };
+          },
+        }),
+    }),
+  );
+  const tasks = ctx.harnessTasks;
+  const sessions = ctx.harnessSessions;
+  const notify = (task: TaskSnapshot) => {
+    if (!task.metadata?.reportToParent || tasks.sealed || ctx.fiber.signal.aborted) return;
+    const id = task.owner.slice('session:'.length);
+    const child = sessions.get(id);
+    if (!child?.parentId) return;
+    try {
+      sessions.assertAvailable(id);
+      const result = typeof task.result === 'string' ? task.result : task.error;
+      const summary = 'Child run ' + task.state + (result ? ': ' + result.slice(0, 4000) : '.');
+      ctx.harnessRuns.send(child.parentId, {
+        message: summary,
+        messageId: task.id + ':settled',
+        mode: 'queue',
+        origin: { source: 'agent', senderSessionId: id, taskId: task.id },
+      });
+    } catch (error) {
+      if (!(error instanceof DomainError && ['conflict', 'not_found'].includes(error.code)))
+        ctx.logger.error('Could not deliver child run notification ' + task.id, error);
+    }
+  };
+  ctx.effect(() =>
+    tasks.subscribe(({ type, task }) => {
+      if (type === 'transition' && task.type === 'agent-run' && terminal(task.state))
+        queueMicrotask(() => notify(task));
+    }),
+  );
+  ctx.on('harness/start', () => {
+    for (const { id, parentId } of sessions.list()) {
+      if (!parentId) continue;
+      const entries = sessions.inspectLog(id, (log) => log.entries());
+      const ids = new Set(
+        entries?.flatMap((entry) =>
+          entry.type === 'task' && entry.task.type === 'agent-run' ? [entry.task.id] : [],
+        ),
+      );
+      for (const id of ids) {
+        const task = tasks.get(id);
+        if (task && terminal(task.state)) notify(task);
+      }
+    }
+  });
 }
