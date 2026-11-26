@@ -431,12 +431,35 @@ export function createMessageView(
       });
     }
 
+    function processDisclosure(label: string, body: HTMLElement, kind: string) {
+      const details = document.createElement('details');
+      details.className = kind + ' process-disclosure ui-disclosure';
+      const summary = document.createElement('summary');
+      const title = document.createElement('span');
+      title.className = 'process-label';
+      title.textContent = label;
+      summary.append(icon('chevron'), title);
+      details.append(summary, body);
+      return details;
+    }
+
+    function checkpoint(entry: Extract<HistoryEntry, { type: 'checkpoint' }>) {
+      return retain('checkpoint:' + entry.id, entry.summary, () => {
+        const body = document.createElement('div');
+        body.className = 'checkpoint-body';
+        renderMarkdown(body, entry.summary);
+        return processDisclosure('Context compacted', body, 'context-checkpoint');
+      });
+    }
+
     function renderPart(
       part: Extract<ReturnType<typeof groupHistory>[number], { type: 'turn' }>['parts'][number],
     ) {
       switch (part.type) {
         case 'record':
           return record(part);
+        case 'checkpoint':
+          return checkpoint(part);
         case 'message':
           return retain('tool-result:' + part.id, part, (node?: HTMLDetailsElement) => {
             const key = progressKey(part.runId, part.toolCallId);
@@ -467,17 +490,9 @@ export function createMessageView(
           return preview;
         case 'thinking':
           return retain('thinking:' + part.id, part.text, () => {
-            const details = document.createElement('details');
-            details.className = 'assistant-reasoning process-disclosure ui-disclosure';
-            const summary = document.createElement('summary');
-            const label = document.createElement('span');
-            label.className = 'process-label';
-            label.textContent = 'Reasoning';
-            summary.append(icon('chevron'), label);
             const body = document.createElement('p');
             body.textContent = part.text;
-            details.append(summary, body);
-            return details;
+            return processDisclosure('Reasoning', body, 'assistant-reasoning');
           });
         default:
           return retain(part.type + ':' + part.id, part.text, (previous) => {
@@ -494,6 +509,8 @@ export function createMessageView(
       switch (row.type) {
         case 'record':
           return record(row);
+        case 'checkpoint':
+          return checkpoint(row);
         case 'termination': {
           const retry = run?.id === row.id && run.state === 'failed';
           return retain('run:' + row.id, retry, () => terminalNode(row, retry));
