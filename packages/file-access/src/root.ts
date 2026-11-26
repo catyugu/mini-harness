@@ -52,7 +52,14 @@ export class RootedFiles implements RootedFileAccess {
         return this.check(physicalRoot, await realpath(target));
       } catch (error) {
         if ((error as NodeJS.ErrnoException).code === 'ENOTDIR') throw new FileTypeError('not-directory');
-        if (!allowMissing || !missing(error) || target === root) throw error;
+        if (!missing(error) || target === root) throw error;
+        const parent = await locate(dirname(target));
+        const info = await stat(parent).catch((error: unknown) => {
+          if (!missing(error)) throw error;
+          return undefined;
+        });
+        if (info && !info.isDirectory()) throw new FileTypeError('not-directory');
+        if (!allowMissing) throw error;
         // A dangling link is not an ordinary absent file.
         if (
           await lstat(target).catch((error: unknown) => {
@@ -61,7 +68,7 @@ export class RootedFiles implements RootedFileAccess {
           })
         )
           throw error;
-        return this.check(physicalRoot, resolve(await locate(dirname(target)), basename(target)));
+        return this.check(physicalRoot, resolve(parent, basename(target)));
       }
     };
     return locate(requested);
