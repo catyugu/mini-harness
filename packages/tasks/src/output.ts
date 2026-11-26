@@ -41,19 +41,19 @@ export class TaskOutputRing {
 }
 
 export function readTaskOutput(output: TaskOutput, after = 0): TaskOutput {
-    const first = output.chunks[0]?.start ?? output.cursor;
-    const chunks = output.chunks
-      .filter(({ end }) => end > after)
-      .map((chunk) => {
-        if (after <= chunk.start) return { ...chunk };
-        const bytes = Buffer.from(chunk.text);
-        const cut = boundary(bytes, after - chunk.start);
-        return { ...chunk, start: chunk.start + cut, text: bytes.subarray(cut).toString('utf8') };
-      })
-      .filter(({ text }) => text.length > 0);
-    return {
-      cursor: output.cursor,
-      truncated: after < first || (chunks[0]?.start ?? output.cursor) > after,
-      chunks,
-    };
-  }
+  const first = output.chunks[0]?.start ?? output.cursor;
+  const chunks = output.chunks
+    .filter(({ end }) => end > after)
+    .map((chunk) => {
+      if (after <= chunk.start) return { ...chunk };
+      const bytes = Buffer.from(chunk.text);
+      const cut = boundary(bytes, after - chunk.start);
+      return { ...chunk, start: chunk.start + cut, text: bytes.subarray(cut).toString('utf8') };
+    })
+    .filter(({ text }) => text.length > 0);
+  return {
+    cursor: output.cursor,
+    truncated: after < first || (chunks[0]?.start ?? output.cursor) > after,
+    chunks,
+  };
+}

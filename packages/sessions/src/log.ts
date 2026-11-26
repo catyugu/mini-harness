@@ -322,11 +322,17 @@ export class SessionLog extends RecordLog<SessionEvent> implements SessionLogPor
     const tasks = new Map<string, TaskHistoryRecord>();
     for (const entry of this.records) if (entry.type === 'task') tasks.set(entry.task.id, entry);
     for (const { task, output } of tasks.values()) {
-      if (!terminal(task.state)) this.append({
-        type: 'task',
-        task: { ...task, state: 'interrupted', finishedAt: new Date().toISOString(), error: 'Task interrupted before a terminal state was recorded' },
-        output,
-      });
+      if (!terminal(task.state))
+        this.append({
+          type: 'task',
+          task: {
+            ...task,
+            state: 'interrupted',
+            finishedAt: new Date().toISOString(),
+            error: 'Task interrupted before a terminal state was recorded',
+          },
+          output,
+        });
     }
     const run = this.latestRun;
     if (run && isRunning(run)) {
@@ -464,9 +470,18 @@ function validateEvent(event: SessionEvent) {
         throw new Error('Invalid inbox failure');
       return;
     case 'task':
-      if (!event.task || typeof event.task.id !== 'string' || typeof event.task.owner !== 'string' || !event.task.retained ||
-        !['queued', 'running', 'waiting', 'completed', 'failed', 'cancelled', 'interrupted'].includes(event.task.state) ||
-        !Number.isFinite(Date.parse(event.task.createdAt)) || !Number.isSafeInteger(event.task.outputCursor) || event.task.outputCursor < 0)
+      if (
+        !event.task ||
+        typeof event.task.id !== 'string' ||
+        typeof event.task.owner !== 'string' ||
+        !event.task.retained ||
+        !['queued', 'running', 'waiting', 'completed', 'failed', 'cancelled', 'interrupted'].includes(
+          event.task.state,
+        ) ||
+        !Number.isFinite(Date.parse(event.task.createdAt)) ||
+        !Number.isSafeInteger(event.task.outputCursor) ||
+        event.task.outputCursor < 0
+      )
         throw new Error('Invalid task record');
       return;
     case 'run':

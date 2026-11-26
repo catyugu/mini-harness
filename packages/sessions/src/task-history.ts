@@ -5,7 +5,7 @@ import type { SessionStore } from './records.ts';
 
 /** Sessions owns durable task facts; the runtime keeps only active and bounded recent state. */
 export function bindTaskHistory(ctx: Context, sessions: SessionStore) {
-  const sessionId = (owner: string) => owner.startsWith('session:') ? owner.slice(8) : undefined;
+  const sessionId = (owner: string) => (owner.startsWith('session:') ? owner.slice(8) : undefined);
   ctx.on('tasks/admit', (owner) => {
     const id = sessionId(owner);
     if (id === undefined) return;
@@ -22,25 +22,28 @@ export function bindTaskHistory(ctx: Context, sessions: SessionStore) {
         const entries = log.entries();
         for (let i = entries.length - 1; i >= 0; i--) {
           const entry = entries[i];
-          if (entry.type === 'task' && entry.task.id === id) return { task: entry.task, output: entry.output };
+          if (entry.type === 'task' && entry.task.id === id)
+            return { task: entry.task, output: entry.output };
           if (entry.type === 'run' && entry.run.id === id) {
             const run = entry.run;
-            return { task: {
-              id,
-              owner: 'session:' + session.id,
-              resourceId: session.id,
-              type: 'agent-run',
-              creator: run.creator,
-              metadata: run.taskMetadata,
-              state: run.state,
-              createdAt: run.startedAt,
-              startedAt: run.executedAt,
-              finishedAt: run.finishedAt,
-              cancellationRequested: run.state === 'cancelled' || run.state === 'interrupted',
-              outputCursor: 0,
-              retained: true,
-              error: run.error,
-            }};
+            return {
+              task: {
+                id,
+                owner: 'session:' + session.id,
+                resourceId: session.id,
+                type: 'agent-run',
+                creator: run.creator,
+                metadata: run.taskMetadata,
+                state: run.state,
+                createdAt: run.startedAt,
+                startedAt: run.executedAt,
+                finishedAt: run.finishedAt,
+                cancellationRequested: run.state === 'cancelled' || run.state === 'interrupted',
+                outputCursor: 0,
+                retained: true,
+                error: run.error,
+              },
+            };
           }
         }
       });

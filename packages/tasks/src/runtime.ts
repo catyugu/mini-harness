@@ -32,11 +32,13 @@ export class TaskRuntime implements TaskPort {
   private readonly waiters = new Map<string, Set<(task: TaskSnapshot) => void>>();
   private closing = false;
 
-  constructor(private readonly domain: {
-    admit?(owner: string): void;
-    record?(record: TaskHistoryRecord): void;
-    history?(id: string): TaskHistoryRecord | undefined;
-  } = {}) {}
+  constructor(
+    private readonly domain: {
+      admit?(owner: string): void;
+      record?(record: TaskHistoryRecord): void;
+      history?(id: string): TaskHistoryRecord | undefined;
+    } = {},
+  ) {}
 
   service(): TaskPort {
     const runtime = this;
@@ -311,7 +313,14 @@ export class TaskRuntime implements TaskPort {
     if (entry) return entry.output.read(after);
     const history = this.domain.history?.(id);
     if (!history) return;
-    return readTaskOutput(history.output ?? { cursor: history.task.outputCursor, truncated: history.task.outputCursor > 0, chunks: [] }, after);
+    return readTaskOutput(
+      history.output ?? {
+        cursor: history.task.outputCursor,
+        truncated: history.task.outputCursor > 0,
+        chunks: [],
+      },
+      after,
+    );
   }
 
   private owned(owner: string) {
