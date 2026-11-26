@@ -74,7 +74,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 10px;
+  font-size: var(--font-caption);
   padding: 2px 5px;
   color: var(--muted);
 }
@@ -86,7 +86,7 @@
   color: var(--danger);
 }
 .session-row {
-  --row-size: 34px;
+  --row-size: 32px;
   --gap: 0px;
   padding: 1px 3px;
 }
@@ -135,7 +135,7 @@
 }
 .session-match {
   color: var(--muted);
-  font-size: 11px;
+  font-size: var(--font-caption);
   padding: 0 8px 4px;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
@@ -192,7 +192,7 @@
   gap: 2px;
 }
 .workspace-row {
-  --row-size: 34px;
+  --row-size: 32px;
   --gap: 0px;
   position: relative;
 }
@@ -202,6 +202,7 @@
 }
 .workspace-name.ui-button,
 .session-name.ui-button {
+  min-height: 30px;
   flex: 1;
   justify-content: flex-start;
   min-width: 0;
@@ -319,7 +320,7 @@
 }
 .run-state[data-state='approval'] {
   color: var(--focus);
-  font-weight: 650;
+  font-weight: 600;
 }
 :where(.session-row, .workspace-row) {
   transition:
@@ -331,6 +332,9 @@
 @media (max-width: 860px) {
   .tree-button,
   .session-row,
+  .workspace-row,
+  .workspace-name.ui-button,
+  .session-name.ui-button,
   .bulk-actions button {
     min-height: 44px;
   }

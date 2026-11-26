@@ -27,8 +27,8 @@
     display: flex;
     align-items: center;
     gap: 9px;
-    font-size: 15px;
-    font-weight: 650;
+    font-size: var(--font-section);
+    font-weight: 600;
   }
   .sidebar-bottom button {
     display: flex;
@@ -39,11 +39,11 @@
     border-radius: 9px;
     padding: 9px 10px;
     background: var(--surface);
-    font-size: 13px;
+    font-size: var(--font-ui);
   }
   .sidebar-bottom button {
     min-height: 44px;
-    line-height: 18px;
+    line-height: var(--line-ui);
   }
   .sidebar-bottom button svg {
     flex: 0 0 18px;
@@ -101,6 +101,8 @@
     gap: var(--space);
     min-width: 0;
     block-size: 32px;
+    font-size: var(--font-meta);
+    line-height: var(--line-ui);
     overflow: hidden;
   }
   .header-context {
@@ -185,8 +187,8 @@
     border-bottom: 1px solid var(--border);
   }
   .plugin-page > header h1 {
-    font-size: clamp(18px, 2.2vw, 24px);
-    font-weight: 620;
+    font-size: var(--font-title);
+    font-weight: 600;
     margin: 0;
   }
   .plugin-page-body {

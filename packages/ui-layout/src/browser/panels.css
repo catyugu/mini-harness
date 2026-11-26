@@ -48,7 +48,7 @@
   .right-start-title {
     flex-shrink: 0;
     padding-inline: 8px;
-    font-size: 13px;
+    font-size: var(--font-ui);
     font-weight: 550;
   }
   .right-panel > header:has(.right-start-title:not([hidden])) {
@@ -80,7 +80,7 @@
     white-space: nowrap;
     min-height: 34px;
     padding-inline: 6px;
-    font-size: 12px;
+    font-size: var(--font-meta);
   }
   .right-tab .icon-button {
     width: 22px;
@@ -173,7 +173,7 @@
   .right-start small {
     display: block;
     margin-top: 3px;
-    font-size: 12px;
+    font-size: var(--font-meta);
     color: var(--muted);
   }
 }

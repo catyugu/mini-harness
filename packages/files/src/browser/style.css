@@ -67,7 +67,7 @@
   overflow: auto;
   color: var(--muted);
   white-space: nowrap;
-  font-size: 12px;
+  font-size: var(--font-meta);
 }
 .file-breadcrumbs .ui-button {
   font: inherit;
