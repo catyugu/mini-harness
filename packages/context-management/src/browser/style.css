@@ -73,8 +73,22 @@
 .context-fields input[type='number'] {
   width: 5em;
 }
-.context-fields select {
+.context-model {
   max-width: 55%;
+  min-width: 0;
+  display: flex;
+  gap: 0.4rem;
+}
+.context-model span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.context-model svg {
+  flex: none;
+  width: 12px;
+  height: 12px;
+  transform: rotate(90deg);
 }
 .context-details > .ui-button {
   margin-top: 0.5rem;

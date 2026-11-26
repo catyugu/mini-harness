@@ -89,7 +89,7 @@ test('a single user turn supports repeated token-budget compaction while tools e
   const submitted = log
     .projection()
     .timeline.find((entry) => entry.type === 'message' && entry.role === 'user');
-  assert.ok(submitted && log.context().contextEntryIds.includes(submitted.id));
+  assert.ok(submitted && JSON.stringify(log.context().contextMessages).includes('Complete the task and preserve the constraints'));
   assertPaired(log, mock);
 
   const { body: state } = await request(path + '/context');
@@ -105,7 +105,7 @@ test('a single user turn supports repeated token-budget compaction while tools e
   assert.deepEqual(Object.values(state.assistantUsage), [state.usage]);
 });
 
-test('context overflow repairs the current request and leaves raw, duplicate tool results recoverable', async (t) => {
+test('context overflow repairs the current request and leaves raw tool results recoverable', async (t) => {
   let calls = 0,
     overflowed = false;
   let restored = false;
@@ -118,7 +118,7 @@ test('context overflow repairs the current request and leaves raw, duplicate too
     if (last?.content === 'Repeat the probe') return { tool: 'probe', args: {}, callId: 'second-probe' };
     if (calls === 2 && !overflowed) {
       overflowed = true;
-      assert.match(last?.content ?? '', /Identical tool output/);
+      assert.match(last?.content ?? '', /Tool output shortened/);
       return { overflow: 'context' };
     }
     if (last?.content === 'Read back the full diagnostic') {
@@ -177,7 +177,8 @@ test('session overrides inherit defaults, reject invalid ratios and accept unstr
     entries: { 'context-management': { config: { triggerRatio: 0.9 } } },
   });
   const { body: configured } = await request(path + '/context');
-  assert.deepEqual(configured.custom, { ...settings, autoCompact: false });
+  assert.equal(configured.customized, true);
+  assert.deepEqual(configured.settings, { ...settings, autoCompact: false });
   assert.equal(configured.settings.triggerRatio, 0.8);
   await sendRun(ctx.harnessRuns, session.id, 'First request. '.repeat(60));
   await sendRun(ctx.harnessRuns, session.id, 'Second request. '.repeat(60));
@@ -208,7 +209,7 @@ test('session overrides inherit defaults, reject invalid ratios and accept unstr
   assert.ok(readFileSync(copy, 'utf8').includes('model-attempt'));
   assert.equal((await request(path + '/context', 'PUT', null)).status, 200);
   const inherited = (await request(path + '/context')).body;
-  assert.equal(inherited.custom, null);
+  assert.equal(inherited.customized, false);
   assert.equal(inherited.settings.triggerRatio, 0.9);
   assert.equal(sessionLog.setting('context-management'), undefined);
 });

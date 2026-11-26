@@ -57,16 +57,14 @@ test('context settings and statistics stay usable at desktop and mobile widths',
     const settings = page.getByRole('button', { name: 'Context settings', exact: true });
     await settings.click();
     const config = page.getByRole('dialog', { name: 'Context settings' });
-    const mode = config.getByRole('combobox', { name: 'Context configuration' });
     const auto = config.getByRole('switch', { name: 'Auto compaction' });
-    await mode.selectOption('custom');
     await auto.uncheck();
     await config.getByRole('button', { name: 'Apply' }).click();
     await expect(auto).toBeEnabled();
     await page.reload();
     await settings.click();
     await expect(auto).not.toBeChecked();
-    await mode.selectOption('default');
+    await config.getByRole('button', { name: 'Restore defaults' }).click();
     await expect(auto).toBeChecked();
     await page.keyboard.press('Escape');
     await page.getByRole('button', { name: 'Toggle navigation' }).click();

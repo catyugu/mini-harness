@@ -85,21 +85,21 @@ function showOccupancy(list: HTMLElement, bar: HTMLElement, state: ContextState)
   const estimate = value?.estimated ? '~' : '';
   const show = (count: number) => estimate + tokens(count);
   rows(list, [
-    ['Current context', value ? show(value.total) : 'Unavailable'],
-    ['Model window', value?.window ? tokens(value.window) : undefined],
+    ['Last measured input', value ? show(value.total) : 'Unavailable'],
+    ['Model window', value ? tokens(value.window) : undefined],
     ['System prompt', value ? show(value.system) : undefined],
     ['Tool schemas', value ? show(value.tools) : undefined],
     ['Messages', value ? show(value.messages) : undefined],
-    ['Input budget', value?.budget !== undefined ? tokens(value.budget) : undefined],
-    ['Input budget used', value?.budget ? estimate + percent(value.total / value.budget) : undefined],
+    ['Input budget', value ? tokens(value.budget) : undefined],
+    ['Input budget used', value ? estimate + percent(value.total / value.budget) : undefined],
   ]);
-  bar.hidden = !value?.window;
+  bar.hidden = !value;
   bar.replaceChildren(
-    ...(value?.window
+    ...(value
       ? [value.system, value.tools, value.messages].map((size, index) => {
           const segment = document.createElement('span');
           segment.className = 'context-segment-' + index;
-          segment.style.flexBasis = percent(Math.min(size / value.window!, 1));
+          segment.style.flexBasis = percent(Math.min(size / value.window, 1));
           return segment;
         })
       : []),
@@ -223,7 +223,7 @@ function mountStats(ctx: Context) {
           ? short.format(totalInput(totals) + totals.output) + ' tok · Cache ' + cache(totals)
           : '— tok';
         showUsage(usageList, totals);
-        const ratio = occupancy?.window ? occupancy.total / occupancy.window : undefined;
+        const ratio = occupancy ? occupancy.total / occupancy.window : undefined;
         ring.style.setProperty('--context-fill', ratio === undefined ? '0%' : percent(Math.min(1, ratio)));
         windowRatio.textContent =
           ratio === undefined ? '—' : (occupancy?.estimated ? '~' : '') + percent(ratio);
@@ -255,20 +255,22 @@ function mountStats(ctx: Context) {
       const position = bindPopover(trigger, panel, signal, { width: 300, prefer: 'above' });
       trigger.onclick = () => {
         if (panel.matches(':popover-open')) panel.hidePopover();
-        else {
+        else if (state) {
+          form.update(state.settings);
           panel.showPopover();
           position();
         }
       };
-      const mode = document.createElement('select');
-      mode.className = 'ui-input';
-      mode.setAttribute('aria-label', 'Context configuration');
-      mode.add(new Option('Follow defaults', 'default'));
-      mode.add(new Option('Custom', 'custom'));
-      mode.onchange = () => {
-        if (state) void write(mode.value === 'custom' ? state.settings : null).catch(conversation.report);
-      };
       const form = settingsForm(ctx, signal, write);
+      const reset = uiButton('Restore defaults', 'quiet');
+      reset.onclick = async () => {
+        try {
+          await write(null);
+          if (state) form.update(state.settings);
+        } catch (error) {
+          conversation.report(error);
+        }
+      };
       const compact = uiButton('Compact now');
       compact.onclick = () => {
         if (state?.compacting === 'manual' && id)
@@ -279,31 +281,24 @@ function mountStats(ctx: Context) {
           ).catch(conversation.report);
         else void compactConversation().catch(conversation.report);
       };
-      panel.append(mode, form.node, compact);
+      panel.append(form.node, reset, compact);
       const render = () => {
         node.hidden = !state;
         if (!state) {
           if (panel.matches(':popover-open')) panel.hidePopover();
           return;
         }
-        mode.value = state.custom ? 'custom' : 'default';
-        form.update(state.settings, Boolean(state.custom), id);
+        reset.disabled = !state.customized;
         const current = conversation.get();
         compact.disabled =
           state.compacting !== 'manual' &&
           Boolean(
-            state.compacting ||
-              current.interaction.operation ||
+            current.interaction.operation ||
               current.run?.state === 'running' ||
               current.run?.state === 'queued' ||
               current.run?.state === 'waiting',
           );
-        compact.textContent =
-          state.compacting === 'manual'
-            ? 'Cancel compaction'
-            : state.compacting
-              ? 'Compacting…'
-              : 'Compact now';
+        compact.textContent = state.compacting ? 'Cancel compaction' : 'Compact now';
       };
       updates.addEventListener('change', render, { signal });
       render();

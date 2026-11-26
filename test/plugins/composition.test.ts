@@ -652,7 +652,8 @@ export const apply = (ctx) => {
           return { id: model.id, name: model.id, input: ['text'], contextWindow: 32000, maxTokens: 1024, reasoning: false };
         }
       });
-      ctx.provide('harnessLlm', {
+      const adapter = {
+        accepts: (choice) => Boolean(resolve(choice)),
         async *stream(request) {
           request.signal.throwIfAborted();
           const model = resolve(request.model);
@@ -671,7 +672,8 @@ export const apply = (ctx) => {
               content: [{ type: 'text', text: answer }] } };
           }
         }
-      });
+      };
+      ctx.provide('harnessLlm', { ...adapter, select: () => adapter });
     };
 `,
   );

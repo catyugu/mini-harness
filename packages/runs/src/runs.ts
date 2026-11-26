@@ -476,7 +476,7 @@ export class Runs implements RunPort {
     await this.scopes.prepare(key, signal);
     signal.throwIfAborted();
     const scope = this.scopes.context(key);
-    const fiber = tagScope(scope.extend(), this.registry.runScope(id)!).inject(['harnessAgent'], () => {});
+    const fiber = tagScope(scope.extend(), this.registry.runScope(id)!).inject(['harnessAgent', 'harnessModels', 'harnessLlm'], () => {});
     try {
       await fiber;
       if (!fiber.ctx.get('harnessAgent'))
