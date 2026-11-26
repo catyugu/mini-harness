@@ -9,6 +9,11 @@ export interface ContextSettings {
   summaryModel: ModelChoice | null;
 }
 
+export function ratioIssue({ retainRatio, targetRatio, triggerRatio }: ContextSettings) {
+  if (!(0 < retainRatio && retainRatio < targetRatio && targetRatio < triggerRatio && triggerRatio < 1))
+    return 'Use 0 < retain < target < trigger < 100%.';
+}
+
 export interface ContextOccupancy extends InputMeasurement {
   model: ModelChoice;
   total: number;
