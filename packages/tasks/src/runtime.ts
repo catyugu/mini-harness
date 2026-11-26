@@ -138,19 +138,23 @@ export class TaskRuntime implements TaskPort {
       if (!failure && signal.aborted) failure = { error: signal.reason };
       signal.removeEventListener('abort', cancelled);
       const error = failure?.error;
-      const aborted = signal.aborted && (
-        error === signal.reason ||
-        (error instanceof Error && (error.name === 'AbortError' || error.cause === signal.reason))
-      );
+      const aborted =
+        signal.aborted &&
+        (error === signal.reason ||
+          (error instanceof Error && (error.name === 'AbortError' || error.cause === signal.reason)));
       const reason = aborted ? signal.reason : error;
       const state = failure
         ? aborted
-          ? reason instanceof TaskInterrupted ? 'interrupted' : 'cancelled'
+          ? reason instanceof TaskInterrupted
+            ? 'interrupted'
+            : 'cancelled'
           : 'failed'
         : 'completed';
       const finishedAt = new Date().toISOString();
       try {
-        transition(failure ? { state, error: describe(reason), finishedAt } : { state, result: value!, finishedAt });
+        transition(
+          failure ? { state, error: describe(reason), finishedAt } : { state, result: value!, finishedAt },
+        );
       } catch (error) {
         // A durable projection failure must reject the task, not acknowledge success.
         update({ state: 'failed', error: describe(error), finishedAt });
