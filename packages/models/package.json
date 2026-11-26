@@ -5,6 +5,7 @@
   "type": "module",
   "exports": {
     "./api": "./src/server/api.ts",
+    "./browser/model-picker": "./src/browser/model-picker.ts",
     "./browser/api": "./src/browser/api.ts",
     "./catalog": "./src/shared/catalog.ts",
     "./selection": "./src/server/selection.ts",

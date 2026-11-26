@@ -1,12 +1,19 @@
 import { KeyedRegistry } from '@mini-harness/ui-runtime/keyed-registry';
 import type { SessionDisplayRecord } from '@mini-harness/sessions/display-record';
-import type { MessageAction, RecordRenderer, ToolRenderer, ToolView } from '../history-api.ts';
+import type {
+  MessageAction,
+  RecordRenderer,
+  ToolRenderer,
+  ToolView,
+  TurnFooterRenderer,
+} from '../history-api.ts';
 
 export class MessageExtensions {
   private readonly actions = new Map<string, MessageAction>();
   private readonly renderers = new KeyedRegistry<string, ToolRenderer>();
   private readonly toolActions = new KeyedRegistry<string, ToolRenderer>();
   private readonly records = new KeyedRegistry<string, RecordRenderer>();
+  private readonly footers = new Map<string, TurnFooterRenderer>();
   private readonly events = new EventTarget();
 
   readonly report = (error: unknown) => console.error('Conversation extension failed', error);
@@ -60,6 +67,24 @@ export class MessageExtensions {
       return this.renderWithLifetime(context.signal, (signal) =>
         render(structuredClone(record), { ...context, signal }),
       );
+  }
+
+  registerTurnFooter(id: string, render: TurnFooterRenderer) {
+    if (this.footers.has(id)) throw new Error('Duplicate turn footer: ' + id);
+    this.footers.set(id, render);
+    this.events.dispatchEvent(new Event('footers'));
+    return () => {
+      this.footers.delete(id);
+      this.events.dispatchEvent(new Event('footers'));
+    };
+  }
+
+  turnFooters() {
+    return this.footers.values();
+  }
+
+  subscribeToFooters(listener: () => void, signal: AbortSignal) {
+    this.events.addEventListener('footers', listener, { signal });
   }
 
   actionsForMessage() {

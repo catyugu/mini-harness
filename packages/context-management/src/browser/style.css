@@ -1,0 +1,111 @@
+.context-status {
+  min-width: 0;
+  display: flex;
+  justify-content: center;
+  gap: 0.65rem;
+  padding-top: 0.2rem;
+}
+.context-status[hidden],
+.turn-usage[hidden],
+.context-bar[hidden] {
+  display: none;
+}
+.context-statistic {
+  font-size: var(--font-caption);
+  line-height: var(--line-caption);
+  color: var(--muted);
+  padding: 0.15rem 0.2rem;
+  display: inline-flex;
+  gap: 0.25rem;
+  align-items: center;
+  white-space: nowrap;
+}
+.context-ring {
+  display: inline-block;
+  inline-size: 0.7rem;
+  block-size: 0.7rem;
+  border-radius: 50%;
+  background: conic-gradient(currentColor var(--context-fill), transparent 0);
+  outline: 1px solid currentColor;
+  outline-offset: -1px;
+  mask-image: radial-gradient(transparent 48%, black 52%);
+}
+.context-details {
+  overflow: auto;
+  padding: 0.7rem;
+  font-size: var(--font-caption);
+}
+.context-details dl {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.35rem 0.75rem;
+  margin: 0.25rem 0;
+}
+.context-details dd {
+  margin: 0;
+  text-align: end;
+  max-width: 14rem;
+  overflow-wrap: anywhere;
+  font-variant-numeric: tabular-nums;
+}
+.context-settings {
+  display: grid;
+  gap: 0.6rem;
+}
+.context-settings h4 {
+  margin: 0.65rem 0 0.15rem;
+}
+.context-setting,
+.context-buttons {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.4rem;
+}
+.context-setting label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  flex: 1;
+}
+.context-setting input[type='number'] {
+  width: 5.5em;
+}
+.context-inheritance {
+  color: var(--muted);
+}
+.context-buttons {
+  margin-top: 0.55rem;
+}
+.context-bar {
+  display: flex;
+  overflow: hidden;
+  border-radius: 1rem;
+  background: var(--border);
+  height: 0.4rem;
+  margin: 0.25rem 0 0.65rem;
+}
+.context-bar span {
+  flex-shrink: 0;
+}
+.context-segment-0 {
+  background: #586bd0;
+}
+.context-segment-1 {
+  background: #a45ca5;
+}
+.context-segment-2 {
+  background: #398d81;
+}
+.turn-usage {
+  text-align: end;
+}
+@media (max-width: 480px) {
+  .context-status {
+    gap: 0.25rem;
+  }
+  .context-speed {
+    display: none;
+  }
+}

@@ -37,6 +37,7 @@ export function mountHistory(ctx: Context, extensions: MessageExtensions, signal
   }
   extensions.subscribe(view.refreshActions, signal);
   extensions.subscribeToTools(view.refreshTools, signal);
+  extensions.subscribeToFooters(render, signal);
   extensions.subscribeToRecords(render, signal);
   control.subscribe(['session', 'history', 'run', 'tools'], render, signal);
   control.subscribe(

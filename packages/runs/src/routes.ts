@@ -14,11 +14,6 @@ export function registerRoutes(ctx: Context) {
   add('DELETE', '/api/sessions/:id/queue/:item', async ({ params, signal }) => {
     return ctx.harnessRuns.cancelQueue(session(params.id), params.item, signal);
   });
-  add('POST', '/api/sessions/:id/compact', async ({ params }) => {
-    const id = session(params.id);
-    await ctx.harnessRuns.compact(id);
-    return { ok: true };
-  });
   add('POST', '/api/sessions/:id/cancel', ({ params }) => ({
     cancelled: ctx.harnessRuns.stop(session(params.id)),
   }));

@@ -1,19 +1,30 @@
 import type { ModelChoice } from '@mini-harness/llm/vocabulary';
-import { bindPopover, scopedElements } from '@mini-harness/ui-primitives/primitives';
+import { bindPopover, fromMarkup, required } from '@mini-harness/ui-primitives/primitives';
 import { icon } from '@mini-harness/ui-primitives/icons';
-import type { ModelSummary } from '@mini-harness/models/catalog';
+import type { ModelSummary } from '../shared/catalog.ts';
+
+let nextPicker = 0;
 
 export function createModelPicker(
-  root: HTMLElement,
+  button: HTMLButtonElement,
   onSelect: (model: ModelChoice) => void,
   signal: AbortSignal,
+  emptyLabel = 'Choose model',
 ) {
-  const { element } = scopedElements(root);
-  const button = element<'button'>('modelSelect'),
-    popup = element('modelPicker');
-  const search = element<'input'>('modelSearch'),
-    results = element('modelResults'),
-    empty = element('modelEmpty');
+  const id = 'model-options-' + ++nextPicker;
+  const popup = fromMarkup(`<div class="ui-popover model-picker" popover="auto">
+      <input class="model-search" type="search" role="combobox" aria-label="Search models"
+        aria-controls="${id}" aria-autocomplete="list" aria-expanded="true" placeholder="Search models">
+      <div id="${id}" class="model-results" role="listbox" aria-label="Configured models"></div>
+      <p class="model-empty hint" role="status" hidden></p>
+    </div>`);
+  button.after(popup);
+  button.setAttribute('aria-haspopup', 'listbox');
+  button.setAttribute('aria-expanded', 'false');
+  button.setAttribute('aria-controls', id);
+  const search = required(popup.querySelector<HTMLInputElement>('.model-search'));
+  const results = required(popup.querySelector<HTMLElement>('.model-results'));
+  const empty = required(popup.querySelector<HTMLElement>('.model-empty'));
   let models: ModelSummary[] = [];
   let providers = new Map<string, string>();
   let selected: ModelSummary | undefined;
@@ -80,7 +91,7 @@ export function createModelPicker(
       option.type = 'button';
       option.tabIndex = -1;
       option.className = 'suggestion model-option';
-      option.id = 'model-option-' + options.length;
+      option.id = id + '-' + options.length;
       option.setAttribute('role', 'option');
       option.setAttribute('aria-selected', String(model === selected));
       const label = document.createElement('span');
@@ -164,10 +175,10 @@ export function createModelPicker(
         (model) => model.provider === choice.provider && (!choice.id || model.id === choice.id),
       );
       const label = document.createElement('span');
-      label.textContent = selected?.name ?? 'Choose model';
+      label.textContent = selected?.name ?? emptyLabel;
       button.replaceChildren(label, icon('chevron'));
       button.title = selected ? providerName(selected.provider) + ' / ' + selected.id : '';
-      button.setAttribute('aria-label', selected ? 'Model: ' + selected.name : 'Choose model');
+      button.setAttribute('aria-label', selected ? 'Model: ' + selected.name : emptyLabel);
       if (popup.matches(':popover-open')) render();
       return selected;
     },

@@ -1,9 +1,9 @@
 import type { Context } from 'mini-harness/cordis';
 import type {
   LlmRequest,
-  ModelRequestContent,
+  ModelAttemptMetrics,
+  ModelErrorKind,
   NativeAssistantMessage,
-  NativeMessage,
   NativeToolMessage,
 } from '@mini-harness/llm/api';
 import type { ModelFailure, ModelRetry } from './events.ts';
@@ -24,6 +24,7 @@ export interface AgentTurn {
 export type AgentEvent =
   | { type: 'phase'; phase: 'model' | 'tools'; turn: number }
   | { type: 'request'; request: Request }
+  | { type: 'model-attempt'; metrics: ModelAttemptMetrics }
   | { type: 'assistant-start' }
   | { type: 'delta'; text: string }
   | {
@@ -43,6 +44,11 @@ export type AgentRun = {
   | { request: Request; tools?: readonly ToolDefinition[] }
   | {
       prepare(turn: number): AgentTurn | Promise<AgentTurn>;
+      recover?(
+        turn: number,
+        error: Extract<ModelErrorKind, 'context-overflow' | 'image-limit'>,
+        message: string,
+      ): AgentTurn | undefined | Promise<AgentTurn | undefined>;
       afterTurn?(
         calls: readonly ToolCallPart[],
       ): 'continue' | 'restart' | void | Promise<'continue' | 'restart' | void>;
@@ -53,29 +59,8 @@ export interface AgentPort {
   run(ctx: Context, input: AgentRun): Promise<NativeAssistantMessage>;
 }
 
-export interface CompactionInput {
-  messages: NativeMessage[];
-  /** The first message is a prior summary when this is true. */
-  summarized?: boolean;
-  automatic: boolean;
-  signal: AbortSignal;
-  request(content: ModelRequestContent): Promise<NativeAssistantMessage>;
-}
-
-export interface CompactionResult {
-  summary: string;
-  keepFromIndex: number;
-  tokensBefore?: number;
-}
-
-export interface CompactionPort {
-  shouldCompact(messages: NativeMessage[], limits: { contextWindow: number; maxTokens: number }): boolean;
-  compact(input: CompactionInput): Promise<CompactionResult | undefined>;
-}
-
 declare module 'mini-harness/cordis' {
   interface Context {
     harnessAgent: AgentPort;
-    harnessCompaction: CompactionPort;
   }
 }

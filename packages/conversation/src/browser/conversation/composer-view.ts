@@ -8,7 +8,7 @@ import { icon } from '@mini-harness/ui-primitives/icons';
 import { promptEditor } from './prompt-editor.ts';
 import { createComposer } from './composer.ts';
 import { isRunning } from '@mini-harness/sessions/run-state';
-import { createModelPicker } from './model-picker.ts';
+import { createModelPicker } from '@mini-harness/models/browser/model-picker';
 import { createThinkingPicker } from './thinking-picker.ts';
 
 export function mountComposer(ctx: Context, signal: AbortSignal) {
@@ -24,12 +24,7 @@ export function mountComposer(ctx: Context, signal: AbortSignal) {
             <div id="permissionPicker" class="ui-popover model-picker permission-picker" popover="auto">
               <div id="permissionResults" role="listbox" aria-label="Conversation permissions"></div>
             </div>
-            <button id="modelSelect" class="model-select" type="button" aria-haspopup="listbox" aria-expanded="false" aria-controls="modelResults">Choose model</button>
-            <div id="modelPicker" class="ui-popover model-picker" popover="auto">
-              <input id="modelSearch" type="search" role="combobox" aria-label="Search models" aria-controls="modelResults" aria-autocomplete="list" aria-expanded="true" placeholder="Search models">
-              <div id="modelResults" role="listbox" aria-label="Configured models"></div>
-              <p id="modelEmpty" class="hint" role="status" hidden></p>
-            </div>
+            <button id="modelSelect" class="model-select" type="button">Choose model</button>
             <button id="thinkingLevel" class="model-select" type="button" aria-haspopup="listbox" aria-expanded="false" aria-controls="thinkingResults" hidden>Default</button>
             <div id="thinkingPicker" class="ui-popover model-picker thinking-picker" popover="auto"><div id="thinkingResults" role="listbox" aria-label="Thinking levels"></div></div>
             <select id="messageMode" class="small-button" aria-label="Message sending mode" hidden></select>
@@ -51,7 +46,7 @@ export function mountComposer(ctx: Context, signal: AbortSignal) {
   );
   const prompt = editor.element;
   const ui = createComposer(ctx, composer, editor, model, control.report, signal);
-  const modelPicker = createModelPicker(composer, model.choose, signal);
+  const modelPicker = createModelPicker(element<'button'>('modelSelect'), model.choose, signal);
   const thinkingPicker = createThinkingPicker(composer, model.chooseThinking, signal);
   const removeToolbar = ctx.miniSlots.define('conversation.composer', element('composerExtensions'));
   signal.addEventListener('abort', removeToolbar, { once: true });

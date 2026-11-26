@@ -2,6 +2,7 @@ import {
   createModels,
   createProvider,
   getSupportedThinkingLevels,
+  isContextOverflow,
   lazyApi,
   type Api,
   type AssistantMessage,
@@ -15,6 +16,7 @@ import type {
   LlmEvent,
   LlmAdapter,
   LlmRequest,
+  ModelErrorKind,
   NativeAssistantMessage,
   NativeMessage,
 } from '@mini-harness/llm/api';
@@ -69,6 +71,37 @@ export class PiLlm implements LlmAdapter {
       return Boolean(this.builtin.getModel(choice.provider, choice.id));
     const connection = this.store.connection(choice);
     return connection !== undefined && Object.hasOwn(apiLoaders, connection.api);
+  }
+
+  classifyError(error: unknown): ModelErrorKind | undefined {
+    const value = error as { status?: number; code?: string; message?: string };
+    const message = String(value?.message ?? error);
+    if (
+      /too many images|(?:image|media|vision).{0,60}(?:limit exceeded|maximum|too large)|(?:maximum|limit).{0,40}(?:images|image size)/i.test(
+        message,
+      )
+    )
+      return 'image-limit';
+    if (
+      value?.code === 'context_length_exceeded' ||
+      isContextOverflow({
+        role: 'assistant',
+        stopReason: 'error',
+        errorMessage: message,
+        usage: emptyUsage(),
+      } as AssistantMessage)
+    )
+      return 'context-overflow';
+    if (
+      value?.status === 408 ||
+      value?.status === 429 ||
+      (value?.status ?? 0) >= 500 ||
+      /\b(?:408|429|50[0234]|529|ECONNRESET|ETIMEDOUT|EAI_AGAIN)\b|fetch failed|rate limit|overloaded|connection (?:reset|terminated)/i.test(
+        message,
+      )
+    )
+      return 'transient';
+    return 'permanent';
   }
 
   async *stream(request: LlmRequest): AsyncIterable<LlmEvent> {
@@ -144,10 +177,13 @@ export class PiLlm implements LlmAdapter {
         yield { type: 'tool-call', call: structuredClone(event.toolCall) };
       else if (event.type === 'done' || event.type === 'error') {
         finished = true;
-        yield {
-          type: 'done',
-          message: fromProviderMessage(event.type === 'done' ? event.message : event.error),
-        };
+        const result = event.type === 'done' ? event.message : event.error;
+        const message = fromProviderMessage(result);
+        if (event.type === 'error')
+          message.errorKind = isContextOverflow(result, model.contextWindow)
+            ? 'context-overflow'
+            : this.classifyError(result.errorMessage);
+        yield { type: 'done', message };
       }
     }
     if (!finished) throw new Error('Model stream ended without a final response');
@@ -186,7 +222,15 @@ function fromProviderMessage(message: AssistantMessage): NativeAssistantMessage 
     timestamp,
     provider,
     model,
-    usage,
+    usage: {
+      ...usage,
+      cacheWriteSupported:
+        usage.cacheWrite > 0 ||
+        message.api === 'anthropic-messages' ||
+        message.api === 'bedrock-converse-stream'
+          ? true
+          : undefined,
+    },
     stopReason: ['stop', 'length', 'toolUse', 'error', 'aborted'].includes(stopReason)
       ? (stopReason as NativeAssistantMessage['stopReason'])
       : 'error',

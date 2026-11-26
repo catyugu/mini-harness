@@ -2,7 +2,12 @@ import type { Context } from 'mini-harness/cordis';
 import type { SessionDisplayRecord } from '@mini-harness/sessions/display-record';
 import type { HistoryEntry, MessageContent, ViewMessage } from '@mini-harness/sessions/message';
 import type { RunInfo, RunTermination } from '@mini-harness/sessions/run-state';
-import type { MessageAction, MessageActionContext, MessageActionTarget } from '../history-api.ts';
+import type {
+  MessageAction,
+  MessageActionContext,
+  MessageActionTarget,
+  TurnFooterRenderer,
+} from '../history-api.ts';
 import { icon } from '@mini-harness/ui-primitives/icons';
 import { renderMarkdown } from '@mini-harness/ui-primitives/markdown';
 import { imageMime } from './attachment-card.ts';
@@ -31,6 +36,7 @@ export function createMessageView(
     },
     { once: true },
   );
+  const footers = new WeakMap<HTMLElement, Map<TurnFooterRenderer, HTMLElement>>();
   const actionContext = new WeakMap<HTMLElement, Omit<MessageActionContext, 'signal'>>();
   const actionOwners = new WeakMap<HTMLButtonElement, MessageAction>();
   const nodes = new Map<string, { node: HTMLElement; source: unknown }>();
@@ -501,8 +507,32 @@ export function createMessageView(
             return node;
           });
           const children = row.parts.map(renderPart);
-          if (row.target)
+          if (row.target) {
             children.push(messageActions(wrapper, row.target, row.target.messages.at(-1)!.timestamp));
+            const { sessionId } = current();
+            if (sessionId) {
+              let rendered = footers.get(wrapper);
+              if (!rendered) footers.set(wrapper, (rendered = new Map()));
+              for (const render of extensions.turnFooters()) {
+                let node = rendered.get(render);
+                if (!node) {
+                  const lifetime = new AbortController();
+                  const context = { sessionId, messageId: row.target.id, signal: lifetime.signal };
+                  try {
+                    node = render(context);
+                    rendered.set(render, node);
+                    resources.set(node, lifetime);
+                  } catch (error) {
+                    lifetime.abort();
+                    extensions.report(error);
+                    continue;
+                  }
+                }
+                children.push(node);
+              }
+              for (const [render, node] of rendered) if (!children.includes(node)) rendered.delete(render);
+            }
+          }
           reconcile(wrapper, children);
           return wrapper;
         }

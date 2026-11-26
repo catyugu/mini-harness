@@ -3,7 +3,7 @@ import type { RecordAppend } from './shared/display-record.ts';
 import { userContent } from './user-content.ts';
 import type { RunInfo } from './shared/run-state.ts';
 import { runFromEntry } from './log-api.ts';
-import type { SessionEntry, SessionLogPort } from './log-api.ts';
+import type { SessionEntry, SessionLogPort, SessionLogReader } from './log-api.ts';
 import { DomainError } from '@mini-harness/platform/errors';
 import { randomUUID } from 'node:crypto';
 import { lstatSync, unlinkSync } from 'node:fs';
@@ -402,24 +402,7 @@ export class SessionRegistry implements SessionStore {
     return target;
   }
 
-  inspectLog<T>(
-    id: string,
-    read: (
-      log: Pick<
-        SessionLogPort,
-        | 'entries'
-        | 'setting'
-        | 'requestDefinition'
-        | 'requestSnapshot'
-        | 'branch'
-        | 'projection'
-        | 'queue'
-        | 'inbox'
-        | 'inboxPaused'
-      >,
-    ) => T,
-    strict = false,
-  ): T | undefined {
+  inspectLog<T>(id: string, read: (log: SessionLogReader) => T, strict = false): T | undefined {
     const existing = this.logs.get(id);
     if (existing) return read(existing.port);
     const record = this.get(id);

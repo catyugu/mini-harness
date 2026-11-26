@@ -73,7 +73,7 @@
   border: 1px solid var(--border);
   border-radius: 8px;
 }
-#modelResults {
+.model-results {
   min-height: 0;
   overflow: auto;
   overscroll-behavior: contain;
@@ -85,7 +85,7 @@
   line-height: 1.4;
   color: var(--muted);
 }
-#modelResults .model-option {
+.model-results .model-option {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -101,32 +101,32 @@
   min-width: 0;
   flex: 1;
 }
-#modelResults .model-option strong,
-#modelResults .model-option small {
+.model-results .model-option strong,
+.model-results .model-option small {
   display: block;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   text-align: left;
 }
-#modelResults .model-option strong {
+.model-results .model-option strong {
   font-weight: 550;
 }
-#modelResults .model-option small {
+.model-results .model-option small {
   font-size: var(--font-caption);
   color: var(--muted);
 }
-#modelResults .model-option[aria-selected='true'] {
+.model-results .model-option[aria-selected='true'] {
   background: var(--selected);
 }
-#modelResults .model-option[aria-selected='true']::after {
+.model-results .model-option[aria-selected='true']::after {
   content: '✓';
   flex: 0 0 auto;
   margin-left: auto;
   color: var(--focus);
   font-size: var(--font-ui);
 }
-#modelResults .model-option.highlighted {
+.model-results .model-option.highlighted {
   outline: none;
   background: var(--hover);
 }

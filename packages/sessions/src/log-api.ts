@@ -50,6 +50,7 @@ export interface ModelAttempt {
   requestId: string;
   runId?: string;
   summary?: true;
+  step?: number;
   elapsedMs: number;
   firstTokenMs?: number;
   usage?: NativeUsage;
@@ -154,3 +155,19 @@ export interface SessionLogPort {
   /** Reconstruct exact model-visible inputs for audits, including distinct tool schemas. */
   requestSnapshot(id: string): ModelRequestSnapshot & { messages: NativeMessage[] };
 }
+
+/** Non-mutating operations available while inspecting a closed conversation log. */
+export type SessionLogReader = Pick<
+  SessionLogPort,
+  | 'entries'
+  | 'setting'
+  | 'originalMessage'
+  | 'context'
+  | 'requestDefinition'
+  | 'requestSnapshot'
+  | 'branch'
+  | 'projection'
+  | 'queue'
+  | 'inbox'
+  | 'inboxPaused'
+>;

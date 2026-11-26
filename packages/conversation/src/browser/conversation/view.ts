@@ -22,11 +22,13 @@ export function mountConversationLayout(ctx: Context) {
         <div id="queuedMessages" class="queued-messages" hidden></div>
         <div id="status" class="status" role="status"></div>
         <div id="composerOutlet"></div>
+        <div id="composerFooter"></div>
       </div>
     </div>`);
   ctx.effect(() => ctx.miniSlots.register('conversation.body', view));
   const { element } = scopedElements(view);
   ctx.effect(() => ctx.miniSlots.define('conversation.composer-view', element('composerOutlet'), 'single'));
+  ctx.effect(() => ctx.miniSlots.define('conversation.composer-footer', element('composerFooter')));
   ctx.effect(() => ctx.miniSlots.define('conversation.history', element('conversationHistory'), 'single'));
   ctx.effect(() => ctx.miniSlots.define('conversation.approvals', element('approvalRequests')));
   ctx.effect(() => ctx.miniSlots.define('workspace.welcome', element('workspaceWelcome'), 'single'));

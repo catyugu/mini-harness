@@ -33,6 +33,7 @@ export interface NativeUsage {
   cacheRead: number;
   cacheWrite: number;
   totalTokens: number;
+  cacheWriteSupported?: true;
   cacheWrite1h?: number;
   reasoning?: number;
   cost?: {
@@ -49,6 +50,20 @@ export interface NativeUserMessage {
   content: string | (TextPart | ImagePart)[];
   timestamp: number;
 }
+export type ModelErrorKind = 'context-overflow' | 'image-limit' | 'transient' | 'permanent';
+
+export interface InputTokenCounts {
+  system: number;
+  tools: number;
+  messages: number;
+}
+
+export interface ModelAttemptMetrics {
+  elapsedMs: number;
+  firstTokenMs?: number;
+  usage?: NativeUsage;
+}
+
 export interface NativeAssistantMessage {
   role: 'assistant';
   content: (TextPart | ThinkingPart | ToolCallPart)[];
@@ -58,6 +73,7 @@ export interface NativeAssistantMessage {
   usage?: NativeUsage;
   stopReason?: 'stop' | 'length' | 'toolUse' | 'error' | 'aborted';
   errorMessage?: string;
+  errorKind?: ModelErrorKind;
   /** JSON-only continuation/signature metadata interpreted exclusively by the LLM adapter. */
   providerData?: Record<string, unknown>;
 }
@@ -168,6 +184,9 @@ export interface LlmAdapter {
   /** Pure predicate on the model choice; do not re-enter aggregate catalog or adapter selection. */
   accepts(model: Readonly<ModelChoice>): boolean;
   stream(request: LlmRequest): AsyncIterable<LlmEvent>;
+  /** Optional counters for the provider's actual request representation. */
+  countInputTokens?(request: LlmRequest): InputTokenCounts | Promise<InputTokenCounts>;
+  classifyError?(error: unknown): ModelErrorKind | undefined;
 }
 
 export interface LlmPort {

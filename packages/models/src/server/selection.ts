@@ -71,7 +71,12 @@ export function assertImageInput(capabilities: Capabilities, count: number) {
 export function prepareModelMessages(capabilities: Capabilities, messages: NativeMessage[]): NativeMessage[] {
   if (capabilities?.input.includes('image')) return messages;
   return messages.map((message) => {
-    if (message.role === 'assistant' || !Array.isArray(message.content)) return message;
+    if (
+      message.role === 'assistant' ||
+      !Array.isArray(message.content) ||
+      !message.content.some(({ type }) => type === 'image')
+    )
+      return message;
     return {
       ...message,
       content: message.content.map((part) =>
