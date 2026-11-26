@@ -71,7 +71,8 @@ export class ContextManagement {
     )
       return;
     measured.requestId = requestId;
-    if (measured.adapter) this.meter.calibrate(measured.occupancy, measured.occupancy, measured.adapter, usage);
+    if (measured.adapter)
+      this.meter.calibrate(measured.occupancy, measured.occupancy, measured.adapter, usage);
   }
 
   prepare(

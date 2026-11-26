@@ -39,7 +39,10 @@ export function prune(
   const { contextMessages, contextEntryIds, contextRevisions } = projection;
   const replacements: ContextReplacement[] = [];
   const tools = new Map(
-    ctx.get('harnessTools')?.list({ resourceId: log.sessionId }).map((tool) => [tool.name, tool]),
+    ctx
+      .get('harnessTools')
+      ?.list({ resourceId: log.sessionId })
+      .map((tool) => [tool.name, tool]),
   );
   const originals = new Map<string, string>();
   let latestUser = contextMessages.length - 1;
@@ -84,7 +87,14 @@ export function prune(
           return [entry];
         }
       }
-      if (part.type === 'text' && position === 0 && message.role === 'user' && index < latestUser && options.offload && fresh) {
+      if (
+        part.type === 'text' &&
+        position === 0 &&
+        message.role === 'user' &&
+        index < latestUser &&
+        options.offload &&
+        fresh
+      ) {
         const entry = log.entry(id);
         if (
           entry?.type === 'message' &&

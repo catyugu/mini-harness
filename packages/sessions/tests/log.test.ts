@@ -49,9 +49,28 @@ test('historical context records migrate once without changing source identity',
   const editId = 'a'.repeat(32);
   const compactId = 'b'.repeat(32);
   const historical = encodeLog(JSON.parse(log.serialize().split('\n')[0]), [
-    first, second,
-    { type: 'context-edit', targetId: first.id, replacement: 'shortened', id: editId, seq: 3, parentId: second.id, timestamp, version: 1 },
-    { type: 'compaction', summary: 'checkpoint', keepFromId: second.id, id: compactId, seq: 4, parentId: editId, timestamp, version: 1 },
+    first,
+    second,
+    {
+      type: 'context-edit',
+      targetId: first.id,
+      replacement: 'shortened',
+      id: editId,
+      seq: 3,
+      parentId: second.id,
+      timestamp,
+      version: 1,
+    },
+    {
+      type: 'compaction',
+      summary: 'checkpoint',
+      keepFromId: second.id,
+      id: compactId,
+      seq: 4,
+      parentId: editId,
+      timestamp,
+      version: 1,
+    },
   ] as Parameters<typeof encodeLog>[1]);
   log.close();
   writeFileSync(file, historical);
