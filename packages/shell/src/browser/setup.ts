@@ -14,7 +14,13 @@ function renderResult(tool: ToolView) {
   try {
     const output = JSON.parse(result);
     pre.textContent =
-      'Exit ' + output.code + '\n' + (output.stdout ?? '') + (output.stderr ? '\n' + output.stderr : '');
+      'Exit ' +
+      output.code +
+      '\n' +
+      (output.stdout ?? '') +
+      (output.stdoutOverflow ? '\n[Remaining stdout: ' + output.stdoutOverflow + ']' : '') +
+      (output.stderr ? '\n' + output.stderr : '') +
+      (output.stderrOverflow ? '\n[Remaining stderr: ' + output.stderrOverflow + ']' : '');
   } catch {
     pre.textContent = result;
   }

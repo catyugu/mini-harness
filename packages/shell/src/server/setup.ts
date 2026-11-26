@@ -31,8 +31,7 @@ export function setup(ctx: Context) {
       execute: async (args, { signal, write }): Promise<ToolResult> => {
         const cwd = workspace.workspacePath(sessionId);
         if (!cwd) throw new DomainError('unavailable', 'Shell requires a workspace');
-        const allowed = () => caller.get('harnessToolPolicy')?.(sessionId, { name: 'shell' }) ?? true;
-        if (!allowed()) throw new Error('Tool denied by conversation policy: shell');
+        if (caller.get('harnessToolPolicy')?.(sessionId, { name: 'shell' }) === false) throw new Error('Tool denied by conversation policy: shell');
         signal?.throwIfAborted();
         const execution = caller.get('harnessProcess');
         if (!execution) throw new Error('Process execution is unavailable');

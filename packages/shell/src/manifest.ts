@@ -3,12 +3,20 @@ import type { Plugin } from 'mini-harness/cordis';
 import type { PluginInfo } from '@mini-harness/plugin-api/descriptor';
 import { setup } from './server/setup.ts';
 import { Type } from 'typebox';
+
 const Config = defineConfig({
   ...Type.Object(
     {
-      timeoutMs: Type.Integer({ title: 'Command timeout (ms)', minimum: 1, maximum: 86400000, default: 120000 }),
+      timeoutMs: Type.Integer({
+        title: 'Command timeout (ms)',
+        description: 'Terminate a command if it runs longer than this duration.',
+        minimum: 1,
+        maximum: 86400000,
+        default: 120000,
+      }),
       maxOutputBytes: Type.Integer({
-        title: 'Captured output limit per stream (bytes)',
+        title: 'Output limit per stream (bytes)',
+        description: 'Additional output is saved to a temporary file.',
         minimum: 1,
         maximum: 1048576,
         default: 64000,
