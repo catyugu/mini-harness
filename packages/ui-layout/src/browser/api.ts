@@ -39,7 +39,7 @@ export interface PageContribution {
 declare module 'mini-harness/cordis' {
   interface Context {
     miniLayout: { closeDrawer(restore?: boolean): void };
-    miniHeader: { setTitle(title: string): void; showContext(show: boolean): void };
+    miniHeader: { setTitle(title: string): void };
     miniPages: {
       open(id?: string): void;
       register(id: string, node: HTMLElement): () => void;

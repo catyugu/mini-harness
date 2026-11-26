@@ -17,15 +17,15 @@ const setup = (ctx: Context) => {
     label.className = 'ui-truncate ui-meta';
     node.append(icon('folder'), label);
     ctx.effect(() => ctx.miniSlots.register(slot, node, { order: -100 }));
-    return { node, label };
+    return { node, label, slot };
   });
   ctx.provide('miniWorkspace', picker);
   const update = () => {
     const selected = workspaces.get().find(({ id }) => id === select.selectedWorkspace);
-    for (const { node, label } of badges) {
+    for (const { node, label, slot } of badges) {
       label.textContent = selected?.path ?? '';
       node.title = selected?.path ?? '';
-      node.hidden = !selected;
+      node.hidden = !selected || (slot === 'header.context' ? !select.activeConversation : !!select.activeConversation);
     }
     tabs.selectWorkspace(selected?.id);
     tabs.prune(new Set(workspaces.get().map(({ id }) => id)));

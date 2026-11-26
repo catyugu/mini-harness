@@ -31,7 +31,6 @@ interface NavigationServices {
   removeWorkspace(record: WorkspaceRecord): Promise<void>;
   clearConversation(): void;
   report(error: Error): void;
-  setTitle(title: string): void;
 }
 
 export function sessionNavigation(ctx: Context, options: NavigationServices) {
@@ -425,10 +424,7 @@ export function sessionNavigation(ctx: Context, options: NavigationServices) {
     for (const id of selection) if (!available.has(id)) selection.delete(id);
     const active = sessions.find(({ id }) => id === state.activeConversation);
     if (state.activeConversation && !available.has(state.activeConversation)) options.clearConversation();
-    else {
-      if (active) options.setTitle(active.title);
-      render();
-    }
+    else render();
   }
   state.subscribe(update, signal);
   sessionStore.subscribe(update, signal);

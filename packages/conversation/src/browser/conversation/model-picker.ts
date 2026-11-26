@@ -147,12 +147,6 @@ export function createModelPicker(
       highlight((cursor + (event.key === 'ArrowDown' ? 1 : -1) + options.length) % options.length);
     }
   };
-  popup.addEventListener('toggle', () =>
-    button.setAttribute('aria-expanded', String(popup.matches(':popover-open'))),
-  );
-  window.addEventListener('resize', position, { signal });
-  window.visualViewport?.addEventListener('resize', position, { signal });
-
   return {
     open,
     selected: () => selected,

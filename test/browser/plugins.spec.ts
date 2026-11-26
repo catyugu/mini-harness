@@ -56,6 +56,9 @@ import { browserPluginId, browserPluginSettings } from "mini-harness/ui-runtime/
 export function apply(ctx, config) {
     const signal = ctx.fiber.signal;
     const { miniPrimitives, miniComposer } = ctx;
+    const context = document.createElement('span');
+    context.textContent = 'Custom header context';
+    ctx.effect(() => ctx.miniSlots.register('header.context', context));
     for (const slot of ['sidebar','composer','inspector']) {
       const node = document.createElement('button');
       if (node.tagName === 'BUTTON') node.type = 'button';
@@ -123,6 +126,7 @@ export function apply(ctx) {
   try {
     await page.goto(service.url + '/#token=' + service.token);
     await expect(page.getByRole('button', { name: 'Plugin entry', exact: true })).toBeVisible();
+    await expect(page.getByText('Custom header context', { exact: true })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Dependent Plugin entry', exact: true })).toBeVisible();
     await page.getByRole('button', { name: 'Plugin composer', exact: true }).click();
     await expect(page.getByRole('textbox', { name: 'Message', exact: true })).toHaveText(

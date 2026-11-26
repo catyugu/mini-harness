@@ -45,12 +45,18 @@ export function mountConversationLayout(ctx: Context) {
     const welcome = !busy && !isRunning(state.run) && !state.history?.timeline.some(hasContent);
     element('welcome').hidden = !welcome;
     element('conversationHistory').hidden = welcome;
-    ctx.miniHeader.showContext(!welcome);
-    ctx.miniHeader.setTitle(state.session?.title ?? 'New conversation');
     element('status').textContent = state.interaction.status;
     element('status').classList.toggle('error', Boolean(state.interaction.error));
     previous = state;
   }
+  function renderTitle() {
+    const session = control.get().session;
+    const latest = ctx.miniSessions.get().find(({ id }) => id === session?.id);
+    ctx.miniHeader.setTitle(latest?.title ?? session?.title ?? 'New conversation');
+  }
+  control.subscribe(['session'], renderTitle, signal);
+  ctx.miniSessions.subscribe(renderTitle, signal);
   control.subscribe(['session', 'history', 'run', 'queue', 'interaction'], render, signal);
+  renderTitle();
   render();
 }
