@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { TaskRuntime } from '../src/runtime.ts';
+import { Context } from 'mini-harness/cordis';
+import type { TaskHandle } from '../src/api.ts';
 
 function gate() {
   let release!: () => void;
@@ -256,4 +258,70 @@ test('a cancellation during running observation prevents invocation of executor 
   await assert.rejects(handle.result, /cancelled/);
   assert.equal(executed, false);
   assert.equal(runtime.get(handle.id)?.state, 'cancelled');
+});
+
+test('creator disposal does not cancel a task executed by another provider fiber', async () => {
+  const runtime = new TaskRuntime();
+  const ctx = new Context();
+  ctx.provide('harnessTasks', runtime.service());
+  const entered = gate();
+  const cleaning = gate();
+  const release = gate();
+  const provider = ctx.plugin(() => {});
+  await provider;
+  let handle!: TaskHandle<void>;
+  let observations = 0;
+  const creator = ctx.plugin({
+    inject: ['harnessTasks'],
+    apply(caller) {
+      caller.harnessTasks.subscribe(() => { observations++; });
+      handle = caller.harnessTasks.start({ owner: 'resource', provider: provider.ctx }, async ({ signal }) => {
+        entered.release();
+        await new Promise<void>((_, reject) => {
+          if (signal.aborted) reject(signal.reason);
+          else signal.addEventListener('abort', () => reject(signal.reason), { once: true });
+        }).finally(async () => {
+          cleaning.release();
+          await release.promise;
+        });
+      });
+    },
+  });
+  try {
+    await creator;
+    await entered.promise;
+    await creator.dispose();
+    assert.equal(handle.signal.aborted, false);
+    const count = observations;
+    const stopping = provider.dispose();
+    await cleaning.promise;
+    assert.equal(handle.signal.aborted, true);
+    assert.equal(runtime.get(handle.id)?.state, 'running');
+    release.release();
+    await stopping;
+    await assert.rejects(handle.result);
+    assert.equal(runtime.get(handle.id)?.state, 'cancelled');
+    assert.equal(observations, count);
+  } finally {
+    release.release();
+    await creator.dispose();
+    await provider.dispose();
+    await runtime.stop();
+  }
+});
+
+test('observation data is detached from arbitrary result objects', async () => {
+  const runtime = new TaskRuntime();
+  const metadata = { nested: { value: 'original' } };
+  const result = { value: 'answer' };
+  const handle = runtime.start<{ value: string }>({ owner: 'one', metadata, projectResult: (value) => value }, async () => result);
+  metadata.nested.value = 'modified';
+  assert.strictEqual(await handle.result, result);
+  result.value = 'modified';
+  const snapshot = runtime.get(handle.id)!;
+  assert.deepEqual(snapshot.result, { value: 'answer' });
+  assert.deepEqual(snapshot.metadata, { nested: { value: 'original' } });
+  const copy = snapshot.result as { value: string };
+  copy.value = 'modified again';
+  assert.deepEqual(runtime.get(handle.id)?.result, { value: 'answer' });
 });

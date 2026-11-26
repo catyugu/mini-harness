@@ -13,7 +13,7 @@ Waiters settle after durable lifecycle recording and before regular observer cal
 `subscribe` observes creation, updates, output and removal from the recent runtime view. Subscriptions
 are scoped to the consumer fiber. Output uses absolute UTF-8 byte cursors and channel names.
 `retain: false` removes a task after settlement; otherwise the runtime retains at most 256 recent
-terminal snapshots (without their result promises or executor closures). `projectResult` selects the
+terminal snapshots, subject also to a 16 MiB aggregate observation/output budget (without their result promises or executor closures). `projectResult` selects the
 serializable observation result independently of the actual JavaScript value returned by the handle.
 
 Resource domains may handle the Cordis `tasks/admit`, `tasks/record` and `tasks/history` events.

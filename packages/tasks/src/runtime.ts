@@ -24,6 +24,8 @@ interface Entry {
 
 const describe = (error: unknown) => (error instanceof Error ? error.message : String(error));
 const clone = <T>(value: T): T => structuredClone(value);
+// Observation data crosses the JSON persistence boundary, unlike handle results.
+const jsonData = <T>(value: T): T => value === undefined ? value : JSON.parse(JSON.stringify(value));
 const taskOwner = (id: string) => 'task:' + id;
 
 export class TaskRuntime implements TaskPort {
@@ -94,7 +96,7 @@ export class TaskRuntime implements TaskPort {
     const signal = AbortSignal.any(signals);
     signal.throwIfAborted();
     const snapshot: TaskSnapshot = {
-      ...clone(metadata),
+      ...jsonData(metadata),
       id: randomUUID(),
       state: 'queued',
       createdAt: new Date().toISOString(),
@@ -140,7 +142,7 @@ export class TaskRuntime implements TaskPort {
     const context: TaskContext = {
       id: snapshot.id,
       signal,
-      update: (progress) => update({ progress }),
+      update: (progress) => update({ progress: jsonData(progress) }),
       write: (text, channel = 'log') => {
         if (terminal(snapshot.state) || !text) return;
         entry.output.write(text, channel);
@@ -182,7 +184,7 @@ export class TaskRuntime implements TaskPort {
         await enter();
         signal.throwIfAborted();
         value = await execute(context);
-        if (!signal.aborted && projectResult) projected = clone(projectResult(value));
+        if (!signal.aborted && projectResult) projected = jsonData(projectResult(value));
       } catch (error) {
         failure = { error };
       }

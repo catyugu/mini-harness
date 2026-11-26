@@ -129,3 +129,5 @@ Plugin records use a typed payload (`PluginRecord<Data>` / `SessionRecords<Data>
 A failed run records the stable entry ID for its active input, including inbox deliveries. An explicit retry can retrieve that input from the native log. A null ID indicates the run failed before accepting the current submission. Older records with ambiguous input or missing attachment content require user input before resubmission.
 
 File Preview reads stored attachment bytes through the conversation attachment endpoint. Workspace references remain part of the original user text and resolve through File Access when opened.
+
+Retained independent work adds operational `task` records to the same log. The task ID is independent of record identity. State transitions do not move the conversation branch. Terminal records can include a compact result projection and bounded output with absolute byte cursors; ordinary inline tool results remain in the existing tool execution/acceptance records. A run uses its Task ID as the Run ID rather than duplicating lifecycle records. On recovery, an unfinished task is marked `interrupted` and never automatically executed again.

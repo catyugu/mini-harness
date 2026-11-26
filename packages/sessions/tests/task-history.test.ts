@@ -30,6 +30,12 @@ test('durable retained tasks recover by ID without reconstructing execution hand
     });
   });
   await ctx.harnessTasks.wait(unfinished.id, ({ state }) => state === 'running');
+  // Simulate a committed task acceptance whose executor was lost without settlement.
+  const lost = 'lost-task';
+  ctx.harnessSessions.log(session.id).append({ type: 'task', task: {
+    id: lost, owner, state: 'running', createdAt: new Date().toISOString(),
+    cancellationRequested: false, outputCursor: 0, retained: true,
+  }});
   await app.close();
   await assert.rejects(unfinished.result);
   app = await createMiniHarnessServer(paths);
@@ -40,6 +46,8 @@ test('durable retained tasks recover by ID without reconstructing execution hand
   ]);
   assert.equal(ctx.harnessTasks.get(run.id)?.state, 'completed');
   assert.equal(ctx.harnessTasks.get(unfinished.id)?.state, 'interrupted');
+  assert.equal(ctx.harnessTasks.get(lost)?.state, 'interrupted');
+  assert.ok(ctx.harnessSessions.log(session.id).entries().some((entry) => entry.type === 'task' && entry.task.id === lost && entry.task.state === 'interrupted'));
   assert.equal(ctx.harnessTasks.cancel(done.id), false);
   assert.equal(ctx.harnessTasks.list().length, 0);
   await ctx.harnessSessions.delete([session.id]);

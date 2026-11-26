@@ -16,6 +16,10 @@ The Profile composition owner serializes configuration edits and applies each ca
 
 Each activation has an abort signal. Teardown aborts and drains work registered with `fiber.run()` and then releases effects. Cordis retains injected services while dependents dispose. Transport routes, long-running work and browser views also have lifetimes owned by their domains.
 
+## Execution
+
+Tasks supplies the common asynchronous runtime. A caller starts one task and chooses whether to await its handle; the resource owner and executing Cordis fiber constrain its lifetime. Runs supplies session admission and durable Run projections, Tools supplies model protocol delivery, and Subagents supplies recursion and capacity policy. Shell streams process output into the tool task. Sessions persists retained task facts and recovers interrupted work without retaining historical execution handles.
+
 ## File interaction
 
 File Access opens an explicit directory and enforces path containment. Workspace routes and Agent tools resolve the directory and scoped service before opening it. Files and Shell publish changes with workspace IDs as projection resource IDs. Files owns file browsing, search and composer completion. File Preview renders workspace resources, stored attachments and draft bytes. Git Diff owns the Git changes list and diff tabs. Sessions owns the stored attachment bytes and their conversation identity.
@@ -24,6 +28,6 @@ Layout registers typed views and opens tabs by their stable key and workspace ow
 
 ## Plugin SDK
 
-The single npm package exports Cordis and domain contracts directly, including `mini-harness/agent`, `mini-harness/llm`, `mini-harness/tools`, `mini-harness/sessions` and `mini-harness/ui-slots`. Plugins import the services and events they consume. Browser modules use an import map restricted to public browser-safe modules.
+The single npm package exports Cordis and domain contracts directly, including `mini-harness/agent`, `mini-harness/llm`, `mini-harness/tools`, `mini-harness/tasks`, `mini-harness/runs`, `mini-harness/sessions` and `mini-harness/ui-slots`. Plugins import the services and events they consume. Browser modules use an import map restricted to public browser-safe modules.
 
 See the [plugin guide](plugins.md), [scoped providers](scoped-providers.md) and [session log](session-log.md).
