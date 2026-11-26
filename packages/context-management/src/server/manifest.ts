@@ -29,19 +29,13 @@ function setup(ctx: Context) {
     notify,
   );
   const statistics = new WeakMap<Pick<SessionLogPort, 'entries'>, Statistics>();
-  ctx.on('agent/prepare-request', (request, step) => {
-    const scoped = ctx.harnessProfileScopes.context(`session:${step.sessionId}`);
-    return manager.prepare(
-      scoped,
-      sessions.log(step.sessionId),
-      request,
-      step.rebuild,
-      step.runId,
-      step.recovery,
+  ctx.on('agent/setup', (run, id) => {
+    run.on('agent/prepare-request', (request, step) =>
+      manager.prepare(run, sessions.log(id), request, step.rebuild, step.runId, step.recovery),
     );
-  });
-  ctx.on('agent/request-attempt', (id, requestId, metrics) => {
-    if (metrics.usage) manager.observe(sessions.log(id), requestId, metrics.usage);
+    run.on('agent/request-attempt', (_, requestId, metrics) => {
+      if (metrics.usage) manager.observe(sessions.log(id), requestId, metrics.usage);
+    });
   });
   ctx.effect(() => changes.register('context-management'));
   ctx.effect(() => ctx.harnessProfileConfig.subscribe(() => notify()));

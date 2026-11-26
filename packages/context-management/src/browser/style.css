@@ -107,8 +107,15 @@
     gap: 0.15rem;
   }
   .context-statistic {
-    font-size: 10px;
     padding-inline: 0.1rem;
+  }
+  .context-status > div {
+    min-width: 0;
+  }
+  .context-status .context-statistic {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
   .context-speed {
     display: none;

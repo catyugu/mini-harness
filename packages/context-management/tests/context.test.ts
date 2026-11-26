@@ -86,6 +86,8 @@ test('a single user turn supports repeated token-budget compaction while tools e
     1,
   );
   assert.ok(log.entries().filter(({ type }) => type === 'context-replace').length >= 2);
+  const submitted = log.projection().timeline.find((entry) => entry.type === 'message' && entry.role === 'user');
+  assert.ok(submitted && log.context().contextEntryIds.includes(submitted.id));
   assertPaired(log, mock);
 
   const { body: state } = await request(path + '/context');
@@ -167,6 +169,7 @@ test('session overrides inherit defaults, reject invalid ratios and accept unstr
   const { body: session } = await request('/sessions', 'POST', {});
   const path = '/sessions/' + session.id;
   assert.equal((await request(path + '/context', 'PUT', { ...settings, targetRatio: 0.85 })).status, 400);
+  assert.equal((await request(path + '/context', 'PUT', { autoCompact: false })).status, 400);
   assert.equal((await request(path + '/context', 'PUT', { ...settings, autoCompact: false })).status, 200);
   await app.runtime.configuration.update({
     entries: { 'context-management': { config: { triggerRatio: 0.9 } } },

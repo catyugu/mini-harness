@@ -76,6 +76,7 @@ test('context settings and statistics stay usable at desktop and mobile widths',
     await plugin.uncheck();
     await expect(plugin).toBeEnabled();
     await expect(status).toHaveCount(0);
+    await expect(settings).toHaveCount(0);
     await page.getByRole('button', { name: 'All settings' }).click();
     await settingsSection(page, 'General').click();
     await expect(page.getByRole('heading', { name: 'Context Management' })).toHaveCount(0);

@@ -138,10 +138,10 @@ export class ContextManagement {
       return finish();
     }
 
+    const fixed = occupancy.system + occupancy.tools;
     const target = Math.floor(
-      (repair || manual
-        ? Math.min(budget ?? occupancy.total, occupancy.total)
-        : (budget ?? occupancy.total)) * config.targetRatio,
+      repair ? Math.min(budget ?? Infinity, fixed + occupancy.messages * config.targetRatio)
+        : budget !== undefined ? budget * config.targetRatio : fixed + occupancy.messages * config.targetRatio,
     );
     const needsSummary =
       manual ||
@@ -159,7 +159,7 @@ export class ContextManagement {
     try {
       do {
         const minimum = Math.floor((budget ?? occupancy.messages) * config.retainRatio);
-        const retain = Math.max(1, Math.min(minimum, Math.floor(occupancy.messages * config.retainRatio)));
+        const retain = Math.max(1, manual || repair ? Math.min(minimum, Math.floor(occupancy.messages * config.retainRatio)) : minimum);
         const { contextMessages, contextEntryIds } = projection;
         const latestUser = contextMessages.reduce(
           (latest, message, index) =>
@@ -174,9 +174,8 @@ export class ContextManagement {
           force ? Math.max(0, target - occupancy.system - occupancy.tools) : undefined,
         );
         if (cut === latestUser + 1) cut = latestUser;
-        const selected = contextMessages.slice(0, cut).filter((_, index) => index !== latestUser);
-        const source = log.entry(contextEntryIds[0]);
-        if (!selected.length || (selected.length === 1 && source?.type === 'context-replace' && cut === 1)) {
+        const selected = contextEntryIds.slice(0, cut).filter((_, index) => index !== latestUser);
+        if (!selected.length || (selected.length === 1 && log.entry(selected[0])?.type === 'context-replace')) {
           if (reduced || (pruned && (manual || repair))) break;
           fail('Nothing to compact within the recent-context budget');
         }

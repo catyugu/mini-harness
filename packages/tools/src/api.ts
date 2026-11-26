@@ -35,7 +35,7 @@ export interface ToolDefinition<Arguments = Record<string, any>> extends ToolSch
   /** Compact observation for independent execution. */
   projectResult?(result: ToolResult): Record<string, unknown>;
   /** Select diagnostic text for a shortened model-visible result. */
-  pruneResult?(text: string, maxCharacters: number): string;
+  pruneResult?(text: string, maxCharacters: number): string | undefined;
   execute(args: Arguments, context: ToolContext): Promise<ToolResult>;
 }
 

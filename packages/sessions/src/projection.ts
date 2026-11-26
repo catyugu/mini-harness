@@ -107,9 +107,9 @@ export function applyReplacements(
       !Number.isSafeInteger(deleteCount) ||
       start < 0 ||
       deleteCount < 0 ||
-      (deleteCount === 0 && insert.length === 0) ||
       start + deleteCount > end ||
       !Array.isArray(insert) ||
+      (deleteCount === 0 && insert.length === 0) ||
       (preserveSource && insert.length !== deleteCount)
     )
       throw new Error('Invalid context replacement interval');

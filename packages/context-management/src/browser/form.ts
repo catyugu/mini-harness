@@ -46,6 +46,7 @@ export function settingsForm(
   node.append(heading, fields, error);
   let current: ContextSettings;
   let editable = true;
+  let scope: string | undefined;
   let busy = false;
   function renderModels() {
     const selected = model.value || JSON.stringify(current?.summaryModel ?? null);
@@ -87,10 +88,11 @@ export function settingsForm(
   };
   return {
     node,
-    update(next: ContextSettings, enabled = true) {
-      editable = enabled;
+    update(next: ContextSettings, enabled = true, nextScope?: string) {
       fields.disabled = busy || !enabled;
-      if (current && JSON.stringify(current) === JSON.stringify(next)) return;
+      if (current && editable === enabled && scope === nextScope && JSON.stringify(current) === JSON.stringify(next)) return;
+      editable = enabled;
+      scope = nextScope;
       current = next;
       auto.checked = next.autoCompact;
       for (const { key, input } of ratios) input.value = String(Number((next[key] * 100).toFixed(4)));

@@ -71,7 +71,7 @@ export class AgentLoop implements AgentPort {
           errorKind,
           errorMessage ?? 'Model input limit exceeded',
         );
-        if (!recovered) break;
+        if (!recovered || isDeepStrictEqual(recovered.request, request)) break;
         step = recovered;
         input.onEvent?.({ type: 'assistant-start' });
       }

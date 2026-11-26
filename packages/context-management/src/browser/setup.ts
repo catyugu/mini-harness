@@ -289,7 +289,7 @@ function mountStats(ctx: Context) {
           return;
         }
         mode.value = state.custom ? 'custom' : 'default';
-        form.update(state.settings, Boolean(state.custom));
+        form.update(state.settings, Boolean(state.custom), id);
         const current = conversation.get();
         compact.disabled =
           state.compacting !== 'manual' &&
