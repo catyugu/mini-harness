@@ -124,7 +124,8 @@ test('file inspection, responsive themes and reduced viewport height keep contro
           for (const markdown of [page.locator('#messages .markdown').last(), panel.locator('.markdown')]) {
             await expect(markdown.locator('p').first()).toHaveCSS('font-size', '14px');
             await expect(markdown.locator('table')).toHaveCSS('font-size', '13px');
-            await expect(markdown.getByRole('columnheader', { name: '命中数' })).toHaveCSS(
+            // The conversation is inert while the workspace panel is open on mobile.
+            await expect(markdown.locator('th').filter({ hasText: /^命中数$/ })).toHaveCSS(
               'white-space',
               'nowrap',
             );
