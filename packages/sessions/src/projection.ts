@@ -102,12 +102,13 @@ export function displayContent(event: SessionEvent): unknown {
   return value;
 }
 
-export function displayRecord(entry: SessionEntry): SessionDisplayRecord | undefined {
+export function displayRecord(entry: SessionEntry, runId?: string): SessionDisplayRecord | undefined {
   if (!entry.display) return;
   const { owner, kind, title } = entry.display;
   return {
     type: 'record',
-    id: entry.id,
+    id: entry.display.id ?? entry.id,
+    ...(runId && { runId }),
     plugin: owner.pluginId,
     instanceId: owner.instanceId,
     kind,
@@ -195,7 +196,7 @@ export function projectLog(
   }
   for (const entry of branch) {
     projectRuns(entry.seq);
-    const record = displayRecord(entry);
+    const record = displayRecord(entry, runId);
     if (record) state.timeline.push(record);
     const message = messageOf(entry);
     if (!message) continue;

@@ -13,6 +13,7 @@ import type { SendReceipt } from '@mini-harness/runs/api';
 import { defaultMessageMode, type MessageMode } from '@mini-harness/sessions/queue';
 import type { RunInfo } from '@mini-harness/sessions/run-state';
 import type { HistoryEntry } from '@mini-harness/sessions/message';
+import { updateRecords } from '@mini-harness/plugin-api/timeline';
 import { isRunning } from '@mini-harness/sessions/run-state';
 import { payload } from '@mini-harness/ui-runtime/http';
 import { workspaceRoute } from '@mini-harness/workspaces/browser/route';
@@ -30,6 +31,7 @@ export function createConversationController(ctx: Context): ConversationControll
   let state: ConversationState = {
     partial: '',
     tools: [],
+    records: [],
     queue: [],
     mode: modeFor(),
     interaction: { status: '' },
@@ -73,15 +75,16 @@ export function createConversationController(ctx: Context): ConversationControll
       history: undefined,
       partial: '',
       tools: [],
+    records: [],
       queue: [],
     });
     selection.selectConversation(item, revealWorkspace);
   }
 
   function display(item: ConversationView, signal: AbortSignal, revealWorkspace: boolean) {
-    const { run, timeline, leafId, partial = '', tools, queue, ...session } = item;
+    const { run, timeline, leafId, partial = '', tools, records, queue, ...session } = item;
     queueRevision++;
-    update({ session, run, history: { timeline, leafId }, partial, tools, queue });
+    update({ session, run, history: { timeline, leafId }, partial, tools, records, queue });
     selection.selectConversation(item, revealWorkspace);
     status(item.logError ?? '', Boolean(item.logError));
     if (!signal.aborted && isRunning(run)) void observe(item, signal);
@@ -153,10 +156,19 @@ export function createConversationController(ctx: Context): ConversationControll
           status(tool.state === 'approval' ? 'Waiting for approval…' : 'Running ' + tool.name + '…');
           break;
         }
-        case 'branch':
-          if (event.display) append(event.display);
-          update({ history: { timeline: state.history?.timeline ?? [], leafId: event.leafId } });
+        case 'record-update':
+          update({ records: updateRecords(state.records, event) });
           break;
+        case 'branch': {
+          const display = event.display;
+          const timeline = [...(state.history?.timeline ?? [])];
+          if (display) {
+            const index = timeline.findIndex(({ id }) => id === display.id);
+            timeline.splice(index < 0 ? timeline.length : index, index < 0 ? 0 : 1, display);
+          }
+          update({ history: { timeline, leafId: event.leafId }, records: display ? state.records.filter(({ id }) => id !== display.id) : state.records });
+          break;
+        }
         case 'snapshot':
           if (!isRunning(event.run)) {
             terminal = event.run;
@@ -167,6 +179,7 @@ export function createConversationController(ctx: Context): ConversationControll
             history: { timeline: event.timeline, leafId: event.leafId },
             partial: event.partial ?? '',
             tools: event.tools ?? [],
+            records: event.records,
             session: state.session && {
               ...state.session,
               model: event.model,
@@ -181,7 +194,7 @@ export function createConversationController(ctx: Context): ConversationControll
             // Keep observation active until the final authoritative conversation snapshot arrives.
             terminal = event.run;
             revision = branchRevision;
-            update({ partial: '', tools: [] });
+            update({ partial: '', tools: [], records: [] });
             interact({ cancelling: false, status: '' });
           }
           break;

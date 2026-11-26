@@ -6,6 +6,7 @@ import type {
   NativeToolMessage,
 } from '@mini-harness/llm/api';
 import type { ModelFailure, ModelRetry } from './events.ts';
+import type { RecordPresentation, RecordUpdate } from '@mini-harness/plugin-api/timeline';
 import type { ToolCallPart } from '@mini-harness/llm/api';
 import type { ToolDefinition } from '@mini-harness/tools/api';
 import type { ToolExecution, ToolExecutorPort } from '@mini-harness/tools/execution';
@@ -21,6 +22,7 @@ export interface AgentTurn {
 }
 
 export type AgentEvent =
+  | RecordUpdate
   | { type: 'phase'; phase: 'model' | 'tools'; turn: number }
   | { type: 'request'; request: Request }
   | { type: 'model-attempt'; metrics: ModelAttemptMetrics }
@@ -29,6 +31,7 @@ export type AgentEvent =
   | {
       type: 'assistant';
       message: NativeAssistantMessage;
+      display?: RecordPresentation;
       diagnostic?: {
         code: 'executor-response' | 'invalid-tool-calls';
         message: NativeAssistantMessage;

@@ -1,6 +1,7 @@
 import type { ThinkingLevel, ModelChoice } from '@mini-harness/llm/vocabulary';
 import type { Attachment, InputSource } from '@mini-harness/input/message';
 import type { RunEvent, ToolProgress } from './stream.ts';
+import type { SessionDisplayRecord } from '@mini-harness/plugin-api/timeline';
 export { defaultMessageMode, messageModes } from '@mini-harness/sessions/queue';
 export type { MessageMode, MessageOrigin } from '@mini-harness/sessions/queue';
 import type { MessageMode, MessageOrigin, QueueEntry } from '@mini-harness/sessions/queue';
@@ -33,7 +34,7 @@ export type RunPolicy = Pick<TaskOptions, 'pool' | 'provider' | 'metadata'>;
 export interface RunPort {
   readonly events: EventTarget;
   current(id: string): TaskHandle | undefined;
-  activity(id: string): { partial?: string; tools: ToolProgress[] };
+  activity(id: string): { partial?: string; tools: ToolProgress[]; records: SessionDisplayRecord[] };
   send(id: string, input: RunSubmission): SendReceipt;
   stop(id: string): boolean;
   reviseAndStart(

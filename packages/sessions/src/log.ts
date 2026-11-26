@@ -417,6 +417,7 @@ function validateEvent(event: SessionEvent) {
       !pluginIdPattern.test(owner.pluginId) ||
       typeof owner.instanceId !== 'string' ||
       !ownsRecord(owner.pluginId, owner.instanceId) ||
+      (display.id !== undefined && (typeof display.id !== 'string' || !display.id.trim())) ||
       typeof display.kind !== 'string' ||
       !display.kind.trim() ||
       typeof display.title !== 'string' ||

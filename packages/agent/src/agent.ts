@@ -1,4 +1,6 @@
 import type { Context } from 'mini-harness/cordis';
+import { randomUUID } from 'node:crypto';
+import type { RecordPresentation } from '@mini-harness/plugin-api/timeline';
 import { isDeepStrictEqual } from 'node:util';
 import {
   validateNativeMessage,
@@ -45,6 +47,11 @@ export class AgentLoop implements AgentPort {
       if (!step) throw new Error('The step was not prepared');
       input.onEvent?.({ type: 'phase', phase: 'model', turn });
       input.onEvent?.({ type: 'assistant-start' });
+      const reasoningId = randomUUID();
+      const owner = { pluginId: 'core:agent', instanceId: 'core:agent' };
+      const kind = 'reasoning';
+      const title = 'Reasoning';
+      let reasoningOpened = false;
       const original = await requestModel(
         llm,
         { ...step.request, signal },
@@ -54,6 +61,13 @@ export class AgentLoop implements AgentPort {
             input.onEvent?.({ type: 'request', request });
           },
           delta: (text) => input.onEvent?.({ type: 'delta', text }),
+          thinking(text) {
+            if (!reasoningOpened) {
+              reasoningOpened = true;
+              input.onEvent?.({ type: 'record-update', operation: 'set', record: { type: 'record', id: reasoningId, plugin: owner.pluginId, instanceId: owner.instanceId, kind, title } });
+            }
+            input.onEvent?.({ type: 'record-update', operation: 'append', id: reasoningId, channel: 'text', text });
+          },
           attempt: (metrics) => input.onEvent?.({ type: 'model-attempt', metrics }),
           retry: input.retry,
           async recover(failure) {
@@ -90,7 +104,11 @@ export class AgentLoop implements AgentPort {
       }
       validateNativeMessage(result);
       messages?.push(result);
-      input.onEvent?.({ type: 'assistant', message: result, diagnostic });
+      const display: RecordPresentation | undefined = result.content.some((part) => part.type === 'thinking' && part.thinking && !part.redacted)
+        ? { owner, kind, title, id: reasoningId, source: ['message', 'content'] }
+        : undefined;
+      if (reasoningOpened && !display) input.onEvent?.({ type: 'record-update', operation: 'remove', id: reasoningId });
+      input.onEvent?.({ type: 'assistant', message: result, diagnostic, display });
       if (failed(result)) {
         signal.throwIfAborted();
         throw new Error(result.errorMessage || 'Model request failed');

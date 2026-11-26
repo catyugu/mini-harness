@@ -10,7 +10,6 @@ import type {
 } from '../history-api.ts';
 import { icon } from '@mini-harness/ui-primitives/icons';
 import { renderMarkdown } from '@mini-harness/ui-primitives/markdown';
-import { recordRow } from '@mini-harness/ui-primitives/primitives';
 import { imageMime } from './attachment-card.ts';
 import { attachmentView } from './attachment-view.ts';
 import { renderReferences } from './file-references.ts';
@@ -41,6 +40,7 @@ export function createMessageView(
   const actionContext = new WeakMap<HTMLElement, Omit<MessageActionContext, 'signal'>>();
   const actionOwners = new WeakMap<HTMLButtonElement, MessageAction>();
   const nodes = new Map<string, { node: HTMLElement; source: unknown }>();
+  const recordUpdates = new WeakMap<HTMLElement, (record: SessionDisplayRecord) => void>();
   const preview = document.createElement('div');
   preview.className = 'message assistant';
   let following = true;
@@ -395,6 +395,7 @@ export function createMessageView(
     run: RunInfo | undefined,
     partial: string,
     tools: Parameters<typeof groupHistory>[3],
+    records: readonly SessionDisplayRecord[],
   ) {
     const pending = new Set(nodes.keys());
     const progressKey = (runId: string | undefined, callId: string) =>
@@ -410,7 +411,7 @@ export function createMessageView(
 
     function record(entry: SessionDisplayRecord) {
       const render = extensions.recordRenderer(entry.plugin, entry.kind);
-      return retain('record:' + entry.id, render, (previous) => {
+      const node = retain('record:' + entry.id, render, (previous) => {
         if (previous) remove(previous);
         const lifetime = new AbortController();
         const node = document.createElement('div');
@@ -421,15 +422,20 @@ export function createMessageView(
           sessionId: current().sessionId!,
           signal: lifetime.signal,
         });
-        if (shown) node.append(shown);
-        else {
+        if (shown) {
+          node.append(shown.node);
+          recordUpdates.set(node, shown.update);
+        } else {
           const label = document.createElement('p');
           label.className = 'hint';
           label.textContent = entry.title;
           node.append(label);
+          recordUpdates.set(node, (next) => { label.textContent = next.title; });
         }
         return node;
       });
+      recordUpdates.get(node)!(entry);
+      return node;
     }
 
     function renderPart(
@@ -466,14 +472,6 @@ export function createMessageView(
         case 'partial':
           preview.textContent = partial;
           return preview;
-        case 'thinking':
-          return retain('thinking:' + part.id, part.text, () => {
-            const body = document.createElement('p');
-            body.textContent = part.text;
-            const node = recordRow('Reasoning', body);
-            node.classList.add('assistant-reasoning');
-            return node;
-          });
         default:
           return retain(part.type + ':' + part.id, part.text, (previous) => {
             const node = previous ?? document.createElement('div');
@@ -485,7 +483,7 @@ export function createMessageView(
       }
     }
 
-    const desired = groupHistory(entries, run?.id, partial, tools).map((row) => {
+    const desired = groupHistory(entries, run?.id, partial, tools, records).map((row) => {
       switch (row.type) {
         case 'record':
           return record(row);

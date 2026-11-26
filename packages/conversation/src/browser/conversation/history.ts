@@ -30,16 +30,16 @@ export function mountHistory(ctx: Context, extensions: MessageExtensions, signal
 
   let selected: string | undefined;
   function render() {
-    const { session, history, run, partial, tools } = control.get();
+    const { session, history, run, partial, tools, records } = control.get();
     if (!history || selected !== session?.id) view.reset();
     selected = session?.id;
-    if (history) view.history(history.timeline, run, partial, tools);
+    if (history) view.history(history.timeline, run, partial, tools, records);
   }
   extensions.subscribe(view.refreshActions, signal);
   extensions.subscribeToTools(view.refreshTools, signal);
   extensions.subscribeToFooters(render, signal);
   extensions.subscribeToRecords(render, signal);
-  control.subscribe(['session', 'history', 'run', 'tools'], render, signal);
+  control.subscribe(['session', 'history', 'run', 'tools', 'records'], render, signal);
   control.subscribe(
     ['partial'],
     () => {

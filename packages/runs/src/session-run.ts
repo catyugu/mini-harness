@@ -271,12 +271,13 @@ export class SessionRun {
             emit(event);
             return;
           }
-          const { diagnostic, message: result } = event;
+          const { diagnostic, message: result, display } = event;
           if (diagnostic) log.append({ type: 'diagnostic', code: diagnostic.code, data: diagnostic.message });
           const assistant = log.append({
             type: 'message',
             message: result,
             attemptsRecorded: attemptsRecorded || undefined,
+            display,
           });
           emit({
             type: 'assistant-end',

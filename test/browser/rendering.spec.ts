@@ -140,6 +140,7 @@ export const apply = (ctx) => {
     await expect(
       turn.locator(':scope > .message, :scope > .conversation-record, :scope > .tool-card'),
     ).toHaveText([
+      /Reasoning.*Inspect the workspace first/s,
       'Checking the workspace',
       'Tool progress record',
       /ls.*Done/s,

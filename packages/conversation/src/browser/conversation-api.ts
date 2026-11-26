@@ -6,6 +6,7 @@ import type { ToolProgress } from '@mini-harness/runs/stream';
 import type { ModelChoice, ThinkingLevel } from '@mini-harness/llm/vocabulary';
 import type { Attachment } from '@mini-harness/input/message';
 import type { HistoryEntry } from '@mini-harness/sessions/message';
+import type { SessionDisplayRecord } from '@mini-harness/plugin-api/timeline';
 import type { RunInfo } from '@mini-harness/sessions/run-state';
 
 export interface ConversationRevision {
@@ -39,6 +40,7 @@ export interface ConversationState {
   run?: RunInfo;
   partial: string;
   tools: readonly ToolProgress[];
+  records: readonly SessionDisplayRecord[];
   mode: MessageMode;
   queue: readonly ConversationView['queue'][number][];
   interaction: {

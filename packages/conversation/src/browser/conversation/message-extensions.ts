@@ -63,10 +63,29 @@ export class MessageExtensions {
     record: SessionDisplayRecord,
     context: { sessionId: string; signal: AbortSignal },
   ) {
-    if (render)
-      return this.renderWithLifetime(context.signal, (signal) =>
-        render(structuredClone(record), { ...context, signal }),
-      );
+    if (!render) return;
+    const listeners = new Set<(record: SessionDisplayRecord) => void>();
+    const node = this.renderWithLifetime(context.signal, (signal) => {
+      signal.addEventListener('abort', () => listeners.clear(), { once: true });
+      return render(structuredClone(record), {
+        ...context,
+        signal,
+        subscribe(listener) { listeners.add(listener); },
+      });
+    });
+    if (!node) return;
+    let current = record;
+    return {
+      node,
+      update: (next: SessionDisplayRecord) => {
+        if (current === next) return;
+        current = next;
+        for (const listener of listeners) {
+          try { listener(structuredClone(next)); }
+          catch (error) { this.report(error); }
+        }
+      },
+    };
   }
 
   registerTurnFooter(id: string, render: TurnFooterRenderer) {

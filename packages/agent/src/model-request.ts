@@ -35,6 +35,7 @@ export async function requestModel(
     request?(request: LlmRequest): void;
     recover?(failure: ModelFailure): Promise<LlmRequest | undefined>;
     delta?(text: string): void;
+    thinking?(text: string): void;
     attempt?(metrics: ModelAttemptMetrics): void;
     retry?(failure: ModelFailure): ModelRetry | undefined | Promise<ModelRetry | undefined>;
   },
@@ -47,7 +48,8 @@ export async function requestModel(
     let firstTokenMs: number | undefined;
     let message: NativeAssistantMessage | undefined;
     let streamed = false,
-      partial = '';
+      partial = '',
+      thinking = '';
     try {
       signal.throwIfAborted();
       for await (const event of llm.stream(request)) {
@@ -59,6 +61,9 @@ export async function requestModel(
           if (event.type === 'text-delta') {
             partial += event.text;
             options.delta?.(event.text);
+          } else if (event.type === 'thinking-delta') {
+            thinking += event.text;
+            options.thinking?.(event.text);
           }
         }
       }
@@ -66,6 +71,7 @@ export async function requestModel(
     } catch (error) {
       message = {
         ...failedMessage(request, error, partial, llm.select?.(model)?.classifyError?.(error)),
+        ...(thinking && { content: [{ type: 'thinking' as const, thinking }, ...(partial ? [{ type: 'text' as const, text: partial }] : [])] }),
         usage: message?.usage,
       };
     }

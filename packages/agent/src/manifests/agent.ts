@@ -16,6 +16,8 @@ const Config = defineConfig(
 export const metadata: PluginInfo = {
   title: 'Agent',
   description: 'Model and tool execution loop',
+  browser: 'packages/agent/src/browser/setup.js',
+  browserStyles: ['packages/agent/src/browser/style.css'],
 };
 
 const plugin: Plugin.Object = {

@@ -159,7 +159,7 @@ export function registerSessionRoutes(ctx: Context, read: (id: string) => Conver
             tools: event.tools?.map((tool) => projectToolEvent(ctx, id, tool)),
           });
         } else if (event.type === 'user' && event.revised) {
-          const { timeline, leafId, model, thinkingLevel, partial, tools, run } = read(id);
+          const { timeline, leafId, model, thinkingLevel, partial, tools, records, run } = read(id);
           stream.send({
             type: 'snapshot',
             timeline,
@@ -168,6 +168,7 @@ export function registerSessionRoutes(ctx: Context, read: (id: string) => Conver
             thinkingLevel,
             partial,
             tools,
+            records,
             run,
             runId: event.runId,
             runSessionId: id,

@@ -1,5 +1,6 @@
 import { isRunning, type RunInfo } from '@mini-harness/sessions/run-state';
 import type { RunEvent, StreamEvent, ToolProgress } from './stream.ts';
+import { updateRecords, type SessionDisplayRecord } from '@mini-harness/plugin-api/timeline';
 
 export class RunEvents {
   private events: RunEvent[] = [];
@@ -7,6 +8,9 @@ export class RunEvents {
   private listeners = new Map<(event: RunEvent) => void, () => void>();
   private tools = new Map<string, ToolProgress>();
   partial = '';
+  private records: SessionDisplayRecord[] = [];
+
+  get activeRecords() { return this.records; }
 
   constructor(readonly info: RunInfo) {}
 
@@ -15,6 +19,14 @@ export class RunEvents {
   }
 
   publish(event: StreamEvent) {
+    if (event.type === 'record-update') {
+      if (event.operation === 'set') event = { ...event, record: { ...event.record, runId: this.info.id } };
+      this.records = updateRecords(this.records, event);
+    }
+    if (event.type === 'branch' && event.display) {
+      event = { ...event, display: { ...event.display, runId: this.info.id } };
+      this.records = this.records.filter((record) => record.id !== event.display!.id);
+    }
     if (event.type === 'assistant-start' || event.type === 'assistant-end') this.partial = '';
     if (event.type === 'delta') this.partial += event.text;
     if (event.type === 'tool') this.tools.set(event.id, event);
@@ -54,6 +66,7 @@ export class RunEvents {
         ...history(),
         partial: this.partial,
         tools: this.activeTools,
+        records: this.activeRecords,
         run: { ...this.info },
         sequence: this.info.sequence,
         runId: this.info.id,

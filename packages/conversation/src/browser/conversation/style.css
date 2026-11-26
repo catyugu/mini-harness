@@ -176,11 +176,6 @@
   display: grid;
   gap: 8px;
 }
-.assistant-reasoning > p {
-  margin: 0;
-  line-height: var(--line-ui);
-  white-space: pre-wrap;
-}
 .run-termination .hint {
   margin: 0;
 }
@@ -252,11 +247,9 @@
   color: var(--warning);
 }
 .tool-content:not(:empty),
-.assistant-reasoning > p,
 .async-message-body {
   padding: 5px 0 8px 20px;
 }
-.assistant-reasoning > p,
 .async-message-body {
   color: var(--muted);
   font-size: var(--font-meta);

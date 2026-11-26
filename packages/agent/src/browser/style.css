@@ -1,0 +1,5 @@
+.assistant-reasoning > p {
+  margin: 0;
+  line-height: var(--line-ui);
+  white-space: pre-wrap;
+}

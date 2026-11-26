@@ -116,7 +116,7 @@ There is no archive state.
 
 ## Extension records
 
-Plugin records use a typed payload (`PluginRecord<Data>` / `SessionRecords<Data>`) in the same record log with an explicit owner (plugin ID and instance ID). A branch event may carry a display descriptor identifying its renderer by plugin ID and kind, with a title and either a presentation payload or an explicit source path. Display metadata does not change the model context; the source is resolved from the committed event. Private records still advance the branch. Deleting a conversation removes all of its records.
+Plugin records use a typed payload (`PluginRecord<Data>` / `SessionRecords<Data>`) in the same record log with an explicit owner (plugin ID and instance ID). A branch event may carry a display descriptor identifying its renderer by plugin ID and kind, with a title and either a presentation payload or an explicit source path. Display metadata does not change the model context; the source is resolved from the committed event. A producer can assign a stable record ID before the durable event is written. Live records use the same renderer and a generic set/append/remove protocol, with independent text channels and a snapshot of active records. The committed display replaces its live counterpart by ID; individual stream chunks are not persisted. Private records still advance the branch. Deleting a conversation removes all of its records.
 
 ## Retained tasks and retry identity
 

@@ -47,7 +47,11 @@ export type TurnFooterRenderer = (context: {
 
 export type RecordRenderer = (
   record: SessionDisplayRecord,
-  context: { sessionId: string; signal: AbortSignal },
+  context: {
+    sessionId: string;
+    signal: AbortSignal;
+    subscribe(listener: (record: SessionDisplayRecord) => void): void;
+  },
 ) => HTMLElement | undefined;
 
 declare module 'mini-harness/cordis' {
