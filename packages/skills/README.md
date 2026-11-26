@@ -15,7 +15,7 @@ description: Review a proposed change against the project conventions.
 Read the affected interfaces and report concrete correctness or maintenance issues.
 ```
 
-With the `skills` plugin enabled, invoke it using `/skill:review-changes` in a user message, choose it in the composer, or let the model call `load_skill` by name. Automatic prompt discovery lists names and descriptions; full instructions are loaded on demand. Explicit user invocation removes the invocation token from model-facing user text and adds the selected instructions while retaining the original presentation text in session history.
+With the `skills` plugin enabled, invoke it using `/skill:review-changes` in a user message, choose it in the composer, or let the model call `load_skill` by name. Automatic prompt discovery lists names and descriptions; full instructions are loaded on demand. Both explicit invocation and `load_skill` include the resolved absolute skill file and its containing directory so the model can resolve relative resource paths. Explicit user invocation removes the invocation token from model-facing user text and adds the selected instructions while retaining the original presentation text in session history.
 
 ## Discovery contract
 
