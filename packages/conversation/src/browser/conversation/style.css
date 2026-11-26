@@ -280,11 +280,13 @@
 }
 .tool-content:not(:empty),
 .assistant-reasoning > p,
-.async-message-body {
+.async-message-body,
+.checkpoint-body {
   padding: 5px 0 8px 20px;
 }
 .assistant-reasoning > p,
-.async-message-body {
+.async-message-body,
+.checkpoint-body {
   color: var(--muted);
   font-size: var(--font-meta);
   overflow-wrap: anywhere;
