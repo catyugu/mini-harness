@@ -34,7 +34,6 @@
     "@mini-harness/file-preview": "workspace:*",
     "@mini-harness/input": "workspace:*",
     "@mini-harness/llm": "workspace:*",
-    "@mini-harness/models": "workspace:*",
     "@mini-harness/platform": "workspace:*",
     "@mini-harness/plugin-api": "workspace:*",
     "@mini-harness/runs": "workspace:*",

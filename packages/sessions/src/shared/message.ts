@@ -28,7 +28,6 @@ interface MessageFields {
   submissionId?: string;
   inboxId?: string;
   origin?: MessageOrigin;
-  taskId?: string;
   parentId?: string | null;
   content: MessageContent;
   attachments?: ViewAttachment[];
@@ -36,12 +35,10 @@ interface MessageFields {
   error?: string;
   toolName?: string;
   toolCallId?: string;
-  sessionId?: string;
   arguments?: unknown;
+  details?: Record<string, unknown>;
   isError?: boolean;
   elapsedMs?: number;
-  approvalMs?: number;
-  exitCode?: number;
 }
 
 export type ViewMessage = MessageFields &

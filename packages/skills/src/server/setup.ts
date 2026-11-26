@@ -2,7 +2,7 @@ import { DomainError } from '@mini-harness/platform/errors';
 import type { Context } from 'mini-harness/cordis';
 import { Type } from 'typebox';
 import { defineTool } from '@mini-harness/tools/api';
-import { SkillLoader, defaultSkillRoots } from './loader.ts';
+import { SkillLoader, defaultSkillRoots, skillInstruction } from './loader.ts';
 
 export function setup(ctx: Context) {
   const sessions = ctx.harnessSessions;
@@ -64,7 +64,10 @@ export function setup(ctx: Context) {
             signal?.throwIfAborted();
             const skill = await loader.load(sessions.workspacePath(sessionId), name);
             signal?.throwIfAborted();
-            return { content: [{ type: 'text', text: skill.content }], details: { skill: skill.name } };
+            return {
+              content: [{ type: 'text', text: skillInstruction(skill) }],
+              details: { skill: skill.name },
+            };
           },
         }),
     }),

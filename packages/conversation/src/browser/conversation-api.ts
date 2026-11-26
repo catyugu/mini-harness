@@ -6,6 +6,7 @@ import type { ToolProgress } from '@mini-harness/runs/stream';
 import type { ModelChoice, ThinkingLevel } from '@mini-harness/llm/vocabulary';
 import type { Attachment } from '@mini-harness/input/message';
 import type { HistoryEntry } from '@mini-harness/sessions/message';
+import type { LiveRecord } from '@mini-harness/runs/stream';
 import type { RunInfo } from '@mini-harness/sessions/run-state';
 
 export interface ConversationRevision {
@@ -39,6 +40,7 @@ export interface ConversationState {
   run?: RunInfo;
   partial: string;
   tools: readonly ToolProgress[];
+  records: readonly LiveRecord[];
   mode: MessageMode;
   queue: readonly ConversationView['queue'][number][];
   interaction: {
@@ -80,6 +82,7 @@ declare module '@mini-harness/ui-slots/browser/api' {
     'workspace.welcome': { kind: 'single' };
     'conversation.composer': { kind: 'list' };
     'conversation.composer-options': { kind: 'list' };
+    'conversation.composer-trailing': { kind: 'list' };
     'conversation.composer-footer': { kind: 'list' };
     'conversation.composer-view': { kind: 'single' };
     'conversation.history': { kind: 'single' };

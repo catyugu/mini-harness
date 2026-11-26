@@ -45,6 +45,8 @@ plugins:
     live: true
   - id: core:composer
     name: '@mini-harness/conversation-composer'
+  - id: attachments
+    name: '@mini-harness/attachment-input'
   - id: core:history
     name: '@mini-harness/conversation-history'
   - id: background-tasks

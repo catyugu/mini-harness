@@ -121,8 +121,9 @@ const setup = (ctx: Context) => {
   }, 1000);
   ctx.effect(() => () => clearInterval(timer));
   ctx.effect(() =>
-    ctx.miniMessages.registerTool('delegate', ({ sessionId }, lifetime) => {
-      if (!sessionId) return;
+    ctx.miniMessages.registerTool('delegate', ({ details }, lifetime) => {
+      const sessionId = details?.sessionId;
+      if (typeof sessionId !== 'string') return;
       const text = document.createElement('span');
       text.className = 'subagent-receipt';
       const update = () => {
@@ -139,8 +140,9 @@ const setup = (ctx: Context) => {
   ctx.effect(() =>
     ctx.miniMessages.registerTool(
       'delegate',
-      ({ sessionId }) => {
-        if (!sessionId || !/^[a-f0-9-]{36}$/.test(sessionId)) return;
+      ({ details }) => {
+        const sessionId = details?.sessionId;
+        if (typeof sessionId !== 'string') return;
         const button = document.createElement('button');
         button.type = 'button';
         button.className = 'link-button';
@@ -148,7 +150,19 @@ const setup = (ctx: Context) => {
         button.onclick = () => services.openConversation(sessionId);
         return button;
       },
-      true,
+      'action',
+    ),
+  );
+  ctx.effect(() =>
+    ctx.miniMessages.registerTool(
+      'delegate',
+      ({ details }) => {
+        if (details?.state !== 'accepted') return;
+        const node = document.createElement('span');
+        node.textContent = 'Accepted';
+        return node;
+      },
+      'status',
     ),
   );
 };

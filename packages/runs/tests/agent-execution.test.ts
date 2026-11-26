@@ -9,14 +9,14 @@ import { randomUUID } from 'node:crypto';
 import { Inbox } from '../src/inbox.ts';
 import type { Attachment } from '@mini-harness/input/message';
 import type { InboxItem } from '@mini-harness/sessions/log-api';
-import type { AgentEvent } from '../src/stream.ts';
+import type { RunStreamEvent } from '../src/shared/stream.ts';
 import { SessionRun } from '../src/session-run.ts';
 import { nativeExecutor } from '@mini-harness/tools/execution';
 import type { SessionStore } from '@mini-harness/sessions/records';
 import { startTestProfile } from '../../../test/support/profile.ts';
 import { defineTool } from '@mini-harness/tools/api';
 import type { LlmPort, NativeAssistantMessage, ToolCallPart } from '@mini-harness/llm/api';
-import type { ModelRetry } from '@mini-harness/agent/events';
+import type { ModelRetry } from '@mini-harness/agent/api';
 import { createFixturePaths } from '../../../test/support/mock-provider.ts';
 
 const model = { provider: 'fixture', id: 'native' };
@@ -367,7 +367,7 @@ test('cancellation closes the whole tool batch durably and never executes later 
       },
     }),
   );
-  const events: AgentEvent[] = [];
+  const events: RunStreamEvent[] = [];
   await assert.rejects(
     agent.prompt(
       ctx,
@@ -500,7 +500,7 @@ test('steering accepts off, skips deterministic failures and resets incompatible
   });
   t.after(() => release());
   const levels: (string | undefined)[] = [];
-  const events: AgentEvent[] = [];
+  const events: RunStreamEvent[] = [];
   const { agent, ctx, sessions, record, tools } = await fixture(
     t,
     {

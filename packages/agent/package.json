@@ -25,6 +25,7 @@
     "@mini-harness/input": "workspace:*",
     "@mini-harness/llm": "workspace:*",
     "@mini-harness/plugin-api": "workspace:*",
+    "@mini-harness/sessions": "workspace:*",
     "@mini-harness/tools": "workspace:*"
   }
 }

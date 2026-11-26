@@ -1,4 +1,4 @@
-import { displayRecord } from './projection.ts';
+import { displayRecords } from './projection.ts';
 import type { RecordAppend } from './shared/display-record.ts';
 import { userContent } from './user-content.ts';
 import type { RunInfo } from './shared/run-state.ts';
@@ -23,7 +23,7 @@ import {
 import type { ScopeAddress } from '@mini-harness/plugin-api/configuration';
 import type { CapabilityObservation } from '@mini-harness/plugin-api/observations';
 import type { ConversationPermission, SessionRecord } from './shared/identity.ts';
-import { SessionLog } from './log.ts';
+import { advancesBranch, SessionLog } from './log.ts';
 import { syncDirectory } from './record-log.ts';
 import { loadCatalog, type CatalogState } from './catalog.ts';
 import {
@@ -291,8 +291,9 @@ export class SessionRegistry implements SessionStore {
           id,
           false,
           false,
-          entry.type === 'plugin-record'
-            ? { leafId: entry.id, display: structuredClone(displayRecord(entry)) }
+          advancesBranch(entry) &&
+            (entry.displays?.length || (entry.type !== 'message' && entry.type !== 'tool-accepted'))
+            ? { leafId: entry.id, records: structuredClone(displayRecords(entry)) }
             : undefined,
           entry.type,
         );
@@ -464,7 +465,12 @@ export class SessionRegistry implements SessionStore {
         ) ?? [],
       append: async (data, display) => {
         this.assertAvailable(id);
-        return this.log(id).append({ type: 'plugin-record', owner, data, display }).id;
+        return this.log(id).append({
+          type: 'plugin-record',
+          owner,
+          data,
+          displays: display && [{ ...display, owner }],
+        }).id;
       },
     };
   }

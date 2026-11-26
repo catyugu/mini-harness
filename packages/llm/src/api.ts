@@ -94,6 +94,8 @@ export interface NativeToolMessage {
   /** Non-success disposition distinct from an execution failure. */
   outcome?: 'skipped' | 'denied' | 'cancelled';
   details?: Record<string, unknown>;
+  /** Fields of details selected by the producing tool for its consumers' presentation. */
+  detailKeys?: readonly string[];
   elapsedMs?: number;
 }
 export type NativeMessage = NativeUserMessage | NativeAssistantMessage | NativeToolMessage;
@@ -252,6 +254,9 @@ export function validateNativeMessage(message: NativeMessage) {
     (typeof message.toolCallId !== 'string' ||
       typeof message.toolName !== 'string' ||
       typeof message.isError !== 'boolean' ||
+      (message.detailKeys !== undefined &&
+        (!Array.isArray(message.detailKeys) ||
+          !message.detailKeys.every((key) => typeof key === 'string'))) ||
       (message.outcome !== undefined &&
         (!message.isError ||
           (message.outcome !== 'skipped' &&

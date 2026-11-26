@@ -30,7 +30,7 @@ export function setup(ctx: Context) {
     const { harnessSessions: sessions, harnessRuns } = ctx;
     sessions.assertAvailable(id);
     const history = sessions.inspectLog(id, (log) => ({ ...log.projection(), queue: log.queue() }));
-    const { partial, tools } = harnessRuns.activity(id);
+    const { partial, tools, records } = harnessRuns.activity(id);
     return {
       ...projectSession(ctx, record),
       timeline: projectHistory(ctx, id, history?.timeline ?? []),
@@ -39,6 +39,7 @@ export function setup(ctx: Context) {
       thinkingLevel: history?.thinkingLevel,
       queue: history?.queue ?? [],
       partial,
+      records,
       tools: tools.map((tool) => projectToolEvent(ctx, id, tool)),
       logError: sessions.logError(id),
     };

@@ -1,10 +1,16 @@
 import { userContent } from './user-content.ts';
-import type { SessionDisplayRecord } from './shared/display-record.ts';
+import type { RecordPresentation, SessionDisplayRecord } from './shared/display-record.ts';
 import { isRunning, type RunInfo } from './shared/run-state.ts';
 import { toolResultState } from '@mini-harness/tools/api';
 import type { NativeMessage, NativeToolMessage } from '@mini-harness/llm/api';
 import type { MessageContent, ViewMessage } from './shared/message.ts';
-import type { ContextReplacement, SessionContext, SessionEntry, SessionProjection } from './log-api.ts';
+import type {
+  ContextReplacement,
+  SessionContext,
+  SessionEntry,
+  SessionEvent,
+  SessionProjection,
+} from './log-api.ts';
 import { applyContentDelta } from './content-delta.ts';
 
 export function projectMessage(
@@ -66,29 +72,45 @@ export function displayMessage(
     view.error = message.errorMessage;
   if (message.role === 'toolResult') {
     view.isError = message.isError;
-    if (typeof message.details?.approvalMs === 'number') view.approvalMs = message.details.approvalMs;
     view.arguments = toolArguments;
     view.elapsedMs = (entry.type === 'message' ? entry.elapsedMs : undefined) ?? message.elapsedMs;
-    if (typeof message.details?.taskId === 'string') view.taskId = message.details.taskId;
-    if (typeof message.details?.sessionId === 'string') view.sessionId = message.details.sessionId;
-    if (typeof message.details?.exitCode === 'number' && Number.isInteger(message.details.exitCode))
-      view.exitCode = message.details.exitCode;
+    const { details, detailKeys } = message;
+    if (details && detailKeys)
+      view.details = Object.fromEntries(
+        detailKeys.filter((key) => Object.hasOwn(details, key)).map((key) => [key, details[key]]),
+      );
   }
   return view;
 }
 
-export function displayRecord(
-  entry: Extract<SessionEntry, { type: 'plugin-record' }>,
-): SessionDisplayRecord | undefined {
-  if (entry.display)
-    return {
-      type: 'record',
-      id: entry.id,
-      plugin: entry.owner.pluginId,
-      instanceId: entry.owner.instanceId,
-      title: entry.display.title,
-      content: entry.display.content,
-    };
+/** Select content explicitly from the event, without interpreting its business meaning. */
+export function displayContent(event: SessionEvent, display: RecordPresentation): unknown {
+  if (!display.source) return display.content;
+  let value: unknown = event;
+  for (const key of display.source) {
+    if (
+      (typeof key !== 'string' && (typeof key !== 'number' || !Number.isSafeInteger(key) || key < 0)) ||
+      !value ||
+      typeof value !== 'object' ||
+      !Object.hasOwn(value, key)
+    )
+      throw new Error('Invalid record display source');
+    value = (value as Record<string | number, unknown>)[key];
+  }
+  return value;
+}
+
+export function displayRecords(entry: SessionEntry, runId?: string): SessionDisplayRecord[] {
+  return (entry.displays ?? []).map((display, index, all) => ({
+    type: 'record',
+    id: display.id ?? (all.length === 1 ? entry.id : entry.id + ':' + index),
+    ...(runId && { runId }),
+    plugin: display.owner.pluginId,
+    instanceId: display.owner.instanceId,
+    kind: display.kind,
+    title: display.title,
+    content: displayContent(entry, display),
+  }));
 }
 
 export function newContext(): SessionContext {
@@ -170,10 +192,7 @@ export function projectLog(
   }
   for (const entry of branch) {
     projectRuns(entry.seq);
-    if (entry.type === 'plugin-record') {
-      const record = displayRecord(entry);
-      if (record) state.timeline.push(record);
-    }
+    state.timeline.push(...displayRecords(entry, runId));
     const message = messageOf(entry);
     if (!message) continue;
     if (message.role === 'assistant')

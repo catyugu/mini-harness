@@ -1,15 +1,16 @@
 import type { PluginIcon } from '@mini-harness/plugin-api/descriptor';
-import type { SessionDisplayRecord } from '@mini-harness/sessions/display-record';
+import type { LiveRecord } from '@mini-harness/runs/stream';
 import type { MessageContent, ViewMessage } from '@mini-harness/sessions/message';
 
+export type ToolPlacement = 'body' | 'action' | 'summary' | 'status';
 export type ToolRenderer = (tool: ToolView, signal: AbortSignal) => HTMLElement | undefined;
 export interface ToolView {
   name: string;
   state: string;
   content?: MessageContent;
   arguments?: unknown;
-  sessionId?: string;
-  taskId?: string;
+  details?: Record<string, unknown>;
+  streams?: Readonly<Record<string, string>>;
 }
 export type MessageActionTarget =
   | {
@@ -46,17 +47,26 @@ export type TurnFooterRenderer = (context: {
 }) => HTMLElement;
 
 export type RecordRenderer = (
-  record: SessionDisplayRecord,
-  context: { sessionId: string; signal: AbortSignal },
+  record: LiveRecord,
+  context: {
+    sessionId: string;
+    signal: AbortSignal;
+    subscribe(listener: (record: LiveRecord) => void): void;
+  },
 ) => HTMLElement | undefined;
 
 declare module 'mini-harness/cordis' {
   interface Context {
     miniMessages: {
       registerTurnFooter(id: string, render: TurnFooterRenderer): () => void;
-      registerRecord(plugin: string, render: RecordRenderer, priority?: number): () => void;
+      registerRecord(plugin: string, kind: string, render: RecordRenderer, priority?: number): () => void;
       registerAction(action: MessageAction): () => void;
-      registerTool(name: string, render: ToolRenderer, action?: boolean, priority?: number): () => void;
+      registerTool(
+        name: string,
+        render: ToolRenderer,
+        placement?: ToolPlacement,
+        priority?: number,
+      ): () => void;
     };
   }
 }

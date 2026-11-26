@@ -11,7 +11,10 @@
     "api": [
       "./message",
       "./prepare"
-    ]
+    ],
+    "profileModules": {
+      "@mini-harness/attachment-input": "./src/manifest.ts"
+    }
   },
   "dependencies": {
     "@mini-harness/platform": "workspace:*"

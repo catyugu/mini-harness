@@ -92,7 +92,8 @@ test(
     );
     assert.ok(
       toolEvents.some(
-        (event) => event.message.toolState === 'finished' && event.message.sessionId === childRecord.id,
+        (event) =>
+          event.message.toolState === 'finished' && event.message.details?.sessionId === childRecord.id,
       ),
     );
     const check = app.runtime.plugins.ctx.harnessSessions.create();

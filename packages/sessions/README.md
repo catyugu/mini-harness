@@ -17,11 +17,11 @@ export async function saveNote(ctx: Context, sessionId: string, text: string) {
     pluginId: 'notes',
     instanceId: 'notes',
   });
-  return records.append({ text }, { title: 'Saved note', content: text });
+  return records.append({ text }, { kind: 'note', title: 'Saved note', source: ['data', 'text'] });
 }
 ```
 
-The owner pair identifies the contributor. `records().list()` returns that owner's records on the selected branch; it does not scan unrelated branches or owners. The [Task notes example](../../docs/examples/task-notes/README.md) shows a complete tool, saved record and browser renderer.
+The display-record contract describes committed records and their projection. Multiple producers may attach independent presentations to the same durable event. The shared RecordPublisher port allows live updates without a dependency on the Runs implementation. Volatile channels and record updates are owned by Runs and never persisted as a second copy of a transcript. The owner pair identifies the contributor. `records().list()` returns that owner's records on the selected branch; it does not scan unrelated branches or owners. The [Task notes example](../../docs/examples/task-notes/README.md) shows a complete tool, saved record and browser renderer.
 
 ## Responsibilities and contracts
 

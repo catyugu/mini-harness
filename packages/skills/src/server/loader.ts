@@ -58,6 +58,10 @@ async function readSkill(file: string) {
 const xml = (text: string) =>
   text.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;');
 
+export function skillInstruction(skill: Skill) {
+  return `<skill name="${xml(skill.name)}" source="${xml(skill.file)}" directory="${xml(dirname(skill.file))}">\nResolve paths referenced by this skill relative to its directory.\n\n${skill.content}\n</skill>`;
+}
+
 /** Roots are ordered from lowest to highest priority. Each scan shares a single budget. */
 export class SkillLoader {
   constructor(
@@ -145,7 +149,7 @@ export class SkillLoader {
     const after = text.slice(match.index + match[0].length).trimStart();
     return {
       task: [before, after].filter(Boolean).join(' '),
-      instruction: `<skill name="${xml(skill.name)}" source="${xml(skill.file)}">\n${skill.content}\n</skill>`,
+      instruction: skillInstruction(skill),
     };
   }
 }

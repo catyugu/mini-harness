@@ -4,7 +4,7 @@ import { conversationTools } from './tool-selection.ts';
 import type { Context } from 'mini-harness/cordis';
 import type { TaskContext } from '@mini-harness/tasks/api';
 import { scopeTarget } from '@mini-harness/plugin-api/scopes';
-import type { InputContext, StepContext } from '@mini-harness/agent/events';
+import { modelRetry, type InputContext, type StepContext } from '@mini-harness/agent/events';
 import { DomainError } from '@mini-harness/platform/errors';
 import { isDeepStrictEqual } from 'node:util';
 import type { SessionCatalog, SessionLifecycle, SessionStore } from '@mini-harness/sessions/records';
@@ -19,7 +19,8 @@ import {
   type NativeUserMessage,
   type ToolCallPart,
 } from '@mini-harness/llm/api';
-import type { AgentEvent } from './stream.ts';
+import { recordPublisher, type RunStreamEvent } from './shared/stream.ts';
+import type { RecordPresentation } from '@mini-harness/sessions/display-record';
 import type { MessageOrigin, MessageMode } from '@mini-harness/sessions/queue';
 import type { SessionLogPort, InboxItem, SessionProjection } from '@mini-harness/sessions/log-api';
 import { Inbox } from './inbox.ts';
@@ -32,7 +33,6 @@ import {
   selectModel,
   assertImageInput,
 } from '@mini-harness/models/selection';
-import { modelRetry } from '@mini-harness/agent/model-request';
 
 function requireService<K extends keyof Context & string>(ctx: Context, name: K): NonNullable<Context[K]> {
   const value = ctx.get(name);
@@ -49,7 +49,6 @@ interface SessionPrompt {
   signal: AbortSignal;
   task: TaskContext;
   fallback?: ModelChoice;
-  changed?: (path: string) => void;
   revision?: Pick<InboxItem, 'text' | 'images' | 'input' | 'model' | 'thinkingLevel'> & {
     parentId: string | null;
     expectedLeafId: string | null;
@@ -117,11 +116,11 @@ export class SessionRun {
   async prompt(
     ctx: Context,
     record: SessionRecord,
-    emit: (event: AgentEvent) => void | Promise<void>,
+    emit: (event: RunStreamEvent) => void | Promise<void>,
     options: SessionPrompt,
   ): Promise<string> {
     const { id } = record;
-    const { signal, task, revision, changed, fallback } = options;
+    const { signal, task, revision, fallback } = options;
     const submissionId = task.id;
     signal.throwIfAborted();
     const log = this.sessions.log(id);
@@ -240,11 +239,24 @@ export class SessionRun {
     let requestId: string | undefined;
     let attemptsRecorded = false;
     let modelStep = 0;
+    const publisher = recordPublisher(emit);
+    const observers = ctx.events
+      .listeners('agent/records', scopeTarget(ctx))
+      .map(({ callback }) => callback(publisher));
     const answer = await requireService(ctx, 'harnessAgent')
       .run(ctx, {
         signal,
         retry: modelRetry(ctx, id),
         onEvent: (event) => {
+          const displays: RecordPresentation[] = [];
+          for (const observe of observers) {
+            const contribution = observe(event);
+            if (!contribution?.length) continue;
+            if (event.type !== 'assistant')
+              throw new Error('Record presentations require a committed assistant message');
+            displays.push(...contribution);
+          }
+          if (event.type === 'thinking') return;
           if (event.type === 'phase') {
             if (event.phase === 'model') modelStep = event.turn;
             task.update({ phase: event.phase, turn: event.turn });
@@ -277,6 +289,7 @@ export class SessionRun {
             type: 'message',
             message: result,
             attemptsRecorded: attemptsRecorded || undefined,
+            ...(displays.length && { displays }),
           });
           emit({
             type: 'assistant-end',
@@ -331,16 +344,18 @@ export class SessionRun {
                 return undefined;
               },
               update(call, value) {
-                const pending = value.details?.approvalPending;
-                if (pending === undefined && hooks.length) return;
+                if (value.state === undefined && hooks.length) return;
                 emit({
                   type: 'tool',
                   id: call.id,
                   name: call.name,
-                  state: pending === true ? 'approval' : 'running',
+                  state: value.state ?? 'running',
                   arguments: call.arguments,
                   content: hooks.length ? undefined : value.content,
                 });
+              },
+              write(call, text, channel) {
+                emit({ type: 'tool-output', id: call.id, channel, text });
               },
             },
             async deliver(output, toolSignal, call) {
@@ -372,10 +387,6 @@ export class SessionRun {
                 executionId && !transformError
                   ? log.acceptToolResult(executionId, output.content)
                   : log.append({ type: 'message', message: output, elapsedMs: output.elapsedMs });
-              const details = output.details;
-              const state = toolResultState(output);
-              if (state === 'finished' && typeof details?.changedPath === 'string')
-                changed?.(details.changedPath);
               emit({
                 type: 'tool-end',
                 message: displayMessage(entry, output, submissionId, call.arguments),

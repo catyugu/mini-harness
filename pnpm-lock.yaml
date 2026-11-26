@@ -111,6 +111,9 @@ importers:
       '@mini-harness/plugin-api':
         specifier: workspace:*
         version: link:../plugin-api
+      '@mini-harness/sessions':
+        specifier: workspace:*
+        version: link:../sessions
       '@mini-harness/tools':
         specifier: workspace:*
         version: link:../tools
@@ -189,9 +192,6 @@ importers:
       '@mini-harness/llm':
         specifier: workspace:*
         version: link:../llm
-      '@mini-harness/models':
-        specifier: workspace:*
-        version: link:../models
       '@mini-harness/platform':
         specifier: workspace:*
         version: link:../platform

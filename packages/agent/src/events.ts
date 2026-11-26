@@ -1,3 +1,7 @@
+import type { Context } from 'mini-harness/cordis';
+import { scopeTarget } from '@mini-harness/plugin-api/scopes';
+import type { AgentEvent, ModelFailure, ModelRetry } from './api.ts';
+import type { RecordPresentation, RecordPublisher } from '@mini-harness/sessions/display-record';
 import type { ModelChoice } from '@mini-harness/llm/vocabulary';
 import type { InputSource, PreparedMessage } from '@mini-harness/input/message';
 import type {
@@ -5,7 +9,6 @@ import type {
   NativeMessage,
   LlmRequest,
   ModelRequestContent,
-  ModelErrorKind,
 } from '@mini-harness/llm/api';
 
 import type { ToolTurn } from '@mini-harness/tools/execution';
@@ -28,14 +31,6 @@ export interface RequestPreparation extends StepContext {
   rebuild(messages: NativeMessage[]): Promise<LlmRequest>;
 }
 
-export interface ModelFailure {
-  readonly model: Readonly<ModelChoice>;
-  readonly attempt: number;
-  readonly error: string;
-  readonly kind?: ModelErrorKind;
-  readonly signal: AbortSignal;
-}
-export type ModelRetry = { delayMs?: number };
 export type ModelRetryHandler = (
   failure: ModelFailure & { readonly sessionId: string },
 ) => ModelRetry | undefined | Promise<ModelRetry | undefined>;
@@ -58,10 +53,14 @@ export interface ToolResultContext extends StepContext {
 
 export type ToolResultTransform = Transform<ToolResult['content'], ToolResultContext>;
 
+/** Run-local observer of native events; returned presentations belong to the committed assistant message. */
+export type AgentRecordObserver = (event: AgentEvent) => readonly RecordPresentation[] | void;
+
 declare module 'mini-harness/cordis' {
   interface Events {
     /** Configure capabilities owned by a single Agent run before its first step. */
     'agent/setup'(ctx: Context, sessionId: string, signal: AbortSignal): void | Promise<void>;
+    'agent/records'(sink: RecordPublisher): AgentRecordObserver;
     'agent/tool-result': ToolResultTransform;
     'agent/prepare-input': InputPreparation;
     'agent/model-request': ModelRequestTransform;
@@ -69,4 +68,15 @@ declare module 'mini-harness/cordis' {
     'agent/prepare-request': Transform<LlmRequest, RequestPreparation>;
     'agent/model-retry': ModelRetryHandler;
   }
+}
+
+/** Dispatch the same scoped retry policy for every model execution. */
+export function modelRetry(ctx: Context, sessionId: string) {
+  return async (failure: ModelFailure) => {
+    const { signal, ...input } = failure;
+    for (const { context, callback } of ctx.events.listeners('agent/model-retry', scopeTarget(ctx))) {
+      const retry = await context.fiber.run((signal) => callback({ ...input, sessionId, signal }), signal);
+      if (retry !== undefined) return retry;
+    }
+  };
 }

@@ -3,7 +3,10 @@ import { sendRun } from '../support/runs.ts';
 import { expectPresent } from '../support/required.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { fixture } from '../support/api-fixture.ts';
+import { fixture, waitUntil } from '../support/api-fixture.ts';
+import { writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import type { StreamEvent } from '@mini-harness/runs/stream';
 import { realpath } from 'node:fs/promises';
 
 test('enabled Shell runs consecutive commands without approval and respects read-only ancestry', async (t) => {
@@ -24,7 +27,8 @@ test('enabled Shell runs consecutive commands without approval and respects read
   assert.equal(results.length, 2);
   assert.ok(
     results.every(
-      (result: { exitCode: number; isError: boolean }) => result.exitCode === 0 && !result.isError,
+      (result: { details: { exitCode: number }; isError: boolean }) =>
+        result.details.exitCode === 0 && !result.isError,
     ),
   );
   assert.equal(
@@ -108,4 +112,38 @@ test('independent shell calls use one task, retain output channels and do not du
   assert.doesNotMatch(JSON.stringify(task.result), /task-output/);
   await ctx.harnessSessions.delete([session.id]);
   assert.equal(ctx.harnessTasks.get(id), undefined);
+});
+
+test('foreground Shell streams live output and commits one final result', async (t) => {
+  const command =
+    "node -e \"console.log('live-shell-output');const timer=setInterval(()=>{if(require('node:fs').existsSync('release-shell-test')){clearInterval(timer);console.error('final-shell-output')}},20)\"";
+  const { app, paths, request } = await fixture(t, ({ messages }) =>
+    messages.at(-1)?.role === 'tool' ? 'Done' : { tool: 'shell', args: { command, timeoutMs: 15000 } },
+  );
+  await app.runtime.configuration.update({ entries: { shell: { disabled: false } } });
+  const { harnessRuns: runs, harnessSessions: sessions } = app.runtime.plugins.ctx;
+  const { id } = sessions.create();
+  const events: StreamEvent[] = [];
+  const work = sendRun(runs, id, 'Stream shell output', (event) => events.push(event));
+  const release = () => writeFileSync(join(paths.cwd, 'release-shell-test'), '');
+  try {
+    await waitUntil(
+      () => runs.activity(id).tools,
+      (tools) => tools.some((tool) => tool.streams?.stdout?.includes('live-shell-output')),
+    );
+    const active = (await request('/sessions/' + id)).body;
+    assert.match(active.tools[0].streams.stdout, /live-shell-output/);
+    assert.ok(events.some((event) => event.type === 'tool-output' && event.channel === 'stdout'));
+    release();
+    assert.equal(await work, 'Done');
+    const completed = (await request('/sessions/' + id)).body;
+    assert.deepEqual(completed.tools, []);
+    const results = completed.timeline.filter((entry: { role?: string }) => entry.role === 'toolResult');
+    assert.equal(results.length, 1);
+    assert.deepEqual(results[0].details, { exitCode: 0 });
+    assert.match(JSON.stringify(results[0].content), /final-shell-output/);
+  } finally {
+    release();
+    await work.catch(() => {});
+  }
 });

@@ -1,12 +1,13 @@
 import type { Context } from 'mini-harness/cordis';
-import type { SessionDisplayRecord } from '@mini-harness/sessions/display-record';
-import type { HistoryEntry, MessageContent, ViewMessage } from '@mini-harness/sessions/message';
+import type { LiveRecord } from '@mini-harness/runs/stream';
+import type { HistoryEntry, ViewMessage } from '@mini-harness/sessions/message';
 import type { RunInfo, RunTermination } from '@mini-harness/sessions/run-state';
 import type {
   MessageAction,
   MessageActionContext,
   MessageActionTarget,
   TurnFooterRenderer,
+  ToolView,
 } from '../history-api.ts';
 import { icon } from '@mini-harness/ui-primitives/icons';
 import { renderMarkdown } from '@mini-harness/ui-primitives/markdown';
@@ -40,6 +41,7 @@ export function createMessageView(
   const actionContext = new WeakMap<HTMLElement, Omit<MessageActionContext, 'signal'>>();
   const actionOwners = new WeakMap<HTMLButtonElement, MessageAction>();
   const nodes = new Map<string, { node: HTMLElement; source: unknown }>();
+  const recordUpdates = new WeakMap<HTMLElement, (record: LiveRecord) => void>();
   const preview = document.createElement('div');
   preview.className = 'message assistant';
   let following = true;
@@ -172,28 +174,17 @@ export function createMessageView(
       renderMessageActions(wrapper);
   }
 
-  function toolCard(
-    data: {
-      name: string;
-      state: string;
-      content?: MessageContent;
-      arguments?: unknown;
-      sessionId?: string;
-      id?: string;
-      taskId?: string;
-      elapsedMs?: number;
-      approvalMs?: number;
-      exitCode?: number;
-    },
-    card?: HTMLDetailsElement,
-  ) {
+  function toolCard(data: ToolView & { id?: string; elapsedMs?: number }, card?: HTMLDetailsElement) {
     const item = card ?? document.createElement('details');
     toolItems.set(item, data);
-    item.className = 'tool-card process-disclosure ui-disclosure';
+    item.className = 'tool-card ui-record ui-disclosure';
     item.dataset.state = data.state;
+    resources.get(item)?.abort();
+    const resource = new AbortController();
+    resources.set(item, resource);
     const summary = document.createElement('summary');
     const name = document.createElement('strong');
-    name.className = 'process-label';
+    name.className = 'ui-record-label';
     name.textContent = data.name.replaceAll('_', ' ');
     name.title = data.name;
     const status = document.createElement('span');
@@ -207,8 +198,9 @@ export function createMessageView(
       cancelled: 'Cancelled',
       error: 'Failed',
     };
-    status.textContent =
-      data.taskId && data.state === 'finished' ? 'Accepted' : (labels[data.state] ?? data.state);
+    const customStatus = extensions.render(data, resource.signal, 'status');
+    if (customStatus) status.append(customStatus);
+    else status.textContent = labels[data.state] ?? data.state;
     summary.append(icon('chevron'), name);
     const elapsed = data.elapsedMs;
     if (elapsed !== undefined && Number.isFinite(elapsed)) {
@@ -216,17 +208,10 @@ export function createMessageView(
       duration.className = 'tool-duration';
       duration.textContent =
         elapsed < 1000 ? Math.round(elapsed) + ' ms' : (elapsed / 1000).toFixed(1) + ' s';
-      if (data.approvalMs !== undefined)
-        duration.title = 'Execution only. Approval took ' + Math.round(data.approvalMs) + ' ms.';
       summary.append(duration);
     }
-    if (data.exitCode !== undefined && Number.isInteger(data.exitCode)) {
-      const code = document.createElement('span');
-      code.className = 'tool-exit-code';
-      code.textContent = 'Exit ' + data.exitCode;
-      if (data.exitCode !== 0) code.dataset.failed = 'true';
-      summary.append(code);
-    }
+    const annotation = extensions.render(data, resource.signal, 'summary');
+    if (annotation) summary.append(annotation);
     summary.append(status);
     const body = document.createElement('div');
     body.className = 'tool-content';
@@ -236,12 +221,9 @@ export function createMessageView(
       args.textContent = JSON.stringify(data.arguments, null, 2);
       body.append(args);
     }
-    resources.get(item)?.abort();
-    const resource = new AbortController();
-    resources.set(item, resource);
     const custom = extensions.render(data, resource.signal);
     if (custom) body.append(custom);
-    const output = custom ? '' : textOf(data.content);
+    const output = custom ? '' : textOf(data.content) || Object.values(data.streams ?? {}).join('');
     if (output) {
       const result = document.createElement('pre');
       result.textContent = output;
@@ -255,7 +237,7 @@ export function createMessageView(
       img.src = 'data:' + block.mimeType + ';base64,' + block.data;
       body.append(img);
     }
-    const action = extensions.render(data, resource.signal, true);
+    const action = extensions.render(data, resource.signal, 'action');
     if (action) {
       body.append(action);
     }
@@ -272,7 +254,7 @@ export function createMessageView(
     const origin = message.origin;
     const notification = notificationLabel(origin, message.inboxId);
     const entry = document.createElement(notification ? 'details' : 'div');
-    entry.className = notification ? 'async-message process-disclosure ui-disclosure' : 'message-row user';
+    entry.className = notification ? 'async-message ui-record ui-disclosure' : 'message-row user';
     const text = textOf(message.content);
     const attachments = message.attachments ?? [];
     const bubble = document.createElement('article');
@@ -282,7 +264,7 @@ export function createMessageView(
       const sender = origin?.senderSessionId;
       const title = sender ? ctx.get('harnessBrowser')?.session(sender)?.title : undefined;
       const label = document.createElement('span');
-      label.className = 'process-label';
+      label.className = 'ui-record-label';
       label.textContent = notification + (title ? ' · ' + title : '');
       summary.append(icon('chevron'), label);
       entry.append(summary);
@@ -394,6 +376,7 @@ export function createMessageView(
     run: RunInfo | undefined,
     partial: string,
     tools: Parameters<typeof groupHistory>[3],
+    records: readonly LiveRecord[],
   ) {
     const pending = new Set(nodes.keys());
     const progressKey = (runId: string | undefined, callId: string) =>
@@ -407,9 +390,9 @@ export function createMessageView(
       return node;
     }
 
-    function record(entry: SessionDisplayRecord) {
-      const render = extensions.recordRenderer(entry.plugin);
-      return retain('record:' + entry.id, render, (previous) => {
+    function record(entry: LiveRecord) {
+      const render = extensions.recordRenderer(entry.plugin, entry.kind);
+      const node = retain('record:' + entry.id, render, (previous) => {
         if (previous) remove(previous);
         const lifetime = new AbortController();
         const node = document.createElement('div');
@@ -420,15 +403,22 @@ export function createMessageView(
           sessionId: current().sessionId!,
           signal: lifetime.signal,
         });
-        if (shown) node.append(shown);
-        else {
+        if (shown) {
+          node.append(shown.node);
+          recordUpdates.set(node, shown.update);
+        } else {
           const label = document.createElement('p');
           label.className = 'hint';
           label.textContent = entry.title;
           node.append(label);
+          recordUpdates.set(node, (next) => {
+            label.textContent = next.title;
+          });
         }
         return node;
       });
+      recordUpdates.get(node)!(entry);
+      return node;
     }
 
     function renderPart(
@@ -449,11 +439,8 @@ export function createMessageView(
                 id: part.toolCallId,
                 content: part.content,
                 arguments: part.arguments,
-                sessionId: part.sessionId,
-                taskId: part.taskId,
+                details: part.details,
                 elapsedMs: part.elapsedMs,
-                approvalMs: part.approvalMs,
-                exitCode: part.exitCode,
               },
               node ?? progress,
             );
@@ -465,20 +452,6 @@ export function createMessageView(
         case 'partial':
           preview.textContent = partial;
           return preview;
-        case 'thinking':
-          return retain('thinking:' + part.id, part.text, () => {
-            const details = document.createElement('details');
-            details.className = 'assistant-reasoning process-disclosure ui-disclosure';
-            const summary = document.createElement('summary');
-            const label = document.createElement('span');
-            label.className = 'process-label';
-            label.textContent = 'Reasoning';
-            summary.append(icon('chevron'), label);
-            const body = document.createElement('p');
-            body.textContent = part.text;
-            details.append(summary, body);
-            return details;
-          });
         default:
           return retain(part.type + ':' + part.id, part.text, (previous) => {
             const node = previous ?? document.createElement('div');
@@ -490,7 +463,7 @@ export function createMessageView(
       }
     }
 
-    const desired = groupHistory(entries, run?.id, partial, tools).map((row) => {
+    const desired = groupHistory(entries, run?.id, partial, tools, records).map((row) => {
       switch (row.type) {
         case 'record':
           return record(row);

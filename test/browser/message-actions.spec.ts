@@ -51,7 +51,7 @@ export const inject = ["harnessRoutes","harnessSessions"];
 export const apply = (ctx) => {
           ctx.effect(() => ctx.harnessRoutes.register('POST', '/api/extensions/record-writer/record', async ({ body }) => {
             const { id, visible } = await body();
-            return ctx.harnessSessions.records(id, { pluginId: 'record-writer', instanceId: 'record-writer' }).append( 'fixture', visible ? { title: 'Saved record' } : undefined);
+            return ctx.harnessSessions.records(id, { pluginId: 'record-writer', instanceId: 'record-writer' }).append( 'fixture', visible ? { kind: 'fixture', title: 'Saved record' } : undefined);
           }));
         };
 `,
@@ -72,7 +72,7 @@ export const apply = (ctx) => {
           };
           miniConversation.subscribe(['session', 'history'], update, signal);
           update();
-          ctx.effect(() => ctx.miniMessages.registerRecord(browserPluginId(ctx), (_record, { signal }) => {
+          ctx.effect(() => ctx.miniMessages.registerRecord(browserPluginId(ctx), 'fixture', (_record, { signal }) => {
             document.body.dataset.recordReleased = 'no';
             signal.addEventListener('abort', () => { document.body.dataset.recordReleased = 'yes'; }, { once: true });
             throw new Error('fixture record rendering failure');

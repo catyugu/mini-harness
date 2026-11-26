@@ -1,17 +1,22 @@
 import { KeyedRegistry } from '@mini-harness/ui-runtime/keyed-registry';
-import type { SessionDisplayRecord } from '@mini-harness/sessions/display-record';
+import type { LiveRecord } from '@mini-harness/runs/stream';
 import type {
   MessageAction,
   RecordRenderer,
   ToolRenderer,
+  ToolPlacement,
   ToolView,
   TurnFooterRenderer,
 } from '../history-api.ts';
 
 export class MessageExtensions {
   private readonly actions = new Map<string, MessageAction>();
-  private readonly renderers = new KeyedRegistry<string, ToolRenderer>();
-  private readonly toolActions = new KeyedRegistry<string, ToolRenderer>();
+  private readonly tools = {
+    body: new KeyedRegistry<string, ToolRenderer>(),
+    action: new KeyedRegistry<string, ToolRenderer>(),
+    summary: new KeyedRegistry<string, ToolRenderer>(),
+    status: new KeyedRegistry<string, ToolRenderer>(),
+  };
   private readonly records = new KeyedRegistry<string, RecordRenderer>();
   private readonly footers = new Map<string, TurnFooterRenderer>();
   private readonly events = new EventTarget();
@@ -35,16 +40,16 @@ export class MessageExtensions {
     };
   }
 
-  registerRecord(plugin: string, render: RecordRenderer, priority = 0) {
-    return this.replace(this.records, plugin, render, 'records', priority);
+  registerRecord(plugin: string, kind: string, render: RecordRenderer, priority = 0) {
+    return this.replace(this.records, JSON.stringify([plugin, kind]), render, 'records', priority);
   }
 
   subscribeToRecords(listener: () => void, signal: AbortSignal) {
     this.events.addEventListener('records', listener, { signal });
   }
 
-  recordRenderer(plugin: string) {
-    return this.records.get(plugin);
+  recordRenderer(plugin: string, kind: string) {
+    return this.records.get(JSON.stringify([plugin, kind]));
   }
 
   private renderWithLifetime(parent: AbortSignal, render: (signal: AbortSignal) => HTMLElement | undefined) {
@@ -60,13 +65,37 @@ export class MessageExtensions {
 
   renderRecord(
     render: RecordRenderer | undefined,
-    record: SessionDisplayRecord,
+    record: LiveRecord,
     context: { sessionId: string; signal: AbortSignal },
   ) {
-    if (render)
-      return this.renderWithLifetime(context.signal, (signal) =>
-        render(structuredClone(record), { ...context, signal }),
-      );
+    if (!render) return;
+    const listeners = new Set<(record: LiveRecord) => void>();
+    const node = this.renderWithLifetime(context.signal, (signal) => {
+      signal.addEventListener('abort', () => listeners.clear(), { once: true });
+      return render(structuredClone(record), {
+        ...context,
+        signal,
+        subscribe(listener) {
+          listeners.add(listener);
+        },
+      });
+    });
+    if (!node) return;
+    let current = record;
+    return {
+      node,
+      update: (next: LiveRecord) => {
+        if (current === next) return;
+        current = next;
+        for (const listener of listeners) {
+          try {
+            listener(structuredClone(next));
+          } catch (error) {
+            this.report(error);
+          }
+        }
+      },
+    };
   }
 
   registerTurnFooter(id: string, render: TurnFooterRenderer) {
@@ -105,9 +134,8 @@ export class MessageExtensions {
     };
   }
 
-  registerTool(name: string, render: ToolRenderer, action = false, priority = 0) {
-    const registry = action ? this.toolActions : this.renderers;
-    return this.replace(registry, name, render, 'tools', priority);
+  registerTool(name: string, render: ToolRenderer, placement: ToolPlacement = 'body', priority = 0) {
+    return this.replace(this.tools[placement], name, render, 'tools', priority);
   }
 
   subscribeToTools(listener: (name: string) => void, signal: AbortSignal) {
@@ -120,8 +148,8 @@ export class MessageExtensions {
     );
   }
 
-  render(tool: ToolView, signal: AbortSignal, action = false) {
-    const render = (action ? this.toolActions : this.renderers).get(tool.name);
+  render(tool: ToolView, signal: AbortSignal, placement: ToolPlacement = 'body') {
+    const render = this.tools[placement].get(tool.name);
     if (render) return this.renderWithLifetime(signal, (lifetime) => render(tool, lifetime));
   }
 }

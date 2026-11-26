@@ -1,5 +1,5 @@
 import type { HistoryEntry, MessageContent, ViewMessage } from '@mini-harness/sessions/message';
-import type { ToolProgress } from '@mini-harness/runs/stream';
+import type { LiveRecord, ToolProgress } from '@mini-harness/runs/stream';
 import type { MessageActionTarget } from '../history-api.ts';
 
 export const textOf = (content?: MessageContent) =>
@@ -15,17 +15,11 @@ export function hasContent(entry: HistoryEntry) {
   if (entry.attachments?.length || entry.error) return true;
   return typeof entry.content === 'string'
     ? Boolean(entry.content)
-    : entry.content.some((part) =>
-        part.type === 'text'
-          ? Boolean(part.text)
-          : part.type === 'thinking'
-            ? Boolean(part.thinking && !part.redacted)
-            : false,
-      );
+    : entry.content.some((part) => part.type === 'text' && Boolean(part.text));
 }
 
 type TurnPart =
-  | { type: 'text' | 'thinking' | 'error'; id: string; text: string }
+  | { type: 'text' | 'error'; id: string; text: string }
   | { type: 'partial' }
   | Extract<HistoryEntry, { type: 'record' } | { role: 'toolResult' }>
   | ToolProgress;
@@ -45,6 +39,7 @@ export function groupHistory(
   runId: string | undefined,
   partial: string,
   tools: readonly ToolProgress[],
+  records: readonly LiveRecord[],
 ): HistoryRow[] {
   const rows: HistoryRow[] = [];
   let turn: Turn | undefined;
@@ -78,7 +73,8 @@ export function groupHistory(
       continue;
     }
     if (entry.type === 'record') {
-      (turn?.parts ?? rows).push(entry);
+      if (entry.runId) response(entry.id, entry.runId).parts.push(entry);
+      else (turn?.parts ?? rows).push(entry);
       continue;
     }
     const { parts } = response(entry.id, entry.runId);
@@ -98,12 +94,13 @@ export function groupHistory(
         else parts.push({ type: 'text', id, text: block.text });
         adjacent = true;
       } else {
-        if (block.type === 'thinking' && block.thinking && !block.redacted)
-          parts.push({ type: 'thinking', id, text: block.thinking });
         adjacent = false;
       }
     }
     if (entry.error) parts.push({ type: 'error', id: entry.id, text: entry.error });
+  }
+  for (const entry of records) {
+    response(entry.id, entry.runId ?? runId).parts.push(entry);
   }
   if (partial || tools.length) {
     const { parts } = response('pending', runId);

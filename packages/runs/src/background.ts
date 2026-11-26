@@ -105,7 +105,7 @@ const plugin: Plugin.Object = {
             async execute(args, { callId, signal }) {
               signal.throwIfAborted();
               const receipt = start(ctx, id, args.tool, args.arguments, callId);
-              return { ...json(receipt), details: receipt };
+              return { ...json(receipt), details: receipt, detailKeys: ['taskId', 'state'] };
             },
           }),
       }),

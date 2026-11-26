@@ -1,6 +1,7 @@
 import type { ThinkingLevel, ModelChoice } from '@mini-harness/llm/vocabulary';
 import type { Attachment, InputSource } from '@mini-harness/input/message';
-import type { RunEvent, ToolProgress } from './stream.ts';
+import type { LiveRecord, RunEvent, ToolProgress } from './shared/stream.ts';
+import type { RecordPublisher } from '@mini-harness/sessions/display-record';
 export { defaultMessageMode, messageModes } from '@mini-harness/sessions/queue';
 export type { MessageMode, MessageOrigin } from '@mini-harness/sessions/queue';
 import type { MessageMode, MessageOrigin, QueueEntry } from '@mini-harness/sessions/queue';
@@ -33,7 +34,11 @@ export type RunPolicy = Pick<TaskOptions, 'pool' | 'provider' | 'metadata'>;
 export interface RunPort {
   readonly events: EventTarget;
   current(id: string): TaskHandle | undefined;
-  activity(id: string): { partial?: string; tools: ToolProgress[] };
+  /** Publish live records to this exact run, never a newer run of the same session. */
+  liveRecords(id: string, runId: string): RecordPublisher;
+  /** Record a file change if its execution belongs to the active Run. */
+  recordChange(id: string, executionId: string, path: string): void;
+  activity(id: string): { partial?: string; tools: ToolProgress[]; records: LiveRecord[] };
   send(id: string, input: RunSubmission): SendReceipt;
   stop(id: string): boolean;
   reviseAndStart(

@@ -1,24 +1,46 @@
 import { isRunning, type RunInfo } from '@mini-harness/sessions/run-state';
-import type { RunEvent, StreamEvent, ToolProgress } from './stream.ts';
+import {
+  updateRecords,
+  updateTools,
+  type LiveRecord,
+  type RunEvent,
+  type StreamEvent,
+  type ToolProgress,
+} from './shared/stream.ts';
 
 export class RunEvents {
   private events: RunEvent[] = [];
   private bytes = 0;
   private listeners = new Map<(event: RunEvent) => void, () => void>();
-  private tools = new Map<string, ToolProgress>();
+  private tools: ToolProgress[] = [];
   partial = '';
+  private records: LiveRecord[] = [];
+
+  get activeRecords() {
+    return this.records;
+  }
 
   constructor(readonly info: RunInfo) {}
 
   get activeTools() {
-    return [...this.tools.values()];
+    return this.tools;
   }
 
   publish(event: StreamEvent) {
+    if (event.type === 'record-update') {
+      if (event.operation === 'set') event = { ...event, record: { ...event.record, runId: this.info.id } };
+      this.records = updateRecords(this.records, event);
+    }
+    if (event.type === 'branch') {
+      const records = event.records.map((record) => ({ ...record, runId: this.info.id }));
+      const ids = new Set(records.map(({ id }) => id));
+      event = { ...event, records };
+      this.records = this.records.filter(({ id }) => !ids.has(id));
+    }
     if (event.type === 'assistant-start' || event.type === 'assistant-end') this.partial = '';
     if (event.type === 'delta') this.partial += event.text;
-    if (event.type === 'tool') this.tools.set(event.id, event);
-    if (event.type === 'tool-end') this.tools.delete(event.message.toolCallId);
+    if (event.type === 'tool' || event.type === 'tool-output' || event.type === 'tool-end')
+      this.tools = updateTools(this.tools, event);
     const item: RunEvent = {
       ...event,
       runId: this.info.id,
@@ -54,6 +76,7 @@ export class RunEvents {
         ...history(),
         partial: this.partial,
         tools: this.activeTools,
+        records: this.activeRecords,
         run: { ...this.info },
         sequence: this.info.sequence,
         runId: this.info.id,

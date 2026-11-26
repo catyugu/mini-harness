@@ -114,16 +114,6 @@ export function createComposer(
     },
     { capture: true, signal },
   );
-  const input = document.createElement('input');
-  input.type = 'file';
-  input.name = 'attachments';
-  input.multiple = true;
-  input.hidden = true;
-  input.onchange = () => {
-    void addFiles([...(input.files ?? [])]);
-    input.value = '';
-  };
-  form.append(input);
   type Token = { start: number; end: number; query: string; kind: string };
   let token: Token | undefined;
   let completeSelected: (() => void)[] = [];
@@ -159,13 +149,13 @@ export function createComposer(
     prompt.removeAttribute('aria-activedescendant');
   }
 
-  function replace(text: string, match: Token) {
+  function replace(text: string, match: Pick<Token, 'start' | 'end'>) {
     hide();
     editor.focus();
     editor.replace(match.start, match.end, text);
   }
 
-  function useCommand(command: ComposerCommand, match: Token, complete = false) {
+  function useCommand(command: ComposerCommand, match: Pick<Token, 'start' | 'end'>, complete = false) {
     if (command.run && !complete) {
       replace('', match);
       try {
@@ -178,6 +168,26 @@ export function createComposer(
       replace('/' + command.name + space, match);
       if (!complete) hide();
     }
+  }
+
+  function submittedCommand() {
+    const match = /^\/([\w:-]+)$/.exec(editor.value.trim());
+    if (!match) return;
+    const name = match[1].toLowerCase();
+    return model
+      .matchCommands(name)
+      .find((command) =>
+        command.run
+          ? [command.name, ...(command.aliases ?? [])].some((key) => key.toLowerCase() === name)
+          : command.name === match[1],
+      );
+  }
+
+  function submitCommand() {
+    const command = submittedCommand();
+    if (!command?.run) return false;
+    useCommand(command, { start: 0, end: editor.value.length });
+    return true;
   }
 
   function positionSuggestions() {
@@ -340,6 +350,7 @@ export function createComposer(
         return;
       }
       if (!buttons.length) return;
+      if (event.key === 'Enter' && !event.shiftKey && submittedCommand()) return;
       if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
         event.preventDefault();
         highlight((selected + (event.key === 'ArrowDown' ? 1 : -1) + buttons.length) % buttons.length);
@@ -362,16 +373,7 @@ export function createComposer(
   return {
     render,
     resetSuggestions: hide,
-    openFiles: () => input.click(),
-    attachmentButton() {
-      const button = document.createElement('button');
-      button.type = 'button';
-      button.className = 'icon-button';
-      button.setAttribute('aria-label', 'Attach files');
-      button.append(icon('attach'));
-      button.onclick = () => input.click();
-      return button;
-    },
+    submitCommand,
     refresh,
   };
 }

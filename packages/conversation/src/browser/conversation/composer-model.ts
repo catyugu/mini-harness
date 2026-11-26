@@ -5,7 +5,6 @@ import type { ModelChoice, ThinkingLevel } from '@mini-harness/llm/vocabulary';
 import { isRunning } from '@mini-harness/sessions/run-state';
 import type { Completer, ComposerDraft, ComposerModel, DraftMode } from '../composer-api.ts';
 import { CommandRegistry } from './commands.ts';
-import { exportSessions } from '../session-client.ts';
 
 interface Draft {
   text: string;
@@ -102,19 +101,6 @@ export function createComposerModel(ctx: Context): ComposerModel {
       change();
     };
   };
-  ctx.effect(() =>
-    register({
-      name: 'export',
-      group: 'Conversation',
-      description: 'Export the current conversation',
-      run: () => {
-        const id = control.get().session?.id;
-        if (!id) throw new Error('Open a conversation to export it.');
-        return exportSessions([id], signal);
-      },
-    }),
-  );
-
   async function send() {
     const origin = key(),
       owner = entry(),

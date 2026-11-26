@@ -6,9 +6,7 @@ import type {
   ModelErrorKind,
   NativeAssistantMessage,
 } from '@mini-harness/llm/api';
-import type { Context } from 'mini-harness/cordis';
-import { scopeTarget } from '@mini-harness/plugin-api/scopes';
-import type { ModelFailure, ModelRetry } from './events.ts';
+import type { ModelFailure, ModelRetry } from './api.ts';
 
 function failedMessage(
   { model, signal }: LlmRequest,
@@ -35,6 +33,7 @@ export async function requestModel(
     request?(request: LlmRequest): void;
     recover?(failure: ModelFailure): Promise<LlmRequest | undefined>;
     delta?(text: string): void;
+    thinking?(text: string): void;
     attempt?(metrics: ModelAttemptMetrics): void;
     retry?(failure: ModelFailure): ModelRetry | undefined | Promise<ModelRetry | undefined>;
   },
@@ -47,7 +46,8 @@ export async function requestModel(
     let firstTokenMs: number | undefined;
     let message: NativeAssistantMessage | undefined;
     let streamed = false,
-      partial = '';
+      partial = '',
+      thinking = '';
     try {
       signal.throwIfAborted();
       for await (const event of llm.stream(request)) {
@@ -59,6 +59,9 @@ export async function requestModel(
           if (event.type === 'text-delta') {
             partial += event.text;
             options.delta?.(event.text);
+          } else if (event.type === 'thinking-delta') {
+            thinking += event.text;
+            options.thinking?.(event.text);
           }
         }
       }
@@ -66,6 +69,12 @@ export async function requestModel(
     } catch (error) {
       message = {
         ...failedMessage(request, error, partial, llm.select?.(model)?.classifyError?.(error)),
+        ...(thinking && {
+          content: [
+            { type: 'thinking' as const, thinking },
+            ...(partial ? [{ type: 'text' as const, text: partial }] : []),
+          ],
+        }),
         usage: message?.usage,
       };
     }
@@ -106,15 +115,4 @@ export async function requestModel(
       return failedMessage(request, error);
     }
   }
-}
-
-/** Dispatch the same scoped retry policy for every model execution. */
-export function modelRetry(ctx: Context, sessionId: string) {
-  return async (failure: ModelFailure) => {
-    const { signal, ...input } = failure;
-    for (const { context, callback } of ctx.events.listeners('agent/model-retry', scopeTarget(ctx))) {
-      const retry = await context.fiber.run((signal) => callback({ ...input, sessionId, signal }), signal);
-      if (retry !== undefined) return retry;
-    }
-  };
 }

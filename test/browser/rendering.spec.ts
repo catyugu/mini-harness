@@ -68,7 +68,7 @@ export const apply = (ctx) => {
       ctx.on("agent/tool-result", async (_content, { sessionId, tool }) => {
         if (tool === 'ls') await ctx.harnessSessions.records(sessionId, {
           pluginId: 'bad-renderer', instanceId: 'bad-renderer'
-        }).append({}, { title: 'Tool progress record' });
+        }).append({}, { kind: 'progress', title: 'Tool progress record' });
       });
       ctx.on("agent/prepare-input", async (_content, { original, signal }) => {
         if (original.userText !== 'Stop before acceptance') return;
@@ -140,6 +140,7 @@ export const apply = (ctx) => {
     await expect(
       turn.locator(':scope > .message, :scope > .conversation-record, :scope > .tool-card'),
     ).toHaveText([
+      /Reasoning.*Inspect the workspace first/s,
       'Checking the workspace',
       'Tool progress record',
       /ls.*Done/s,
@@ -229,9 +230,18 @@ export const apply = (ctx) => {
     await expect(page.locator('.tool-card[data-state=finished]')).toHaveCount(1);
     await expect(page.getByText(/^Run cancelled/)).toHaveCount(2);
 
-    await prompt.fill('/compact');
+    await prompt.fill('  /compact  ');
     await prompt.press('Enter');
-    await expect(page.getByRole('status').filter({ hasText: 'Conversation compacted.' })).toBeVisible();
+    const checkpoint = page.getByText('Context compacted', { exact: true });
+    const checkpointHeading = page.getByRole('heading', { name: 'Goal and constraints' });
+    await expect(checkpoint).toBeVisible();
+    await expect(checkpointHeading).toBeHidden();
+    await checkpoint.click();
+    await expect(checkpointHeading).toBeVisible();
+    await page.reload();
+    await expect(checkpoint).toBeVisible();
+    await checkpoint.click();
+    await expect(checkpointHeading).toBeVisible();
     await prompt.fill('Reuse the tool ID');
     await page.getByRole('button', { name: 'Send', exact: true }).click();
     await expect(page.getByText('The second tool finished', { exact: true })).toBeVisible();

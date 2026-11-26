@@ -91,7 +91,47 @@ test(
     });
     const branch = observed.find((event) => event.type === 'branch');
     assert.equal(branch?.leafId, record.id);
-    assert.equal(branch?.display, undefined);
+    assert.deepEqual(branch?.records, []);
+    const owner = { pluginId: 'fixture', instanceId: 'fixture' };
+    const publisher = runs.liveRecords(item.id, runId);
+    for (const id of ['live-a', 'live-b']) {
+      publisher.set({
+        type: 'record',
+        id,
+        plugin: owner.pluginId,
+        instanceId: owner.instanceId,
+        kind: 'note',
+        title: id,
+      });
+      publisher.append(id, 'text', 'First ');
+      publisher.append(id, 'text', 'chunk');
+    }
+    assert.deepEqual(
+      runs.activity(item.id).records.map(({ streams }) => streams?.text),
+      ['First chunk', 'First chunk'],
+    );
+    const committed = app.runtime.plugins.ctx.harnessSessions.log(item.id).append({
+      type: 'plugin-record',
+      owner,
+      data: { text: 'Committed' },
+      displays: ['live-a', 'live-b'].map((id) => ({
+        owner,
+        id,
+        kind: 'note',
+        title: id,
+        source: ['data', 'text'],
+      })),
+    });
+    assert.deepEqual(runs.activity(item.id).records, []);
+    const published = observed.find((event) => event.type === 'branch' && event.leafId === committed.id);
+    assert.ok(published?.type === 'branch');
+    assert.deepEqual(
+      published.records.map(({ id, content }) => ({ id, content })),
+      [
+        { id: 'live-a', content: 'Committed' },
+        { id: 'live-b', content: 'Committed' },
+      ],
+    );
     detach();
     const replay = fetch(
       base + '/api/sessions/' + item.id + '/events?run=' + status.run.id + '&after=' + cursor,

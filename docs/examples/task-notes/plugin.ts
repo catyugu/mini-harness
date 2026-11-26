@@ -77,7 +77,7 @@ export function apply(ctx: Context) {
               pluginId: 'task-notes',
               instanceId: 'task-notes',
             });
-            await records.append({ note }, { title: label(), content: note });
+            await records.append({ note }, { kind: 'note', title: label(), source: ['data', 'note'] });
             return { content: [{ type: 'text', text: 'Task note saved.' }] };
           },
         };

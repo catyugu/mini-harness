@@ -8,21 +8,14 @@ export type { SessionLogPort, SessionEntry, SessionEvent, SessionProjection } fr
 import type { Attachment, ImageInput, PreparedMessage } from '@mini-harness/input/message';
 import type { RunInfo } from './shared/run-state.ts';
 
-export interface RecordDisplay {
-  title: string;
-  content?: unknown;
-}
-export interface RecordOwner {
-  pluginId: string;
-  instanceId: string;
-}
+import type { RecordDisplay, RecordOwner } from './shared/display-record.ts';
+export type { RecordDisplay, RecordOwner } from './shared/display-record.ts';
 
 /** Plugin-contributed payloads use the same durable branch record contract as native events. */
 export interface PluginRecord<Data = unknown> {
   type: 'plugin-record';
   owner: RecordOwner;
   data: Data;
-  display?: RecordDisplay;
 }
 
 export interface SessionRecords<Data = unknown> {

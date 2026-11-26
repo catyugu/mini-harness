@@ -24,6 +24,7 @@ import type {
 import { messageModes, type QueueEntry } from './shared/queue.ts';
 import {
   applyReplacements,
+  displayContent,
   newContext,
   projectContextEntry,
   projectLog,
@@ -31,17 +32,6 @@ import {
 } from './projection.ts';
 import { applyContentDelta, contentDelta } from './content-delta.ts';
 import { RecordLog, digest, entryId } from './record-log.ts';
-
-type StoredEntry =
-  | SessionEntry
-  | (Omit<Extract<SessionEntry, { type: 'inbox-enqueued' }>, 'item'> & {
-      item: Omit<InboxItem, 'mode'> & { mode: 'followUp' };
-    })
-  | (Pick<SessionEntry, 'version' | 'seq' | 'id' | 'parentId' | 'timestamp'> & {
-      type: 'custom';
-      namespace: unknown;
-      data: unknown;
-    });
 
 /** Store only the divergent interval of a transformed model context. */
 function messagePatch(base: NativeMessage[], actual: NativeMessage[]): MessagePatch | undefined {
@@ -109,7 +99,7 @@ export class SessionLog extends RecordLog<SessionEvent> implements SessionLogPor
   }
 
   protected decodeRecord(record: Record<string, unknown>): SessionEntry {
-    const entry = storedEntry(record as StoredEntry);
+    const entry = record as SessionEntry;
     if (
       entry.type === 'message' &&
       entry.message.role === 'toolResult' &&
@@ -123,7 +113,7 @@ export class SessionLog extends RecordLog<SessionEvent> implements SessionLogPor
   }
 
   protected advancesBranch(entry: SessionEntry) {
-    return !operational(entry);
+    return advancesBranch(entry);
   }
 
   protected validateRecord(entry: SessionEntry, recovering: boolean) {
@@ -177,12 +167,12 @@ export class SessionLog extends RecordLog<SessionEvent> implements SessionLogPor
 
   protected recordAdded(entry: SessionEntry) {
     const run = runFromEntry(this.sessionId, entry);
-    if (!operational(entry)) {
+    if (advancesBranch(entry)) {
       if (this.cachedContext?.leafId === entry.parentId)
         projectContextEntry(this.cachedContext, entry, projectMessage(entry, this.execution));
       else this.cachedContext = undefined;
     }
-    if (!operational(entry) || run) this.cachedProjection = undefined;
+    if (advancesBranch(entry) || run) this.cachedProjection = undefined;
     if (entry.type === 'session-setting') {
       if (entry.value == null) this.settings.delete(entry.owner);
       else this.settings.set(entry.owner, entry.value);
@@ -417,6 +407,29 @@ function queueEntry(item: InboxItem): QueueEntry {
 }
 
 function validateEvent(event: SessionEvent) {
+  if (event.displays !== undefined && !Array.isArray(event.displays))
+    throw new Error('Invalid record presentations');
+  for (const display of event.displays ?? []) {
+    if (!display || typeof display !== 'object') throw new Error('Invalid record presentation');
+    const { owner } = display;
+    if (
+      !owner ||
+      typeof owner.pluginId !== 'string' ||
+      !pluginIdPattern.test(owner.pluginId) ||
+      typeof owner.instanceId !== 'string' ||
+      !ownsRecord(owner.pluginId, owner.instanceId) ||
+      (display.id !== undefined && (typeof display.id !== 'string' || !display.id.trim())) ||
+      typeof display.kind !== 'string' ||
+      !display.kind.trim() ||
+      typeof display.title !== 'string' ||
+      !display.title.trim() ||
+      display.title.length > 140 ||
+      (display.source !== undefined &&
+        (!Array.isArray(display.source) || !display.source.length || Object.hasOwn(display, 'content')))
+    )
+      throw new Error('Invalid record presentation');
+    displayContent(event, display);
+  }
   switch (event.type) {
     case 'message':
       validateNativeMessage(event.message);
@@ -458,28 +471,19 @@ function validateEvent(event: SessionEvent) {
       if (event.level !== null && !isThinkingLevel(event.level)) throw new Error('Invalid thinking level');
       return;
     case 'plugin-record': {
-      const { owner, display } = event;
+      const { owner } = event;
       if (
         !owner ||
         typeof owner.pluginId !== 'string' ||
         typeof owner.instanceId !== 'string' ||
         !pluginIdPattern.test(owner.pluginId) ||
-        !ownsRecord(owner.pluginId, owner.instanceId) ||
-        (display !== undefined &&
-          (!display ||
-            typeof display.title !== 'string' ||
-            !display.title.trim() ||
-            display.title.length > 140))
+        !ownsRecord(owner.pluginId, owner.instanceId)
       )
         throw new Error('Invalid plugin record');
       return;
     }
     case 'diagnostic':
-      if (
-        event.code !== 'invalid-tool-calls' &&
-        event.code !== 'executor-response' &&
-        event.code !== 'historical-record'
-      )
+      if (event.code !== 'invalid-tool-calls' && event.code !== 'executor-response')
         throw new Error('Invalid session diagnostic');
       return;
     case 'context-replace':
@@ -569,42 +573,8 @@ function ownsRecord(pluginId: string, instanceId: string) {
   return slash > 0 && isScopeAddress(instanceId.slice(0, slash)) && instanceId.slice(slash + 1) === pluginId;
 }
 
-/** Normalize historical record envelopes only after validating the original checksum. */
-function storedEntry(entry: StoredEntry): SessionEntry {
-  if (entry.type === 'inbox-enqueued' && entry.item.mode === 'followUp')
-    return { ...entry, item: { ...entry.item, mode: 'queue' } };
-  if (entry.type !== 'custom') return entry as SessionEntry;
-  const { type: _type, namespace, data, ...identity } = entry;
-  if (typeof namespace !== 'string' || !namespace) throw new Error('Invalid historical record namespace');
-  if (namespace === 'agent.invalid-tool-calls')
-    return { ...identity, type: 'diagnostic', code: 'invalid-tool-calls', data };
-  const shown = namespace.startsWith('display:');
-  const instanceId = shown ? namespace.slice('display:'.length) : namespace;
-  const pluginId = instanceId.slice(instanceId.lastIndexOf('/') + 1);
-  if (pluginIdPattern.test(pluginId) && ownsRecord(pluginId, instanceId)) {
-    const owner = { pluginId, instanceId };
-    if (!shown) return { ...identity, type: 'plugin-record', owner, data };
-    const envelope = data as { data?: unknown; display?: { title?: unknown; content?: unknown } } | undefined;
-    const { display } = envelope ?? {};
-    if (typeof display?.title === 'string' && display.title.trim() && display.title.length <= 140)
-      return {
-        ...identity,
-        type: 'plugin-record',
-        owner,
-        data: envelope?.data,
-        display: { title: display.title, content: display.content },
-      };
-  }
-  return {
-    ...identity,
-    type: 'diagnostic',
-    code: 'historical-record',
-    data: { label: namespace, payload: data },
-  };
-}
-
-function operational(entry: SessionEvent) {
-  return (
+export function advancesBranch(entry: SessionEvent) {
+  return !(
     entry.type === 'run' ||
     entry.type === 'task' ||
     entry.type === 'model-request' ||

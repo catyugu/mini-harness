@@ -7,6 +7,7 @@ import type { ModelCatalog, ProviderInfo, ProviderModel } from '../shared/catalo
 import { RemoteStore } from '@mini-harness/ui-runtime/remote-store';
 import { icon } from '@mini-harness/ui-primitives/icons';
 import { button, field, fromMarkup, confirmAction, required } from '@mini-harness/ui-primitives/primitives';
+import { mountModelControls } from './composer.ts';
 
 const setup = async (ctx: Context) => {
   const { miniSettings: settings } = ctx;
@@ -23,6 +24,13 @@ const setup = async (ctx: Context) => {
   await state.refresh();
   ctx.effect(() => ctx.miniProjections.register('models', state));
   ctx.provide('miniModels', state);
+  ctx.inject(['miniComposer', 'miniConversation', 'miniSlots'], (composer) => {
+    composer.effect(() =>
+      composer.miniSlots.register('conversation.composer-trailing', (signal) =>
+        mountModelControls(composer, signal),
+      ),
+    );
+  });
   ctx.on('settings/options', (schema, value) => {
     if (!schema['x-modelChoice']) return;
     const current = value as ModelChoice | null | undefined;

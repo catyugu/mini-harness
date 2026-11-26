@@ -11,7 +11,7 @@ const setup = (ctx: Context) => {
   );
 };
 export default {
-  inject: ['miniConversation', 'miniSelection', 'miniModels', 'miniSlots'],
+  inject: ['miniConversation', 'miniSelection', 'miniSlots'],
   provide: ['miniComposer'],
   apply: setup,
 };
