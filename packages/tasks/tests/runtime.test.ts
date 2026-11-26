@@ -274,17 +274,22 @@ test('creator disposal does not cancel a task executed by another provider fiber
   const creator = ctx.plugin({
     inject: ['harnessTasks'],
     apply(caller) {
-      caller.harnessTasks.subscribe(() => { observations++; });
-      handle = caller.harnessTasks.start({ owner: 'resource', provider: provider.ctx }, async ({ signal }) => {
-        entered.release();
-        await new Promise<void>((_, reject) => {
-          if (signal.aborted) reject(signal.reason);
-          else signal.addEventListener('abort', () => reject(signal.reason), { once: true });
-        }).finally(async () => {
-          cleaning.release();
-          await release.promise;
-        });
+      caller.harnessTasks.subscribe(() => {
+        observations++;
       });
+      handle = caller.harnessTasks.start(
+        { owner: 'resource', provider: provider.ctx },
+        async ({ signal }) => {
+          entered.release();
+          await new Promise<void>((_, reject) => {
+            if (signal.aborted) reject(signal.reason);
+            else signal.addEventListener('abort', () => reject(signal.reason), { once: true });
+          }).finally(async () => {
+            cleaning.release();
+            await release.promise;
+          });
+        },
+      );
     },
   });
   try {
@@ -314,7 +319,10 @@ test('observation data is detached from arbitrary result objects', async () => {
   const runtime = new TaskRuntime();
   const metadata = { nested: { value: 'original' } };
   const result = { value: 'answer' };
-  const handle = runtime.start<{ value: string }>({ owner: 'one', metadata, projectResult: (value) => value }, async () => result);
+  const handle = runtime.start<{ value: string }>(
+    { owner: 'one', metadata, projectResult: (value) => value },
+    async () => result,
+  );
   metadata.nested.value = 'modified';
   assert.strictEqual(await handle.result, result);
   result.value = 'modified';

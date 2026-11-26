@@ -25,7 +25,7 @@ interface Entry {
 const describe = (error: unknown) => (error instanceof Error ? error.message : String(error));
 const clone = <T>(value: T): T => structuredClone(value);
 // Observation data crosses the JSON persistence boundary, unlike handle results.
-const jsonData = <T>(value: T): T => value === undefined ? value : JSON.parse(JSON.stringify(value));
+const jsonData = <T>(value: T): T => (value === undefined ? value : JSON.parse(JSON.stringify(value)));
 const taskOwner = (id: string) => 'task:' + id;
 
 export class TaskRuntime implements TaskPort {
