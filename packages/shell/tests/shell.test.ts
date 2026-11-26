@@ -63,7 +63,7 @@ test('independent shell calls use one task, retain output channels and do not du
   const { app } = await fixture(t);
   const ctx = app.runtime.plugins.ctx;
   await app.runtime.configuration.update({
-    entries: { shell: { disabled: false } },
+    entries: { shell: { disabled: false, config: { timeoutMs: 1000 } } },
   });
   const session = ctx.harnessSessions.create({ permission: 'fullAccess' });
   ctx.harnessRuns.stop(session.id);
@@ -71,14 +71,15 @@ test('independent shell calls use one task, retain output channels and do not du
     .list({ resourceId: session.id, scope: ctx.harnessSessions.runScope(session.id) })
     .find(({ name }) => name === 'start_background');
   assert.ok(tool);
+  const command = 'node -e "setTimeout(() => console.log(\'task-output\'), 1500)"';
   const receipt = await runTool(tool, 'background-shell', {
     tool: 'shell',
-    arguments: { command: 'echo task-output', timeoutMs: 30000 },
+    arguments: { command, timeoutMs: 30000 },
   });
   const id = String(receipt.details?.taskId);
   const task = await ctx.harnessTasks.wait(id);
   assert.equal(task.state, 'completed');
-  assert.deepEqual(task.metadata, { tool: 'shell', arguments: { command: 'echo task-output', timeoutMs: 30000 } });
+  assert.deepEqual(task.metadata, { tool: 'shell', arguments: { command, timeoutMs: 30000 } });
   assert.equal((task.result as { details: { exitCode: number } }).details.exitCode, 0);
   assert.equal((task.result as { details: { timeoutMs: number } }).details.timeoutMs, 30000);
   assert.equal(ctx.harnessTasks.list('session:' + session.id).length, 1);
