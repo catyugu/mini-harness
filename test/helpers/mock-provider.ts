@@ -63,7 +63,9 @@ export async function createMockProvider(
         res.write('data: ' + item({}, 'stop') + '\n\n');
       } else {
         if (answer.thinking)
-          res.write('data: ' + item({ role: 'assistant', reasoning_content: answer.thinking }, null) + '\n\n');
+          res.write(
+            'data: ' + item({ role: 'assistant', reasoning_content: answer.thinking }, null) + '\n\n',
+          );
         if (answer.text)
           res.write('data: ' + item({ role: 'assistant', content: answer.text }, null) + '\n\n');
         res.write(
