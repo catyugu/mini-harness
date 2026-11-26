@@ -12,6 +12,8 @@ test('search, rename, switch conversations and enter bulk selection', async ({ p
   await prompt.fill('Find the violet-sparrow detail');
   await send.click();
   await expect(assistant).toHaveText('Mock response');
+  await expect(list).toHaveText('Find the violet-sparrow detail');
+  await expect(list).toBeVisible();
   const nameBeforeHover = await list.boundingBox();
   await page.locator('.session-row').hover();
   expect(await list.boundingBox()).toEqual(nameBeforeHover);
