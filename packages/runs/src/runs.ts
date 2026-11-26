@@ -5,12 +5,7 @@ import { tagScope, scopeTarget } from '@mini-harness/plugin-api/scopes';
 import type { ThinkingLevel, ModelChoice } from '@mini-harness/llm/vocabulary';
 import type { ProfileScopes } from '@mini-harness/plugin-api/configuration';
 import { DomainError } from '@mini-harness/platform/errors';
-import {
-  terminal,
-  type TaskEvent,
-  type TaskPort,
-  type TaskSnapshot,
-} from '@mini-harness/tasks/api';
+import { terminal, type TaskEvent, type TaskPort, type TaskSnapshot } from '@mini-harness/tasks/api';
 import { imageMimeType } from '@mini-harness/input/prepare';
 import { validateModelOptions } from '@mini-harness/llm/options';
 import type { Attachment, InputSource } from '@mini-harness/input/message';
@@ -56,9 +51,8 @@ export class Runs implements RunPort {
   }
 
   get size() {
-    return this.tasks
-      .list()
-      .filter((task) => task.lane?.startsWith('conversation:') && !terminal(task.state)).length;
+    return this.tasks.list().filter((task) => task.lane?.startsWith('conversation:') && !terminal(task.state))
+      .length;
   }
 
   active(id: string) {
@@ -158,7 +152,10 @@ export class Runs implements RunPort {
       Object.assign(info, next, { sequence: info.sequence });
       this.publish(activity, { type: 'run', run: next });
       if (firstAdmission)
-        this.observe({ type: 'run-started', sessionId: id, run: next }, this.tasks.active(this.lane(id))?.signal);
+        this.observe(
+          { type: 'run-started', sessionId: id, run: next },
+          this.tasks.active(this.lane(id))?.signal,
+        );
       if (ended) this.observe({ type: 'run-ended', sessionId: id, run: next });
     } finally {
       if (ended) {
@@ -298,17 +295,12 @@ export class Runs implements RunPort {
       throw new DomainError('invalid_input', 'Reattach the original text files: ' + missing.join(', '));
     const attachments = [...target.images.filter((_, index) => !removed.includes(index)), ...attached];
     return {
-      ...this.launch(
-        id,
-        input.message,
-        undefined,
-        {
-          attachments,
-          model: input.model,
-          thinkingLevel: input.thinkingLevel,
-          revision: { parentId: target.parentId, expectedLeafId: input.expectedLeafId },
-        },
-      ).info,
+      ...this.launch(id, input.message, undefined, {
+        attachments,
+        model: input.model,
+        thinkingLevel: input.thinkingLevel,
+        revision: { parentId: target.parentId, expectedLeafId: input.expectedLeafId },
+      }).info,
     };
   }
 
@@ -426,8 +418,7 @@ export class Runs implements RunPort {
     return (
       this.tasks
         .active(this.lane(id))
-        ?.cancel(new Error(activity?.events ? 'Agent run cancelled' : 'Compaction cancelled')) ??
-      false
+        ?.cancel(new Error(activity?.events ? 'Agent run cancelled' : 'Compaction cancelled')) ?? false
     );
   }
 
@@ -436,7 +427,9 @@ export class Runs implements RunPort {
     const task = this.tasks.start(
       { owner: 'session:' + id, type: 'compaction', lane: this.lane(id) },
       ({ signal }) =>
-        this.withAgentContext(id, undefined, signal, (ctx, signal) => this.sessionRun.compact(ctx, id, signal)),
+        this.withAgentContext(id, undefined, signal, (ctx, signal) =>
+          this.sessionRun.compact(ctx, id, signal),
+        ),
     );
     this.changed(id);
     try {

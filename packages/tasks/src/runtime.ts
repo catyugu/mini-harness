@@ -272,9 +272,7 @@ export class TaskRuntime implements TaskPort {
     let accepted = false;
     const result = Promise.resolve().then(() => {
       if (!accepted) throw new Error('Task submission failed');
-      return provider
-        ? provider.fiber.run(() => (executing = run())).catch(() => executing ?? run())
-        : run();
+      return provider ? provider.fiber.run(() => (executing = run())).catch(() => executing ?? run()) : run();
     });
     const handle: TaskHandle<T> = {
       id: snapshot.id,
