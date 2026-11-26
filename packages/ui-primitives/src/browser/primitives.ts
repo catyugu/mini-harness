@@ -41,7 +41,10 @@ export function bindPopover(
   options: FloatingOptions = {},
 ) {
   const position = () => {
-    if (panel.matches(':popover-open')) positionFloating(trigger, panel, options);
+    if (panel.matches(':popover-open')) {
+      if (!trigger.getClientRects().length) panel.hidePopover();
+      else positionFloating(trigger, panel, options);
+    }
   };
   panel.addEventListener(
     'toggle',

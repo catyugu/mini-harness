@@ -70,7 +70,7 @@ export function apply(ctx, config) {
         };
       }
       if (slot === 'sidebar') ctx.provide('exampleUi', node);
-      ctx.effect(() => ctx.miniSlots.register({sidebar:'sidebar.actions',composer:'conversation.composer',inspector:'conversation.header'}[slot], node));
+      ctx.effect(() => ctx.miniSlots.register({sidebar:'sidebar.actions',composer:'conversation.composer',inspector:'header.actions'}[slot], node));
     }
     ctx.effect(() => ctx.miniSettingsRegistry.register(browserPluginId(ctx), { section: 'General', id: 'preferences', order: 10, render({ bind }) {
       const content = document.createElement('div');

@@ -24,7 +24,12 @@ export function createModelPicker(
     return providers.get(id) ?? id;
   }
 
-  const position = bindPopover(button, popup, signal, { width: 300, maxHeight: 420, align: 'end', prefer: 'above' });
+  const position = bindPopover(button, popup, signal, {
+    width: 300,
+    maxHeight: 420,
+    align: 'end',
+    prefer: 'above',
+  });
 
   function matches(label: string, term: string) {
     if (label.includes(term)) return true;

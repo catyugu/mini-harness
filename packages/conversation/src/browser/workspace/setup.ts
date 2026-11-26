@@ -16,7 +16,7 @@ const setup = (ctx: Context) => {
     const label = document.createElement('small');
     label.className = 'ui-truncate ui-meta';
     node.append(icon('folder'), label);
-    ctx.effect(() => ctx.miniSlots.register(slot, node));
+    ctx.effect(() => ctx.miniSlots.register(slot, node, { order: -100 }));
     return { node, label };
   });
   ctx.provide('miniWorkspace', picker);

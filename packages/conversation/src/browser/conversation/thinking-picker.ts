@@ -23,7 +23,12 @@ export function createThinkingPicker(
     results = element('thinkingResults');
   let options: HTMLButtonElement[] = [];
 
-  const position = bindPopover(button, popup, signal, { width: 180, maxHeight: 320, align: 'end', prefer: 'above' });
+  const position = bindPopover(button, popup, signal, {
+    width: 180,
+    maxHeight: 320,
+    align: 'end',
+    prefer: 'above',
+  });
 
   function open() {
     if (button.hidden || popup.matches(':popover-open')) return;

@@ -321,7 +321,7 @@ function setup(ctx: Context) {
     const total = pending.length + settled.length;
     const liveCount = pending.length;
     count.textContent = total + (total === 1 ? ' task' : ' tasks');
-    toggle.dataset.tone = (liveCount > 0) ? 'info' : 'neutral';
+    toggle.dataset.tone = liveCount > 0 ? 'info' : 'neutral';
     toggle.title = liveCount + ' running · ' + (total - liveCount) + ' finished';
     container.hidden = !active || (!total && !notice.textContent);
     if (container.hidden && open()) panel.hidePopover();

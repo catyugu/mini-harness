@@ -96,8 +96,6 @@
     align-items: center;
     gap: var(--space);
     min-width: 0;
-  }
-  .header-meta {
     block-size: 32px;
     overflow: hidden;
   }
@@ -115,6 +113,7 @@
   .header-context > * {
     min-width: 0;
     flex: 0 1 auto;
+    max-width: 100%;
   }
   #headerActions,
   #headerInline {
@@ -162,7 +161,7 @@
   #headerOverflow > * {
     flex: none;
   }
-  .title-block strong {
+  .title-block > strong {
     font-weight: 600;
     font-size: var(--font-ui);
     line-height: 20px;

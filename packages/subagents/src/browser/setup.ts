@@ -67,7 +67,7 @@ const setup = (ctx: Context) => {
     const children = parentId ? ctx.miniSessions.get().filter((child) => child.parentId === parentId) : [];
     const running = children.filter(({ run }) => isRunning(run)).length;
     count.textContent = children.length + (children.length === 1 ? ' subagent' : ' subagents');
-    toggle.dataset.tone = (running > 0) ? 'info' : 'neutral';
+    toggle.dataset.tone = running > 0 ? 'info' : 'neutral';
     toggle.title = running + ' running · ' + (children.length - running) + ' idle or finished';
     container.hidden = !children.length;
     if (container.hidden && panel.matches(':popover-open')) panel.hidePopover();

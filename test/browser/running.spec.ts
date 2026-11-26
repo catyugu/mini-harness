@@ -512,7 +512,7 @@ export const apply = (ctx) => {
     await expect(toggle).toBeInViewport();
     await expect
       .poll(async () => {
-        const workspace = await page.locator('#workspaceHeader').boundingBox();
+        const workspace = await page.locator('#headerContext .workspace-button').boundingBox();
         const button = await toggle.boundingBox();
         return (
           workspace &&
@@ -567,10 +567,10 @@ export const apply = (ctx) => {
     await page.setViewportSize({ width: 1280, height: 844 });
     await expect(more).toBeHidden();
     await expect(
-      page.locator('#conversationExtensions').getByRole('button', { name: 'Subagents', exact: true }),
+      page.locator('#headerInline').getByRole('button', { name: 'Subagents', exact: true }),
     ).toBeVisible();
     await expect(
-      page.locator('#conversationExtensions').getByRole('button', { name: 'Tasks', exact: true }),
+      page.locator('#headerInline').getByRole('button', { name: 'Tasks', exact: true }),
     ).toBeVisible();
     await agentToggle.click();
     const agentPanel = agents.locator('.subagent-list');

@@ -39,7 +39,7 @@ export function createHeaderOutlet(
     }
     const width = meta.clientWidth;
     if (!width) return;
-    const gap = parseFloat(getComputedStyle(row).columnGap);
+    const gap = parseFloat(getComputedStyle(row).columnGap) || 0;
     // Keep a small amount of space for flexible context contributions.
     const reserved =
       context.hidden || !context.querySelector(':scope > :not([hidden])')
@@ -50,7 +50,7 @@ export function createHeaderOutlet(
     const total = sizes.reduce((sum, size) => sum + size, 0) + gap * (sizes.length - 1);
     let count = visible.length;
     if (total > available) {
-      const budget = available - parseFloat(getComputedStyle(more).width) - gap;
+      const budget = available - (parseFloat(getComputedStyle(more).width) || 32) - gap;
       count = 0;
       let used = 0;
       for (const size of sizes) {

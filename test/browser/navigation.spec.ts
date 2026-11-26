@@ -12,7 +12,9 @@ test('search, rename, switch conversations and enter bulk selection', async ({ p
   await prompt.fill('Find the violet-sparrow detail');
   await send.click();
   await expect(assistant).toHaveText('Mock response');
+  const nameBeforeHover = await list.boundingBox();
   await page.locator('.session-row').hover();
+  expect(await list.boundingBox()).toEqual(nameBeforeHover);
   await page.getByRole('button', { name: 'Rename Find the violet-sparrow detail' }).click();
   await page.getByRole('textbox', { name: 'Title', exact: true }).fill('Renamed chat');
   await page.getByRole('button', { name: 'Rename', exact: true }).click();
