@@ -6,10 +6,12 @@
     min-width: 0;
   }
   .sidebar {
+    position: relative;
     display: flex;
-    flex: 0 0 280px;
+    flex: 0 0 var(--left-width);
     flex-direction: column;
-    width: 280px;
+    width: var(--left-width);
+    min-width: 0;
     transition:
       flex-basis var(--motion-sidebar) ease-out,
       width var(--motion-sidebar) ease-out;

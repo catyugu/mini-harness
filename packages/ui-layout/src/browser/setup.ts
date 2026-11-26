@@ -48,6 +48,7 @@ function createAppFrame(
 ) {
   const root = fromMarkup(`<div id="app" class="app">
   <aside id="sidebar" class="sidebar" aria-label="Conversations">
+    <div id="sidebarResize" class="panel-resize" role="separator" aria-label="Resize navigation sidebar" aria-orientation="vertical" aria-controls="sidebar" tabindex="0"></div>
     <div class="sidebar-top">
       <div class="brand"><img src="/logo.svg" width="28" height="28" alt=""><span>mini-harness</span></div>
       <button id="sidebarClose" class="icon-button mobile-only" type="button" aria-label="Close navigation" data-icon="close"></button>
@@ -68,7 +69,7 @@ function createAppFrame(
     <div id="mainSlot" hidden></div>
   </main>
   <aside id="inspector" class="right-panel" aria-label="Workspace panel" inert>
-    <div id="panelResize" class="panel-resize" role="separator" aria-label="Resize workspace panel" aria-orientation="vertical" aria-valuemin="260" tabindex="0"></div>
+    <div id="panelResize" class="panel-resize" role="separator" aria-label="Resize workspace panel" aria-orientation="vertical" aria-controls="inspector" tabindex="0"></div>
     <header>
       <div id="rightTabList" class="right-tab-list" role="tablist" aria-label="Workspace tabs"></div>
       <button id="inspectorClose" class="icon-button" type="button" aria-label="Close workspace panel" data-icon="close"></button>
@@ -95,12 +96,13 @@ function createAppFrame(
       sidebar: element('sidebar'),
       sidebarButton: element('sidebarOpen'),
       sidebarClose: element('sidebarClose'),
+      sidebarResize: element('sidebarResize'),
       main: element('main'),
       overlay: element('overlay'),
       panel: element('inspector'),
       panelButton: element('inspectorOpen'),
       panelClose: element('inspectorClose'),
-      resizeHandle: element('panelResize'),
+      panelResize: element('panelResize'),
     },
     signal,
   );

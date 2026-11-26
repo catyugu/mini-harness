@@ -15,13 +15,17 @@
       visibility 0s linear var(--motion-panel);
   }
   .right-open .right-panel {
-    flex-basis: var(--right-width, 380px);
-    width: var(--right-width, 380px);
+    flex-basis: var(--right-width);
+    width: var(--right-width);
     visibility: visible;
     border-left: 1px solid var(--border);
     transition-delay: 0s;
   }
-  .resizing-panel .right-panel {
+  .app.resizing {
+    cursor: col-resize;
+    user-select: none;
+  }
+  .app.resizing :is(.sidebar, .right-panel) {
     transition: none;
   }
   .panel-resize {
@@ -31,6 +35,9 @@
     width: 7px;
     cursor: col-resize;
     touch-action: none;
+  }
+  .sidebar .panel-resize {
+    inset: 0 0 0 auto;
   }
   .panel-resize:is(:hover, :focus-visible) {
     background: var(--focus);

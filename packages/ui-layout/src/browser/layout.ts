@@ -3,12 +3,13 @@ interface LayoutElements {
   sidebar: HTMLElement;
   sidebarButton: HTMLElement;
   sidebarClose: HTMLElement;
+  sidebarResize: HTMLElement;
   main: HTMLElement;
   overlay: HTMLElement;
   panel: HTMLElement;
   panelButton: HTMLElement;
   panelClose: HTMLElement;
-  resizeHandle: HTMLElement;
+  panelResize: HTMLElement;
 }
 
 export function createLayout(view: LayoutElements, signal: AbortSignal) {
@@ -17,37 +18,67 @@ export function createLayout(view: LayoutElements, signal: AbortSignal) {
     sidebar,
     sidebarButton,
     sidebarClose,
+    sidebarResize,
     main,
     overlay,
     panel,
     panelButton,
     panelClose,
-    resizeHandle,
+    panelResize,
   } = view;
   const narrow = matchMedia('(max-width: 860px)');
-  const widthKey = 'mini-harness-panel-width';
-  let width = Number(localStorage.getItem(widthKey)) || 380;
+  const sidebarWidthKey = 'mini-harness-sidebar-width';
+  const panelWidthKey = 'mini-harness-panel-width';
+  const sidebarMin = 280;
+  const sidebarMax = 380;
+  const collapsedWidth = 56;
+  const panelMin = 260;
+  const mainMin = 300;
+  let sidebarWidth = Number(localStorage.getItem(sidebarWidthKey)) || 340;
+  let panelWidth = Number(localStorage.getItem(panelWidthKey)) || 380;
   let desktopSidebar = localStorage.getItem('mini-harness-sidebar') !== 'collapsed';
   let drawer = false;
   let panelOpen = false;
   let panelTrigger: HTMLElement;
   const viewport = window.visualViewport;
 
-  function clamp(value: number) {
-    return Math.round(
-      Math.max(260, Math.min(value, innerWidth * 0.48, innerWidth - (desktopSidebar ? 280 : 56) - 300)),
-    );
+  function clamp(value: number, min: number, max: number) {
+    return Math.round(Math.max(min, Math.min(value, max)));
   }
-  function measure(value = width) {
-    const size = clamp(value);
-    root.style.setProperty('--right-width', size + 'px');
-    resizeHandle.setAttribute('aria-valuenow', String(size));
-    resizeHandle.setAttribute('aria-valuemax', String(clamp(innerWidth)));
+  function maxSidebarWidth() {
+    return panelOpen && !narrow.matches
+      ? Math.max(sidebarMin, Math.min(sidebarMax, innerWidth - panelMin - mainMin))
+      : sidebarMax;
+  }
+  function sidebarSize(value = sidebarWidth) {
+    return clamp(value, sidebarMin, maxSidebarWidth());
+  }
+  function maxPanelWidth() {
+    const left = desktopSidebar ? sidebarSize() : collapsedWidth;
+    return Math.round(Math.max(panelMin, Math.min(innerWidth * 0.48, innerWidth - left - mainMin)));
+  }
+  function panelSize(value = panelWidth) {
+    return clamp(value, panelMin, maxPanelWidth());
+  }
+  function measure() {
+    const left = sidebarSize();
+    const right = panelSize();
+    root.style.setProperty('--left-width', left + 'px');
+    root.style.setProperty('--right-width', right + 'px');
+    for (const [handle, size, min, max] of [
+      [sidebarResize, left, sidebarMin, maxSidebarWidth()],
+      [panelResize, right, panelMin, maxPanelWidth()],
+    ] as const) {
+      handle.setAttribute('aria-valuenow', String(size));
+      handle.setAttribute('aria-valuemin', String(min));
+      handle.setAttribute('aria-valuemax', String(max));
+    }
   }
   function render() {
     const mobile = narrow.matches;
     sidebar.classList.toggle('open', mobile && drawer);
     sidebar.inert = mobile && (!drawer || panelOpen);
+    sidebarResize.hidden = mobile || !desktopSidebar;
     root.classList.toggle('sidebar-collapsed', !mobile && !desktopSidebar);
     root.classList.toggle('right-open', panelOpen);
     sidebarButton.setAttribute('aria-expanded', String(mobile ? drawer : desktopSidebar));
@@ -156,46 +187,80 @@ export function createLayout(view: LayoutElements, signal: AbortSignal) {
     { signal },
   );
 
-  let drag: { id: number; start: number; width: number } | undefined;
-  resizeHandle.addEventListener(
-    'pointerdown',
-    (event) => {
-      if (event.button !== 0) return;
-      event.preventDefault();
-      drag = { id: event.pointerId, start: event.clientX, width: panel.getBoundingClientRect().width };
-      root.classList.add('resizing-panel');
-      resizeHandle.setPointerCapture(event.pointerId);
+  function bindResize(
+    handle: HTMLElement,
+    target: HTMLElement,
+    direction: 1 | -1,
+    key: string,
+    getWidth: () => number,
+    setWidth: (value: number) => void,
+  ) {
+    let drag: { id: number; start: number; width: number } | undefined;
+    const save = () => localStorage.setItem(key, String(getWidth()));
+    handle.addEventListener(
+      'pointerdown',
+      (event) => {
+        if (event.button !== 0 || drag) return;
+        event.preventDefault();
+        handle.focus();
+        drag = { id: event.pointerId, start: event.clientX, width: target.getBoundingClientRect().width };
+        root.classList.add('resizing');
+        handle.setPointerCapture(event.pointerId);
+      },
+      { signal },
+    );
+    handle.addEventListener(
+      'pointermove',
+      (event) => {
+        if (drag?.id !== event.pointerId) return;
+        setWidth(drag.width + direction * (event.clientX - drag.start));
+        measure();
+      },
+      { signal },
+    );
+    handle.addEventListener(
+      'lostpointercapture',
+      (event) => {
+        if (drag?.id !== event.pointerId) return;
+        drag = undefined;
+        root.classList.remove('resizing');
+        save();
+      },
+      { signal },
+    );
+    handle.addEventListener(
+      'keydown',
+      (event) => {
+        if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+        event.preventDefault();
+        const delta = event.key === 'ArrowRight' ? 20 : -20;
+        setWidth(Number(handle.getAttribute('aria-valuenow')) + direction * delta);
+        measure();
+        save();
+      },
+      { signal },
+    );
+  }
+
+  bindResize(
+    sidebarResize,
+    sidebar,
+    1,
+    sidebarWidthKey,
+    () => sidebarWidth,
+    (value) => {
+      sidebarWidth = sidebarSize(value);
     },
-    { signal },
   );
-  resizeHandle.addEventListener(
-    'pointermove',
-    (event) => {
-      if (drag?.id !== event.pointerId) return;
-      width = clamp(drag.width + drag.start - event.clientX);
-      measure();
+  bindResize(
+    panelResize,
+    panel,
+    -1,
+    panelWidthKey,
+    () => panelWidth,
+    (value) => {
+      panelWidth = panelSize(value);
     },
-    { signal },
-  );
-  resizeHandle.addEventListener(
-    'lostpointercapture',
-    () => {
-      drag = undefined;
-      root.classList.remove('resizing-panel');
-      localStorage.setItem(widthKey, String(width));
-    },
-    { signal },
-  );
-  resizeHandle.addEventListener(
-    'keydown',
-    (event) => {
-      if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
-      event.preventDefault();
-      width = clamp(clamp(width) + (event.key === 'ArrowLeft' ? 20 : -20));
-      measure();
-      localStorage.setItem(widthKey, String(width));
-    },
-    { signal },
   );
 
   function resize() {
