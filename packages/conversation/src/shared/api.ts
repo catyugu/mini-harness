@@ -1,6 +1,6 @@
 import type { ThinkingLevel, ModelChoice } from '@mini-harness/llm/vocabulary';
 import type { HistoryEntry } from '@mini-harness/sessions/message';
-import type { SessionDisplayRecord } from '@mini-harness/plugin-api/timeline';
+import type { SessionDisplayRecord } from '@mini-harness/sessions/display-record';
 import type { QueueEntry } from '@mini-harness/sessions/queue';
 import type { ToolProgress } from '@mini-harness/runs/stream';
 import type { RunInfo } from '@mini-harness/sessions/run-state';

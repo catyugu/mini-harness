@@ -1,6 +1,6 @@
 import type { Context } from 'mini-harness/cordis';
 import { randomUUID } from 'node:crypto';
-import type { RecordPresentation } from '@mini-harness/plugin-api/timeline';
+import type { RecordPresentation } from '@mini-harness/sessions/display-record';
 import { isDeepStrictEqual } from 'node:util';
 import {
   validateNativeMessage,

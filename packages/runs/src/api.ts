@@ -1,7 +1,7 @@
 import type { ThinkingLevel, ModelChoice } from '@mini-harness/llm/vocabulary';
 import type { Attachment, InputSource } from '@mini-harness/input/message';
 import type { RunEvent, ToolProgress } from './stream.ts';
-import type { SessionDisplayRecord } from '@mini-harness/plugin-api/timeline';
+import type { SessionDisplayRecord } from '@mini-harness/sessions/display-record';
 export { defaultMessageMode, messageModes } from '@mini-harness/sessions/queue';
 export type { MessageMode, MessageOrigin } from '@mini-harness/sessions/queue';
 import type { MessageMode, MessageOrigin, QueueEntry } from '@mini-harness/sessions/queue';

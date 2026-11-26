@@ -11,8 +11,7 @@
     "./plugin-configuration": "./src/shared/plugin-configuration.ts",
     "./observations": "./src/observations.ts",
     "./scopes": "./src/scopes.ts",
-    "./profile": "./src/profile.ts",
-    "./timeline": "./src/shared/timeline.ts"
+    "./profile": "./src/profile.ts"
   },
   "miniHarness": {
     "api": [
@@ -23,8 +22,7 @@
       "./plugin-configuration",
       "./observations",
       "./scopes",
-      "./profile",
-      "./timeline"
+      "./profile"
     ]
   },
   "dependencies": {

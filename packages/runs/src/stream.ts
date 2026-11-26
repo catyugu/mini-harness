@@ -1,6 +1,6 @@
 import type { MessageContent, ViewMessage } from '@mini-harness/sessions/message';
 import type { RecordAppend } from '@mini-harness/sessions/display-record';
-import type { RecordUpdate, SessionDisplayRecord } from '@mini-harness/plugin-api/timeline';
+import type { RecordUpdate, SessionDisplayRecord } from '@mini-harness/sessions/display-record';
 import type { InputSource } from '@mini-harness/input/message';
 import type { ModelChoice } from '@mini-harness/llm/vocabulary';
 import type { SessionProjection } from '@mini-harness/sessions/log-api';

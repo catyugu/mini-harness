@@ -1,6 +1,6 @@
 import type { HistoryEntry, MessageContent, ViewMessage } from '@mini-harness/sessions/message';
 import type { ToolProgress } from '@mini-harness/runs/stream';
-import type { SessionDisplayRecord } from '@mini-harness/plugin-api/timeline';
+import type { SessionDisplayRecord } from '@mini-harness/sessions/display-record';
 import type { MessageActionTarget } from '../history-api.ts';
 
 export const textOf = (content?: MessageContent) =>

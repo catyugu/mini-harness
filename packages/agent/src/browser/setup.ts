@@ -1,5 +1,5 @@
 import type { Context } from 'mini-harness/cordis';
-import type { SessionDisplayRecord } from '@mini-harness/plugin-api/timeline';
+import type { SessionDisplayRecord } from '@mini-harness/sessions/display-record';
 
 function setup(ctx: Context) {
   ctx.effect(() =>

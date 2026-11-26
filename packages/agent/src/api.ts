@@ -6,7 +6,7 @@ import type {
   NativeToolMessage,
 } from '@mini-harness/llm/api';
 import type { ModelFailure, ModelRetry } from './events.ts';
-import type { RecordPresentation, RecordUpdate } from '@mini-harness/plugin-api/timeline';
+import type { RecordPresentation, RecordUpdate } from '@mini-harness/sessions/display-record';
 import type { ToolCallPart } from '@mini-harness/llm/api';
 import type { ToolDefinition } from '@mini-harness/tools/api';
 import type { ToolExecution, ToolExecutorPort } from '@mini-harness/tools/execution';

@@ -1,6 +1,6 @@
 import { isRunning, type RunInfo } from '@mini-harness/sessions/run-state';
 import type { RunEvent, StreamEvent, ToolProgress } from './stream.ts';
-import { updateRecords, type SessionDisplayRecord } from '@mini-harness/plugin-api/timeline';
+import { updateRecords, type SessionDisplayRecord } from '@mini-harness/sessions/display-record';
 
 export class RunEvents {
   private events: RunEvent[] = [];
