@@ -42,8 +42,19 @@ function assertPaired(log: SessionLogPort, mock: MockProvider) {
 test('retention includes the complete latest exchange even when it exceeds the minimum', () => {
   const messages = [
     { role: 'user', content: 'History', timestamp: 0 },
-    { role: 'assistant', content: [{ type: 'toolCall', id: 'probe', name: 'probe', arguments: {} }], timestamp: 0 },
-    { role: 'toolResult', toolCallId: 'probe', toolName: 'probe', content: [{ type: 'text', text: 'diagnostics '.repeat(1000) }], isError: false, timestamp: 0 },
+    {
+      role: 'assistant',
+      content: [{ type: 'toolCall', id: 'probe', name: 'probe', arguments: {} }],
+      timestamp: 0,
+    },
+    {
+      role: 'toolResult',
+      toolCallId: 'probe',
+      toolName: 'probe',
+      content: [{ type: 'text', text: 'diagnostics '.repeat(1000) }],
+      isError: false,
+      timestamp: 0,
+    },
   ] satisfies import('@mini-harness/llm/api').NativeMessage[];
   assert.equal(splitPoint(messages, 10), 1);
 });
@@ -63,8 +74,16 @@ test('provider input usage calibrates the next request without compounding previ
     const raw = estimate(current);
     assert.ok(current.inputMeasurement?.estimated);
     assert.deepEqual(
-      { system: current.inputMeasurement.system, tools: current.inputMeasurement.tools, messages: current.inputMeasurement.messages },
-      { system: Math.ceil(raw.system * scale), tools: Math.ceil(raw.tools * scale), messages: Math.ceil(raw.messages * scale) },
+      {
+        system: current.inputMeasurement.system,
+        tools: current.inputMeasurement.tools,
+        messages: current.inputMeasurement.messages,
+      },
+      {
+        system: Math.ceil(raw.system * scale),
+        tools: Math.ceil(raw.tools * scale),
+        messages: Math.ceil(raw.messages * scale),
+      },
     );
   }
 });
@@ -75,7 +94,10 @@ test('a single user turn supports repeated token-budget compaction while tools e
   let input = 0;
   const { app, mock, request } = await fixture(t, ({ messages }) => {
     const report = (text: string) => {
-      const count = Math.max(100, Math.ceil(messages.reduce((sum, message) => sum + message.content.length + 16, 0) / 4));
+      const count = Math.max(
+        100,
+        Math.ceil(messages.reduce((sum, message) => sum + message.content.length + 16, 0) / 4),
+      );
       input += count;
       return withUsage(text, count);
     };
@@ -337,16 +359,20 @@ test('image rejection offloads all historical images and an irreducible overflow
 
 test('disabled automatic compaction still retries context overflow after deterministic image offloading', async (t) => {
   let attempts = 0;
-  const { app, request } = await fixture(t, ({ messages }) => {
-    if (summary(messages.at(-1)?.content)) assert.fail('Automatic summary is disabled');
-    if (messages.at(-1)?.content === 'Latest input' && ++attempts === 1) return { overflow: 'context' };
-    return 'Done';
-  }, (paths) => {
-    const file = join(paths.home, 'models.json');
-    const models = JSON.parse(readFileSync(file, 'utf8'));
-    models.providers['local-mock'].models[0].input.push('image');
-    writeFileSync(file, JSON.stringify(models));
-  });
+  const { app, request } = await fixture(
+    t,
+    ({ messages }) => {
+      if (summary(messages.at(-1)?.content)) assert.fail('Automatic summary is disabled');
+      if (messages.at(-1)?.content === 'Latest input' && ++attempts === 1) return { overflow: 'context' };
+      return 'Done';
+    },
+    (paths) => {
+      const file = join(paths.home, 'models.json');
+      const models = JSON.parse(readFileSync(file, 'utf8'));
+      models.providers['local-mock'].models[0].input.push('image');
+      writeFileSync(file, JSON.stringify(models));
+    },
+  );
   const ctx = app.runtime.plugins.ctx;
   const { body: session } = await request('/sessions', 'POST', {});
   const endpoint = '/sessions/' + session.id + '/context';

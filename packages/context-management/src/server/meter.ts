@@ -68,7 +68,10 @@ export function estimate(request: Pick<LlmRequest, 'systemPrompt' | 'tools' | 'm
 
 /** Use the newest usable same-model input observation. The raw estimate is reconstructed
  * once from its exact snapshot so calibration never compounds a previous correction. */
-export function calibration(log: Pick<SessionLogPort, 'entries' | 'requestSnapshot'>, model: LlmRequest['model']) {
+export function calibration(
+  log: Pick<SessionLogPort, 'entries' | 'requestSnapshot'>,
+  model: LlmRequest['model'],
+) {
   const inputs = new Map<string, number>();
   for (const entry of log.entries().reverse()) {
     if (entry.type === 'model-attempt' && entry.usage && !inputs.has(entry.requestId)) {
@@ -76,8 +79,13 @@ export function calibration(log: Pick<SessionLogPort, 'entries' | 'requestSnapsh
       const actual = input + cacheRead + cacheWrite;
       if (Number.isFinite(actual) && actual > 0) inputs.set(entry.requestId, actual);
     }
-    if (entry.type !== 'model-request' || !entry.request.inputMeasurement?.estimated ||
-        entry.request.model.provider !== model.provider || entry.request.model.id !== model.id) continue;
+    if (
+      entry.type !== 'model-request' ||
+      !entry.request.inputMeasurement?.estimated ||
+      entry.request.model.provider !== model.provider ||
+      entry.request.model.id !== model.id
+    )
+      continue;
     const actual = inputs.get(entry.id);
     if (actual === undefined) continue;
     const raw = totalTokens(estimate(log.requestSnapshot(entry.id)));

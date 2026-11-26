@@ -29,7 +29,13 @@ function pendingInputStart(log: SessionLogPort, projection: SessionContext) {
   for (const entry of log.branch().reverse()) {
     if (entry.type !== 'message') continue;
     const message = entry.message;
-    if (message.role === 'assistant' && !message.errorMessage && message.stopReason !== 'error' && message.stopReason !== 'aborted') break;
+    if (
+      message.role === 'assistant' &&
+      !message.errorMessage &&
+      message.stopReason !== 'error' &&
+      message.stopReason !== 'aborted'
+    )
+      break;
     if (message.role === 'user') pending.add(entry.id);
   }
   const first = projection.contextEntryIds.findIndex((id) => pending.has(id));
@@ -53,7 +59,12 @@ export class ContextManagement {
 
   private measure(log: SessionLogPort, request: LlmRequest) {
     const { capability, adapter } = this.model(request.model);
-    return measure(request, capability, adapter, adapter.countInputTokens ? 1 : calibration(log, request.model));
+    return measure(
+      request,
+      capability,
+      adapter,
+      adapter.countInputTokens ? 1 : calibration(log, request.model),
+    );
   }
 
   private async replace(
@@ -88,7 +99,9 @@ export class ContextManagement {
     );
     const rawMessages = estimate(request).messages;
     const messageScale = rawMessages && counts.messages ? counts.messages / rawMessages : 1;
-    const retain = Math.ceil(Math.min(counts.budget, counts.messages) * settings.retainRatio / messageScale);
+    const retain = Math.ceil(
+      (Math.min(counts.budget, counts.messages) * settings.retainRatio) / messageScale,
+    );
     const cut = Math.min(splitPoint(messages, retain), pendingInputStart(log, projection));
     if (!cut) return;
     const kept = messages.slice(cut);
@@ -96,7 +109,8 @@ export class ContextManagement {
     // The target is aspirational; the retained suffix must leave room for a smaller
     // checkpoint within the actual model input budget.
     const available = Math.min(counts.budget, totalTokens(counts) - 1) - fixed - retained;
-    if (available <= 0) throw new DomainError('unavailable', 'Retained context leaves no input budget for a checkpoint');
+    if (available <= 0)
+      throw new DomainError('unavailable', 'Retained context leaves no input budget for a checkpoint');
     const desired = target - fixed - retained;
     const output = desired > 0 ? Math.min(desired, available) : available;
     const { model } = selectModel(this.models, { explicit: settings.summaryModel ?? request.model });
@@ -128,14 +142,22 @@ export class ContextManagement {
       },
       scale,
     );
-    const next = await measure(await rebuild([summary, ...kept]), currentModel.capability, currentModel.adapter, currentScale);
+    const next = await measure(
+      await rebuild([summary, ...kept]),
+      currentModel.capability,
+      currentModel.adapter,
+      currentScale,
+    );
     validateRequestSnapshot(next);
     request.signal.throwIfAborted();
     if (
       totalTokens(next.inputMeasurement) >= totalTokens(counts) ||
       totalTokens(next.inputMeasurement) > next.inputMeasurement.budget
     )
-      throw new DomainError('unavailable', 'Checkpoint must reduce the request and fit the model input budget');
+      throw new DomainError(
+        'unavailable',
+        'Checkpoint must reduce the request and fit the model input budget',
+      );
     log.append(
       {
         type: 'context-replace',
@@ -169,7 +191,10 @@ export class ContextManagement {
         current = await this.measure(log, await this.replace(log, current, rebuild, images));
       }
       if (failure?.kind === 'image-limit' && !images.length)
-        throw new DomainError('unavailable', 'No historical images can be offloaded without changing pending user input');
+        throw new DomainError(
+          'unavailable',
+          'No historical images can be offloaded without changing pending user input',
+        );
     }
     const overflow = failure?.kind === 'context-overflow';
     if (settings.autoCompact && (overflow || pressure())) {
@@ -178,8 +203,18 @@ export class ContextManagement {
     }
     if (totalTokens(current.inputMeasurement) > current.inputMeasurement.budget)
       throw new DomainError('unavailable', 'The prepared request exceeds its input budget');
-    if (overflow && (!changed || totalTokens(current.inputMeasurement) >= totalTokens((await this.measure(log, request)).inputMeasurement)))
-      throw new DomainError('unavailable', settings.autoCompact ? 'No further context reduction is possible' : 'Automatic compaction is off and no further deterministic reduction is possible');
+    if (
+      overflow &&
+      (!changed ||
+        totalTokens(current.inputMeasurement) >=
+          totalTokens((await this.measure(log, request)).inputMeasurement))
+    )
+      throw new DomainError(
+        'unavailable',
+        settings.autoCompact
+          ? 'No further context reduction is possible'
+          : 'Automatic compaction is off and no further deterministic reduction is possible',
+      );
     return current;
   }
 }

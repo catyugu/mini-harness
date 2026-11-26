@@ -78,7 +78,13 @@ function setup(ctx: Context) {
                 );
               if (!latest)
                 throw new HttpError('invalid_input', 'No model request has been prepared for this branch');
-              const { model: choice, systemPrompt, tools, thinkingLevel, maxTokens } = log.requestDefinition(latest.id);
+              const {
+                model: choice,
+                systemPrompt,
+                tools,
+                thinkingLevel,
+                maxTokens,
+              } = log.requestDefinition(latest.id);
               const { model } = selectModel(models, { explicit: choice });
               const rebuild = async (messages: LlmRequest['messages']): Promise<LlmRequest> => ({
                 model,
@@ -98,7 +104,8 @@ function setup(ctx: Context) {
                 configuration(log.setting(owner), defaults()).settings,
                 taskId,
               );
-              if (!compacted) throw new HttpError('invalid_input', 'Nothing to compact within the recent-context budget');
+              if (!compacted)
+                throw new HttpError('invalid_input', 'Nothing to compact within the recent-context budget');
             });
             return { ok: true };
           } catch (error) {
