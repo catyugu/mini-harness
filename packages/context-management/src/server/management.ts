@@ -109,10 +109,9 @@ export class ContextManagement {
     // The target is aspirational; the retained suffix must leave room for a smaller
     // checkpoint within the actual model input budget.
     const available = Math.min(counts.budget, totalTokens(counts) - 1) - fixed - retained;
-    if (available <= 0)
-      throw new DomainError('unavailable', 'Retained context leaves no input budget for a checkpoint');
+    if (available <= 0) return;
     const desired = target - fixed - retained;
-    const output = desired > 0 ? Math.min(desired, available) : available;
+    const checkpointTarget = desired > 0 ? Math.min(desired, available) : available;
     const { model } = selectModel(this.models, { explicit: settings.summaryModel ?? request.model });
     const { capability, adapter } = this.model(model);
     const scale = adapter.countInputTokens ? 1 : calibration(log, model);
@@ -120,9 +119,11 @@ export class ContextManagement {
     const currentScale = currentModel.adapter.countInputTokens ? 1 : calibration(log, request.model);
     const summaryRequest: LlmRequest = {
       model,
-      systemPrompt: 'Prepare a continuation checkpoint.',
+      systemPrompt:
+        'Prepare a continuation checkpoint. Aim for at most ' + checkpointTarget + ' tokens of checkpoint text.',
       messages: [],
-      maxTokens: Math.min(capability.maxTokens, output),
+      thinkingLevel: 'off',
+      maxTokens: capability.maxTokens,
       signal: request.signal,
     };
     const summary = await checkpoint(
@@ -150,10 +151,8 @@ export class ContextManagement {
     );
     validateRequestSnapshot(next);
     request.signal.throwIfAborted();
-    if (
-      totalTokens(next.inputMeasurement) >= totalTokens(counts) ||
-      totalTokens(next.inputMeasurement) > next.inputMeasurement.budget
-    )
+    if (totalTokens(next.inputMeasurement) >= totalTokens(counts)) return;
+    if (totalTokens(next.inputMeasurement) > next.inputMeasurement.budget)
       throw new DomainError(
         'unavailable',
         'Checkpoint must reduce the request and fit the model input budget',
