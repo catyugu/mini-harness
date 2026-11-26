@@ -6,7 +6,6 @@
   "exports": {
     "./api": "./src/browser/api.ts",
     "./icons": "./src/browser/icons.ts",
-    "./manifest": "./src/manifest.ts",
     "./markdown": "./src/browser/markdown.ts",
     "./primitives": "./src/browser/primitives.ts"
   },

@@ -7,8 +7,6 @@
     "./http": "./src/http.ts",
     "./projection-api": "./src/projection-api.ts",
     "./projection-notice": "./src/shared/projection-notice.ts",
-    "./projections": "./src/projections.ts",
-    "./router": "./src/router.ts",
     "./routes": "./src/routes.ts",
     "./runtime": "./src/runtime.ts"
   },

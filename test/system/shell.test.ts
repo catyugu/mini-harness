@@ -1,5 +1,5 @@
 import { runTool } from '@mini-harness/tools/execution';
-import { conversationTools } from '@mini-harness/runs/tool-selection';
+import { sendRun } from '../support/runs.ts';
 import { expectPresent } from '../support/required.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -7,10 +7,11 @@ import { fixture } from '../support/api-fixture.ts';
 import { realpath } from 'node:fs/promises';
 
 test('enabled Shell runs consecutive commands without approval and respects read-only ancestry', async (t) => {
-  const { app, request, finish } = await fixture(t, ({ messages }) =>
-    messages.filter(({ role }) => role === 'tool').length >= 2
-      ? 'Done'
-      : { tool: 'shell', args: { command: 'echo permitted' } },
+  const { app, mock, request, finish } = await fixture(t, ({ messages }) =>
+    messages.filter(({ role }) => role === 'user').at(-1)?.content === 'Run twice' &&
+    messages.filter(({ role }) => role === 'tool').length < 2
+      ? { tool: 'shell', args: { command: 'echo permitted' } }
+      : 'Done',
   );
   await app.runtime.configuration.update({ entries: { shell: { disabled: false } } });
   const ctx = app.runtime.plugins.ctx;
@@ -31,23 +32,19 @@ test('enabled Shell runs consecutive commands without approval and respects read
     200,
   );
   const child = ctx.harnessSessions.create({ parentId: session.id, permission: 'fullAccess' });
+  const advertised = async (id: string) => {
+    await sendRun(ctx.harnessRuns, id, 'Inspect available tools');
+    return JSON.stringify(mock.requests.at(-1)?.tools ?? []);
+  };
   for (const id of [session.id, child.id]) {
-    const tools = conversationTools(ctx, id, ctx.harnessSessions.runScope(id));
-    assert.ok(tools.some(({ name }) => name === 'read'));
-    assert.ok(!tools.some(({ name }) => name === 'shell' || name === 'write'));
+    const tools = await advertised(id);
+    assert.match(tools, /"name":"read"/);
+    assert.doesNotMatch(tools, /"name":"(?:shell|write)"/);
   }
   const sibling = ctx.harnessSessions.create();
-  assert.ok(
-    conversationTools(ctx, sibling.id, ctx.harnessSessions.runScope(sibling.id)).some(
-      ({ name }) => name === 'shell',
-    ),
-  );
+  assert.match(await advertised(sibling.id), /"name":"shell"/);
   await app.runtime.configuration.update({ entries: { shell: { disabled: true } } });
-  assert.ok(
-    !conversationTools(ctx, sibling.id, ctx.harnessSessions.runScope(sibling.id)).some(
-      ({ name }) => name === 'shell',
-    ),
-  );
+  assert.doesNotMatch(await advertised(sibling.id), /"name":"shell"/);
 });
 
 test('Shell preserves native workspace and environment', async (t) => {
@@ -62,7 +59,7 @@ test('Shell preserves native workspace and environment', async (t) => {
   });
   const { id } = ctx.harnessSessions.create();
   const tool = expectPresent(
-    conversationTools(ctx, id, ctx.harnessSessions.runScope(id)).find(({ name }) => name === 'shell'),
+    ctx.harnessTools.list({ resourceId: id, scope: ctx.harnessSessions.runScope(id) }).find(({ name }) => name === 'shell'),
     'shell',
   );
   const result = await runTool(tool, 'native-environment', {

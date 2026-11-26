@@ -1,8 +1,7 @@
 import { test, expect } from '@playwright/test';
-import { rmSync, mkdirSync, realpathSync, writeFileSync, cpSync } from 'node:fs';
+import { rmSync, mkdirSync, writeFileSync, cpSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { createFixturePaths, createMockProvider } from '../support/mock-provider.ts';
-import { workspaceId } from '@mini-harness/workspaces/identity';
 import { writeJson } from '@mini-harness/platform/json';
 import {
   readWebProfile,
@@ -426,7 +425,15 @@ test('the Web plugin manager excludes entries declared only in scoped Profile co
     join(folder, 'plugin.js'),
     "import { defineConfig } from 'mini-harness/configuration';\nimport { readFileSync } from 'node:fs';\nexport const Config = defineConfig(JSON.parse(readFileSync(new URL('./schema.json', import.meta.url), 'utf8')));\nexport const apply = (ctx, config) => { if (config.value === 1) throw new Error('Workspace setup failed'); };",
   );
-  const key = 'workspace:' + workspaceId(realpathSync.native(paths.cwd));
+  let service = await startIsolatedHost(paths);
+  try {
+    const workspaces = await page.request.get(service.url + '/api/workspaces', {
+      headers: { Authorization: 'Bearer ' + service.token },
+    });
+    expect(workspaces.ok()).toBe(true);
+    const [workspace] = await workspaces.json();
+    const key = 'workspace:' + workspace.id;
+    await service.stop();
   const initial = {
     scopes: {
       [key]: {
@@ -441,8 +448,7 @@ test('the Web plugin manager excludes entries declared only in scoped Profile co
     },
   };
   writeJson(join(paths.home, 'profiles', 'web', 'cordis.patch.yml'), initial);
-  const service = await startIsolatedHost(paths);
-  try {
+    service = await startIsolatedHost(paths);
     await page.goto(service.url + '/#token=' + service.token);
     await page.getByRole('button', { name: 'Browse plugins' }).click();
     await expect(page.getByRole('button', { name: 'Workspace example settings' })).toHaveCount(0);

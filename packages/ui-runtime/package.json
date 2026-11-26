@@ -8,7 +8,6 @@
     "./graph-api": "./src/browser/graph-api.ts",
     "./http": "./src/browser/http.ts",
     "./projection-api": "./src/browser/projection-api.ts",
-    "./projections": "./src/browser/projections.ts",
     "./remote-store": "./src/browser/remote-store.ts",
     "./plugin-settings": "./src/browser/plugin-settings.ts",
     "./keyed-registry": "./src/browser/keyed-registry.ts"

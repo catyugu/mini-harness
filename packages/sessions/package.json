@@ -8,14 +8,11 @@
     "./identity": "./src/shared/identity.ts",
     "./log-api": "./src/log-api.ts",
     "./projection": "./src/projection.ts",
-    "./manifest": "./src/manifest.ts",
     "./message": "./src/shared/message.ts",
     "./user-content": "./src/user-content.ts",
     "./queue": "./src/shared/queue.ts",
     "./records": "./src/records.ts",
-    "./registry": "./src/registry.ts",
     "./run-state": "./src/shared/run-state.ts",
-    "./manifests/tool-policy": "./src/permission-policy.ts",
     "./display-record": "./src/shared/display-record.ts"
   },
   "miniHarness": {

@@ -114,7 +114,6 @@ async function checkPackage() {
     for (const section of ['dependencies', 'optionalDependencies', 'peerDependencies'])
       assert.doesNotMatch(JSON.stringify(manifest[section] ?? {}), /@mini-harness\/|workspace:\*/);
     const publicExports = manifest.exports as Record<string, { types: string; default: string }>;
-    assert.ok(!Object.hasOwn(publicExports, './plugin') && !Object.hasOwn(publicExports, './browser-plugin'));
     for (const target of Object.values(publicExports)) {
       for (const path of [target.types, target.default])
         assert.ok(

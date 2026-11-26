@@ -9,10 +9,6 @@
     "./browser/history-api": "./src/browser/history-api.ts",
     "./browser/navigation-api": "./src/browser/navigation-api.ts",
     "./display-events": "./src/server/display-events.ts",
-    "./manifests/conversation": "./src/manifests/conversation.ts",
-    "./manifests/navigation": "./src/manifests/navigation.ts",
-    "./manifests/session-data": "./src/manifests/session-data.ts",
-    "./manifests/workspace": "./src/manifests/workspace.ts",
     "./view": "./src/shared/api.ts"
   },
   "miniHarness": {

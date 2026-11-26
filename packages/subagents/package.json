@@ -3,9 +3,6 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "exports": {
-    "./manifest": "./src/manifest.ts"
-  },
   "dependencies": {
     "@mini-harness/llm": "workspace:*",
     "@mini-harness/platform": "workspace:*",

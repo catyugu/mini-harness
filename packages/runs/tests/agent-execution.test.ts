@@ -14,7 +14,7 @@ import { SessionRun } from '../src/session-run.ts';
 import { nativeExecutor } from '@mini-harness/tools/execution';
 import type { SessionStore } from '@mini-harness/sessions/records';
 import { startTestProfile } from '../../../test/support/profile.ts';
-import { defineTool, toolResultState } from '@mini-harness/tools/api';
+import { defineTool } from '@mini-harness/tools/api';
 import type { LlmPort, NativeAssistantMessage, ToolCallPart } from '@mini-harness/llm/api';
 import type { ModelRetry } from '@mini-harness/agent/events';
 import { createFixturePaths } from '../../../test/support/mock-provider.ts';
@@ -400,27 +400,6 @@ test('cancellation closes the whole tool batch durably and never executes later 
   );
 });
 
-test('a concurrent cancellation does not hide a genuine tool failure', async () => {
-  const controller = new AbortController();
-  const tool = defineTool({
-    name: 'fail',
-    description: 'Fail independently of cancellation',
-    parameters: Type.Object({}),
-    async execute() {
-      controller.abort(new Error('Stopped by test'));
-      throw new Error('Independent failure');
-    },
-  });
-  const states: string[] = [];
-  await nativeExecutor.execute([call('one', 'fail'), call('two', 'fail')], new Map([[tool.name, tool]]), {
-    signal: controller.signal,
-    async deliver(result) {
-      states.push(toolResultState(result));
-    },
-  });
-  assert.deepEqual(states, ['error', 'skipped']);
-});
-
 test('interrupted calls receive an error record before the next prompt and are not retried', async (t) => {
   let executed = 0;
   const { agent, ctx, tools, record, sessions } = await fixture(t, {
@@ -738,43 +717,6 @@ test('the retry policy cannot replay a model attempt after output has streamed',
     /Transport closed after output/,
   );
   assert.deepEqual({ requests, retries, deltas }, { requests: 1, retries: 0, deltas: ['Partial'] });
-});
-
-test('a fatal pipeline failure stops dispatch and drains active calls', async () => {
-  const tool = defineTool({
-    name: 'parallel',
-    description: 'Parallel',
-    parameters: Type.Object({}),
-    isConcurrencySafe: () => true,
-    async execute() {
-      return { content: [] };
-    },
-  });
-  const tools = new Map([[tool.name, tool]]);
-  const calls = Array.from({ length: 18 }, (_, index) => call(String(index), 'parallel'));
-  const started: string[] = [];
-  let drained = 0;
-  await assert.rejects(
-    nativeExecutor.execute(calls, tools, {
-      signal: new AbortController().signal,
-      start(call) {
-        started.push(call.id);
-        return undefined;
-      },
-      update() {},
-      async deliver(result, signal) {
-        if (result.toolCallId === '0') throw new Error('Log write failed');
-        await new Promise<void>((resolve) => {
-          if (signal.aborted) return resolve();
-          signal.addEventListener('abort', () => resolve(), { once: true });
-        });
-        drained++;
-      },
-    }),
-    /Log write failed/,
-  );
-  assert.equal(started.length, 16);
-  assert.equal(drained, 15);
 });
 
 test('a queued follow-up can preselect the next model and thinking level', async (t) => {

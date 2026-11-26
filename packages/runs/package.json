@@ -5,9 +5,7 @@
   "type": "module",
   "exports": {
     "./api": "./src/api.ts",
-    "./manifest": "./src/manifest.ts",
-    "./stream": "./src/stream.ts",
-    "./tool-selection": "./src/tool-selection.ts"
+    "./stream": "./src/stream.ts"
   },
   "miniHarness": {
     "api": [
