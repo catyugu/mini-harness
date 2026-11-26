@@ -306,8 +306,7 @@ export class SessionRegistry implements SessionStore {
       );
       if (writable) {
         log.recover();
-        for (const entry of log.entries())
-          if (entry.type === 'task') this.taskOwners.set(entry.task.id, id);
+        for (const entry of log.entries()) if (entry.type === 'task') this.taskOwners.set(entry.task.id, id);
         const run = log.latestRun;
         if (run) this.latestRuns.set(id, run);
         else this.latestRuns.delete(id);
