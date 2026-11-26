@@ -1,12 +1,13 @@
 import { randomUUID } from 'node:crypto';
-import type { AgentRecordObserver, AgentRecordSink } from './events.ts';
+import type { AgentRecordObserver } from './events.ts';
+import type { RecordPublisher } from '@mini-harness/sessions/display-record';
 
 const owner = { pluginId: 'core:agent', instanceId: 'core:agent' };
 const kind = 'reasoning';
 const title = 'Reasoning';
 
 /** Associate live reasoning with its single durable assistant message. */
-export function reasoningRecords(sink: AgentRecordSink): AgentRecordObserver {
+export function reasoningRecords(sink: RecordPublisher): AgentRecordObserver {
   let id: string | undefined;
   return (event) => {
     if (event.type === 'thinking') {
@@ -26,7 +27,7 @@ export function reasoningRecords(sink: AgentRecordSink): AgentRecordObserver {
     const recordId = id;
     id = undefined;
     if (event.message.content.some((part) => part.type === 'thinking' && part.thinking && !part.redacted))
-      return { owner, kind, title, id: recordId ?? randomUUID(), source: ['message', 'content'] };
+      return [{ owner, kind, title, id: recordId ?? randomUUID(), source: ['message', 'content'] }];
     if (recordId) sink.remove(recordId);
   };
 }

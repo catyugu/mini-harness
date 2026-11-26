@@ -24,5 +24,12 @@ export interface SessionDisplayRecord {
 
 export interface RecordAppend {
   leafId: string;
-  display?: SessionDisplayRecord;
+  records: SessionDisplayRecord[];
+}
+
+/** Producer-facing live publication; the run owns the stream state and wire protocol. */
+export interface RecordPublisher {
+  set(record: SessionDisplayRecord): void;
+  append(id: string, channel: string, text: string): void;
+  remove(id: string): void;
 }

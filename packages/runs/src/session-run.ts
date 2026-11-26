@@ -19,7 +19,7 @@ import {
   type NativeUserMessage,
   type ToolCallPart,
 } from '@mini-harness/llm/api';
-import type { RunStreamEvent } from './shared/stream.ts';
+import { recordPublisher, type RunStreamEvent } from './shared/stream.ts';
 import type { RecordPresentation } from '@mini-harness/sessions/display-record';
 import type { MessageOrigin, MessageMode } from '@mini-harness/sessions/queue';
 import type { SessionLogPort, InboxItem, SessionProjection } from '@mini-harness/sessions/log-api';
@@ -240,26 +240,22 @@ export class SessionRun {
     let requestId: string | undefined;
     let attemptsRecorded = false;
     let modelStep = 0;
+    const publisher = recordPublisher(emit);
     const observers = ctx.events.listeners('agent/records', scopeTarget(ctx)).map(({ callback }) =>
-      callback({
-        set: (record) => emit({ type: 'record-update', operation: 'set', record }),
-        append: (id, channel, text) =>
-          emit({ type: 'record-update', operation: 'append', id, channel, text }),
-        remove: (id) => emit({ type: 'record-update', operation: 'remove', id }),
-      }),
+      callback(publisher),
     );
     const answer = await requireService(ctx, 'harnessAgent')
       .run(ctx, {
         signal,
         retry: modelRetry(ctx, id),
         onEvent: (event) => {
-          let display: RecordPresentation | undefined;
+          const displays: RecordPresentation[] = [];
           for (const observe of observers) {
             const contribution = observe(event);
-            if (!contribution) continue;
-            if (event.type !== 'assistant' || display)
-              throw new Error('An assistant message may have one record presentation');
-            display = contribution;
+            if (!contribution?.length) continue;
+            if (event.type !== 'assistant')
+              throw new Error('Record presentations require a committed assistant message');
+            displays.push(...contribution);
           }
           if (event.type === 'thinking') return;
           if (event.type === 'phase') {
@@ -294,7 +290,7 @@ export class SessionRun {
             type: 'message',
             message: result,
             attemptsRecorded: attemptsRecorded || undefined,
-            display,
+            ...(displays.length && { displays }),
           });
           emit({
             type: 'assistant-end',

@@ -1,6 +1,6 @@
 import type { Context } from 'mini-harness/cordis';
 import type { LiveRecord } from '@mini-harness/runs/stream';
-import type { HistoryEntry, MessageContent, ViewMessage } from '@mini-harness/sessions/message';
+import type { HistoryEntry, ViewMessage } from '@mini-harness/sessions/message';
 import type { RunInfo, RunTermination } from '@mini-harness/sessions/run-state';
 import type {
   MessageAction,

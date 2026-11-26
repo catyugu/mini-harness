@@ -1,5 +1,5 @@
 import { userContent } from './user-content.ts';
-import type { SessionDisplayRecord } from './shared/display-record.ts';
+import type { RecordPresentation, SessionDisplayRecord } from './shared/display-record.ts';
 import { isRunning, type RunInfo } from './shared/run-state.ts';
 import { toolResultState } from '@mini-harness/tools/api';
 import type { NativeMessage, NativeToolMessage } from '@mini-harness/llm/api';
@@ -74,20 +74,15 @@ export function displayMessage(
     view.isError = message.isError;
     view.arguments = toolArguments;
     view.elapsedMs = (entry.type === 'message' ? entry.elapsedMs : undefined) ?? message.elapsedMs;
-    if (message.details && message.detailKeys)
-      view.details = Object.fromEntries(
-        message.detailKeys
-          .filter((key) => Object.hasOwn(message.details!, key))
-          .map((key) => [key, message.details![key]]),
-      );
+    const { details, detailKeys } = message;
+    if (details && detailKeys)
+      view.details = Object.fromEntries(detailKeys.filter((key) => Object.hasOwn(details, key)).map((key) => [key, details[key]]));
   }
   return view;
 }
 
 /** Select content explicitly from the event, without interpreting its business meaning. */
-export function displayContent(event: SessionEvent): unknown {
-  const display = event.display;
-  if (!display) return;
+export function displayContent(event: SessionEvent, display: RecordPresentation): unknown {
   if (!display.source) return display.content;
   let value: unknown = event;
   for (const key of display.source) {
@@ -103,19 +98,17 @@ export function displayContent(event: SessionEvent): unknown {
   return value;
 }
 
-export function displayRecord(entry: SessionEntry, runId?: string): SessionDisplayRecord | undefined {
-  if (!entry.display) return;
-  const { owner, kind, title } = entry.display;
-  return {
+export function displayRecords(entry: SessionEntry, runId?: string): SessionDisplayRecord[] {
+  return (entry.displays ?? []).map((display, index, all) => ({
     type: 'record',
-    id: entry.display.id ?? entry.id,
+    id: display.id ?? (all.length === 1 ? entry.id : entry.id + ':' + index),
     ...(runId && { runId }),
-    plugin: owner.pluginId,
-    instanceId: owner.instanceId,
-    kind,
-    title,
-    content: displayContent(entry),
-  };
+    plugin: display.owner.pluginId,
+    instanceId: display.owner.instanceId,
+    kind: display.kind,
+    title: display.title,
+    content: displayContent(entry, display),
+  }));
 }
 
 export function newContext(): SessionContext {
@@ -197,8 +190,7 @@ export function projectLog(
   }
   for (const entry of branch) {
     projectRuns(entry.seq);
-    const record = displayRecord(entry, runId);
-    if (record) state.timeline.push(record);
+    state.timeline.push(...displayRecords(entry, runId));
     const message = messageOf(entry);
     if (!message) continue;
     if (message.role === 'assistant')

@@ -164,12 +164,12 @@ export class ContextManagement {
         type: 'context-replace',
         replacements: [{ start: 0, deleteCount: cut, insert: [summary] }],
         measurement: { ...next.inputMeasurement, model: next.model },
-        display: {
+        displays: [{
           owner: { pluginId: owner, instanceId: owner },
           kind: 'checkpoint',
           title: 'Context compacted',
           source: ['replacements', 0, 'insert', 0, 'content'],
-        },
+        }],
       },
       projection.leafId,
     );

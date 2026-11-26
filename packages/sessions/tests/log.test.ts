@@ -301,7 +301,7 @@ test('display records resolve explicitly selected content on the committed branc
     type: 'plugin-record',
     owner,
     data: { note: 'Done' },
-    display: { owner, kind: 'progress', title: 'Progress', source: ['data', 'note'] },
+    displays: [{ owner, kind: 'progress', title: 'Progress', source: ['data', 'note'] }],
   });
   log.close();
   log = open();

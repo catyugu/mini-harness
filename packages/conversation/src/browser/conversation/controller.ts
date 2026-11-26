@@ -159,15 +159,15 @@ export function createConversationController(ctx: Context): ConversationControll
           update({ records: updateRecords(state.records, event) });
           break;
         case 'branch': {
-          const display = event.display;
           const timeline = [...(state.history?.timeline ?? [])];
-          if (display) {
-            const index = timeline.findIndex(({ id }) => id === display.id);
-            timeline.splice(index < 0 ? timeline.length : index, index < 0 ? 0 : 1, display);
+          for (const record of event.records) {
+            const index = timeline.findIndex(({ id }) => id === record.id);
+            timeline.splice(index < 0 ? timeline.length : index, index < 0 ? 0 : 1, record);
           }
+          const ids = new Set(event.records.map(({ id }) => id));
           update({
             history: { timeline, leafId: event.leafId },
-            records: display ? state.records.filter(({ id }) => id !== display.id) : state.records,
+            records: state.records.filter(({ id }) => !ids.has(id)),
           });
           break;
         }

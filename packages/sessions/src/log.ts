@@ -407,8 +407,9 @@ function queueEntry(item: InboxItem): QueueEntry {
 }
 
 function validateEvent(event: SessionEvent) {
-  if (event.display !== undefined) {
-    const { display } = event;
+  if (event.displays !== undefined && !Array.isArray(event.displays))
+    throw new Error('Invalid record presentations');
+  for (const display of event.displays ?? []) {
     if (!display || typeof display !== 'object') throw new Error('Invalid record presentation');
     const { owner } = display;
     if (
@@ -427,7 +428,7 @@ function validateEvent(event: SessionEvent) {
         (!Array.isArray(display.source) || !display.source.length || Object.hasOwn(display, 'content')))
     )
       throw new Error('Invalid record presentation');
-    displayContent(event);
+    displayContent(event, display);
   }
   switch (event.type) {
     case 'message':

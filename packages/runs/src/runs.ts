@@ -15,7 +15,7 @@ import type { CapabilityObservation } from '@mini-harness/plugin-api/observation
 import { Inbox } from './inbox.ts';
 import { assertImageInput } from '@mini-harness/models/selection';
 import { selectInputModel, SessionRun } from './session-run.ts';
-import type { StreamEvent, RunEvent, RecordUpdate } from './shared/stream.ts';
+import { recordPublisher, type StreamEvent, type RunEvent } from './shared/stream.ts';
 import { isRunning, projectRun, type RunDetails, type RunInfo } from '@mini-harness/sessions/run-state';
 import { runFromEntry } from '@mini-harness/sessions/log-api';
 import { RunEvents } from './events.ts';
@@ -69,11 +69,13 @@ export class Runs implements RunPort {
     };
   }
 
-  publishRecord(id: string, runId: string, event: RecordUpdate) {
-    const events = this.streams.get(id)?.events;
-    if (!events || events.info.id !== runId || !isRunning(events.info))
-      throw new DomainError('not_found', 'Run not found');
-    events.publish(event);
+  liveRecords(id: string, runId: string) {
+    return recordPublisher((event) => {
+      const events = this.streams.get(id)?.events;
+      if (!events || events.info.id !== runId || !isRunning(events.info))
+        throw new DomainError('not_found', 'Run not found');
+      events.publish(event);
+    });
   }
 
   recordChange(id: string, executionId: string, path: string) {

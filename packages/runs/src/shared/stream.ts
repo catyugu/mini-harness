@@ -1,5 +1,5 @@
 import type { MessageContent, ViewMessage } from '@mini-harness/sessions/message';
-import type { RecordAppend, SessionDisplayRecord } from '@mini-harness/sessions/display-record';
+import type { RecordAppend, RecordPublisher, SessionDisplayRecord } from '@mini-harness/sessions/display-record';
 import type { InputSource } from '@mini-harness/input/message';
 import type { ModelChoice } from '@mini-harness/llm/vocabulary';
 import type { SessionProjection } from '@mini-harness/sessions/log-api';
@@ -108,4 +108,13 @@ export function updateTools(
     };
   }
   return next;
+}
+
+/** Both the scoped agent observer and public Runs service use the same producer port. */
+export function recordPublisher(emit: (event: RecordUpdate) => void): RecordPublisher {
+  return {
+    set: (record) => emit({ type: 'record-update', operation: 'set', record }),
+    append: (id, channel, text) => emit({ type: 'record-update', operation: 'append', id, channel, text }),
+    remove: (id) => emit({ type: 'record-update', operation: 'remove', id }),
+  };
 }

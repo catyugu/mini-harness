@@ -10,7 +10,7 @@ export interface ToolUpdate {
   details?: Record<string, unknown>;
   state?: 'running' | 'approval';
 }
-export interface ToolResult extends ToolUpdate {
+export interface ToolResult extends Omit<ToolUpdate, 'state'> {
   content: (TextPart | ImagePart)[];
   detailKeys?: NativeToolMessage['detailKeys'];
   isError?: boolean;

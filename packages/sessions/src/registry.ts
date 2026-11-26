@@ -1,4 +1,4 @@
-import { displayRecord } from './projection.ts';
+import { displayRecords } from './projection.ts';
 import type { RecordAppend } from './shared/display-record.ts';
 import { userContent } from './user-content.ts';
 import type { RunInfo } from './shared/run-state.ts';
@@ -292,8 +292,8 @@ export class SessionRegistry implements SessionStore {
           false,
           false,
           advancesBranch(entry) &&
-            (entry.display !== undefined || (entry.type !== 'message' && entry.type !== 'tool-accepted'))
-            ? { leafId: entry.id, display: structuredClone(displayRecord(entry)) }
+            (entry.displays?.length || (entry.type !== 'message' && entry.type !== 'tool-accepted'))
+            ? { leafId: entry.id, records: structuredClone(displayRecords(entry)) }
             : undefined,
           entry.type,
         );
@@ -469,7 +469,7 @@ export class SessionRegistry implements SessionStore {
           type: 'plugin-record',
           owner,
           data,
-          display: display && { ...display, owner },
+          displays: display && [{ ...display, owner }],
         }).id;
       },
     };
