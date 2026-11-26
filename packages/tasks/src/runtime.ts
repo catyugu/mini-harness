@@ -74,14 +74,7 @@ export class TaskRuntime implements TaskPort {
 
   start<T>(options: TaskOptions<T>, execute: (context: TaskContext) => Promise<T>): TaskHandle<T> {
     if (this.closing) throw new Error('Task runtime is closing');
-    const {
-      signal: lifetime,
-      provider,
-      acquire,
-      retain = true,
-      projectResult,
-      ...metadata
-    } = options;
+    const { signal: lifetime, provider, acquire, retain = true, projectResult, ...metadata } = options;
     if (this.removing.has(options.owner)) throw new Error('Task owner has been removed');
     this.domain.admit?.(options.owner);
     const parent = options.owner.startsWith('task:') ? this.entries.get(options.owner.slice(5)) : undefined;
