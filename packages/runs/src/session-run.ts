@@ -244,7 +244,8 @@ export class SessionRun {
     const observers = ctx.events.listeners('agent/records', scopeTarget(ctx)).map(({ callback }) =>
       callback({
         set: (record) => emit({ type: 'record-update', operation: 'set', record }),
-        append: (id, channel, text) => emit({ type: 'record-update', operation: 'append', id, channel, text }),
+        append: (id, channel, text) =>
+          emit({ type: 'record-update', operation: 'append', id, channel, text }),
         remove: (id) => emit({ type: 'record-update', operation: 'remove', id }),
       }),
     );

@@ -1,5 +1,11 @@
 import { isRunning, type RunInfo } from '@mini-harness/sessions/run-state';
-import { updateRecords, type LiveRecord, type RunEvent, type StreamEvent, type ToolProgress } from './shared/stream.ts';
+import {
+  updateRecords,
+  type LiveRecord,
+  type RunEvent,
+  type StreamEvent,
+  type ToolProgress,
+} from './shared/stream.ts';
 
 export class RunEvents {
   private events: RunEvent[] = [];

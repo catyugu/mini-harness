@@ -55,10 +55,7 @@ export type RecordUpdate =
   | { type: 'record-update'; operation: 'remove'; id: string };
 
 /** Shared by the live snapshot owner and its browser replica. Upserts preserve record order. */
-export function updateRecords(
-  records: readonly LiveRecord[],
-  event: RecordUpdate,
-): LiveRecord[] {
+export function updateRecords(records: readonly LiveRecord[], event: RecordUpdate): LiveRecord[] {
   const id = event.operation === 'set' ? event.record.id : event.id;
   const index = records.findIndex((record) => record.id === id);
   if (event.operation === 'remove') return records.filter((record) => record.id !== id);
