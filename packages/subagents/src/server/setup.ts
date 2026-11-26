@@ -40,7 +40,11 @@ export function setup(ctx: Context) {
       isConcurrencySafe: () => true,
       execute: async (args, { signal, executionId }) => {
         const child = delegation.delegate(id, args, signal, executionId);
-        return { content: [{ type: 'text', text: JSON.stringify(child) }], details: child, detailKeys: ['sessionId', 'state'] };
+        return {
+          content: [{ type: 'text', text: JSON.stringify(child) }],
+          details: child,
+          detailKeys: ['sessionId', 'state'],
+        };
       },
     });
   ctx.effect(() =>

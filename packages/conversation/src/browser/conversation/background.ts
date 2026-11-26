@@ -425,12 +425,16 @@ function setup(ctx: Context) {
   };
   ctx.effect(() => ctx.miniMessages.registerTool('start_background', receipt));
   ctx.effect(() =>
-    ctx.miniMessages.registerTool('start_background', ({ details }) => {
-      if (details?.state !== 'accepted') return;
-      const node = document.createElement('span');
-      node.textContent = 'Accepted';
-      return node;
-    }, 'status'),
+    ctx.miniMessages.registerTool(
+      'start_background',
+      ({ details }) => {
+        if (details?.state !== 'accepted') return;
+        const node = document.createElement('span');
+        node.textContent = 'Accepted';
+        return node;
+      },
+      'status',
+    ),
   );
   void refresh();
 }

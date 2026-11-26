@@ -174,10 +174,7 @@ export function createMessageView(
       renderMessageActions(wrapper);
   }
 
-  function toolCard(
-    data: ToolView & { id?: string; elapsedMs?: number },
-    card?: HTMLDetailsElement,
-  ) {
+  function toolCard(data: ToolView & { id?: string; elapsedMs?: number }, card?: HTMLDetailsElement) {
     const item = card ?? document.createElement('details');
     toolItems.set(item, data);
     item.className = 'tool-card ui-record ui-disclosure';
@@ -226,7 +223,7 @@ export function createMessageView(
     }
     const custom = extensions.render(data, resource.signal);
     if (custom) body.append(custom);
-    const output = custom ? '' : (textOf(data.content) || Object.values(data.streams ?? {}).join(''));
+    const output = custom ? '' : textOf(data.content) || Object.values(data.streams ?? {}).join('');
     if (output) {
       const result = document.createElement('pre');
       result.textContent = output;

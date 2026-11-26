@@ -61,7 +61,12 @@ declare module 'mini-harness/cordis' {
       registerTurnFooter(id: string, render: TurnFooterRenderer): () => void;
       registerRecord(plugin: string, kind: string, render: RecordRenderer, priority?: number): () => void;
       registerAction(action: MessageAction): () => void;
-      registerTool(name: string, render: ToolRenderer, placement?: ToolPlacement, priority?: number): () => void;
+      registerTool(
+        name: string,
+        render: ToolRenderer,
+        placement?: ToolPlacement,
+        priority?: number,
+      ): () => void;
     };
   }
 }

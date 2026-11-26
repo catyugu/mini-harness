@@ -154,12 +154,16 @@ const setup = (ctx: Context) => {
     ),
   );
   ctx.effect(() =>
-    ctx.miniMessages.registerTool('delegate', ({ details }) => {
-      if (details?.state !== 'accepted') return;
-      const node = document.createElement('span');
-      node.textContent = 'Accepted';
-      return node;
-    }, 'status'),
+    ctx.miniMessages.registerTool(
+      'delegate',
+      ({ details }) => {
+        if (details?.state !== 'accepted') return;
+        const node = document.createElement('span');
+        node.textContent = 'Accepted';
+        return node;
+      },
+      'status',
+    ),
   );
 };
 export default {

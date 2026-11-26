@@ -27,7 +27,8 @@ test('enabled Shell runs consecutive commands without approval and respects read
   assert.equal(results.length, 2);
   assert.ok(
     results.every(
-      (result: { details: { exitCode: number }; isError: boolean }) => result.details.exitCode === 0 && !result.isError,
+      (result: { details: { exitCode: number }; isError: boolean }) =>
+        result.details.exitCode === 0 && !result.isError,
     ),
   );
   assert.equal(
@@ -114,7 +115,8 @@ test('independent shell calls use one task, retain output channels and do not du
 });
 
 test('foreground Shell streams live output and commits one final result', async (t) => {
-  const command = 'node -e "console.log(\'live-shell-output\');const timer=setInterval(()=>{if(require(\'node:fs\').existsSync(\'release-shell-test\')){clearInterval(timer);console.error(\'final-shell-output\')}},20)"';
+  const command =
+    "node -e \"console.log('live-shell-output');const timer=setInterval(()=>{if(require('node:fs').existsSync('release-shell-test')){clearInterval(timer);console.error('final-shell-output')}},20)\"";
   const { app, paths, request } = await fixture(t, ({ messages }) =>
     messages.at(-1)?.role === 'tool' ? 'Done' : { tool: 'shell', args: { command, timeoutMs: 15000 } },
   );

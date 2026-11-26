@@ -76,7 +76,9 @@ export function displayMessage(
     view.elapsedMs = (entry.type === 'message' ? entry.elapsedMs : undefined) ?? message.elapsedMs;
     if (message.details && message.detailKeys)
       view.details = Object.fromEntries(
-        message.detailKeys.filter((key) => Object.hasOwn(message.details!, key)).map((key) => [key, message.details![key]]),
+        message.detailKeys
+          .filter((key) => Object.hasOwn(message.details!, key))
+          .map((key) => [key, message.details![key]]),
       );
   }
   return view;
