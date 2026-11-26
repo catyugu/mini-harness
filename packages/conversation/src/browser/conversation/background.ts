@@ -107,9 +107,7 @@ function setup(ctx: Context) {
   let expanded: ReturnType<typeof createOutput> | undefined;
 
   function label(task: TaskSnapshot) {
-    return task.metadata?.tool === 'shell'
-      ? input(task) || task.name || 'Shell'
-      : (task.name ?? 'Task');
+    return task.metadata?.tool === 'shell' ? input(task) || task.name || 'Shell' : (task.name ?? 'Task');
   }
 
   function closeOutput() {
@@ -157,8 +155,14 @@ function setup(ctx: Context) {
         if (following) output.scrollTop = output.scrollHeight;
       }
       const details = object(object(next.result).details);
-      const overflow = [details.stdoutOverflow, details.stderrOverflow].filter((path) => typeof path === 'string');
-      warning.textContent = [truncated ? 'Earlier output was truncated' : '', ...overflow, failure || next.error || '']
+      const overflow = [details.stdoutOverflow, details.stderrOverflow].filter(
+        (path) => typeof path === 'string',
+      );
+      warning.textContent = [
+        truncated ? 'Earlier output was truncated' : '',
+        ...overflow,
+        failure || next.error || '',
+      ]
         .filter(Boolean)
         .join(' · ');
     }

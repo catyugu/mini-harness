@@ -82,8 +82,14 @@ export function mountComposer(ctx: Context, signal: AbortSignal) {
   };
   let previousPermission: ConversationPermission | undefined;
   const permissionOptions: Array<{ value: ConversationPermission; description: string }> = [
-    { value: 'fullAccess', description: 'Run enabled tools; release plugin approvals that support Full access' },
-    { value: 'standard', description: 'Run enabled tools with normal plugin policies; Shell uses your user permissions' },
+    {
+      value: 'fullAccess',
+      description: 'Run enabled tools; release plugin approvals that support Full access',
+    },
+    {
+      value: 'standard',
+      description: 'Run enabled tools with normal plugin policies; Shell uses your user permissions',
+    },
     { value: 'readOnly', description: 'Only tools declared read-only; no edits or Shell' },
   ];
   function renderPermission() {

@@ -8,15 +8,15 @@ Shell is disabled in the base Profile. Enable the `shell` entry in Plugins to au
 
 The [configuration schema](src/manifest.ts) defines:
 
-| Setting | Behavior |
-| --- | --- |
-| `timeoutMs` | Default command timeout in milliseconds (120000). |
+| Setting          | Behavior                                                                           |
+| ---------------- | ---------------------------------------------------------------------------------- |
+| `timeoutMs`      | Default command timeout in milliseconds (120000).                                  |
 | `maxOutputBytes` | Maximum captured bytes per stream (64000). Remaining bytes go to a temporary file. |
 
 The `shell` tool accepts a nonempty `command` and an optional `timeoutMs` override, including when invoked independently through `start_background`. For long builds or tests, an agent can submit:
 
 ```json
-{"tool":"shell","arguments":{"command":"pnpm run build","timeoutMs":600000}}
+{ "tool": "shell", "arguments": { "command": "pnpm run build", "timeoutMs": 600000 } }
 ```
 
 Shell uses `/bin/sh` on POSIX or `cmd.exe` on Windows. `MINI_HARNESS_ATTACHMENTS` points to available attachment storage. The selected scoped `harnessProcess` provider determines how a command runs; there is no built-in isolation layer.

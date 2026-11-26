@@ -58,10 +58,10 @@ Use **Settings → Built-in plugins → Optional plugins** to toggle Files, Skil
 
 Choose permissions from the left side of the composer:
 
-| Permission  | Behavior                                                                                                                   |
-| ----------- | -------------------------------------------------------------------------------------------------------------------------- |
-| Read-only   | Select tools that declare read-only access; descendants inherit the restriction                                            |
-| Standard | Run enabled tools with normal plugin policies. |
+| Permission  | Behavior                                                                                                          |
+| ----------- | ----------------------------------------------------------------------------------------------------------------- |
+| Read-only   | Select tools that declare read-only access; descendants inherit the restriction                                   |
+| Standard    | Run enabled tools with normal plugin policies.                                                                    |
 | Full access | Release pending plugin confirmations that opt into Full access, while retaining inherited read-only restrictions. |
 
 Permission changes apply to work that has not started and persist per conversation. They do not enable disabled plugins. Shell starts disabled. Enabling it authorizes native command execution with your user permissions, without per-command confirmation. Its plugin settings control the default timeout and per-stream output limit. Review the [security model](../../SECURITY.md) and [Shell configuration](../../packages/shell/README.md) before enabling command execution.

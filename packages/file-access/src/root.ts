@@ -19,7 +19,6 @@ function checkName(name: string) {
   }
 }
 
-
 const denied = () => new DomainError('forbidden', 'Path is outside the permitted root');
 const missing = (error: unknown) => (error as NodeJS.ErrnoException).code === 'ENOENT';
 
@@ -55,10 +54,13 @@ export class RootedFiles implements RootedFileAccess {
         if ((error as NodeJS.ErrnoException).code === 'ENOTDIR') throw new FileTypeError('not-directory');
         if (!allowMissing || !missing(error) || target === root) throw error;
         // A dangling link is not an ordinary absent file.
-        if (await lstat(target).catch((error: unknown) => {
-          if (!missing(error)) throw error;
-          return undefined;
-        })) throw error;
+        if (
+          await lstat(target).catch((error: unknown) => {
+            if (!missing(error)) throw error;
+            return undefined;
+          })
+        )
+          throw error;
         return this.check(physicalRoot, resolve(await locate(dirname(target)), basename(target)));
       }
     };

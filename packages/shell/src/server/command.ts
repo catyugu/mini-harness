@@ -68,7 +68,12 @@ export async function runShellCommand(
     join(await (temporary ??= mkdtemp(join(tmpdir(), 'mini-harness-output-'))), channel + '.log');
   child.stdin.end();
   const collect = (channel: 'stdout' | 'stderr') =>
-    capture(child[channel], maxOutputBytes, () => spill(channel), (text) => write?.(text, channel));
+    capture(
+      child[channel],
+      maxOutputBytes,
+      () => spill(channel),
+      (text) => write?.(text, channel),
+    );
   const pending = [child.finished, collect('stdout'), collect('stderr')] as const;
   try {
     const [status, stdout, stderr] = await Promise.all(pending);

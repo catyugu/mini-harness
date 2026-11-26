@@ -21,7 +21,11 @@ test('enabled Shell runs consecutive commands without approval and respects read
   const history = (await request('/sessions/' + session.id)).body.timeline;
   const results = history.filter((message: { role: string }) => message.role === 'toolResult');
   assert.equal(results.length, 2);
-  assert.ok(results.every((result: { exitCode: number; isError: boolean }) => result.exitCode === 0 && !result.isError));
+  assert.ok(
+    results.every(
+      (result: { exitCode: number; isError: boolean }) => result.exitCode === 0 && !result.isError,
+    ),
+  );
   assert.equal(
     (await request('/sessions/' + session.id + '/permissions', 'PATCH', { permission: 'readOnly' })).status,
     200,
@@ -33,9 +37,17 @@ test('enabled Shell runs consecutive commands without approval and respects read
     assert.ok(!tools.some(({ name }) => name === 'shell' || name === 'write'));
   }
   const sibling = ctx.harnessSessions.create();
-  assert.ok(conversationTools(ctx, sibling.id, ctx.harnessSessions.runScope(sibling.id)).some(({ name }) => name === 'shell'));
+  assert.ok(
+    conversationTools(ctx, sibling.id, ctx.harnessSessions.runScope(sibling.id)).some(
+      ({ name }) => name === 'shell',
+    ),
+  );
   await app.runtime.configuration.update({ entries: { shell: { disabled: true } } });
-  assert.ok(!conversationTools(ctx, sibling.id, ctx.harnessSessions.runScope(sibling.id)).some(({ name }) => name === 'shell'));
+  assert.ok(
+    !conversationTools(ctx, sibling.id, ctx.harnessSessions.runScope(sibling.id)).some(
+      ({ name }) => name === 'shell',
+    ),
+  );
 });
 
 test('Shell preserves native workspace and environment', async (t) => {
@@ -49,7 +61,10 @@ test('Shell preserves native workspace and environment', async (t) => {
     else process.env.MINI_HARNESS_TEST_ENV = previous;
   });
   const { id } = ctx.harnessSessions.create();
-  const tool = expectPresent(conversationTools(ctx, id, ctx.harnessSessions.runScope(id)).find(({ name }) => name === 'shell'), 'shell');
+  const tool = expectPresent(
+    conversationTools(ctx, id, ctx.harnessSessions.runScope(id)).find(({ name }) => name === 'shell'),
+    'shell',
+  );
   const result = await runTool(tool, 'native-environment', {
     command: 'node -e "console.log(JSON.stringify([process.cwd(), process.env.MINI_HARNESS_TEST_ENV]))"',
   });

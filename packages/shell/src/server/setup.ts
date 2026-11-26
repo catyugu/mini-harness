@@ -13,15 +13,18 @@ export function setup(ctx: Context) {
     defineTool({
       name: 'shell',
       label: 'Shell',
-      description: 'Run a shell command in the workspace. For long builds or tests, use start_background and set timeoutMs as needed.',
+      description:
+        'Run a shell command in the workspace. For long builds or tests, use start_background and set timeoutMs as needed.',
       parameters: Type.Object(
         {
           command: Type.String({ minLength: 1, maxLength: 16000 }),
-          timeoutMs: Type.Optional(Type.Integer({
-            minimum: 1,
-            maximum: 86400000,
-            description: 'Command timeout in milliseconds; defaults to the Shell plugin setting.',
-          })),
+          timeoutMs: Type.Optional(
+            Type.Integer({
+              minimum: 1,
+              maximum: 86400000,
+              description: 'Command timeout in milliseconds; defaults to the Shell plugin setting.',
+            }),
+          ),
         },
         { additionalProperties: false },
       ),
@@ -41,7 +44,8 @@ export function setup(ctx: Context) {
       execute: async (args, { signal, write }): Promise<ToolResult> => {
         const cwd = workspace.workspacePath(sessionId);
         if (!cwd) throw new DomainError('unavailable', 'Shell requires a workspace');
-        if (caller.get('harnessToolPolicy')?.(sessionId, { name: 'shell' }) === false) throw new Error('Tool denied by conversation policy: shell');
+        if (caller.get('harnessToolPolicy')?.(sessionId, { name: 'shell' }) === false)
+          throw new Error('Tool denied by conversation policy: shell');
         signal?.throwIfAborted();
         const execution = caller.get('harnessProcess');
         if (!execution) throw new Error('Process execution is unavailable');
