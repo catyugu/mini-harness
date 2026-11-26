@@ -491,6 +491,9 @@ importers:
       '@mini-harness/sessions':
         specifier: workspace:*
         version: link:../sessions
+      '@mini-harness/tasks':
+        specifier: workspace:*
+        version: link:../tasks
       '@mini-harness/tools':
         specifier: workspace:*
         version: link:../tools

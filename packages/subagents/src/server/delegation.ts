@@ -109,6 +109,7 @@ export class Delegation {
     parentId: string,
     request: { task: string; provider?: string; model?: string },
     signal?: AbortSignal,
+    creator?: string,
   ) {
     signal?.throwIfAborted();
     const parent = this.sessions.get(parentId);
@@ -125,6 +126,7 @@ export class Delegation {
       { message: request.task, model },
       {
         provider: this.provider,
+        creator,
         acquire: (cancellation) => this.semaphore.acquire(cancellation),
       },
     );

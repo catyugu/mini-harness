@@ -9,16 +9,21 @@ import { expectPresent } from '../../../test/support/required.ts';
 import { createMockProvider, createFixturePaths } from '../../../test/helpers/mock-provider.ts';
 
 test(
-  'Native execution honors file policy and recursive delegates can finish with one slot',
+  'Native execution honors file policy and recursive task waits release the single child slot',
   { timeout: 30000 },
   async (t) => {
     const mock = await createMockProvider(({ messages }) => {
       const last = messages.at(-1);
       assert.ok(last);
-      if (last.role === 'tool')
-        return (
-          'Finished ' + ([...messages].reverse().find((message) => message.role === 'user')?.content ?? '')
-        );
+      if (last.role === 'tool') {
+        if (last.content.startsWith('{')) {
+          const payload = JSON.parse(last.content);
+          if (payload.taskId && payload.state === 'queued')
+            return { tool: 'task_control', args: { action: 'wait', taskId: payload.taskId } };
+          if (payload.taskId) assert.equal(payload.state, 'completed');
+        }
+        return 'Finished ' + ([...messages].reverse().find((message) => message.role === 'user')?.content ?? '');
+      }
       if (last.content === 'root task')
         return { tool: 'delegate', args: { task: 'child task', provider: 'local-mock' } };
       if (last.content === 'child task') return { tool: 'delegate', args: { task: 'leaf task' } };
@@ -45,6 +50,7 @@ test(
     await app.runtime.plugins.ctx.harnessRuns.send(parent.id, 'root task', (event) => {
       if (event.type === 'tool-end') toolEvents.push(event);
     });
+    await waitUntil(() => app.runtime.plugins.ctx.harnessSessions.descendants([parent.id]).length, (length) => length === 3);
     const records = app.runtime.plugins.ctx.harnessSessions
       .descendants([parent.id])
       .map((id) => app.runtime.plugins.ctx.harnessSessions.get(id));
@@ -58,6 +64,8 @@ test(
     const childRecord = records[1],
       leafRecord = records[2];
     assert.ok(childRecord && leafRecord);
+    await app.runtime.plugins.ctx.harnessRuns.completion(childRecord.id);
+    await app.runtime.plugins.ctx.harnessRuns.completion(leafRecord.id);
     assert.deepEqual(app.runtime.plugins.ctx.harnessSessions.log(leafRecord.id).projection().model, {
       provider: 'local-mock',
       id: 'mock-model',
@@ -107,44 +115,38 @@ test(
 );
 
 test(
-  'cancelling a root aborts its active child and preserves indexed history',
+  'stopping a root leaves its delegated child running',
   { timeout: 15000 },
   async (t) => {
-    let entered: () => void;
-    let release: () => void;
-    const waiting = new Promise<void>((done) => {
-      entered = done;
-    });
-    const held = new Promise<void>((done) => {
-      release = done;
-    });
-    const mock = await createMockProvider(async ({ messages }) => {
-      if (messages.at(-1)?.content === 'start child')
+    const parentEntered = gate();
+    const childEntered = gate();
+    const held = gate();
+    t.after(() => held.release());
+    const { app } = await fixture(t, async ({ messages }) => {
+      const last = messages.at(-1);
+      if (last?.content === 'start child')
         return { tool: 'delegate', args: { task: 'hold child' } };
-      entered();
-      await held;
+      if (last?.content === 'hold child') childEntered.release();
+      else parentEntered.release();
+      await held.promise;
       return 'Released';
     });
-    const { root, paths } = createFixturePaths(mock.url);
-    const app = await createMiniHarnessServer(paths);
-    t.after(async () => {
-      release();
-      await app.close();
-      await mock.close();
-      rmSync(root, { recursive: true, force: true });
-    });
-    const parent = app.runtime.plugins.ctx.harnessSessions.create();
-    const pending = app.runtime.plugins.ctx.harnessRuns.send(parent.id, 'start child');
+    const ctx = app.runtime.plugins.ctx;
+    const parent = ctx.harnessSessions.create();
+    const pending = ctx.harnessRuns.send(parent.id, 'start child');
     const aborted = assert.rejects(pending, /cancelled/);
-    await waiting;
-    assert.equal(app.runtime.plugins.ctx.harnessRuns.size, 2);
-    assert.equal(app.runtime.plugins.ctx.harnessRuns.cancel(parent.id), true);
-    await aborted;
-    assert.equal(app.runtime.plugins.ctx.harnessRuns.size, 0);
-    const child = app.runtime.plugins.ctx.harnessSessions.export([parent.id])[1];
+    await Promise.all([parentEntered.promise, childEntered.promise]);
+    const child = ctx.harnessSessions.list().find(({ parentId }) => parentId === parent.id);
     assert.ok(child);
-    assert.equal(child.title, '[Cancelled] hold child');
-    assert.ok(child.log?.includes('hold child'));
+    const childRun = expectPresent(ctx.harnessRuns.info(child.id), 'child run');
+    assert.equal(ctx.harnessRuns.cancel(parent.id), true);
+    await aborted;
+    assert.equal(ctx.harnessTasks.get(childRun.id)?.state, 'running');
+    held.release();
+    await ctx.harnessRuns.completion(child.id);
+    assert.equal(ctx.harnessTasks.get(childRun.id)?.state, 'completed');
+    assert.equal(ctx.harnessRuns.size, 0);
+    assert.equal(ctx.harnessSessions.export([parent.id]).length, 2);
   },
 );
 
@@ -186,12 +188,12 @@ test(
     );
     const start = (task: string) =>
       delegate.execute(task, { task, provider: 'local-mock', model: 'mock-model' });
-    const first = start('First child');
+    const first = await start('First child');
     assert.ok(entered[0] && entered[1]);
     await entered[0].promise;
-    const second = start('Second child');
-    const third = start('Cancelled queued child');
-    const aborted = assert.rejects(third, /cancelled/);
+    const second = await start('Second child');
+    const third = await start('Cancelled queued child');
+    assert.equal(third.details?.state, 'queued');
     const queued = await waitUntil(
       () =>
         app.runtime.plugins.ctx.harnessSessions
@@ -202,7 +204,7 @@ test(
     assert.ok(queued);
     assert.equal(app.runtime.plugins.ctx.harnessRuns.info(queued.id)?.state, 'queued');
     app.runtime.plugins.ctx.harnessRuns.cancel(queued.id);
-    await aborted;
+    await app.runtime.plugins.ctx.harnessRuns.completion(queued.id)?.catch(() => {});
     assert.equal(app.runtime.plugins.ctx.harnessRuns.info(queued.id)?.state, 'cancelled');
     assert.equal(requests, 1);
     await app.runtime.configuration.update({ entries: { subagents: { config: { maxParallel: 2 } } } });
@@ -224,7 +226,7 @@ test(
     assert.ok(held[0] && held[1]);
     held[0].release();
     held[1].release();
-    await Promise.all([first, second]);
+    await Promise.all([first, second].map((result) => app.runtime.plugins.ctx.harnessRuns.completion(String(result.details?.sessionId))));
     assert.equal(app.runtime.plugins.ctx.harnessRuns.size, 0);
     assert.equal(requests, 2, 'Cancelled queued children never reach the provider');
   },
