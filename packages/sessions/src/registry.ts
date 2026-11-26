@@ -291,7 +291,7 @@ export class SessionRegistry implements SessionStore {
           id,
           false,
           false,
-          entry.type === 'plugin-record' || entry.type === 'context-replace'
+          entry.type === 'plugin-record' || (entry.type === 'context-replace' && entry.measurement)
             ? { leafId: entry.id, display: structuredClone(displayRecord(entry)) }
             : undefined,
           entry.type,
