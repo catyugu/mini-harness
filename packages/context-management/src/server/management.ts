@@ -6,7 +6,7 @@ import {
   type NativeUsage,
 } from '@mini-harness/llm/api';
 import { DomainError } from '@mini-harness/platform/errors';
-import type { ContextRepair, ContextRequest } from '@mini-harness/runs/context-management';
+import type { RequestRecovery } from '@mini-harness/agent/events';
 import type { SessionContext, SessionLogPort } from '@mini-harness/sessions/log-api';
 import type { ContextOccupancy, ContextSettings, ContextState } from '../shared/state.ts';
 import { checkpoint, splitPoint } from './compaction.ts';
@@ -16,13 +16,12 @@ import { prune } from './prune.ts';
 
 export const owner = 'context-management';
 
+type Rebuild = (messages: LlmRequest['messages']) => Promise<LlmRequest>;
+
 export class ContextManagement {
   private readonly signatures = new WeakMap<SessionLogPort, Map<string, string | null>>();
   private readonly meter = new TokenMeter();
-  private readonly prepared = new WeakMap<
-    LlmRequest['messages'],
-    { occupancy: ContextOccupancy; adapter: LlmAdapter }
-  >();
+  private readonly prepared = new WeakMap<SessionLogPort, { occupancy: ContextOccupancy; adapter: LlmAdapter; leafId: string | null; requestId?: string }>();
   private readonly operations = new Map<string, NonNullable<ContextState['compacting']>>();
 
   constructor(
@@ -48,29 +47,34 @@ export class ContextManagement {
       projection,
       count,
     );
-    if (count && adapter) this.prepared.set(request.messages, { occupancy, adapter });
     return occupancy;
   }
 
-  observe(request: Omit<LlmRequest, 'signal'>, usage: NativeUsage) {
-    const measured = this.prepared.get(request.messages);
-    if (measured) this.meter.calibrate(request, measured.occupancy, measured.adapter, usage);
+  observe(log: SessionLogPort, requestId: string, usage: NativeUsage) {
+    const measured = this.prepared.get(log);
+    if (!measured || measured.leafId !== log.context().leafId || (measured.requestId && measured.requestId !== requestId)) return;
+    measured.requestId = requestId;
+    this.meter.calibrate(measured.occupancy, measured.occupancy, measured.adapter, usage);
   }
 
-  prepare(input: ContextRequest, repair?: ContextRepair) {
-    return this.process(input, repair ? 'recovery' : 'automatic', repair);
+  prepare(ctx: Context, log: SessionLogPort, request: LlmRequest, rebuild: Rebuild, runId?: string, repair?: RequestRecovery) {
+    return this.process(ctx, log, request, rebuild, repair ? 'recovery' : 'automatic', runId, repair);
   }
 
-  async compact(input: ContextRequest) {
-    await this.process(input, 'manual');
+  async compact(ctx: Context, log: SessionLogPort, request: LlmRequest, rebuild: Rebuild) {
+    await this.process(ctx, log, request, rebuild, 'manual');
   }
 
   private async process(
-    input: ContextRequest,
+    ctx: Context,
+    log: SessionLogPort,
+    request: LlmRequest,
+    rebuild: Rebuild,
     mode: 'automatic' | 'manual' | 'recovery',
-    repair?: ContextRepair,
+    runId?: string,
+    repair?: RequestRecovery,
   ) {
-    const { log, signal } = input;
+    const { signal } = request;
     const { settings: config } = this.configuration(log.setting(owner));
     const id = log.sessionId;
     const manual = mode === 'manual';
@@ -83,27 +87,32 @@ export class ContextManagement {
     signal.throwIfAborted();
     if (repair && repair.attempt > 3) fail('The model still rejects the input after three repairs');
     let projection = log.context();
-    let request = await input.assemble(projection);
-    let occupancy = await this.measure(input.ctx, request, projection);
+    let occupancy = await this.measure(ctx, request, projection);
+    const finish = () => {
+      const adapter = ctx.harnessLlm.select(request.model);
+      if (adapter) this.prepared.set(log, { occupancy, adapter, leafId: log.context().leafId });
+      return request;
+    };
     const budget = occupancy.budget;
     if (budget === 0) fail('The model window has no room after reserving its output budget');
 
     const pressure = budget !== undefined && occupancy.total >= budget * config.triggerRatio;
     let signatures = this.signatures.get(log);
     if (!signatures) this.signatures.set(log, (signatures = new Map()));
-    const pruned = prune(input, projection, signatures, {
-      offload: pressure || manual || repair !== undefined,
-      forceImages: repair?.kind === 'image-limit',
-      toolTokens: Math.max(256, Math.min(4096, Math.floor((budget ?? 64_000) * (repair ? 0.03 : 0.09)))),
-    });
+    const pruned =
+      prune(ctx, log, projection, signatures, {
+        offload: pressure || manual || repair !== undefined,
+        forceImages: repair?.kind === 'image-limit',
+        toolTokens: Math.max(256, Math.min(4096, Math.floor((budget ?? 64_000) * (repair ? 0.03 : 0.09)))),
+      });
     if (pruned) {
       projection = log.context();
-      request = await input.assemble(projection);
-      occupancy = await this.measure(input.ctx, request, projection);
+      request = await rebuild(projection.contextMessages);
+      occupancy = await this.measure(ctx, request, projection);
     }
     if (repair?.kind === 'image-limit') {
       if (!pruned) fail('No further images can be offloaded');
-      return request;
+      return finish();
     }
 
     const target = Math.floor(
@@ -117,7 +126,7 @@ export class ContextManagement {
     if (!needsSummary) {
       if (repair && !pruned)
         fail('Automatic compaction is off and pruning cannot reduce this request further');
-      return request;
+      return finish();
     }
 
     let reduced = false;
@@ -129,17 +138,17 @@ export class ContextManagement {
         const retain = Math.max(
           1,
           Math.floor(
-            manual && occupancy.messages <= minimum ? occupancy.messages * config.retainRatio : minimum,
+            manual && occupancy.messages <= minimum
+              ? occupancy.messages * config.retainRatio
+              : minimum,
           ),
         );
         const force = repair || (budget !== undefined && occupancy.total > budget);
-        const checkpointAtStart = log
-          .branch(projection.leafId)
-          .some(
-            (entry) =>
-              entry.id === projection.contextEntryIds[0] &&
-              (entry.type === 'context-replace' || entry.type === 'compaction'),
-          );
+        const checkpointAtStart = log.branch(projection.leafId).some(
+          (entry) =>
+            entry.id === projection.contextEntryIds[0] &&
+            (entry.type === 'context-replace' || entry.type === 'compaction'),
+        );
         const cut = splitPoint(
           projection,
           this.meter,
@@ -156,21 +165,23 @@ export class ContextManagement {
           Math.max(96, target - occupancy.system - occupancy.tools - retain),
         );
         const summary = await checkpoint(
-          input,
+          ctx,
+          log,
           request,
           projection.contextMessages.slice(0, cut),
           config,
           summaryBudget,
-          (draft) => this.measure(input.ctx, draft),
+          (draft) => this.measure(ctx, draft),
+          runId,
         );
         const candidate = {
           ...projection,
           contextMessages: [summary, ...projection.contextMessages.slice(cut)],
           contextRevisions: ['', ...projection.contextRevisions.slice(cut)],
         };
-        const next = await input.assemble(candidate);
+        const next = await rebuild(candidate.contextMessages);
         validateRequestSnapshot(next);
-        const measured = await this.measure(input.ctx, next, candidate);
+        const measured = await this.measure(ctx, next, candidate);
         signal.throwIfAborted();
         if (measured.total >= occupancy.total || measured.messages >= occupancy.messages) {
           if (reduced) break;
@@ -201,6 +212,6 @@ export class ContextManagement {
     if (repair && !pruned && !reduced) fail('No further reduction is possible');
     if (budget !== undefined && occupancy.total > budget && !manual)
       fail('The prepared request exceeds the available input budget after compaction');
-    return request;
+    return finish();
   }
 }

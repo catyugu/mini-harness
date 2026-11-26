@@ -230,12 +230,20 @@ function mountStats(ctx: Context) {
         windowRatio.textContent =
           ratio === undefined ? '—' : (occupancy?.estimated ? '~' : '') + percent(ratio);
         showOccupancy(contextList, bar, state);
+
       }
       updates.addEventListener('change', render, { signal });
       render();
       return row;
     }),
   );
+
+  const compactConversation = async () => {
+    if (!id) throw new Error('Open a conversation to compact it.');
+    const sessionId = id;
+    await browserRequest(ctx, '/sessions/' + encodeURIComponent(sessionId) + '/compact', payload('POST', {}));
+    if (id === sessionId) await conversation.activate(sessionId, false);
+  };
 
   ctx.effect(() =>
     ctx.miniSlots.register('conversation.composer-options', (signal) => {
@@ -266,8 +274,9 @@ function mountStats(ctx: Context) {
       const form = settingsForm(ctx, signal, write);
       const compact = uiButton('Compact now');
       compact.onclick = () => {
-        if (state?.compacting === 'manual') void conversation.cancel().catch(conversation.report);
-        else void conversation.compact().catch(conversation.report);
+        if (state?.compacting === 'manual' && id)
+          void browserRequest(ctx, '/sessions/' + encodeURIComponent(id) + '/cancel', payload('POST', {})).catch(conversation.report);
+        else void compactConversation().catch(conversation.report);
       };
       panel.append(mode, form.node, compact);
       const render = () => {
@@ -279,21 +288,11 @@ function mountStats(ctx: Context) {
         mode.value = state.custom ? 'custom' : 'default';
         form.update(state.settings, Boolean(state.custom));
         const current = conversation.get();
-        compact.disabled =
-          state.compacting !== 'manual' &&
-          Boolean(
-            state.compacting ||
-              current.interaction.operation ||
-              current.run?.state === 'running' ||
-              current.run?.state === 'queued' ||
-              current.run?.state === 'waiting',
-          );
-        compact.textContent =
-          state.compacting === 'manual'
-            ? 'Cancel compaction'
-            : state.compacting
-              ? 'Compacting…'
-              : 'Compact now';
+        compact.disabled = state.compacting !== 'manual' && Boolean(
+          state.compacting || current.interaction.operation ||
+          current.run?.state === 'running' || current.run?.state === 'queued' || current.run?.state === 'waiting'
+        );
+        compact.textContent = state.compacting === 'manual' ? 'Cancel compaction' : state.compacting ? 'Compacting…' : 'Compact now';
       };
       updates.addEventListener('change', render, { signal });
       render();
@@ -327,7 +326,7 @@ function mountStats(ctx: Context) {
         name: 'compact',
         group: 'Conversation',
         description: 'Summarize earlier messages to free context',
-        run: conversation.compact,
+        run: compactConversation,
       }),
     );
   });
@@ -354,7 +353,13 @@ function setup(ctx: Context) {
                 retainRatio: configuration.get('retainRatio'),
                 summaryModel: configuration.get('summaryModel'),
               });
-            for (const key of ['autoCompact', 'triggerRatio', 'targetRatio', 'retainRatio', 'summaryModel'])
+            for (const key of [
+              'autoCompact',
+              'triggerRatio',
+              'targetRatio',
+              'retainRatio',
+              'summaryModel',
+            ])
               signal.addEventListener('abort', configuration.subscribe(key, read), { once: true });
             read();
             return form.node;

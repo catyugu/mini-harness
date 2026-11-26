@@ -42,7 +42,7 @@ export interface ConversationState {
   mode: MessageMode;
   queue: readonly ConversationView['queue'][number][];
   interaction: {
-    operation?: 'open' | 'submit' | 'compact';
+    operation?: 'open' | 'submit';
     cancelling?: boolean;
     status: string;
     error?: boolean;
@@ -64,7 +64,6 @@ export interface ConversationController {
   cancel(): Promise<void>;
   cancelQueue(id?: string): Promise<void>;
   setPermission(permission: ConversationPermission): Promise<void>;
-  compact(): Promise<void>;
 }
 
 declare module 'mini-harness/cordis' {

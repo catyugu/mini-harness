@@ -9,6 +9,7 @@
     }
   },
   "dependencies": {
+    "@mini-harness/agent": "workspace:*",
     "@mini-harness/conversation": "workspace:*",
     "@mini-harness/llm": "workspace:*",
     "@mini-harness/models": "workspace:*",

@@ -4,7 +4,7 @@ import { conversationTools } from './tool-selection.ts';
 import type { Context } from 'mini-harness/cordis';
 import type { TaskContext } from '@mini-harness/tasks/api';
 import { scopeTarget } from '@mini-harness/plugin-api/scopes';
-import type { InputContext, ModelFailure, StepContext } from '@mini-harness/agent/events';
+import type { InputContext, ModelFailure, RequestRecovery, StepContext } from '@mini-harness/agent/events';
 import { DomainError } from '@mini-harness/platform/errors';
 import { isDeepStrictEqual } from 'node:util';
 import type { SessionCatalog, SessionLifecycle, SessionStore } from '@mini-harness/sessions/records';
@@ -33,8 +33,6 @@ import {
   assertImageInput,
 } from '@mini-harness/models/selection';
 import type { AgentTurn } from '@mini-harness/agent/api';
-import type { ContextRepair, ContextRequest } from './context-management.ts';
-import { requestModel } from '@mini-harness/agent/model-request';
 
 function requireService<K extends keyof Context & string>(ctx: Context, name: K): NonNullable<Context[K]> {
   const value = ctx.get(name);
@@ -92,7 +90,7 @@ export class SessionRun {
   ) {}
 
   /** Never retry an unknown tool outcome after restart or provider failure. */
-  private closeUnfinishedTools(log: SessionLogPort, cancelled = false) {
+  closeUnfinishedTools(log: SessionLogPort, cancelled = false) {
     const pending = new Map<string, ToolCallPart>();
     for (const message of log.context().contextMessages) {
       if (message.role === 'assistant')
@@ -248,12 +246,11 @@ export class SessionRun {
         // Coalesce messages accepted during the same interruption before requesting a model turn.
       }
     }
-    let modelRequest: AgentTurn['request'] | undefined;
     let requestId: string | undefined;
     let attemptsRecorded = false;
     let modelStep = 0;
     let repairs = 0;
-    let prepareTurn: ((repair?: ContextRepair) => Promise<AgentTurn>) | undefined;
+    let prepareTurn: ((repair?: RequestRecovery) => Promise<AgentTurn>) | undefined;
     const answer = await requireService(ctx, 'harnessAgent')
       .run(ctx, {
         signal,
@@ -265,7 +262,6 @@ export class SessionRun {
             return;
           }
           if (event.type === 'request') {
-            modelRequest = event.request;
             requestId = log.recordRequest(event.request).id;
             attemptsRecorded = false;
             return;
@@ -279,8 +275,8 @@ export class SessionRun {
               step: modelStep,
               ...event.metrics,
             });
-            if (modelRequest && event.metrics.usage)
-              ctx.get('harnessContextManagement')?.observe(modelRequest, event.metrics.usage);
+            for (const { callback } of ctx.events.listeners('agent/request-attempt', scopeTarget(ctx)))
+              callback(id, requestId, event.metrics);
             attemptsRecorded = true;
             return;
           }
@@ -312,13 +308,15 @@ export class SessionRun {
           const cwd = this.sessions.workspacePath(id);
           const step: StepContext = { sessionId: id, turn, phase: 'turn', cwd, model, signal };
           const executor = requireService(ctx, 'harnessToolExecutor');
-          const input = await this.contextRequest(ctx, step, log, submissionId);
-          const advertisedTools = input.tools;
-          const strategy = ctx.get('harnessContextManagement');
+          const { tools: advertisedTools, assemble } = await this.requestBuilder(ctx, step, log);
+          const prepareHooks = ctx.events.listeners('agent/prepare-request', scopeTarget(ctx));
           prepareTurn = async (repair) => {
-            const request = strategy
-              ? await strategy.prepare(input, repair)
-              : await input.assemble(log.context());
+            const request = await applyTransforms(prepareHooks, await assemble(log.context().contextMessages), {
+              ...step,
+              runId: submissionId,
+              recovery: repair,
+              rebuild: assemble,
+            });
             const hooks = ctx.events.listeners('agent/tool-result', scopeTarget(ctx));
             return {
               request,
@@ -400,7 +398,7 @@ export class SessionRun {
             };
           };
           const prepared = await prepareTurn();
-          if (!strategy) prepareTurn = undefined;
+          if (!prepareHooks.length) prepareTurn = undefined;
           return prepared;
         },
       })
@@ -436,7 +434,7 @@ export class SessionRun {
     };
   }
 
-  private async contextRequest(ctx: Context, step: StepContext, log: SessionLogPort, runId?: string) {
+  private async requestBuilder(ctx: Context, step: StepContext, log: SessionLogPort) {
     const { sessionId, cwd, model, signal } = step;
     const executor = requireService(ctx, 'harnessToolExecutor');
     const tools = conversationTools(ctx, sessionId);
@@ -450,16 +448,13 @@ export class SessionRun {
     }));
     const systemPrompt =
       (await ctx.get('harnessPrompt')?.build({ sessionId, cwd, tools: metadata, signal })) ?? '';
-    const input = {
-      ctx,
-      log,
-      signal,
+    return {
       tools: advertised,
-      assemble: (projection) =>
+      assemble: (messages: LlmRequest['messages']) =>
         this.prepareRequest(
           ctx,
           step,
-          { systemPrompt, messages: projection.contextMessages, thinkingLevel: projection.thinkingLevel },
+          { systemPrompt, messages, thinkingLevel: log.context().thinkingLevel },
           (content) => {
             for (const [name, tool] of advertised) if (!toolAvailable(tool)) advertised.delete(name);
             const schemas = metadata
@@ -468,46 +463,6 @@ export class SessionRun {
             return executor.present(content, schemas, { model, turn: step.turn, signal });
           },
         ),
-      assembleSummary: (summary) =>
-        this.prepareRequest(
-          ctx,
-          { ...step, model: summary.model, phase: 'compaction' },
-          summary,
-          (content) => ({ ...content, tools: summary.tools }),
-        ),
-      summarize: (request) => {
-        const recorded = log.recordRequest(request, 'summary');
-        return requestModel(requireService(ctx, 'harnessLlm'), request, {
-          maxAttempts: 3,
-          retry: (failure) => retryModel(ctx, { ...failure, sessionId }),
-          attempt: (metrics) => {
-            log.append({ type: 'model-attempt', requestId: recorded.id, summary: true, runId, ...metrics });
-            if (metrics.usage) ctx.get('harnessContextManagement')?.observe(request, metrics.usage);
-          },
-        });
-      },
-    } satisfies ContextRequest;
-    return input;
-  }
-
-  async compact(ctx: Context, id: string, signal: AbortSignal) {
-    signal.throwIfAborted();
-    this.sessions.assertAvailable(id);
-    const strategy = requireService(ctx, 'harnessContextManagement');
-    const log = this.sessions.log(id);
-    const current = log.context();
-    if (!current.contextMessages.length)
-      throw new DomainError('invalid_input', 'Nothing to compact in this conversation');
-    const { model } = selectModel(requireService(ctx, 'harnessModels'), {
-      explicit: current.model,
-      unavailable: 'Configure a model before compacting',
-    });
-    this.closeUnfinishedTools(log);
-    const input = await this.contextRequest(
-      ctx,
-      { sessionId: id, cwd: this.sessions.workspacePath(id), model, turn: 0, phase: 'turn', signal },
-      log,
-    );
-    await strategy.compact(input);
+    };
   }
 }

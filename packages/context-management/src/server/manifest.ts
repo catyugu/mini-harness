@@ -1,6 +1,9 @@
 import type { Context, Plugin } from 'mini-harness/cordis';
 import type { PluginInfo } from '@mini-harness/plugin-api/descriptor';
 import type { LlmRequest } from '@mini-harness/llm/api';
+import type {} from '@mini-harness/agent/events';
+import type {} from '@mini-harness/runs/api';
+import { prepareModelMessages, selectModel } from '@mini-harness/models/selection';
 import type { SessionLogPort } from '@mini-harness/sessions/log-api';
 import { defineTool } from '@mini-harness/tools/api';
 import { HttpError } from '@mini-harness/transport/routes';
@@ -25,7 +28,13 @@ function setup(ctx: Context) {
     notify,
   );
   const statistics = new WeakMap<Pick<SessionLogPort, 'entries'>, Statistics>();
-  ctx.provide('harnessContextManagement', manager);
+  ctx.on('agent/prepare-request', (request, step) => {
+    const scoped = ctx.harnessProfileScopes.context(`session:${step.sessionId}`);
+    return manager.prepare(scoped, sessions.log(step.sessionId), request, step.rebuild, step.runId, step.recovery);
+  });
+  ctx.on('agent/request-attempt', (id, requestId, metrics) => {
+    if (metrics.usage) manager.observe(sessions.log(id), requestId, metrics.usage);
+  });
   ctx.effect(() => changes.register('context-management'));
   ctx.effect(() => ctx.harnessProfileConfig.subscribe(() => notify()));
   ctx.effect(() => {
@@ -42,7 +51,22 @@ function setup(ctx: Context) {
       run.effect(() =>
         routes.register('POST', '/api/sessions/:id/compact', async ({ params }) => {
           try {
-            await run.harnessRuns.compact(params.id);
+            await run.harnessRuns.runTask(params.id, 'compaction', async (scoped, signal) => {
+              const log = sessions.log(params.id);
+              const projection = log.context();
+              if (!projection.contextMessages.length) throw new HttpError('invalid_input', 'Nothing to compact in this conversation');
+              const { model } = selectModel(scoped.harnessModels, { explicit: projection.model, unavailable: 'Configure a model before compacting' });
+              const latest = log.entries().findLast((entry) => entry.type === 'model-request' && !entry.request.purpose);
+              const previous = latest && log.requestDefinition(latest.id);
+              const rebuild = async (messages: LlmRequest['messages']): Promise<LlmRequest> => ({
+                ...previous,
+                model,
+                systemPrompt: previous?.systemPrompt ?? '',
+                messages: prepareModelMessages(scoped.harnessModels.capabilities(model), messages),
+                signal,
+              });
+              await manager.compact(scoped, log, await rebuild(projection.contextMessages), rebuild);
+            });
             return { ok: true };
           } catch (error) {
             if (error instanceof Error && error.name === 'AbortError') return { cancelled: true };
@@ -177,12 +201,12 @@ const plugin: Plugin.Object = {
   inject: [
     'harnessSessions',
     'harnessModels',
+    'harnessLlm',
     'harnessTools',
     'harnessChanges',
     'harnessProfileConfig',
     'harnessProfileScopes',
   ],
-  provide: ['harnessContextManagement'],
   apply: setup,
 };
 

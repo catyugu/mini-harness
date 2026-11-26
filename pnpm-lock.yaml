@@ -141,6 +141,9 @@ importers:
 
   packages/context-management:
     dependencies:
+      '@mini-harness/agent':
+        specifier: workspace:*
+        version: link:../agent
       '@mini-harness/conversation':
         specifier: workspace:*
         version: link:../conversation

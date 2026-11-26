@@ -1,7 +1,8 @@
 import { createHash } from 'node:crypto';
 import type { ImagePart, NativeMessage, NativeToolMessage, NativeUserMessage } from '@mini-harness/llm/api';
-import type { ContextRequest } from '@mini-harness/runs/context-management';
-import type { ContextReplacement, SessionContext } from '@mini-harness/sessions/log-api';
+import type { Context } from 'mini-harness/cordis';
+import type {} from '@mini-harness/tools/api';
+import type { ContextReplacement, SessionContext, SessionLogPort } from '@mini-harness/sessions/log-api';
 import { messageTokens } from './meter.ts';
 
 const attachment = /\n\nAttached file: "(?:[^"\\]|\\.)*"\n/;
@@ -16,7 +17,8 @@ function shortened(text: string, size: number) {
 function pruneText(text: string, size: number, customize?: (text: string, size: number) => string) {
   if (customize) {
     const excerpt = customize(text, size);
-    if (typeof excerpt !== 'string' || excerpt.length > size) throw new Error('Invalid tool result excerpt');
+    if (typeof excerpt !== 'string' || excerpt.length > size)
+      throw new Error('Invalid tool result excerpt');
     return excerpt;
   }
   return shortened(text, size);
@@ -27,13 +29,15 @@ function reference(id: string, kind: string) {
 }
 
 export function prune(
-  input: ContextRequest,
+  ctx: Context,
+  log: SessionLogPort,
   projection: SessionContext,
   signatures: Map<string, string | null>,
   options: { offload: boolean; forceImages: boolean; toolTokens: number },
 ) {
   const { contextMessages, contextEntryIds, contextRevisions } = projection;
   const replacements: ContextReplacement[] = [];
+  const tools = new Map(ctx.harnessTools.list({ resourceId: log.sessionId }).map((tool) => [tool.name, tool]));
   const originals = new Map<string, string>();
   let latestUser = contextMessages.length - 1;
   while (latestUser >= 0 && contextMessages[latestUser].role !== 'user') latestUser--;
@@ -69,7 +73,7 @@ export function prune(
         message.role === 'user' &&
         index < latestUser &&
         options.offload &&
-        input.log.hasAttachments(id)
+        log.hasAttachments(id)
       ) {
         const position = part.text.search(attachment);
         if (position >= 0)
@@ -84,14 +88,14 @@ export function prune(
     });
     let replacement: NativeMessage = { ...message, content };
     if (message.role === 'toolResult') {
-      const tool = input.tools.get(message.toolName);
+      const tool = tools.get(message.toolName);
       // A replacement revision can never become the original for a second text prune.
       const fresh = contextRevisions[index] === id;
       let duplicate: string | undefined;
       if (!message.isError && tool?.tags?.includes('readOnly')) {
         let key = signatures.get(id);
         if (key === undefined) {
-          const source = fresh ? message : input.log.originalMessage(id);
+          const source = fresh ? message : log.originalMessage(id);
           key =
             source?.role === 'toolResult' &&
             !source.details?.stdoutOverflow &&
@@ -146,6 +150,6 @@ export function prune(
     replacements.push({ start: index, deleteCount: 1, insert: [replacement], preserveSource: true });
   }
   if (!replacements.length) return false;
-  input.log.append({ type: 'context-replace', replacements: replacements.reverse() }, projection.leafId);
+  log.append({ type: 'context-replace', replacements: replacements.reverse() }, projection.leafId);
   return true;
 }

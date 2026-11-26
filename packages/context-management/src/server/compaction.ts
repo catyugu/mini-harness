@@ -4,9 +4,12 @@ import {
   type NativeMessage,
   type NativeUserMessage,
 } from '@mini-harness/llm/api';
-import { selectModel } from '@mini-harness/models/selection';
-import type { ContextRequest } from '@mini-harness/runs/context-management';
-import type { SessionContext } from '@mini-harness/sessions/log-api';
+import type { Context } from 'mini-harness/cordis';
+import { requestModel } from '@mini-harness/agent/model-request';
+import { scopeTarget } from '@mini-harness/plugin-api/scopes';
+import { prepareModelMessages, selectModel } from '@mini-harness/models/selection';
+import type {} from '@mini-harness/agent/events';
+import type { SessionContext, SessionLogPort } from '@mini-harness/sessions/log-api';
 import type { ContextOccupancy, ContextSettings } from '../shared/state.ts';
 import type { TokenMeter } from './meter.ts';
 
@@ -88,15 +91,17 @@ function transcript(group: NativeMessage[]) {
 }
 
 export async function checkpoint(
-  input: ContextRequest,
+  ctx: Context,
+  log: SessionLogPort,
   request: LlmRequest,
   messages: NativeMessage[],
   settings: ContextSettings,
   desiredOutput: number,
   measure: (request: LlmRequest) => Promise<ContextOccupancy>,
+  runId?: string,
 ) {
-  const models = input.ctx.get('harnessModels');
-  if (!models) throw new Error('No model catalog is available to prepare a checkpoint');
+  const { harnessModels: models, harnessLlm: llm } = ctx;
+  const { signal } = request;
   const { model } = selectModel(models, { explicit: settings.summaryModel ?? request.model });
   const capability = models.capabilities(model);
   const maxTokens = Math.floor(Math.min(capability?.maxTokens ?? desiredOutput, desiredOutput));
@@ -112,19 +117,28 @@ export async function checkpoint(
   let prior: NativeUserMessage | undefined;
 
   async function assemble(segment: NativeMessage[]) {
-    input.signal.throwIfAborted();
-    const outgoing = await input.assembleSummary({
-      ...base,
-      messages: [...(prior ? [prior] : []), ...segment, user(instruction)],
-    });
+    signal.throwIfAborted();
+    const outgoing = { ...base, messages: prepareModelMessages(capability, [...(prior ? [prior] : []), ...segment, user(instruction)]) };
     const tally = await measure(outgoing);
     return { outgoing, fits: tally.budget === undefined || tally.total <= tally.budget };
   }
 
   async function summarize(outgoing: LlmRequest) {
     validateRequestSnapshot(outgoing);
-    const answer = await input.summarize(outgoing);
-    input.signal.throwIfAborted();
+    const recorded = log.recordRequest(outgoing, 'summary');
+    const answer = await requestModel(llm, outgoing, {
+      maxAttempts: 3,
+      async retry(failure) {
+        for (const { context, callback } of ctx.events.listeners('agent/model-retry', scopeTarget(ctx))) {
+          const result = await context.fiber.run((signal) => callback({ ...failure, sessionId: log.sessionId, signal }), signal);
+          if (result !== undefined) return result;
+        }
+      },
+      attempt(metrics) {
+        log.append({ type: 'model-attempt', requestId: recorded.id, summary: true, runId, ...metrics });
+      },
+    });
+    signal.throwIfAborted();
     const summary = answer.content
       .flatMap((part) => (part.type === 'text' ? [part.text] : []))
       .join('')

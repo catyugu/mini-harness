@@ -1,6 +1,6 @@
 import type { ModelChoice } from '@mini-harness/llm/vocabulary';
 import type { InputSource, PreparedMessage } from '@mini-harness/input/message';
-import type { NativeUserMessage, ModelRequestContent, ModelErrorKind } from '@mini-harness/llm/api';
+import type { NativeUserMessage, NativeMessage, LlmRequest, ModelAttemptMetrics, ModelRequestContent, ModelErrorKind } from '@mini-harness/llm/api';
 
 import type { ToolTurn } from '@mini-harness/tools/execution';
 import type { ToolResult } from '@mini-harness/tools/api';
@@ -16,6 +16,13 @@ type Transform<Value, Input> = (
   context: Input,
 ) => Value | undefined | Promise<Value | undefined>;
 export type ModelRequestTransform = Transform<ModelRequestContent, StepContext>;
+
+export type RequestRecovery = { kind: Extract<ModelErrorKind, 'context-overflow' | 'image-limit'>; message: string; attempt: number };
+export interface RequestPreparation extends StepContext {
+  readonly runId: string;
+  readonly recovery?: RequestRecovery;
+  rebuild(messages: NativeMessage[]): Promise<LlmRequest>;
+}
 
 export interface ModelFailure {
   readonly model: Readonly<ModelChoice>;
@@ -54,6 +61,9 @@ declare module 'mini-harness/cordis' {
     'agent/tool-result': ToolResultTransform;
     'agent/prepare-input': InputPreparation;
     'agent/model-request': ModelRequestTransform;
+    /** Prepare or recover the final model-visible request before execution. */
+    'agent/prepare-request': Transform<LlmRequest, RequestPreparation>;
+    'agent/request-attempt'(sessionId: string, requestId: string, metrics: ModelAttemptMetrics): void;
     'agent/model-retry': ModelRetryHandler;
   }
 }
