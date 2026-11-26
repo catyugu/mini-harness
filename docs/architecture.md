@@ -18,7 +18,7 @@ Each activation has an abort signal. Teardown aborts and drains work registered 
 
 ## Execution
 
-Tasks supplies the common asynchronous runtime. A caller starts one task and chooses whether to await its handle; the resource owner and executing Cordis fiber constrain its lifetime. Task Runtime owns exclusive lanes, resizable pools and serial/parallel batch dispatch. Runs selects a conversation lane and supplies conversation-specific projections, Tools declares batch policy and supplies model protocol delivery, and Subagents supplies recursion and pool capacity policy. The optional task-control plugin operates on any task. Shell streams process output into the tool task. Sessions persists retained task facts and recovers interrupted work without retaining historical execution handles.
+Tasks supplies the common asynchronous runtime. A caller starts one task and chooses whether to await its handle; the resource owner and executing Cordis fiber constrain its lifetime. Task Runtime owns exclusive lanes, resizable pools and serial/parallel batch dispatch. Runs selects a conversation lane and supplies conversation-specific projections, Tools declares batch policy and supplies model protocol delivery, and Subagents supplies recursion and pool capacity policy. The optional task-control plugin operates on any task. Shell streams process output into the tool task. Storage is an explicit submission policy: Runs commits its own conversation records, and Sessions supplies optional task bindings and indexed historical reads. Tasks does not interpret business identities or call domain events.
 
 ## File interaction
 

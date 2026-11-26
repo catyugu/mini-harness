@@ -19,7 +19,7 @@ export const terminal = (state: TaskState) =>
 /** Serializable observation data, not the arbitrary JavaScript value returned by the executor. */
 export type TaskData = null | boolean | number | string | TaskData[] | { [key: string]: TaskData };
 
-export interface TaskOptions {
+export interface TaskOptions<T = unknown> {
   /** Opaque resource lifetime key. */
   owner: string;
   /** An inline child is drained before its parent settles. */
@@ -36,6 +36,8 @@ export interface TaskOptions {
   lane?: string;
   /** Inline callers can discard runtime history after terminal observation and result delivery. */
   retain?: boolean;
+  /** Project the returned value into a serializable observation, only when retained. */
+  project?(value: T): TaskData | undefined;
   /** Synchronously commit a retained task transition before notifying observers. */
   commit?(record: TaskHistoryRecord): void;
   /** Observe this execution through settlement, without retaining the observer afterwards. */
@@ -80,8 +82,6 @@ export interface TaskContext {
   readonly owner: string;
   readonly signal: AbortSignal;
   update(progress: TaskData): void;
-  /** Set a serializable observation result independently of the executor's return value. */
-  setResult(result: TaskData): void;
   write(output: string, channel?: string): void;
   /** Call only at a whole-task wait point; reacquires admission before returning or throwing. */
   suspend<T>(wait: (signal: AbortSignal) => Promise<T>): Promise<T>;
@@ -115,7 +115,7 @@ export interface TaskPort {
   active(lane: string): TaskHandle | undefined;
   pool(limit: number): TaskPool;
   batch(jobs: Iterable<TaskJob>, options: { signal: AbortSignal; limit: number }): Promise<void>;
-  start<T>(options: TaskOptions, execute: (context: TaskContext) => Promise<T>): TaskHandle<T>;
+  start<T>(options: TaskOptions<T>, execute: (context: TaskContext) => Promise<T>): TaskHandle<T>;
   get(id: string): TaskSnapshot | undefined;
   /** Active tasks and bounded recent history; older durable records remain queryable by ID. */
   list(owner?: string): TaskSnapshot[];

@@ -197,6 +197,7 @@ export class Runs implements RunPort {
           owner,
           commit: (record) => this.commitRun(id, activity, record),
           onEvent: (event) => this.taskChanged(id, activity, event),
+          project: (answer) => answer,
           type: 'agent-run',
           lane: this.lane(id),
           metadata,
@@ -227,7 +228,6 @@ export class Runs implements RunPort {
                 },
               }),
             );
-            task.setResult(answer);
             return answer;
           } catch (error) {
             task.signal.throwIfAborted();

@@ -65,7 +65,7 @@ export class TaskRuntime implements TaskPort {
       active: runtime.active.bind(runtime),
       pool: runtime.pool.bind(runtime),
       batch: runtime.batch,
-      start<T>(options: TaskOptions, execute: (context: TaskContext) => Promise<T>) {
+      start<T>(options: TaskOptions<T>, execute: (context: TaskContext) => Promise<T>) {
         return runtime.start({ ...options, provider: options.provider ?? Service.caller(this) }, execute);
       },
       get: runtime.get.bind(runtime),
@@ -93,9 +93,9 @@ export class TaskRuntime implements TaskPort {
     });
   }
 
-  start<T>(options: TaskOptions, execute: (context: TaskContext) => Promise<T>): TaskHandle<T> {
+  start<T>(options: TaskOptions<T>, execute: (context: TaskContext) => Promise<T>): TaskHandle<T> {
     if (this.closing) throw new Error('Task runtime is closing');
-    const { signal: lifetime, provider, pool, retain = true, commit, onEvent, ...metadata } = options;
+    const { signal: lifetime, provider, pool, retain = true, commit, onEvent, project, ...metadata } = options;
     if (this.removing.has(options.owner)) throw new Error('Task owner has been removed');
     if (options.lane !== undefined && this.active(options.lane))
       throw new Error('Task lane is already occupied');
@@ -149,9 +149,6 @@ export class TaskRuntime implements TaskPort {
       owner: snapshot.owner,
       signal,
       update: (progress) => update({ progress: jsonData(progress) }),
-      setResult: (result) => {
-        projected = jsonData(result);
-      },
       write: (text, channel = 'log') => {
         if (terminal(snapshot.state) || !text) return;
         entry.output.write(text, channel);
@@ -208,6 +205,8 @@ export class TaskRuntime implements TaskPort {
         await enter();
         signal.throwIfAborted();
         value = await execute(context);
+        signal.throwIfAborted();
+        if (retain && project) projected = jsonData(project(value));
       } catch (error) {
         failure = { error };
       }

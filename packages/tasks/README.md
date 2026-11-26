@@ -1,26 +1,41 @@
 # @mini-harness/tasks
 
-`harnessTasks` starts asynchronous work through a single execution primitive. Await the returned
-handle's result for inline execution, or retain its ID for independent work. The owner key determines
-which work is drained when a resource is deleted; `parentId` binds an inline child to an active task.
-Creator and resource annotations are ordinary metadata. The provider Cordis fiber controls the lifetime of executing code.
+A business-independent asynchronous scheduler. Start an arbitrary async function, await the
+returned handle for inline execution, or keep the ID for independent work.
 
-Cancellation is cooperative. A task remains active until its executor and owned work have settled.
-`pool(limit)` creates a shared concurrency budget with a live limit. `lane` provides exclusive
-admission through settlement, including during pool suspension; `active(lane)` returns its handle. `suspend` is a whole-task
-waiting point: it releases pool capacity and reacquires it before returning or propagating an ordinary wait error. A cancelled wait does not resume work.
-`waitFor(id)` rejects circular waits. `batch` dispatches jobs with bounded parallelism and serial barriers,
-then cancels and drains started jobs on failure. Waiting reuses the execution promise and observes the committed terminal state, even for ephemeral tasks.
+```ts
+const pool = tasks.pool(4)
+const work = tasks.start(
+  { owner: 'resource', lane: 'exclusive-operation', pool, project: (value: string) => value },
+  async (task) => {
+    task.signal.throwIfAborted()
+    task.write('started')
+    return 'done'
+  },
+)
+await work.result
+```
 
-`subscribe` observes creation, updates, output and removal from the recent runtime view. Subscriptions
-are scoped to the consumer fiber. Output uses absolute UTF-8 byte cursors and channel names.
-`retain: false` removes a task after settlement; otherwise the runtime retains at most 256 recent
-terminal snapshots, subject also to a 16 MiB aggregate observation/output budget (without their result promises or executor closures). `task.setResult` sets the serializable observation result independently of the actual JavaScript value returned by the handle.
+An opaque owner groups resource lifetimes; `parentId` defines structured child cancellation and
+settlement. A provider Cordis fiber owns executing code. A lane is exclusive through settlement,
+even while a task waits. A resizable pool bounds running work. At a whole-task waiting point,
+`suspend` and `waitFor(id)` release pool capacity and reacquire it before resumption without
+releasing the lane. `waitFor` detects circular task dependencies. `batch` implements bounded
+parallelism, serial barriers and cancellation/drain on failure.
 
-Resource domains may handle the Cordis `tasks/admit`, `tasks/record` and `tasks/history` events.
-Sessions owns long-term history in SessionLog, including retained background tasks and conversation runs.
-Every retained task uses the same synchronous durable transition hook; observers run only after commit. `list` returns active and recent tasks; `get` and `readOutput` can also retrieve a durable
-record by ID. Recovery records interrupted work rather than restarting unknown side effects.
+Cancellation is cooperative: a task remains active until execution and children settle.
+`active(lane)` returns its live handle; `removeOwner` excludes new work during cancellation
+and drain, then removes its recent observations. The owner of the resource determines whether
+it still exists.
 
-`removeOwner` excludes new work until removal settles. The resource domain is responsible for
-rejecting work addressed to deleted resources. The runtime has no session or agent dependency.
+`subscribe` observes runtime activity; an optional per-task `onEvent` observes its own execution.
+Output has absolute UTF-8 byte cursors and channel names. `retain: false` discards observations
+after settlement; otherwise a bounded cache holds at most 256 recent terminal snapshots and
+16 MiB of observations/output, without execution promises or closures. An optional `project`
+function produces the serializable result from the executor's actual returned value.
+
+Storage is optional. A task can supply a synchronous `commit` function to record transitions
+before their observation. `registerHistory` attaches a read-only history source; `get` and
+`readOutput` can retrieve its records, never recreate historical execution handles. `list`
+contains only active and recently settled tasks. Tasks does not interpret owner keys, task types,
+or metadata, and has no dependency on Sessions, Runs, Tools or Agent.

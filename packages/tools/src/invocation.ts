@@ -63,6 +63,7 @@ export function invokeTool(
       signal,
       retain,
       commit,
+      project: tool.projectResult ?? ((result) => result as unknown as TaskData),
     },
     async (task) => {
       assertAvailable();
@@ -82,8 +83,6 @@ export function invokeTool(
       });
       if (!result || !isToolContent(result.content))
         throw new Error('Invalid result from tool: ' + tool.name);
-      if (retain)
-        task.setResult(tool.projectResult ? tool.projectResult(result) : (result as unknown as TaskData));
       return result;
     },
   );

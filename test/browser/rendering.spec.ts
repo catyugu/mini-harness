@@ -55,7 +55,7 @@ export const inject = ["harnessSessions", "harnessTools"];
 export const apply = (ctx) => {
       ctx.effect(() => ctx.harnessTools.register({
         name: "wait_for_stop", description: "Wait until cancelled", parameters: { type: "object", properties: {} },
-        async execute(_id, _args, signal) {
+        async execute(_args, { signal }) {
           signal.throwIfAborted();
           await new Promise((_, reject) => signal.addEventListener("abort", () => reject(signal.reason), { once: true }));
         }

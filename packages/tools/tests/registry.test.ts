@@ -178,9 +178,7 @@ test('task control can inspect and await standalone work without Sessions or Sub
       ctx.harnessTools.list().find(({ name }) => name === 'task_control'),
       'task control',
     );
-    const work = tasks.start({ owner: 'resource' }, async (task) => {
-      task.setResult('done');
-    });
+    const work = tasks.start<string>({ owner: 'resource', project: (value) => value }, async () => 'done');
     const result = await startTool(ctx.harnessTasks, tool, 'wait', { action: 'wait', taskId: work.id })
       .result;
     assert.deepEqual(result.content, [
