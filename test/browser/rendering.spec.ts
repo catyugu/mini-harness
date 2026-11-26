@@ -165,6 +165,16 @@ export const apply = (ctx) => {
     const toolHeader = turn.locator('.tool-card summary');
     await expect(reasonHeader).toHaveText('Reasoning');
     await expect(reasonHeader.locator('svg')).toHaveCount(1);
+    for (const header of [reasonHeader, toolHeader]) {
+      await expect(header).toHaveCSS('padding-inline-start', '0px');
+      expect(
+        await header.evaluate((node) => {
+          const turn = node.closest('.assistant-turn');
+          if (!turn) throw new Error('Missing assistant turn');
+          return node.getBoundingClientRect().left - turn.getBoundingClientRect().left;
+        }),
+      ).toBe(0);
+    }
     await expect(toolHeader).toHaveCSS('min-height', '24px');
     await expect(reasonHeader).toHaveCSS(
       'min-height',

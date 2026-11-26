@@ -226,7 +226,6 @@
 }
 :is(.tool-card, .assistant-reasoning) {
   min-width: 0;
-  margin-inline: var(--space);
   border: 0;
   border-radius: 0;
   background: transparent;
@@ -234,7 +233,7 @@
 :is(.tool-card, .assistant-reasoning) > summary {
   min-height: 24px;
   gap: 6px;
-  padding-block: 2px;
+  padding: 2px 0;
   color: var(--muted);
   font-size: var(--font-meta);
   line-height: var(--line-ui);
