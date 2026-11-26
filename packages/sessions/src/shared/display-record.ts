@@ -1,6 +1,6 @@
 export interface RecordAppend {
   leafId: string;
-  display?: SessionDisplayRecord;
+  display?: SessionDisplayRecord | ContextCheckpoint;
 }
 
 export interface SessionDisplayRecord {
@@ -10,4 +10,11 @@ export interface SessionDisplayRecord {
   instanceId: string;
   title: string;
   content?: unknown;
+}
+
+/** The visible result of a committed summarizing context replacement. */
+export interface ContextCheckpoint {
+  type: 'checkpoint';
+  id: string;
+  summary: string;
 }
