@@ -7,6 +7,7 @@ mini-harness is a minimal agent harness composed from Cordis plugins. The worksp
 - Read [architecture](docs/architecture.md) for the system boundaries and [package index](docs/packages.md) to find the owner of the behavior.
 - Read each affected package README and the relevant cross-package reference. Check the actual public interfaces, schemas, implementations and tests before changing a contract.
 - Follow [engineering conventions](docs/conventions.md), [code style](docs/code-style/README.md), and the [development workflow](docs/development.md).
+- Keep tests at their owning layer and use [module imports](docs/code-style/module-imports.md) and [test conventions](docs/code-style/testing.md) without exporting private implementations.
 - Follow [documentation rules](docs/AGENTS.md) when changing any documented behavior.
 
 ## Changes

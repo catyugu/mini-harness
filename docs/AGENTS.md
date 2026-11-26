@@ -36,6 +36,6 @@ Libraries should document functions and invariants, not invented services or con
 
 ## Verification and maintenance
 
-Read actual source, exported types, schemas, manifests, and relevant tests. Use the root package.json exports for external SDK examples, not private workspace imports. Reuse build-checked examples in docs/examples where possible; distinguish illustrative snippets from verified runnable examples. Test significant new examples where practical.
+Read actual source, exported types, schemas, manifests, and relevant tests. Follow [module imports](code-style/module-imports.md) for SDK examples and [test ownership](code-style/testing.md) when linking to verification suites. Reuse build-checked examples in docs/examples where possible; distinguish illustrative snippets from verified runnable examples. Test significant new examples where practical.
 
 Keep descriptions of current behavior separate from normative design rules. Do not describe intended but unimplemented features as present. Delete superseded references rather than archiving them. Update all affected links when moving a document. Run the existing formatter; keep the PR focused and do not introduce documentation infrastructure without a demonstrated need.
