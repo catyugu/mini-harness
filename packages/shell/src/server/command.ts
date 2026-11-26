@@ -64,10 +64,8 @@ export async function runShellCommand(
   if (signal?.aborted) cancel();
 
   let temporary: Promise<string> | undefined;
-  const spill = async (channel: string) => join(
-    await (temporary ??= mkdtemp(join(tmpdir(), 'mini-harness-output-'))),
-    channel + '.log',
-  );
+  const spill = async (channel: string) =>
+    join(await (temporary ??= mkdtemp(join(tmpdir(), 'mini-harness-output-'))), channel + '.log');
   child.stdin.end();
   const collect = (channel: 'stdout' | 'stderr') =>
     capture(child[channel], maxOutputBytes, () => spill(channel), (text) => write?.(text, channel));

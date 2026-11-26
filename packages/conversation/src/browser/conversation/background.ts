@@ -156,7 +156,9 @@ function setup(ctx: Context) {
         output.textContent = shown;
         if (following) output.scrollTop = output.scrollHeight;
       }
-      warning.textContent = [truncated ? 'Earlier output was truncated' : '', failure || next.error || '']
+      const details = object(object(next.result).details);
+      const overflow = [details.stdoutOverflow, details.stderrOverflow].filter((path) => typeof path === 'string');
+      warning.textContent = [truncated ? 'Earlier output was truncated' : '', ...overflow, failure || next.error || '']
         .filter(Boolean)
         .join(' · ');
     }

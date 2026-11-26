@@ -73,13 +73,14 @@ test('independent shell calls use one task, retain output channels and do not du
   assert.ok(tool);
   const receipt = await runTool(tool, 'background-shell', {
     tool: 'shell',
-    arguments: { command: 'echo task-output' },
+    arguments: { command: 'echo task-output', timeoutMs: 30000 },
   });
   const id = String(receipt.details?.taskId);
   const task = await ctx.harnessTasks.wait(id);
   assert.equal(task.state, 'completed');
-  assert.deepEqual(task.metadata, { tool: 'shell', arguments: { command: 'echo task-output' } });
+  assert.deepEqual(task.metadata, { tool: 'shell', arguments: { command: 'echo task-output', timeoutMs: 30000 } });
   assert.equal((task.result as { details: { exitCode: number } }).details.exitCode, 0);
+  assert.equal((task.result as { details: { timeoutMs: number } }).details.timeoutMs, 30000);
   assert.equal(ctx.harnessTasks.list('session:' + session.id).length, 1);
   assert.match(
     ctx.harnessTasks
@@ -93,4 +94,3 @@ test('independent shell calls use one task, retain output channels and do not du
   await ctx.harnessSessions.delete([session.id]);
   assert.equal(ctx.harnessTasks.get(id), undefined);
 });
-

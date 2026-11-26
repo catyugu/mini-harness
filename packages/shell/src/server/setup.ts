@@ -13,8 +13,18 @@ export function setup(ctx: Context) {
     defineTool({
       name: 'shell',
       label: 'Shell',
-      description: 'Run a shell command in the workspace using the configured process provider.',
-      parameters: Type.Object({ command: Type.String({ minLength: 1, maxLength: 16000 }) }),
+      description: 'Run a shell command in the workspace. For long builds or tests, use start_background and set timeoutMs as needed.',
+      parameters: Type.Object(
+        {
+          command: Type.String({ minLength: 1, maxLength: 16000 }),
+          timeoutMs: Type.Optional(Type.Integer({
+            minimum: 1,
+            maximum: 86400000,
+            description: 'Command timeout in milliseconds; defaults to the Shell plugin setting.',
+          })),
+        },
+        { additionalProperties: false },
+      ),
       background: true,
       projectResult(result) {
         if (result.details?.exitCode === undefined) return JSON.parse(JSON.stringify(result));
@@ -36,7 +46,8 @@ export function setup(ctx: Context) {
         const execution = caller.get('harnessProcess');
         if (!execution) throw new Error('Process execution is unavailable');
         const attachments = ctx.harnessSessions.attachmentDirectory(sessionId);
-        const { timeoutMs, maxOutputBytes } = options;
+        const { maxOutputBytes } = options;
+        const timeoutMs = args.timeoutMs ?? options.timeoutMs;
         const env = { ...process.env };
         if (attachments) env.MINI_HARNESS_ATTACHMENTS = attachments;
         else delete env.MINI_HARNESS_ATTACHMENTS;
@@ -58,7 +69,7 @@ export function setup(ctx: Context) {
             content: [{ type: 'text', text: JSON.stringify(output) }],
             isError: Boolean(output.reason) || output.code !== 0,
             outcome: cancelled ? 'cancelled' : undefined,
-            details: { ...output, exitCode: output.code },
+            details: { ...output, timeoutMs, exitCode: output.code },
             elapsedMs: performance.now() - startedAt,
           };
         } finally {

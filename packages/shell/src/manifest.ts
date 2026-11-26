@@ -9,7 +9,7 @@ const Config = defineConfig({
     {
       timeoutMs: Type.Integer({
         title: 'Command timeout (ms)',
-        description: 'Terminate a command if it runs longer than this duration.',
+        description: 'Default command timeout. Agents may override it for individual commands.',
         minimum: 1,
         maximum: 86400000,
         default: 120000,

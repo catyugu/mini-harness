@@ -15,6 +15,7 @@ const node = (code: string): ProcessCommand => ({
 const execution = { start: startProcess };
 const run = (code: string, timeoutMs = 60000, signal?: AbortSignal) =>
   runShellCommand(execution, node(code), timeoutMs, 64000, signal);
+
 test('a subprocess supports concurrent stdin, stdout and stderr streams', async () => {
   const child = startProcess(node('process.stdin.pipe(process.stdout); process.stderr.write("diagnostic")'));
   child.stdin.write('part one');
@@ -32,9 +33,7 @@ test('shell reports cancellation and timeouts', { timeout: 15000 }, async () => 
   setTimeout(() => controller.abort(), 200);
   assert.equal((await cancelled).reason, 'cancelled');
   assert.equal((await run(long, 100)).reason, 'timeout');
-
 });
-
 
 test('each stream spills its remaining bytes independently without stopping the command', async (t) => {
   const code = 'process.stdout.write("a".repeat(128)); process.stderr.write("b".repeat(130));';
