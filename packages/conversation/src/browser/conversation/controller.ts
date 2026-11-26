@@ -251,11 +251,7 @@ export function createConversationController(ctx: Context): ConversationControll
               payload('POST', { ...message, ...revision }),
             ),
           }
-        : await browserRequest<SendReceipt>(
-            ctx,
-            path(id, '/runs'),
-            payload('POST', { ...message, mode }),
-          );
+        : await browserRequest<SendReceipt>(ctx, path(id, '/runs'), payload('POST', { ...message, mode }));
       if (!signal.aborted) {
         if ('queue' in receipt) {
           queueRevision++;
