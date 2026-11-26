@@ -153,7 +153,13 @@ export function apply(ctx) {
     await expect(page.getByText('Plugin settings', { exact: true })).toBeVisible();
     await settingsSection(page, 'Built-in plugins').click();
     const builtins = page.locator('.builtin-plugins');
-    for (const title of ['Transport', 'Web Authentication', 'Plugin Runtime', 'Tool Executor', 'Context Compaction']) {
+    for (const title of [
+      'Transport',
+      'Web Authentication',
+      'Plugin Runtime',
+      'Tool Executor',
+      'Context Compaction',
+    ]) {
       await expect(builtins.getByText(title, { exact: true })).toBeVisible();
       await expect(builtins.getByRole('switch', { name: title, exact: true })).toHaveCount(0);
     }
@@ -161,7 +167,11 @@ export function apply(ctx) {
     await expect(builtins.getByText('UI example', { exact: true })).toHaveCount(0);
     await page.getByRole('button', { name: 'Close settings', exact: true }).click();
     await page.getByRole('button', { name: 'Browse plugins', exact: true }).click();
-    await expect(page.locator('.catalog-group').first().locator('strong')).toHaveText(['Subagents', 'Agent', 'Shell']);
+    await expect(page.locator('.catalog-group').first().locator('strong')).toHaveText([
+      'Subagents',
+      'Agent',
+      'Shell',
+    ]);
     await expect(page.locator('[data-plugin-row="core:transport"]')).toHaveCount(0);
     await expect(page.locator('[data-plugin-row="ui-example"] strong')).toHaveText('UI example');
     await expect(page.locator('[data-plugin-row="ui-example"] .plugin-symbol svg path')).toHaveAttribute(
@@ -289,7 +299,9 @@ test('plugin catalog applies configuration and removes disabled browser capabili
     };
     const closeSettings = () => page.getByRole('button', { name: 'Close settings' }).click();
     await openBuiltins();
-    const files = page.getByRole('dialog', { name: 'Settings' }).getByRole('switch', { name: 'Workspace files', exact: true });
+    const files = page
+      .getByRole('dialog', { name: 'Settings' })
+      .getByRole('switch', { name: 'Workspace files', exact: true });
     await expect(files).toBeChecked();
     await files.uncheck();
     await expect(files).not.toBeChecked();

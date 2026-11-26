@@ -162,7 +162,8 @@ function pluginCatalog(
         try {
           const config = readPluginValues(fields);
           const saved = await mutate(
-            () => browserRequest(ctx, '/settings', payload('PATCH', { entries: { [plugin.id]: { config } } })),
+            () =>
+              browserRequest(ctx, '/settings', payload('PATCH', { entries: { [plugin.id]: { config } } })),
             (error) => {
               outcome.textContent = error.message;
             },
@@ -198,12 +199,19 @@ function pluginCatalog(
       savingSwitch = true;
       outcome.textContent = '';
       const peers = [content, builtinList]
-        .flatMap((root) => [...root.querySelectorAll<HTMLInputElement | HTMLButtonElement>('input.toggle, [data-plugin-row]')])
+        .flatMap((root) => [
+          ...root.querySelectorAll<HTMLInputElement | HTMLButtonElement>('input.toggle, [data-plugin-row]'),
+        ])
         .filter((peer) => peer !== control && !peer.disabled);
       for (const peer of peers) peer.disabled = true;
       try {
         const saved = await mutate(
-          () => browserRequest(ctx, '/settings', payload('PATCH', { entries: { [plugin.id]: { disabled: !next } } })),
+          () =>
+            browserRequest(
+              ctx,
+              '/settings',
+              payload('PATCH', { entries: { [plugin.id]: { disabled: !next } } }),
+            ),
           (error) => {
             outcome.textContent = error.message;
           },
@@ -235,7 +243,9 @@ function pluginCatalog(
         const list = fromMarkup('<div class="builtin-group"><h4></h4></div>');
         required(list.querySelector('h4')).textContent = group.title;
         for (const plugin of group.plugins) {
-          const row = fromMarkup('<div class="builtin-row"><div><strong></strong><small></small></div></div>');
+          const row = fromMarkup(
+            '<div class="builtin-row"><div><strong></strong><small></small></div></div>',
+          );
           required(row.querySelector('strong')).textContent = plugin.title;
           required(row.querySelector('small')).textContent = plugin.description;
           if (group.toggle) row.append(switchFor(plugin, builtinStatus));
@@ -258,7 +268,9 @@ function pluginCatalog(
     const groups = [
       {
         title: 'Built-in configuration',
-        plugins: configurable.flatMap((id) => plugins.filter((plugin) => !plugin.external && plugin.id === id)),
+        plugins: configurable.flatMap((id) =>
+          plugins.filter((plugin) => !plugin.external && plugin.id === id),
+        ),
       },
       { title: 'Local plugins', plugins: plugins.filter((plugin) => plugin.external) },
     ];
@@ -281,7 +293,8 @@ function pluginCatalog(
           required(row.querySelector('.plugin-symbol')).append(icon(plugin.icon ?? 'plugin'));
           required(row.querySelector('strong')).textContent = plugin.title;
           required(row.querySelector('small')).textContent = plugin.error ?? plugin.description;
-          if (plugin.external) required(row.querySelector('.catalog-controls')).append(switchFor(plugin, status));
+          if (plugin.external)
+            required(row.querySelector('.catalog-controls')).append(switchFor(plugin, status));
           list.append(row);
         }
         return list;
