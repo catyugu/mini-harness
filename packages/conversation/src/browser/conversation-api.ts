@@ -77,6 +77,7 @@ declare module '@mini-harness/ui-slots/browser/api' {
   interface SlotMap {
     'workspace.welcome': { kind: 'single' };
     'conversation.composer': { kind: 'list' };
+    'conversation.composer-footer': { kind: 'list' };
     'conversation.composer-view': { kind: 'single' };
     'conversation.history': { kind: 'single' };
     'conversation.approvals': { kind: 'list' };

@@ -1,6 +1,6 @@
 import type { ModelChoice } from '@mini-harness/llm/vocabulary';
 import type { InputSource, PreparedMessage } from '@mini-harness/input/message';
-import type { NativeUserMessage, ModelRequestContent } from '@mini-harness/llm/api';
+import type { NativeUserMessage, ModelRequestContent, ModelErrorKind } from '@mini-harness/llm/api';
 
 import type { ToolTurn } from '@mini-harness/tools/execution';
 import type { ToolResult } from '@mini-harness/tools/api';
@@ -21,6 +21,7 @@ export interface ModelFailure {
   readonly model: Readonly<ModelChoice>;
   readonly attempt: number;
   readonly error: string;
+  readonly kind?: ModelErrorKind;
   readonly signal: AbortSignal;
 }
 export type ModelRetry = { delayMs?: number };

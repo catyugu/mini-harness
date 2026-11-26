@@ -3,7 +3,7 @@ import type { ScopeKey } from '@mini-harness/plugin-api/scopes';
 import type { ModelChoice } from '@mini-harness/llm/vocabulary';
 import type { HistoryEntry } from './shared/message.ts';
 import type { ConversationPermission, SessionRecord } from './shared/identity.ts';
-import type { SessionLogPort } from './log-api.ts';
+import type { SessionLogPort, SessionLogReader } from './log-api.ts';
 export type { SessionLogPort, SessionEntry, SessionEvent, SessionProjection } from './log-api.ts';
 import type { Attachment, ImageInput, PreparedMessage } from '@mini-harness/input/message';
 import type { RunInfo } from './shared/run-state.ts';
@@ -52,13 +52,7 @@ export interface SessionHistory {
     images: { data: string; mimeType: string; name: string }[];
     textFiles: string[];
   };
-  inspectLog<T>(
-    id: string,
-    read: (
-      log: Pick<SessionLogPort, 'entries' | 'branch' | 'projection' | 'queue' | 'inbox' | 'inboxPaused'>,
-    ) => T,
-    strict?: boolean,
-  ): T | undefined;
+  inspectLog<T>(id: string, read: (log: SessionLogReader) => T, strict?: boolean): T | undefined;
   runSummary(id: string): RunInfo | undefined;
   logError(id: string): string | undefined;
   diagnostics(): { id: string; message: string }[];

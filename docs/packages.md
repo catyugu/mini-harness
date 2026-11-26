@@ -13,7 +13,8 @@ These private source packages are built into a single npm package. Locate the ow
 ## Execution
 
 - [tasks](../packages/tasks/README.md): Business-independent async scheduling and task handles.
-- [agent](../packages/agent/README.md): Native model-turn loop, prompts and compaction.
+- [agent](../packages/agent/README.md): Native model-turn loop and prompts.
+- [context-management](../packages/context-management/README.md): Context budget, pruning, checkpoints and usage projections.
 - [runs](../packages/runs/README.md): Conversation run submission and replay.
 - [llm](../packages/llm/README.md): Native model protocol and adapter selection.
 - [models](../packages/models/README.md): Model catalog, provider data and model preference.

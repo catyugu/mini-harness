@@ -8,21 +8,28 @@ import {
   RequestMessages,
   validateNativeMessage,
   validateRequestSnapshot,
-  type ModelRequestSnapshot,
   type LlmRequest,
   type NativeMessage,
   type NativeToolMessage,
 } from '@mini-harness/llm/api';
 import type {
+  HistoricalContextEvent,
   InboxItem,
   MessagePatch,
+  SessionContext,
   SessionEntry,
   SessionEvent,
   SessionLogPort,
   SessionProjection,
 } from './log-api.ts';
 import { messageModes, type QueueEntry } from './shared/queue.ts';
-import { projectLog, projectMessage } from './projection.ts';
+import {
+  applyReplacements,
+  newContext,
+  projectContextEntry,
+  projectLog,
+  projectMessage,
+} from './projection.ts';
 import { applyContentDelta, contentDelta } from './content-delta.ts';
 import { RecordLog, digest, entryId } from './record-log.ts';
 
@@ -57,20 +64,25 @@ function messagePatch(base: NativeMessage[], actual: NativeMessage[]): MessagePa
 }
 
 /** Session semantics layered over the generic durable record log. */
-export class SessionLog extends RecordLog<SessionEvent> implements SessionLogPort {
+export class SessionLog extends RecordLog<SessionEvent | HistoricalContextEvent> implements SessionLogPort {
   private readonly schemas = new Map<string, ToolSchema[]>();
+  private readonly settings = new Map<string, unknown>();
   private paused = false;
   private readonly inboxIds = new Set<string>();
   private readonly pendingInbox = new Map<string, InboxItem>();
   private readonly inboxFailures: QueueEntry[] = [];
   private readonly runEvents: { seq: number; parentId: string | null; run: RunInfo }[] = [];
+  private cachedContext?: SessionContext;
   private cachedProjection?: SessionProjection;
   private recovery = { leaf: null as string | null, checker: new RequestMessages() };
 
   /** All consumers share record operations; only the Registry owns the open file. */
   readonly port: SessionLogPort = {
     sessionId: this.sessionId,
-    entries: () => this.entries(),
+    entries: (after) => this.entries(after),
+    hasAttachments: (id) => this.hasAttachments(id),
+    originalMessage: (id, raw) => this.originalMessage(id, raw),
+    setting: (owner) => this.setting(owner),
     inbox: () => this.inbox(),
     hasInbox: (id) => this.hasInbox(id),
     inboxPaused: () => this.inboxPaused(),
@@ -78,9 +90,11 @@ export class SessionLog extends RecordLog<SessionEvent> implements SessionLogPor
     branch: (leafId) => this.branch(leafId),
     append: (event, leafId) => this.append(event, leafId),
     revise: (event, parentId, leafId) => this.revise(event, parentId, leafId),
+    context: (leafId) => this.context(leafId),
     projection: (leafId) => this.projection(leafId),
-    recordRequest: (snapshot) => this.recordRequest(snapshot),
+    recordRequest: (snapshot, purpose) => this.recordRequest(snapshot, purpose),
     acceptToolResult: (id, content) => this.acceptToolResult(id, content),
+    requestDefinition: (id) => this.requestDefinition(id),
     requestSnapshot: (id) => this.requestSnapshot(id),
   };
 
@@ -160,6 +174,15 @@ export class SessionLog extends RecordLog<SessionEvent> implements SessionLogPor
       )
     )
       throw new Error('Compaction boundary is not a message on the selected branch');
+    if (entry.type === 'context-replace') {
+      const state = this.context(entry.parentId);
+      applyReplacements(state, entry.replacements, entry.id);
+      const checker = new RequestMessages();
+      checker.append(state.contextMessages);
+      checker.complete();
+    }
+    if (entry.type === 'model-attempt' && this.byId.get(entry.requestId)?.type !== 'model-request')
+      throw new Error('Model attempt references a missing request');
     if (entry.type === 'context-edit') {
       const target = this.branchEntries(entry.parentId).find(
         (item) => item.id === entry.targetId && item.type === 'message',
@@ -173,7 +196,13 @@ export class SessionLog extends RecordLog<SessionEvent> implements SessionLogPor
 
   protected recordAdded(entry: SessionEntry) {
     const run = runFromEntry(this.sessionId, entry);
+    if (!operational(entry)) {
+      if (this.cachedContext?.leafId === entry.parentId)
+        projectContextEntry(this.cachedContext, entry, projectMessage(entry, this.execution));
+      else this.cachedContext = undefined;
+    }
     if (!operational(entry) || run) this.cachedProjection = undefined;
+    if (entry.type === 'session-setting') this.settings.set(entry.owner, entry.value);
     if (run) this.runEvents.push({ seq: entry.seq, parentId: entry.parentId, run });
     if (entry.type === 'tool-schema') this.schemas.set(entry.hash, entry.tools);
     if (entry.type === 'inbox-paused') this.paused = true;
@@ -195,6 +224,10 @@ export class SessionLog extends RecordLog<SessionEvent> implements SessionLogPor
     if (entry.type === 'message' && entry.inboxId) this.pendingInbox.delete(entry.inboxId);
   }
 
+  setting(owner: string) {
+    return structuredClone(this.settings.get(owner));
+  }
+
   hasInbox(id: string) {
     return this.inboxIds.has(id);
   }
@@ -211,25 +244,50 @@ export class SessionLog extends RecordLog<SessionEvent> implements SessionLogPor
     return [...Array.from(this.pendingInbox.values(), queueEntry), ...structuredClone(this.inboxFailures)];
   }
 
-  private project(leafId?: string | null) {
-    return projectLog(
-      this.branchEntries(leafId),
-      (id) => {
-        const raw = this.byId.get(id);
-        return raw?.type === 'tool-execution' ? raw.result : undefined;
-      },
-      this.runEvents,
+  private execution = (id: string) => {
+    const raw = this.byId.get(id);
+    return raw?.type === 'tool-execution' ? raw.result : undefined;
+  };
+
+  hasAttachments(id: string) {
+    const entry = this.byId.get(id);
+    return entry?.type === 'message' && Boolean(entry.presentation?.attachments.length);
+  }
+
+  originalMessage(id: string, raw = false) {
+    const entry = this.byId.get(id);
+    if (!entry) return;
+    return structuredClone(
+      raw && entry.type === 'tool-accepted'
+        ? this.execution(entry.executionId)
+        : projectMessage(entry, this.execution),
     );
   }
 
+  private contextAt(leafId = this.leafId) {
+    if (this.cachedContext?.leafId === leafId) return this.cachedContext;
+    const state = newContext();
+    for (const entry of this.branchEntries(leafId))
+      projectContextEntry(state, entry, projectMessage(entry, this.execution));
+    if (leafId === this.leafId) this.cachedContext = state;
+    return state;
+  }
+
+  context(leafId?: string | null) {
+    return structuredClone(this.contextAt(leafId));
+  }
+
   projection(leafId?: string | null) {
-    if (leafId !== undefined) return structuredClone(this.project(leafId));
-    this.cachedProjection ??= this.project();
+    // A display projection owns its timeline. Effective context is maintained on demand.
+    const project = () =>
+      projectLog(this.branchEntries(leafId), this.execution, this.runEvents, this.contextAt(leafId));
+    if (leafId !== undefined) return structuredClone(project());
+    this.cachedProjection ??= project();
     return structuredClone(this.cachedProjection);
   }
 
-  recordRequest(snapshot: Omit<LlmRequest, 'signal'>) {
-    const projected = this.projection();
+  recordRequest(snapshot: Omit<LlmRequest, 'signal'>, purpose?: 'summary') {
+    const projected = this.contextAt();
     const { messages, tools, model, systemPrompt, thinkingLevel, maxTokens } = snapshot;
     const patch = messagePatch(projected.contextMessages, messages);
     const toolSchema = tools === undefined ? undefined : digest(tools);
@@ -244,6 +302,7 @@ export class SessionLog extends RecordLog<SessionEvent> implements SessionLogPor
           thinkingLevel,
           maxTokens,
           toolSchema,
+          purpose,
           ...(patch && { messagesPatch: patch }),
         },
       },
@@ -262,7 +321,7 @@ export class SessionLog extends RecordLog<SessionEvent> implements SessionLogPor
   }
 
   private requestMetadata(entry: Extract<SessionEntry, { type: 'model-request' }>) {
-    const { toolSchema, messagesPatch: _, ...request } = entry.request;
+    const { toolSchema, messagesPatch: _, purpose: _purpose, ...request } = entry.request;
     const tools = toolSchema ? this.schemas.get(toolSchema) : undefined;
     if (toolSchema && !tools) throw new Error('Missing recorded tool schema');
     return tools ? { ...request, tools } : request;
@@ -282,17 +341,13 @@ export class SessionLog extends RecordLog<SessionEvent> implements SessionLogPor
     }
     if (
       cursor !== recovery.leaf ||
-      tail.some(({ type }) => type === 'compaction' || type === 'context-edit')
+      tail.some(({ type }) => type === 'context-replace' || type === 'compaction' || type === 'context-edit')
     ) {
       recovery.checker = new RequestMessages();
-      recovery.checker.append(this.project(leaf).contextMessages);
+      recovery.checker.append(this.contextAt(leaf).contextMessages);
     } else {
-      const execution = (id: string) => {
-        const raw = this.byId.get(id);
-        return raw?.type === 'tool-execution' ? raw.result : undefined;
-      };
       for (const entry of tail.reverse()) {
-        const message = projectMessage(entry, execution);
+        const message = projectMessage(entry, this.execution);
         if (message) recovery.checker.append([message]);
       }
     }
@@ -302,7 +357,7 @@ export class SessionLog extends RecordLog<SessionEvent> implements SessionLogPor
 
   private materializeRequest(entry: Extract<SessionEntry, { type: 'model-request' }>) {
     const { messagesPatch } = entry.request;
-    const context = this.project(entry.parentId).contextMessages;
+    const context = this.contextAt(entry.parentId).contextMessages;
     let messages = context;
     if (messagesPatch) {
       const { start, deleteCount, insert } = messagesPatch;
@@ -322,12 +377,18 @@ export class SessionLog extends RecordLog<SessionEvent> implements SessionLogPor
     return { ...metadata, messages };
   }
 
-  requestSnapshot(
-    id: string,
-  ): ModelRequestSnapshot & { messages: import('@mini-harness/llm/api').NativeMessage[] } {
+  private recordedRequest(id: string) {
     const entry = this.byId.get(id);
     if (entry?.type !== 'model-request') throw new Error('Model request not found');
-    return structuredClone(this.materializeRequest(entry));
+    return entry;
+  }
+
+  requestDefinition(id: string) {
+    return structuredClone(this.requestMetadata(this.recordedRequest(id)));
+  }
+
+  requestSnapshot(id: string) {
+    return structuredClone(this.materializeRequest(this.recordedRequest(id)));
   }
 
   get latestRun() {
@@ -378,7 +439,7 @@ function queueEntry(item: InboxItem): QueueEntry {
   };
 }
 
-function validateEvent(event: SessionEvent) {
+function validateEvent(event: SessionEvent | HistoricalContextEvent) {
   switch (event.type) {
     case 'message':
       validateNativeMessage(event.message);
@@ -443,6 +504,17 @@ function validateEvent(event: SessionEvent) {
         event.code !== 'historical-record'
       )
         throw new Error('Invalid session diagnostic');
+      return;
+    case 'context-replace':
+      if (!Array.isArray(event.replacements) || !event.replacements.length)
+        throw new Error('Invalid context replacement');
+      return;
+    case 'model-attempt':
+      if (!entryId.test(event.requestId) || !Number.isFinite(event.elapsedMs) || event.elapsedMs < 0)
+        throw new Error('Invalid model attempt');
+      return;
+    case 'session-setting':
+      if (!pluginIdPattern.test(event.owner)) throw new Error('Invalid session setting owner');
       return;
     case 'compaction':
       if (typeof event.summary !== 'string' || (event.keepFromId !== null && !entryId.test(event.keepFromId)))
@@ -567,11 +639,13 @@ function storedEntry(entry: StoredEntry): SessionEntry {
   };
 }
 
-function operational(entry: SessionEvent) {
+function operational(entry: SessionEvent | HistoricalContextEvent) {
   return (
     entry.type === 'run' ||
     entry.type === 'task' ||
     entry.type === 'model-request' ||
+    entry.type === 'model-attempt' ||
+    entry.type === 'session-setting' ||
     entry.type === 'tool-schema' ||
     entry.type === 'tool-execution' ||
     entry.type.startsWith('inbox-')

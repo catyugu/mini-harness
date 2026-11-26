@@ -157,16 +157,11 @@ export function apply(ctx) {
     await expect(page.getByText('Plugin settings', { exact: true })).toBeVisible();
     await settingsSection(page, 'Built-in plugins').click();
     const builtins = page.locator('.builtin-plugins');
-    for (const title of [
-      'Transport',
-      'Web Authentication',
-      'Plugin Runtime',
-      'Tool Executor',
-      'Context Compaction',
-    ]) {
+    for (const title of ['Transport', 'Web Authentication', 'Plugin Runtime', 'Tool Executor']) {
       await expect(builtins.getByText(title, { exact: true })).toBeVisible();
       await expect(builtins.getByRole('switch', { name: title, exact: true })).toHaveCount(0);
     }
+    await expect(builtins.getByRole('switch', { name: 'Context Management', exact: true })).toBeChecked();
     await expect(builtins.locator('svg')).toHaveCount(0);
     await expect(builtins.getByText('UI example', { exact: true })).toHaveCount(0);
     await page.getByRole('button', { name: 'Close settings', exact: true }).click();

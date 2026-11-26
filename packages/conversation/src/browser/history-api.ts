@@ -39,6 +39,12 @@ export interface MessageAction {
   visible(context: MessageActionContext): boolean;
   run(context: MessageActionContext): void | Promise<void>;
 }
+export type TurnFooterRenderer = (context: {
+  sessionId: string;
+  messageId: string;
+  signal: AbortSignal;
+}) => HTMLElement;
+
 export type RecordRenderer = (
   record: SessionDisplayRecord,
   context: { sessionId: string; signal: AbortSignal },
@@ -47,6 +53,7 @@ export type RecordRenderer = (
 declare module 'mini-harness/cordis' {
   interface Context {
     miniMessages: {
+      registerTurnFooter(id: string, render: TurnFooterRenderer): () => void;
       registerRecord(plugin: string, render: RecordRenderer, priority?: number): () => void;
       registerAction(action: MessageAction): () => void;
       registerTool(name: string, render: ToolRenderer, action?: boolean, priority?: number): () => void;

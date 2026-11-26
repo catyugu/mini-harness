@@ -22,7 +22,7 @@ export class AgentLoop implements AgentPort {
     const knownCalls = new Set<string>();
     for (let turn = 1; turn <= maxTurns; turn++) {
       signal.throwIfAborted();
-      const step: AgentTurn = await ('prepare' in input
+      let step: AgentTurn = await ('prepare' in input
         ? input.prepare(turn)
         : (() => {
             const executor = ctx.get('harnessToolExecutor');
@@ -42,20 +42,40 @@ export class AgentLoop implements AgentPort {
               tools,
             };
           })());
-      const { request, executor, execution, deliver } = step;
-      const requestCalls = validateRequestSnapshot(request);
-      for (const id of requestCalls ?? []) knownCalls.add(id);
       input.onEvent?.({ type: 'phase', phase: 'model', turn });
-      input.onEvent?.({ type: 'request', request });
       input.onEvent?.({ type: 'assistant-start' });
-      const original = await requestModel(
-        llm,
-        { ...request, signal },
-        {
-          delta: (text) => input.onEvent?.({ type: 'delta', text }),
-          retry: input.retry,
-        },
-      );
+      let original: NativeAssistantMessage;
+      for (;;) {
+        const { request } = step;
+        const requestCalls = validateRequestSnapshot(request);
+        for (const id of requestCalls ?? []) knownCalls.add(id);
+        input.onEvent?.({ type: 'request', request });
+        original = await requestModel(
+          llm,
+          { ...request, signal },
+          {
+            delta: (text) => input.onEvent?.({ type: 'delta', text }),
+            attempt: (metrics) => input.onEvent?.({ type: 'model-attempt', metrics }),
+            retry: input.retry,
+          },
+        );
+        const { errorKind, errorMessage } = original;
+        if (
+          signal.aborted ||
+          !('prepare' in input) ||
+          (errorKind !== 'context-overflow' && errorKind !== 'image-limit')
+        )
+          break;
+        const recovered = await input.recover?.(
+          turn,
+          errorKind,
+          errorMessage ?? 'Model input limit exceeded',
+        );
+        if (!recovered) break;
+        step = recovered;
+        input.onEvent?.({ type: 'assistant-start' });
+      }
+      const { request, executor, execution, deliver } = step;
       let result = original;
       let diagnostic: Extract<AgentEvent, { type: 'assistant' }>['diagnostic'];
       if (!failed(original)) {

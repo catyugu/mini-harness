@@ -4,7 +4,7 @@ import { isRunning, type RunInfo } from './shared/run-state.ts';
 import { toolResultState } from '@mini-harness/tools/api';
 import type { NativeMessage, NativeToolMessage } from '@mini-harness/llm/api';
 import type { MessageContent, ViewMessage } from './shared/message.ts';
-import type { SessionEntry, SessionProjection } from './log-api.ts';
+import type { ContextReplacement, SessionContext, SessionEntry, SessionProjection } from './log-api.ts';
 import { applyContentDelta } from './content-delta.ts';
 
 export function projectMessage(
@@ -91,24 +91,90 @@ export function displayRecord(
     };
 }
 
+export function newContext(): SessionContext {
+  return { leafId: null, contextMessages: [], contextEntryIds: [], contextRevisions: [] };
+}
+
+export function applyReplacements(
+  { contextMessages, contextEntryIds, contextRevisions }: SessionContext,
+  replacements: ContextReplacement[],
+  id: string,
+) {
+  let end = contextMessages.length;
+  for (const { start, deleteCount, insert, preserveSource } of replacements) {
+    if (
+      !Number.isSafeInteger(start) ||
+      !Number.isSafeInteger(deleteCount) ||
+      start < 0 ||
+      deleteCount < 1 ||
+      start + deleteCount > end ||
+      !Array.isArray(insert) ||
+      (preserveSource && insert.length !== deleteCount)
+    )
+      throw new Error('Invalid context replacement interval');
+    end = start;
+    contextMessages.splice(start, deleteCount, ...insert);
+    if (!preserveSource) contextEntryIds.splice(start, deleteCount, ...insert.map(() => id));
+    contextRevisions.splice(start, deleteCount, ...insert.map((_, index) => id + ':' + (start + index)));
+  }
+}
+
+export function projectContextEntry(state: SessionContext, entry: SessionEntry, message?: NativeMessage) {
+  state.leafId = entry.id;
+  if (entry.type === 'model') state.model = entry.model;
+  if (entry.type === 'thinking') state.thinkingLevel = entry.level ?? undefined;
+  if (entry.type === 'message' && entry.selection) {
+    state.model = entry.selection.model;
+    state.thinkingLevel = entry.selection.thinkingLevel;
+  }
+  if (message) {
+    state.contextMessages.push(message);
+    state.contextEntryIds.push(entry.id);
+    state.contextRevisions.push(entry.id);
+    return;
+  }
+  if (entry.type === 'context-replace') applyReplacements(state, entry.replacements, entry.id);
+  if (entry.type === 'compaction' && state.contextMessages.length) {
+    const keep = entry.keepFromId === null ? -1 : state.contextEntryIds.indexOf(entry.keepFromId);
+    const deleteCount = keep < 0 ? state.contextMessages.length : keep;
+    const summary: NativeMessage = {
+      role: 'user',
+      content: 'Summary of earlier conversation:\n' + entry.summary,
+      timestamp: Date.parse(entry.timestamp),
+    };
+    if (deleteCount) applyReplacements(state, [{ start: 0, deleteCount, insert: [summary] }], entry.id);
+    else {
+      state.contextMessages.unshift(summary);
+      state.contextEntryIds.unshift(entry.id);
+      state.contextRevisions.unshift(entry.id);
+    }
+  }
+  if (entry.type === 'context-edit') {
+    const start = state.contextEntryIds.indexOf(entry.targetId);
+    if (start < 0) return;
+    const original = state.contextMessages[start];
+    const insert =
+      entry.replacement === null ? [] : [{ ...original, content: entry.replacement } as NativeMessage];
+    applyReplacements(
+      state,
+      [{ start, deleteCount: 1, insert, preserveSource: insert.length ? true : undefined }],
+      entry.id,
+    );
+  }
+}
+
 /** Read projections are pure and never write synthetic history back into the transcript. */
 export function projectLog(
   branch: SessionEntry[],
   execution: (id: string) => NativeToolMessage | undefined,
   runs: readonly { seq: number; parentId: string | null; run: RunInfo }[],
+  context: SessionContext,
 ): SessionProjection {
-  const state: SessionProjection = {
-    leafId: branch.at(-1)?.id ?? null,
-    timeline: [],
-    contextMessages: [],
-    contextEntryIds: [],
-  };
+  const state: SessionProjection = { ...context, timeline: [] };
   const lastRun = runs.at(-1)?.run;
   if (lastRun) state.run = lastRun;
   const messageOf = (entry: SessionEntry) => projectMessage(entry, execution);
   const calls = new Map<string, unknown>();
-  const edits = new Map<string, NativeMessage['content'] | null>();
-  let compaction: Extract<SessionEntry, { type: 'compaction' }> | undefined;
   const ancestry = new Set(branch.map(({ id }) => id));
   let runIndex = 0;
   let runId: string | undefined;
@@ -133,14 +199,6 @@ export function projectLog(
   }
   for (const entry of branch) {
     projectRuns(entry.seq);
-    if (entry.type === 'model') state.model = entry.model;
-    if (entry.type === 'thinking') state.thinkingLevel = entry.level ?? undefined;
-    if (entry.type === 'message' && entry.selection) {
-      state.model = entry.selection.model;
-      state.thinkingLevel = entry.selection.thinkingLevel;
-    }
-    if (entry.type === 'compaction') compaction = entry;
-    if (entry.type === 'context-edit') edits.set(entry.targetId, entry.replacement);
     if (entry.type === 'plugin-record') {
       const record = displayRecord(entry);
       if (record) state.timeline.push(record);
@@ -160,29 +218,5 @@ export function projectLog(
     );
   }
   projectRuns(Infinity);
-  let context = branch;
-  if (compaction) {
-    const from = compaction.keepFromId && branch.findIndex(({ id }) => id === compaction.keepFromId);
-    context =
-      typeof from === 'number' && from >= 0
-        ? branch.slice(from)
-        : branch.slice(branch.indexOf(compaction) + 1);
-    state.contextMessages.push({
-      role: 'user',
-      content: 'Summary of earlier conversation:\n' + compaction.summary,
-      timestamp: Date.parse(compaction.timestamp),
-    });
-    state.contextEntryIds.push(compaction.id);
-  }
-  state.contextMessages.push(
-    ...context.flatMap<NativeMessage>((entry) => {
-      const message = messageOf(entry);
-      if (!message || edits.get(entry.id) === null) return [];
-      state.contextEntryIds.push(entry.id);
-      return [
-        { ...message, ...(edits.has(entry.id) ? { content: edits.get(entry.id) } : {}) } as NativeMessage,
-      ];
-    }),
-  );
   return state;
 }

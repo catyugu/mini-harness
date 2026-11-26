@@ -10,6 +10,7 @@ import type {
   ModelRequestSnapshot,
   NativeMessage,
   NativeToolMessage,
+  NativeUsage,
 } from '@mini-harness/llm/api';
 import type { HistoryEntry } from './shared/message.ts';
 import { projectRun, type RunDetails, type RunInfo } from './shared/run-state.ts';
@@ -35,8 +36,25 @@ export interface MessagePatch {
 
 export type RecordedModelRequest = Omit<ModelRequestSnapshot, 'messages' | 'tools'> & {
   toolSchema?: string;
+  purpose?: 'summary';
   messagesPatch?: MessagePatch;
 };
+
+/** Replace intervals of the parent branch's effective context atomically. */
+export interface ContextReplacement extends MessagePatch {
+  /** Keep the original content reference for one-for-one edits. */
+  preserveSource?: true;
+}
+
+export interface ModelAttempt {
+  requestId: string;
+  runId?: string;
+  summary?: true;
+  step?: number;
+  elapsedMs: number;
+  firstTokenMs?: number;
+  usage?: NativeUsage;
+}
 
 /** The durable session protocol is independent of any model SDK. */
 export type SessionEvent<Data = unknown> =
@@ -45,6 +63,7 @@ export type SessionEvent<Data = unknown> =
       message: NativeMessage;
       presentation?: PreparedMessage;
       elapsedMs?: number;
+      attemptsRecorded?: true;
       submissionId?: string;
       inboxId?: string;
       origin?: MessageOrigin;
@@ -65,8 +84,9 @@ export type SessionEvent<Data = unknown> =
       data: unknown;
     }
   | PluginRecord<Data>
-  | { type: 'compaction'; summary: string; keepFromId: string | null; tokensBefore?: number }
-  | { type: 'context-edit'; targetId: string; replacement: NativeMessage['content'] | null }
+  | { type: 'context-replace'; replacements: ContextReplacement[] }
+  | ({ type: 'model-attempt' } & ModelAttempt)
+  | { type: 'session-setting'; owner: string; value: unknown }
   | { type: 'inbox-enqueued'; item: InboxItem }
   | { type: 'inbox-paused' }
   | { type: 'inbox-consumed' | 'inbox-cancelled'; ids: string[]; reason?: string }
@@ -75,7 +95,12 @@ export type SessionEvent<Data = unknown> =
   | ({ type: 'task'; run?: RunDetails } & TaskHistoryRecord)
   | { type: 'branch' };
 
-export type SessionEntry<Data = unknown> = LogEntry<SessionEvent<Data>>;
+// Historical logs still decode through the same replacement projection.
+export type HistoricalContextEvent =
+  | { type: 'compaction'; summary: string; keepFromId: string | null }
+  | { type: 'context-edit'; targetId: string; replacement: NativeMessage['content'] | null };
+
+export type SessionEntry<Data = unknown> = LogEntry<SessionEvent<Data> | HistoricalContextEvent>;
 
 /** Historical run envelopes remain readable; new writes have one canonical task lifecycle. */
 export function runFromEntry(sessionId: string, entry: SessionEntry): RunInfo | undefined {
@@ -83,21 +108,30 @@ export function runFromEntry(sessionId: string, entry: SessionEntry): RunInfo | 
   if (entry.type === 'task' && entry.run) return projectRun(sessionId, entry.task, entry.run);
 }
 
-export interface SessionProjection {
+export interface SessionContext {
   leafId: string | null;
-  timeline: HistoryEntry[];
-  /** Selected branch after the latest compaction, including its summary. */
+  /** Effective messages on the selected branch after applying replacements. */
   contextMessages: NativeMessage[];
-  /** Stable source identity parallel to contextMessages; summaries use their compaction event ID. */
+  /** Original entry IDs parallel to contextMessages. Synthetic entries use their replacement record ID. */
   contextEntryIds: string[];
+  /** Cache keys change when content changes, even when its source remains the same. */
+  contextRevisions: string[];
   model?: ModelChoice;
   thinkingLevel?: ThinkingLevel;
+}
+
+export interface SessionProjection extends SessionContext {
+  timeline: HistoryEntry[];
   run?: RunInfo;
 }
 
 export interface SessionLogPort {
   readonly sessionId: string;
-  entries(): SessionEntry[];
+  entries(after?: number): SessionEntry[];
+  hasAttachments(id: string): boolean;
+  /** Fetch the pre-pruning message or, for tool results, the raw execution before transforms. */
+  originalMessage(id: string, raw?: boolean): NativeMessage | undefined;
+  setting(owner: string): unknown;
   inbox(): InboxItem[];
   hasInbox(id: string): boolean;
   inboxPaused(): boolean;
@@ -111,11 +145,29 @@ export interface SessionLogPort {
     parentId: string | null,
     expectedLeafId: string | null,
   ): SessionEntry;
+  context(leafId?: string | null): SessionContext;
   projection(leafId?: string | null): SessionProjection;
   /** Persist the exact model-visible request, sharing schemas and branch context. */
-  recordRequest(snapshot: Omit<LlmRequest, 'signal'>): SessionEntry;
+  recordRequest(snapshot: Omit<LlmRequest, 'signal'>, purpose?: 'summary'): SessionEntry;
   /** Commit the model-visible content of a previously recorded raw execution. */
   acceptToolResult(executionId: string, content: NativeToolMessage['content']): SessionEntry;
+  /** Read the stable components of a recorded request without materializing its messages. */
+  requestDefinition(id: string): Omit<ModelRequestSnapshot, 'messages'>;
   /** Reconstruct exact model-visible inputs for audits, including distinct tool schemas. */
   requestSnapshot(id: string): ModelRequestSnapshot & { messages: NativeMessage[] };
 }
+
+/** Non-mutating operations available while inspecting a closed conversation log. */
+export type SessionLogReader = Pick<
+  SessionLogPort,
+  | 'entries'
+  | 'setting'
+  | 'context'
+  | 'requestDefinition'
+  | 'requestSnapshot'
+  | 'branch'
+  | 'projection'
+  | 'queue'
+  | 'inbox'
+  | 'inboxPaused'
+>;

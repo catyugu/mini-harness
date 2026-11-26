@@ -1,7 +1,7 @@
 import { expectPresent } from '../support/required.ts';
 import { test, expect } from '@playwright/test';
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
-import { createFixturePaths, createMockProvider } from '../helpers/mock-provider.ts';
+import { checkpointFixture, createFixturePaths, createMockProvider } from '../helpers/mock-provider.ts';
 import { join } from 'node:path';
 import { writeJson } from '@mini-harness/platform/json';
 import { settingsSection, startIsolatedHost } from '../support/browser.ts';
@@ -35,8 +35,7 @@ test('renders Markdown and tool results, and stops a pending reply', async ({ pa
     }
     if (last.content === 'Change course') return 'Steering accepted';
     if (last.content === 'Stop this tool') return { tool: 'wait_for_stop', args: {} };
-    if (last.role === 'user' && last.content.startsWith('user: Show a result'))
-      return 'Summarized the earlier tool call.';
+    if (last.content.startsWith('Write a continuation checkpoint')) return checkpointFixture;
     if (last.content === 'Reuse the tool ID')
       return { tool: 'read', args: { path: 'sample.txt' }, callId: 'reused-tool' };
     if (last.role === 'tool' && last.content === 'A second tool result') return 'The second tool finished';

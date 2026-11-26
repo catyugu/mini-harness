@@ -114,14 +114,6 @@ export function createComposerModel(ctx: Context): ComposerModel {
       },
     }),
   );
-  ctx.effect(() =>
-    register({
-      name: 'compact',
-      group: 'Conversation',
-      description: 'Summarize earlier messages to free context',
-      run: control.compact,
-    }),
-  );
 
   async function send() {
     const origin = key(),

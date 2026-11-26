@@ -15,8 +15,9 @@ plugins:
     name: '@mini-harness/agent'
   - id: core:tool-executor
     name: '@mini-harness/tool-executor'
-  - id: core:compaction
-    name: '@mini-harness/compaction'
+  - id: context-management
+    name: '@mini-harness/context-management'
+    live: true
   - id: core:prompt
     name: '@mini-harness/agent-prompt'
   - id: core:prompt-defaults
