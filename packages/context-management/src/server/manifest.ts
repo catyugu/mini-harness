@@ -79,7 +79,7 @@ function setup(ctx: Context) {
               signal,
             };
             return {
-              settings: manager.configuration(log.setting(owner), false),
+              settings: manager.configuration(log.setting(owner)),
               stats,
               occupancy: request && manager.measure(scoped, request, exact ? undefined : projection, false),
             };
@@ -92,25 +92,18 @@ function setup(ctx: Context) {
           ...settings,
           ...(result?.stats ?? { turns: 0, steps: 0, assistantUsage: {} }),
           ...status,
-          issue: settings.issue,
           occupancy: await result?.occupancy,
         } satisfies ContextState;
       }),
     );
     web.effect(() =>
       routes.register('PUT', '/api/sessions/:id/context', async ({ params, body }) => {
-        const overrides = await body();
-        if (!overrides || typeof overrides !== 'object' || Array.isArray(overrides))
-          throw new HttpError('invalid_input', 'Expected a context settings object');
-        const config = manager.configuration(overrides).settings;
-        if (
-          Object.hasOwn(overrides, 'summaryModel') &&
-          config.summaryModel &&
-          !ctx.harnessModels.resolve(config.summaryModel)
-        )
+        const value = await body();
+        const { custom } = manager.configuration(value);
+        if (custom?.summaryModel && !ctx.harnessModels.resolve(custom.summaryModel))
           throw new HttpError('invalid_input', 'Unknown summary model');
         const log = sessions.log(params.id);
-        log.append({ type: 'session-setting', owner, value: overrides });
+        log.append({ type: 'session-setting', owner, value: custom });
         return { ok: true };
       }),
     );

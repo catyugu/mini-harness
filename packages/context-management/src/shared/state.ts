@@ -6,7 +6,6 @@ export interface ContextSettings {
   triggerRatio: number;
   targetRatio: number;
   retainRatio: number;
-  pruneTools: boolean;
   summaryModel: ModelChoice | null;
 }
 
@@ -27,9 +26,8 @@ export interface TokenTotals {
 
 export interface ContextState {
   settings: ContextSettings;
-  overrides: Partial<ContextSettings>;
+  custom: ContextSettings | null;
   occupancy?: ContextOccupancy;
-  issue?: string;
   compacting?: 'automatic' | 'manual' | 'recovery';
   turns: number;
   steps: number;

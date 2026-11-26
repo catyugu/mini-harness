@@ -4,7 +4,7 @@ import type {} from '@mini-harness/conversation/browser/conversation-api';
 import type {} from '@mini-harness/conversation/browser/history-api';
 import type {} from '@mini-harness/ui-slots/browser/api';
 import type {} from '@mini-harness/ui-runtime/projection-api';
-import { bindPopover } from '@mini-harness/ui-primitives/primitives';
+import { bindPopover, button as uiButton, iconButton } from '@mini-harness/ui-primitives/primitives';
 import { browserRequest, payload } from '@mini-harness/ui-runtime/http';
 import { browserPluginId, browserPluginSettings } from '@mini-harness/ui-runtime/plugin-settings';
 import type { ContextSettings, ContextState, TokenTotals } from '../shared/state.ts';
@@ -94,7 +94,6 @@ function showOccupancy(list: HTMLElement, bar: HTMLElement, state: ContextState)
     ['Auto compaction trigger', percent(settings.triggerRatio) + ' of input budget'],
     ['Auto compaction', settings.autoCompact ? 'On' : 'Off'],
     ['Compaction', state.compacting ? 'Running (' + state.compacting + ')' : undefined],
-    ['Last compaction', state.issue],
   ]);
   bar.hidden = !value?.window;
   bar.replaceChildren(
@@ -165,7 +164,7 @@ function mountStats(ctx: Context) {
   );
   select();
 
-  const write = async (values: Partial<ContextSettings>) => {
+  const write = async (values: ContextSettings | null) => {
     if (!id) return;
     const request = controller;
     await browserRequest(ctx, path(id), { ...payload('PUT', values), signal: request.signal });
@@ -193,38 +192,9 @@ function mountStats(ctx: Context) {
       ring.setAttribute('aria-hidden', 'true');
       const windowRatio = document.createElement('span');
       context.trigger.replaceChildren(ring, windowRatio);
-      const form = settingsForm(
-        ctx,
-        signal,
-        async (field, value) => {
-          if (!state) return;
-          const values = { ...state.overrides } as Record<string, unknown>;
-          if (value === undefined) delete values[field];
-          else values[field] = value;
-          await write(values);
-        },
-        true,
-      );
-      const compact = button('Compact now'),
-        reset = button('Reset to defaults');
-      compact.className = 'small-button';
-      reset.className = 'link-button';
-      const controls = document.createElement('div');
-      controls.className = 'context-buttons';
-      controls.append(compact, reset);
-      compact.onclick = () => {
-        if (state?.compacting === 'manual' && id) {
-          void browserRequest(
-            ctx,
-            '/sessions/' + encodeURIComponent(id) + '/cancel',
-            payload('POST', {}),
-          ).catch(conversation.report);
-        } else void conversation.compact().catch(conversation.report);
-      };
-      reset.onclick = () => void write({}).catch(conversation.report);
       run.panel.append(runList);
       usage.panel.append(usageList);
-      context.panel.append(bar, contextList, form.node, controls);
+      context.panel.append(bar, contextList);
       row.append(run.node, usage.node, context.node);
 
       function render() {
@@ -260,28 +230,65 @@ function mountStats(ctx: Context) {
         windowRatio.textContent =
           ratio === undefined ? '—' : (occupancy?.estimated ? '~' : '') + percent(ratio);
         showOccupancy(contextList, bar, state);
-        form.update(state.settings, state.overrides);
-        const current = conversation.get();
-        compact.disabled =
-          state.compacting !== 'manual' &&
-          Boolean(
-            state.compacting ||
-              current.interaction.operation ||
-              current.run?.state === 'running' ||
-              current.run?.state === 'queued' ||
-              current.run?.state === 'waiting',
-          );
-        compact.textContent =
-          state.compacting === 'manual'
-            ? 'Cancel compaction'
-            : state.compacting
-              ? 'Compacting…'
-              : 'Compact now';
-        reset.disabled = !Object.keys(state.overrides).length;
+
       }
       updates.addEventListener('change', render, { signal });
       render();
       return row;
+    }),
+  );
+
+  ctx.effect(() =>
+    ctx.miniSlots.register('conversation.composer-options', (signal) => {
+      const node = document.createElement('div');
+      const trigger = iconButton('Context settings', 'settings');
+      const panel = document.createElement('div');
+      panel.className = 'ui-popover context-details';
+      panel.setAttribute('popover', 'auto');
+      panel.setAttribute('role', 'dialog');
+      panel.setAttribute('aria-label', 'Context settings');
+      node.append(trigger, panel);
+      const position = bindPopover(trigger, panel, signal, { width: 300, prefer: 'above' });
+      trigger.onclick = () => {
+        if (panel.matches(':popover-open')) panel.hidePopover();
+        else {
+          panel.showPopover();
+          position();
+        }
+      };
+      const mode = document.createElement('select');
+      mode.className = 'ui-input';
+      mode.setAttribute('aria-label', 'Context configuration');
+      mode.add(new Option('Follow defaults', 'default'));
+      mode.add(new Option('Custom', 'custom'));
+      mode.onchange = () => {
+        if (state) void write(mode.value === 'custom' ? state.settings : null).catch(conversation.report);
+      };
+      const form = settingsForm(ctx, signal, write);
+      const compact = uiButton('Compact now');
+      compact.onclick = () => {
+        if (state?.compacting === 'manual') void conversation.cancel().catch(conversation.report);
+        else void conversation.compact().catch(conversation.report);
+      };
+      panel.append(mode, form.node, compact);
+      const render = () => {
+        node.hidden = !state;
+        if (!state) {
+          if (panel.matches(':popover-open')) panel.hidePopover();
+          return;
+        }
+        mode.value = state.custom ? 'custom' : 'default';
+        form.update(state.settings, Boolean(state.custom));
+        const current = conversation.get();
+        compact.disabled = state.compacting !== 'manual' && Boolean(
+          state.compacting || current.interaction.operation ||
+          current.run?.state === 'running' || current.run?.state === 'queued' || current.run?.state === 'waiting'
+        );
+        compact.textContent = state.compacting === 'manual' ? 'Cancel compaction' : state.compacting ? 'Compacting…' : 'Compact now';
+      };
+      updates.addEventListener('change', render, { signal });
+      render();
+      return node;
     }),
   );
 
@@ -329,14 +336,13 @@ function setup(ctx: Context) {
           section: { title: 'General', icon: 'settings', order: 20 },
           order: 10,
           render({ signal }) {
-            const form = settingsForm(settings, signal, (field, value) => configuration.set(field, value));
+            const form = settingsForm(settings, signal, (value) => configuration.patch({ ...value }));
             const read = () =>
               form.update({
                 autoCompact: configuration.get('autoCompact'),
                 triggerRatio: configuration.get('triggerRatio'),
                 targetRatio: configuration.get('targetRatio'),
                 retainRatio: configuration.get('retainRatio'),
-                pruneTools: configuration.get('pruneTools'),
                 summaryModel: configuration.get('summaryModel'),
               });
             for (const key of [
@@ -344,7 +350,6 @@ function setup(ctx: Context) {
               'triggerRatio',
               'targetRatio',
               'retainRatio',
-              'pruneTools',
               'summaryModel',
             ])
               signal.addEventListener('abort', configuration.subscribe(key, read), { once: true });

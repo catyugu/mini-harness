@@ -24,6 +24,7 @@ export function mountComposer(ctx: Context, signal: AbortSignal) {
             <div id="permissionPicker" class="ui-popover model-picker permission-picker" popover="auto">
               <div id="permissionResults" role="listbox" aria-label="Conversation permissions"></div>
             </div>
+            <div id="composerOptions" class="composer-tools"></div>
             <button id="modelSelect" class="model-select" type="button">Choose model</button>
             <button id="thinkingLevel" class="model-select" type="button" aria-haspopup="listbox" aria-expanded="false" aria-controls="thinkingResults" hidden>Default</button>
             <div id="thinkingPicker" class="ui-popover model-picker thinking-picker" popover="auto"><div id="thinkingResults" role="listbox" aria-label="Thinking levels"></div></div>
@@ -50,6 +51,8 @@ export function mountComposer(ctx: Context, signal: AbortSignal) {
   const thinkingPicker = createThinkingPicker(composer, model.chooseThinking, signal);
   const removeToolbar = ctx.miniSlots.define('conversation.composer', element('composerExtensions'));
   signal.addEventListener('abort', removeToolbar, { once: true });
+  const removeOptions = ctx.miniSlots.define('conversation.composer-options', element('composerOptions'));
+  signal.addEventListener('abort', removeOptions, { once: true });
   const removeAttachment = ctx.miniSlots.register('conversation.composer', ui.attachmentButton());
   signal.addEventListener('abort', removeAttachment, { once: true });
   const removeFileCommand = model.command({

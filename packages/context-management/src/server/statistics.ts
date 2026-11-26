@@ -57,7 +57,7 @@ function observe(entry: SessionEntry): Observation | undefined {
 }
 
 class BranchStatistics {
-  private readonly totals: Omit<ContextState, 'settings' | 'overrides'> = {
+  private readonly totals: Omit<ContextState, 'settings' | 'custom'> = {
     turns: 0,
     steps: 0,
     assistantUsage: Object.create(null),

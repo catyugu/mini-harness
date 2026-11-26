@@ -8,7 +8,6 @@ const fields = {
   triggerRatio: Type.Number({ default: 0.8, exclusiveMinimum: 0, exclusiveMaximum: 1 }),
   targetRatio: Type.Number({ default: 0.6, exclusiveMinimum: 0, exclusiveMaximum: 1 }),
   retainRatio: Type.Number({ default: 0.16, exclusiveMinimum: 0, exclusiveMaximum: 1 }),
-  pruneTools: Type.Boolean({ default: true }),
   summaryModel: Type.Union(
     [
       Type.Null(),
@@ -30,10 +29,10 @@ export const Config = defineConfig(Type.Object(fields, { additionalProperties: f
     return 'Use 0 < retain < target < trigger < 100%.';
 });
 
-export function resolveSettings(defaults: ContextSettings, overrides: unknown): ContextSettings {
-  if (!overrides || typeof overrides !== 'object' || Array.isArray(overrides))
+export function validateSettings(value: unknown): ContextSettings {
+  if (!value || typeof value !== 'object' || Array.isArray(value) || Object.keys(value).length !== Object.keys(fields).length)
     throw new DomainError('invalid_input', 'Expected a context settings object');
-  const config = Config['~standard'].validate({ ...defaults, ...overrides });
+  const config = Config['~standard'].validate(value);
   if (config instanceof Promise || config.issues)
     throw new DomainError(
       'invalid_input',

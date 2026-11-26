@@ -12,6 +12,7 @@ import { SessionLog } from '../../sessions/src/log.ts';
 import type { SessionLogPort } from '@mini-harness/sessions/log-api';
 import type { MockProvider } from '../../../test/helpers/mock-provider.ts';
 
+const settings = { autoCompact: true, triggerRatio: 0.8, targetRatio: 0.6, retainRatio: 0.16, summaryModel: null };
 const summary = (content?: string) => content?.startsWith('Write a continuation checkpoint');
 const withUsage = (text: string) => ({
   text,
@@ -64,6 +65,7 @@ test('a single user turn supports repeated token-budget compaction while tools e
   const { body: session } = await request('/sessions', 'POST', {});
   const path = '/sessions/' + session.id;
   const reply = await request(path + '/context', 'PUT', {
+    ...settings,
     retainRatio: 0.1,
     targetRatio: 0.38,
     triggerRatio: 0.45,
@@ -158,14 +160,14 @@ test('session overrides inherit defaults, reject invalid ratios and accept unstr
   const ctx = app.runtime.plugins.ctx;
   const { body: session } = await request('/sessions', 'POST', {});
   const path = '/sessions/' + session.id;
-  assert.equal((await request(path + '/context', 'PUT', { targetRatio: 0.85 })).status, 400);
-  assert.equal((await request(path + '/context', 'PUT', { autoCompact: false })).status, 200);
+  assert.equal((await request(path + '/context', 'PUT', { ...settings, targetRatio: 0.85 })).status, 400);
+  assert.equal((await request(path + '/context', 'PUT', { ...settings, autoCompact: false })).status, 200);
   await app.runtime.configuration.update({
     entries: { 'context-management': { config: { triggerRatio: 0.9 } } },
   });
   const { body: configured } = await request(path + '/context');
-  assert.deepEqual(configured.overrides, { autoCompact: false });
-  assert.equal(configured.settings.triggerRatio, 0.9);
+  assert.deepEqual(configured.custom, { ...settings, autoCompact: false });
+  assert.equal(configured.settings.triggerRatio, 0.8);
   await sendRun(ctx.harnessRuns, session.id, 'First request. '.repeat(60));
   await sendRun(ctx.harnessRuns, session.id, 'Second request. '.repeat(60));
   const sessionLog = ctx.harnessSessions.log(session.id);
@@ -178,13 +180,13 @@ test('session overrides inherit defaults, reject invalid ratios and accept unstr
   const restored = new SessionLog(copy, session.id);
   try {
     assert.deepEqual(restored.context(), sessionLog.context());
-    assert.deepEqual(restored.setting('context-management'), { autoCompact: false });
+    assert.deepEqual(restored.setting('context-management'), { ...settings, autoCompact: false });
   } finally {
     restored.close();
   }
   assert.ok(readFileSync(copy, 'utf8').includes('model-attempt'));
-  assert.equal((await request(path + '/context', 'PUT', {})).status, 200);
-  assert.deepEqual((await request(path + '/context')).body.overrides, {});
+  assert.equal((await request(path + '/context', 'PUT', null)).status, 200);
+  assert.deepEqual((await request(path + '/context')).body.custom, null);
 });
 
 test('switching to a smaller window uses the configured summary model and segments its input', async (t) => {
@@ -206,7 +208,7 @@ test('switching to a smaller window uses the configured summary model and segmen
   const { body: session } = await request('/sessions', 'POST', {});
   const endpoint = '/sessions/' + session.id + '/context';
   const summaryModel = { provider: 'local-mock', id: 'summary' };
-  assert.equal((await request(endpoint, 'PUT', { summaryModel })).status, 200);
+  assert.equal((await request(endpoint, 'PUT', { ...settings, summaryModel })).status, 200);
   for (let index = 0; index < 3; index++)
     await sendRun(ctx.harnessRuns, session.id, 'Document ' + index + '\n' + 'Prior context. '.repeat(1000));
   const model = { provider: 'local-mock', id: 'smaller' };
@@ -252,7 +254,7 @@ test('an image limit offloads the oldest image and an irreducible overflow exits
   assert.equal(images(log.requestSnapshot(requests[1].id).messages).length, 2);
   const { body: plain } = await request('/sessions', 'POST', {});
   assert.equal(
-    (await request('/sessions/' + plain.id + '/context', 'PUT', { autoCompact: false })).status,
+    (await request('/sessions/' + plain.id + '/context', 'PUT', { ...settings, autoCompact: false })).status,
     200,
   );
   await assert.rejects(sendRun(ctx.harnessRuns, plain.id, 'Always overflow'), /Automatic compaction is off/);

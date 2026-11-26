@@ -10,7 +10,7 @@ import type { ContextRepair, ContextRequest } from '@mini-harness/runs/context-m
 import type { SessionContext, SessionLogPort } from '@mini-harness/sessions/log-api';
 import type { ContextOccupancy, ContextSettings, ContextState } from '../shared/state.ts';
 import { checkpoint, splitPoint } from './compaction.ts';
-import { resolveSettings } from './config.ts';
+import { validateSettings } from './config.ts';
 import { TokenMeter } from './meter.ts';
 import { prune } from './prune.ts';
 
@@ -30,19 +30,9 @@ export class ContextManagement {
     private readonly notify: (sessionId: string) => void,
   ) {}
 
-  configuration(stored: unknown, strict = true) {
-    const overrides = (stored ?? {}) as Partial<ContextSettings>;
-    const defaults = this.settings();
-    try {
-      return { settings: resolveSettings(defaults, overrides), overrides };
-    } catch (error) {
-      if (strict) throw error;
-      return {
-        settings: { ...defaults, ...overrides },
-        overrides,
-        issue: error instanceof Error ? error.message : String(error),
-      };
-    }
+  configuration(stored: unknown) {
+    const custom = stored == null ? null : validateSettings(stored);
+    return { settings: custom ?? this.settings(), custom };
   }
 
   status(id: string) {
