@@ -456,7 +456,9 @@ function validateEvent(event: SessionEvent) {
         !event.run ||
         typeof event.run.id !== 'string' ||
         typeof event.run.sessionId !== 'string' ||
-        !['queued', 'running', 'waiting', 'completed', 'failed', 'cancelled', 'interrupted'].includes(event.run.state) ||
+        !['queued', 'running', 'waiting', 'completed', 'failed', 'cancelled', 'interrupted'].includes(
+          event.run.state,
+        ) ||
         !Number.isFinite(Date.parse(event.run.startedAt)) ||
         !Number.isInteger(event.run.sequence) ||
         event.run.sequence < 0 ||

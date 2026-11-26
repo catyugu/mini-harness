@@ -59,7 +59,6 @@ export class Semaphore {
       this.drain();
     });
   }
-
 }
 
 export function selectChildModel(
@@ -104,7 +103,11 @@ export class Delegation {
     return this.sessions.depth(id) < this.settings().maxDepth;
   }
 
-  delegate(parentId: string, request: { task: string; provider?: string; model?: string }, signal?: AbortSignal) {
+  delegate(
+    parentId: string,
+    request: { task: string; provider?: string; model?: string },
+    signal?: AbortSignal,
+  ) {
     signal?.throwIfAborted();
     const parent = this.sessions.get(parentId);
     if (!parent) throw new Error('Parent conversation not found');
@@ -115,9 +118,13 @@ export class Delegation {
       workspaceId: parent.workspaceId,
       title: childTitle(request.task),
     });
-    const task = this.runs.submit(record.id, { message: request.task, model }, {
-      acquire: (cancellation) => this.semaphore.acquire(cancellation),
-    });
+    const task = this.runs.submit(
+      record.id,
+      { message: request.task, model },
+      {
+        acquire: (cancellation) => this.semaphore.acquire(cancellation),
+      },
+    );
     return { sessionId: record.id, taskId: task.id, state: 'queued' as const };
   }
 }

@@ -165,12 +165,13 @@ export class Runs implements RunPort {
             if (terminal(snapshot.state)) {
               const inbox = new Inbox(log);
               if (snapshot.state === 'cancelled') inbox.cancel('Run cancelled');
-              else inbox.failPending(
-                'steer',
-                snapshot.state === 'interrupted'
-                  ? 'The target run was interrupted before delivery'
-                  : 'The target run ended before delivery',
-              );
+              else
+                inbox.failPending(
+                  'steer',
+                  snapshot.state === 'interrupted'
+                    ? 'The target run was interrupted before delivery'
+                    : 'The target run ended before delivery',
+                );
               if (snapshot.state === 'failed' && snapshot.error)
                 publish({ type: 'error', error: snapshot.error });
             }
@@ -182,7 +183,9 @@ export class Runs implements RunPort {
             return await this.withAgentContext(id, activity, task.signal, (ctx, signal) =>
               this.sessionRun.prompt(ctx, record, prepared.text, publish, {
                 fallback,
-                beginSubmission: () => { info.inputEntryId = null; },
+                beginSubmission: () => {
+                  info.inputEntryId = null;
+                },
                 signal,
                 source,
                 submissionId: task.id,
@@ -235,7 +238,13 @@ export class Runs implements RunPort {
 
   submit(id: string, { message, ...input }: RunInput, options: RunSubmission = {}) {
     const caller = Service.caller(this);
-    return this.launch(id, message, undefined, { ...input, ...options, source: 'plugin' }, caller.harnessTasks).task;
+    return this.launch(
+      id,
+      message,
+      undefined,
+      { ...input, ...options, source: 'plugin' },
+      caller.harnessTasks,
+    ).task;
   }
 
   async send(id: string, prompt: string, emit?: (event: StreamEvent) => void, options: RunOptions = {}) {
@@ -417,14 +426,21 @@ export class Runs implements RunPort {
 
   cancel(id: string) {
     const activity = this.work.get(id);
-    return activity?.task?.cancel(new Error(activity.events ? 'Agent run cancelled' : 'Compaction cancelled')) ?? false;
+    return (
+      activity?.task?.cancel(new Error(activity.events ? 'Agent run cancelled' : 'Compaction cancelled')) ??
+      false
+    );
   }
 
   async compact(id: string) {
     const activity = this.reserve(id);
     try {
-      const task = this.tasks.start({ owner: 'session:' + id, resourceId: id, type: 'compaction' }, ({ signal }) =>
-        this.withAgentContext(id, activity, signal, (ctx, signal) => this.sessionRun.compact(ctx, id, signal)),
+      const task = this.tasks.start(
+        { owner: 'session:' + id, resourceId: id, type: 'compaction' },
+        ({ signal }) =>
+          this.withAgentContext(id, activity, signal, (ctx, signal) =>
+            this.sessionRun.compact(ctx, id, signal),
+          ),
       );
       activity.task = task;
       this.changed(id);
@@ -461,6 +477,4 @@ export class Runs implements RunPort {
       await fiber.dispose();
     }
   }
-
-
 }

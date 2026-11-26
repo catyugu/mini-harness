@@ -22,4 +22,5 @@ export interface RunTermination {
   error?: string;
 }
 
-export const isRunning = (run?: RunInfo) => run?.state === 'queued' || run?.state === 'running' || run?.state === 'waiting';
+export const isRunning = (run?: RunInfo) =>
+  run?.state === 'queued' || run?.state === 'running' || run?.state === 'waiting';

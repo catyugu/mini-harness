@@ -22,7 +22,8 @@ export function setup(ctx: Context) {
     defineTool({
       name: 'delegate',
       label: 'Delegate',
-      description: 'Start a child agent asynchronously. Returns its session ID and task ID immediately; the child continues independently. Set provider/model to override the default.',
+      description:
+        'Start a child agent asynchronously. Returns its session ID and task ID immediately; the child continues independently. Set provider/model to override the default.',
       parameters: Type.Object({
         task: Type.String({ minLength: 1, maxLength: 12000 }),
         provider: Type.Optional(Type.String({ maxLength: 160 })),
