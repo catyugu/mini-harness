@@ -1,4 +1,4 @@
-import type { InputTokenCounts } from '@mini-harness/llm/api';
+import type { InputMeasurement } from '@mini-harness/llm/api';
 import type { ModelChoice } from '@mini-harness/llm/vocabulary';
 
 export interface ContextSettings {
@@ -9,12 +9,9 @@ export interface ContextSettings {
   summaryModel: ModelChoice | null;
 }
 
-export interface ContextOccupancy extends InputTokenCounts {
+export interface ContextOccupancy extends InputMeasurement {
   model: ModelChoice;
   total: number;
-  window?: number;
-  budget?: number;
-  estimated: boolean;
 }
 
 export interface TokenTotals {
@@ -26,9 +23,9 @@ export interface TokenTotals {
 
 export interface ContextState {
   settings: ContextSettings;
-  custom: ContextSettings | null;
+  customized: boolean;
   occupancy?: ContextOccupancy;
-  compacting?: 'automatic' | 'manual' | 'recovery';
+  compacting?: 'manual';
   turns: number;
   steps: number;
   modelMs?: number;

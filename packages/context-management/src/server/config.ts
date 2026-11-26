@@ -1,6 +1,7 @@
 import { DomainError } from '@mini-harness/platform/errors';
 import { defineConfig } from '@mini-harness/plugin-api/configuration';
 import { Type } from 'typebox';
+import { Check } from 'typebox/value';
 import type { ContextSettings } from '../shared/state.ts';
 
 const fields = {
@@ -23,27 +24,18 @@ const fields = {
   ),
 };
 
-export const Config = defineConfig(Type.Object(fields, { additionalProperties: false }), (config) => {
-  const { retainRatio, targetRatio, triggerRatio } = config as unknown as ContextSettings;
+const schema = Type.Object(fields, { additionalProperties: false });
+
+function ratioIssue({ retainRatio, targetRatio, triggerRatio }: ContextSettings) {
   if (retainRatio >= targetRatio || targetRatio >= triggerRatio)
     return 'Use 0 < retain < target < trigger < 100%.';
-});
+}
+
+export const Config = defineConfig(schema, (config) => Check(schema, config) ? ratioIssue(config) : 'Invalid context settings');
 
 export function validateSettings(value: unknown): ContextSettings {
-  if (
-    !value ||
-    typeof value !== 'object' ||
-    Array.isArray(value) ||
-    Object.keys(value).length !== Object.keys(fields).length
-  )
-    throw new DomainError('invalid_input', 'Expected a context settings object');
-  const config = Config['~standard'].validate(value);
-  if (config instanceof Promise || config.issues)
-    throw new DomainError(
-      'invalid_input',
-      config instanceof Promise
-        ? 'Invalid context settings'
-        : (config.issues[0]?.message ?? 'Invalid context settings'),
-    );
-  return config.value as unknown as ContextSettings;
+  if (!Check(schema, value)) throw new DomainError('invalid_input', 'Invalid context settings');
+  const issue = ratioIssue(value);
+  if (issue) throw new DomainError('invalid_input', issue);
+  return value;
 }

@@ -1,174 +1,53 @@
-import { createHash } from 'node:crypto';
-import type { NativeMessage, NativeToolMessage, NativeUserMessage } from '@mini-harness/llm/api';
-import type { Context } from 'mini-harness/cordis';
-import type { ContextReplacement, SessionContext, SessionLogPort } from '@mini-harness/sessions/log-api';
-import { messageTokens } from './meter.ts';
+import type { ContextReplacement, SessionContext } from '@mini-harness/sessions/log-api';
 
-const chunks = (content: NativeToolMessage['content'] | NativeUserMessage['content']) =>
-  typeof content === 'string' ? [{ type: 'text' as const, text: content }] : content;
+const toolLimit = 8000;
 
-function shortened(text: string, size: number) {
-  const head = Math.floor(size / 2);
-  return text.slice(0, head) + '\n[… middle omitted …]\n' + text.slice(-(size - head));
+function reference(id: string, label: string) {
+  return '[' + label + '. Use read_context with entry "' + id + '" to retrieve the original.]';
 }
 
-function pruneText(
-  text: string,
-  size: number,
-  customize?: (text: string, size: number) => string | undefined,
-) {
-  const excerpt = customize?.(text, size);
-  if (excerpt !== undefined) {
-    if (typeof excerpt !== 'string' || excerpt.length > size) throw new Error('Invalid tool result excerpt');
-    return excerpt;
-  }
-  return shortened(text, size);
+function excerpt(text: string, limit: number) {
+  if (text.length <= limit) return text;
+  const head = Math.floor(limit / 2);
+  const tail = limit - head - 3;
+  return tail > 0 ? text.slice(0, head) + '…\n' + text.slice(-tail) : text.slice(0, limit);
 }
 
-function reference(id: string, kind: string) {
-  return '[' + kind + '. Use read_context with entry "' + id + '" to retrieve the original.]';
-}
-
-export function prune(
-  ctx: Context,
-  log: SessionLogPort,
-  projection: SessionContext,
-  signatures: Map<string, string | null>,
-  options: { offload: boolean; forceImages: boolean; toolTokens: number },
-) {
-  const { contextMessages, contextEntryIds, contextRevisions } = projection;
-  const replacements: ContextReplacement[] = [];
-  const tools = new Map(
-    ctx
-      .get('harnessTools')
-      ?.list({ resourceId: log.sessionId })
-      .map((tool) => [tool.name, tool]),
-  );
-  const originals = new Map<string, string>();
-  let latestUser = contextMessages.length - 1;
-  while (
-    latestUser >= 0 &&
-    (contextMessages[latestUser].role !== 'user' ||
-      log.entry(contextEntryIds[latestUser])?.type !== 'message')
-  )
-    latestUser--;
-  let latestExchange = contextMessages.length - 1;
-  while (latestExchange >= 0) {
-    const message = contextMessages[latestExchange];
-    if (message.role === 'assistant' && message.content.some(({ type }) => type === 'toolCall')) break;
-    latestExchange--;
-  }
-  let imageIndex = 0;
-  const imageCount = contextMessages.reduce(
-    (sum, message) =>
-      sum +
-      (Array.isArray(message.content) ? message.content.filter(({ type }) => type === 'image').length : 0),
-    0,
-  );
-  for (const [index, message] of contextMessages.entries()) {
-    if (message.role === 'assistant') continue;
-    const id = contextEntryIds[index];
-    const parts = chunks(message.content);
-    const fresh = contextRevisions[index] === id;
-    const imageReferences: { type: 'text'; text: string }[] = [];
-    const content = parts.flatMap((part, position) => {
-      if (part.type === 'image') {
-        const current = imageIndex++;
-        if (
-          options.forceImages
-            ? current < Math.max(1, Math.ceil(imageCount / 2))
-            : options.offload && index < (message.role === 'user' ? latestUser : latestExchange)
-        ) {
-          const entry = {
-            type: 'text' as const,
-            text: reference(id, 'Image ' + (position + 1) + ' offloaded'),
-          };
-          imageReferences.push(entry);
-          return [entry];
-        }
-      }
-      if (
-        part.type === 'text' &&
-        position === 0 &&
-        message.role === 'user' &&
-        index < latestUser &&
-        options.offload &&
-        fresh
-      ) {
-        const entry = log.entry(id);
-        if (
-          entry?.type === 'message' &&
-          entry.presentation?.attachments.some((file) => !file.mimeType.startsWith('image/'))
-        ) {
-          const text = entry.presentation.userText;
-          if (text && part.text.startsWith(text) && part.text.length > text.length)
-            return [
-              { type: 'text' as const, text: text + '\n' + reference(id, 'Inlined attachments offloaded') },
-            ];
-        }
-      }
-      return [part];
+/** Bound text per tool result, retaining the positions of original image parts. */
+export function prune({ contextMessages, contextEntryIds }: SessionContext): ContextReplacement[] {
+  return contextMessages.flatMap((message, start) => {
+    if (message.role !== 'toolResult') return [];
+    const texts = message.content.filter((part) => part.type === 'text');
+    if (texts.reduce((sum, part) => sum + part.text.length, 0) <= toolLimit) return [];
+    const paths = [message.details?.stdoutOverflow, message.details?.stderrOverflow].filter((value): value is string => typeof value === 'string');
+    const diagnostics = typeof message.details?.diagnostics === 'string' ? message.details.diagnostics : '';
+    const note = '\n' + reference(contextEntryIds[start], 'Tool output shortened') + '\n' + [diagnostics, ...paths].join('\n').slice(0, 1500);
+    const limit = Math.floor((toolLimit - note.length) / texts.length);
+    let annotated = false;
+    const content = message.content.map((part) => {
+      if (part.type !== 'text') return part;
+      const text = excerpt(part.text, limit);
+      if (annotated || text === part.text) return { ...part, text };
+      annotated = true;
+      return { ...part, text: text + note };
     });
-    let replacement: NativeMessage = { ...message, content };
-    if (message.role === 'toolResult') {
-      const tool = tools.get(message.toolName);
-      // A replacement revision can never become the original for a second text prune.
-      let duplicate: string | undefined;
-      if (!message.isError && tool?.tags?.includes('readOnly')) {
-        let key = signatures.get(id);
-        if (key === undefined) {
-          const source = fresh ? message : log.originalMessage(id);
-          key =
-            source?.role === 'toolResult' &&
-            !source.details?.stdoutOverflow &&
-            !source.details?.stderrOverflow &&
-            messageTokens(source) > 256
-              ? createHash('sha256')
-                  .update(JSON.stringify([source.toolName, source.content, source.details]))
-                  .digest('hex')
-              : null;
-          if (signatures.size >= 4096) signatures.delete(signatures.keys().next().value!);
-          signatures.set(id, key);
-        }
-        if (key) {
-          duplicate = originals.get(key);
-          if (!duplicate) originals.set(key, id);
-        }
-      }
-      const text = parts.flatMap((part) => (part.type === 'text' ? [part.text] : [])).join('\n');
-      if (
-        fresh &&
-        (duplicate || (messageTokens(message) > options.toolTokens && text.length > options.toolTokens * 3))
-      ) {
-        const size = Math.max(128, Math.floor((options.toolTokens * 3) / 2));
-        const excerpt = duplicate ? '' : pruneText(text, size, tool?.pruneResult);
-        const outputPaths = [message.details?.stdoutOverflow, message.details?.stderrOverflow].filter(
-          (value): value is string => typeof value === 'string',
-        );
-        const source = duplicate ? 'Identical tool output from entry ' + duplicate : 'Tool output shortened';
-        replacement = {
-          ...message,
-          content: [
-            {
-              type: 'text',
-              text: [excerpt, reference(id, source), ...outputPaths].filter(Boolean).join('\n'),
-            },
-            ...content.filter((part) => part.type === 'image'),
-            ...imageReferences,
-          ],
-        };
-      }
-    }
-    if (
-      replacement.content === content &&
-      parts.length === content.length &&
-      parts.every((part, position) => part === content[position])
-    )
-      continue;
-    if (messageTokens(replacement) >= messageTokens(message) && !options.forceImages) continue;
-    replacements.push({ start: index, deleteCount: 1, insert: [replacement], preserveSource: true });
+    return [{ start, deleteCount: 1, preserveSource: true, insert: [{ ...message, content }] } satisfies ContextReplacement];
+  }).reverse();
+}
+
+/** Under pressure offload historical images; after image rejection offload the oldest remaining group. */
+export function offloadImages({ contextMessages, contextEntryIds }: SessionContext, includeLatest: boolean): ContextReplacement[] {
+  const latest = contextMessages.reduce((index, message, i) => message.role === 'user' ? i : index, -1);
+  const result: ContextReplacement[] = [];
+  for (const [start, message] of contextMessages.entries()) {
+    if (message.role === 'assistant' || typeof message.content === 'string' || (!includeLatest && start >= latest)) continue;
+    const parts = message.content;
+    const content = parts.map((part, index) => part.type === 'image'
+      ? { type: 'text' as const, text: reference(contextEntryIds[start], 'Image ' + (index + 1) + ' offloaded') }
+      : part);
+    if (content.every((part, index) => part === parts[index])) continue;
+    result.push({ start, deleteCount: 1, preserveSource: true, insert: [{ ...message, content }] });
+    if (includeLatest) break;
   }
-  if (!replacements.length) return false;
-  log.append({ type: 'context-replace', replacements: replacements.reverse() }, projection.leafId);
-  return true;
+  return result.reverse();
 }
