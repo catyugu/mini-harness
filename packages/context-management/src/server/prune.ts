@@ -16,8 +16,7 @@ function shortened(text: string, size: number) {
 function pruneText(text: string, size: number, customize?: (text: string, size: number) => string) {
   if (customize) {
     const excerpt = customize(text, size);
-    if (typeof excerpt !== 'string' || excerpt.length > size)
-      throw new Error('Invalid tool result excerpt');
+    if (typeof excerpt !== 'string' || excerpt.length > size) throw new Error('Invalid tool result excerpt');
     return excerpt;
   }
   return shortened(text, size);

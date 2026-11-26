@@ -91,12 +91,11 @@ export class ContextManagement {
     const pressure = budget !== undefined && occupancy.total >= budget * config.triggerRatio;
     let signatures = this.signatures.get(log);
     if (!signatures) this.signatures.set(log, (signatures = new Map()));
-    const pruned =
-      prune(input, projection, signatures, {
-        offload: pressure || manual || repair !== undefined,
-        forceImages: repair?.kind === 'image-limit',
-        toolTokens: Math.max(256, Math.min(4096, Math.floor((budget ?? 64_000) * (repair ? 0.03 : 0.09)))),
-      });
+    const pruned = prune(input, projection, signatures, {
+      offload: pressure || manual || repair !== undefined,
+      forceImages: repair?.kind === 'image-limit',
+      toolTokens: Math.max(256, Math.min(4096, Math.floor((budget ?? 64_000) * (repair ? 0.03 : 0.09)))),
+    });
     if (pruned) {
       projection = log.context();
       request = await input.assemble(projection);
@@ -130,17 +129,17 @@ export class ContextManagement {
         const retain = Math.max(
           1,
           Math.floor(
-            manual && occupancy.messages <= minimum
-              ? occupancy.messages * config.retainRatio
-              : minimum,
+            manual && occupancy.messages <= minimum ? occupancy.messages * config.retainRatio : minimum,
           ),
         );
         const force = repair || (budget !== undefined && occupancy.total > budget);
-        const checkpointAtStart = log.branch(projection.leafId).some(
-          (entry) =>
-            entry.id === projection.contextEntryIds[0] &&
-            (entry.type === 'context-replace' || entry.type === 'compaction'),
-        );
+        const checkpointAtStart = log
+          .branch(projection.leafId)
+          .some(
+            (entry) =>
+              entry.id === projection.contextEntryIds[0] &&
+              (entry.type === 'context-replace' || entry.type === 'compaction'),
+          );
         const cut = splitPoint(
           projection,
           this.meter,

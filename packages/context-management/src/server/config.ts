@@ -30,7 +30,12 @@ export const Config = defineConfig(Type.Object(fields, { additionalProperties: f
 });
 
 export function validateSettings(value: unknown): ContextSettings {
-  if (!value || typeof value !== 'object' || Array.isArray(value) || Object.keys(value).length !== Object.keys(fields).length)
+  if (
+    !value ||
+    typeof value !== 'object' ||
+    Array.isArray(value) ||
+    Object.keys(value).length !== Object.keys(fields).length
+  )
     throw new DomainError('invalid_input', 'Expected a context settings object');
   const config = Config['~standard'].validate(value);
   if (config instanceof Promise || config.issues)

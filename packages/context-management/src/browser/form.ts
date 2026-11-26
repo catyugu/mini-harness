@@ -20,11 +20,13 @@ export function settingsForm(
   error.className = 'hint form-error';
   error.setAttribute('role', 'alert');
   error.hidden = true;
-  const ratios = ([
-    ['triggerRatio', 'Trigger threshold (%)'],
-    ['targetRatio', 'Target threshold (%)'],
-    ['retainRatio', 'Retain ratio (%)'],
-  ] as const).map(([key, label]) => {
+  const ratios = (
+    [
+      ['triggerRatio', 'Trigger threshold (%)'],
+      ['targetRatio', 'Target threshold (%)'],
+      ['retainRatio', 'Retain ratio (%)'],
+    ] as const
+  ).map(([key, label]) => {
     const input = document.createElement('input');
     input.type = 'number';
     input.min = '0.1';
@@ -35,7 +37,12 @@ export function settingsForm(
   });
   const fields = document.createElement('fieldset');
   fields.className = 'context-fields';
-  fields.append(field('Auto compaction', auto), ...ratios.map(({ row }) => row), field('Summary model', model), save);
+  fields.append(
+    field('Auto compaction', auto),
+    ...ratios.map(({ row }) => row),
+    field('Summary model', model),
+    save,
+  );
   node.append(heading, fields, error);
   let current: ContextSettings;
   let editable = true;
@@ -46,7 +53,12 @@ export function settingsForm(
     const names = new Map(providers.map(({ id, name }) => [id, name]));
     model.replaceChildren(new Option('Current model', 'null'));
     for (const entry of models.filter(({ configured }) => configured)) {
-      model.add(new Option((names.get(entry.provider) ?? entry.provider) + ' / ' + entry.name, JSON.stringify({ provider: entry.provider, id: entry.id })));
+      model.add(
+        new Option(
+          (names.get(entry.provider) ?? entry.provider) + ' / ' + entry.name,
+          JSON.stringify({ provider: entry.provider, id: entry.id }),
+        ),
+      );
     }
     if (!Array.from(model.options).some(({ value }) => value === selected))
       model.add(new Option('Unavailable model', selected));

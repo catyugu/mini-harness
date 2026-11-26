@@ -12,7 +12,13 @@ import { SessionLog } from '../../sessions/src/log.ts';
 import type { SessionLogPort } from '@mini-harness/sessions/log-api';
 import type { MockProvider } from '../../../test/helpers/mock-provider.ts';
 
-const settings = { autoCompact: true, triggerRatio: 0.8, targetRatio: 0.6, retainRatio: 0.16, summaryModel: null };
+const settings = {
+  autoCompact: true,
+  triggerRatio: 0.8,
+  targetRatio: 0.6,
+  retainRatio: 0.16,
+  summaryModel: null,
+};
 const summary = (content?: string) => content?.startsWith('Write a continuation checkpoint');
 const withUsage = (text: string) => ({
   text,
