@@ -2,7 +2,7 @@
 
 Registers and resolves scoped tool definitions, validates arguments and dispatches actual invocations through Task Runtime.
 
-`harnessTools.register` accepts a definition or a resource-specific factory. `harnessTools.list({ scope, resourceId })` selects the effective registrations. `defineTool` infers argument types from the schema. The same definition can be invoked inline with `execute` or independently with `start` and a resource owner. The returned handle belongs to the single actual tool-call task; no wrapper task is created.
+`harnessTools.register` accepts a definition or a resource-specific factory. `harnessTools.list({ scope, resourceId })` selects the effective registrations. `defineTool` infers argument types from the schema. Invoke any selected or standalone definition through `startTool(tasks, tool, callId, args, options)` and await its handle for inline work. Independent work supplies its own resource owner and retention policy. Tool implementations receive `execute(args, context)`. The returned handle belongs to the single actual tool-call task; no wrapper task is created.
 
 A registration is no longer available once replaced or removed. Removal cancels and drains its active Task invocations. The registering provider fiber owns executing code. For independent factory calls, a consumer may explicitly supply its long-lived composition context instead of retaining a short-lived run context.
 

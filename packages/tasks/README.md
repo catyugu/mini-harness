@@ -2,8 +2,8 @@
 
 `harnessTasks` starts asynchronous work through a single execution primitive. Await the returned
 handle's result for inline execution, or retain its ID for independent work. The owner key determines
-which work is drained when a resource is deleted; `task:<id>` binds a child to an active task.
-The creator is descriptive, and the provider Cordis fiber controls the lifetime of executing code.
+which work is drained when a resource is deleted; `parentId` binds an inline child to an active task.
+Creator and resource annotations are ordinary metadata. The provider Cordis fiber controls the lifetime of executing code.
 
 Cancellation is cooperative. A task remains active until its executor and owned work have settled.
 `suspend` is a whole-task waiting point: it releases the caller-defined admission slot and reacquires
@@ -13,8 +13,7 @@ Waiting reuses the execution promise and observes the committed terminal state, 
 `subscribe` observes creation, updates, output and removal from the recent runtime view. Subscriptions
 are scoped to the consumer fiber. Output uses absolute UTF-8 byte cursors and channel names.
 `retain: false` removes a task after settlement; otherwise the runtime retains at most 256 recent
-terminal snapshots, subject also to a 16 MiB aggregate observation/output budget (without their result promises or executor closures). `projectResult` selects the
-serializable observation result independently of the actual JavaScript value returned by the handle.
+terminal snapshots, subject also to a 16 MiB aggregate observation/output budget (without their result promises or executor closures). `task.setResult` sets the serializable observation result independently of the actual JavaScript value returned by the handle.
 
 Resource domains may handle the Cordis `tasks/admit`, `tasks/record` and `tasks/history` events.
 Sessions owns long-term history in SessionLog, including retained background tasks and conversation runs.

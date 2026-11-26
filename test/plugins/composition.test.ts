@@ -1,3 +1,4 @@
+import { startTool } from '@mini-harness/tools/execution';
 import { isViewMessage } from '@mini-harness/sessions/message';
 import { conversationTools } from '@mini-harness/runs/tool-selection';
 import { expectPresent } from '../support/required.ts';
@@ -116,7 +117,7 @@ test('Shell delegates to a selected external process provider and still requires
       .find(({ name }) => name === 'sandbox_shell'),
     'shell tool',
   );
-  const execution = tool.execute('preview', { command: 'Preview command' });
+  const execution = startTool(app.runtime.plugins.ctx.harnessTasks, tool, 'preview', { command: 'Preview command' }).result;
   const pending = await waitUntil(
     () => request('/approvals'),
     ({ body }) => body.length === 1,
@@ -238,7 +239,7 @@ export const apply = (ctx, config) => {
       .find(({ name }) => name === 'scoped_greeting'),
     'scoped greeting tool',
   );
-  assert.match(JSON.stringify(await tool.execute('scope', {})), new RegExp(parent.id));
+  assert.match(JSON.stringify(await startTool(app.runtime.plugins.ctx.harnessTasks, tool, 'scope', {}).result), new RegExp(parent.id));
   assert.equal(
     await app.runtime.plugins.ctx.harnessRuns.send(parent.id, 'Run scoped greeting'),
     'Finished greeting',
@@ -326,7 +327,7 @@ export const apply = (ctx) => {
   assert.ok(list(child.id).some(({ name }) => name === 'custom'));
   assert.ok(!list(child.id).some(({ name }) => name === 'write_like'));
   assert.ok(list(parent.id).some(({ name }) => name === 'read'));
-  await assert.rejects(original.execute('old', { path: 'README.md' }), /no longer available/);
+  assert.throws(() => startTool(app.runtime.plugins.ctx.harnessTasks, original, 'old', { path: 'README.md' }), /no longer available/);
   await app.runtime.plugins.ctx.harnessRuns.send(child.id, 'Continue');
   const sent = expectPresent(mock.requests.at(-1), 'request with tools');
   assert.equal(JSON.stringify(sent.tools).includes('"name":"read"'), true);
@@ -337,7 +338,7 @@ export const apply = (ctx) => {
     list(child.id).find(({ name }) => name === 'custom'),
     'read-only registration',
   );
-  assert.match(JSON.stringify(await custom.execute('read', {})), /Authorized local read/);
+  assert.match(JSON.stringify(await startTool(app.runtime.plugins.ctx.harnessTasks, custom, 'read', {}).result), /Authorized local read/);
 });
 
 test('explicit Profile composition can replace the default tool policy without a provider whitelist', async (t) => {
@@ -440,7 +441,7 @@ export function apply(ctx) {
     'read tool',
   );
   assert.match(
-    JSON.stringify((await tool.execute('virtual', { path: 'virtual.txt' })).content),
+    JSON.stringify((await startTool(app.runtime.plugins.ctx.harnessTasks, tool, 'virtual', { path: 'virtual.txt' }).result).content),
     /Provided file content/,
   );
 });

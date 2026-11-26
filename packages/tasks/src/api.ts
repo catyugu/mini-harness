@@ -18,13 +18,13 @@ export type TaskData = null | boolean | number | string | TaskData[] | { [key: s
 /** Acquire a caller-defined execution slot. Release is called exactly once per acquisition. */
 export type TaskAdmission = (signal: AbortSignal) => Promise<() => void>;
 
-export interface TaskOptions<T = unknown> {
-  /** Resource lifetime key, or 'task:' followed by the ID of an active owning task. */
+export interface TaskOptions {
+  /** Opaque resource lifetime key. */
   owner: string;
-  creator?: string;
+  /** An inline child is drained before its parent settles. */
+  parentId?: string;
   name?: string;
   type?: string;
-  resourceId?: string;
   metadata?: Readonly<Record<string, TaskData>>;
   /** The fiber whose code/resources execute the work, defaulting to the submitting caller. */
   provider?: Context;
@@ -32,17 +32,14 @@ export interface TaskOptions<T = unknown> {
   acquire?: TaskAdmission;
   /** Inline callers can discard runtime history after terminal observation and result delivery. */
   retain?: boolean;
-  /** Select a serializable result for subsequent observation. The handle always returns the original value. */
-  projectResult?(result: T): TaskData;
 }
 
 export interface TaskSnapshot {
   id: string;
   owner: string;
-  creator?: string;
+  parentId?: string;
   name?: string;
   type?: string;
-  resourceId?: string;
   metadata?: Readonly<Record<string, TaskData>>;
   state: TaskState;
   createdAt: string;
@@ -71,8 +68,11 @@ export interface TaskHandle<T = unknown> {
 
 export interface TaskContext {
   readonly id: string;
+  readonly owner: string;
   readonly signal: AbortSignal;
   update(progress: TaskData): void;
+  /** Set a serializable observation result independently of the executor's return value. */
+  setResult(result: TaskData): void;
   write(output: string, channel?: string): void;
   /** Call only at a whole-task wait point; reacquires admission before returning or throwing. */
   suspend<T>(wait: (signal: AbortSignal) => Promise<T>): Promise<T>;
@@ -98,7 +98,7 @@ export interface TaskHistoryRecord {
 }
 
 export interface TaskPort {
-  start<T>(options: TaskOptions<T>, execute: (context: TaskContext) => Promise<T>): TaskHandle<T>;
+  start<T>(options: TaskOptions, execute: (context: TaskContext) => Promise<T>): TaskHandle<T>;
   get(id: string): TaskSnapshot | undefined;
   /** Active tasks and bounded recent history; older durable records remain queryable by ID. */
   list(owner?: string): TaskSnapshot[];

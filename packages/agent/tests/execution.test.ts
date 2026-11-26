@@ -91,8 +91,17 @@ function fixture(
   ctx.provide('harnessPrompt', { build: async () => 'Fixture', register: () => () => {} });
   if (retryModel) ctx.on('agent/model-retry', retryModel);
   ctx.provide('harnessAgent', new AgentLoop(() => 8));
-  const agent = new SessionRun(sessions);
+  const sessionRun = new SessionRun(sessions);
   const record = sessions.create();
+  type Prompt = Parameters<SessionRun['prompt']>;
+  const agent = {
+    prompt(ctx: Prompt[0], record: Prompt[1], text: Prompt[2], emit: Prompt[3], options: Omit<Prompt[4], 'task'>) {
+      return runtime.start(
+        { owner: 'session:' + record.id, signal: options.signal, retain: false },
+        (task) => sessionRun.prompt(ctx, record, text, emit, { ...options, signal: task.signal, task }),
+      ).result;
+    },
+  };
   return { agent, ctx, sessions, tools, record };
 }
 
@@ -324,7 +333,7 @@ test('cancellation closes the whole tool batch durably and never executes later 
       name: 'first',
       description: 'First',
       parameters: Type.Object({}),
-      async execute(_id, _args, signal) {
+      async execute(_args, { signal }) {
         ranFirst++;
         controller.abort(new Error('Stopped by test'));
         signal?.throwIfAborted();
@@ -636,7 +645,7 @@ test(
         description: 'Parallel',
         parameters: Type.Object({ wait: Type.Boolean() }),
         isConcurrencySafe: ({ wait }) => typeof wait === 'boolean',
-        async execute(id, { wait }, signal) {
+        async execute({ wait }, { callId: id, signal }) {
           started.push(id);
           if (wait) {
             await Promise.race([
@@ -655,7 +664,7 @@ test(
         name: 'serial',
         description: 'Serial',
         parameters: Type.Object({}),
-        async execute(id) {
+        async execute(_args, { callId: id }) {
           started.push(id);
           return { content: [] };
         },

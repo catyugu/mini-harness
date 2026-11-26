@@ -1,9 +1,8 @@
 import type { Context } from 'mini-harness/cordis';
 import { type ToolDefinition, type ToolInvocation, type ToolResult, type ToolUpdate } from './api.ts';
 import type { TaskContext, TaskHandle, TaskPort } from '@mini-harness/tasks/api';
-import { startTool } from './invocation.ts';
-export { startTool } from './invocation.ts';
-import { Check } from 'typebox/value';
+import { invokeTool, prepareTool } from './invocation.ts';
+export { startTool, toolAvailable } from './invocation.ts';
 import type {
   LlmRequest,
   ModelRequestContent,
@@ -73,7 +72,14 @@ export const executeTools: ToolExecutorPort['execute'] = async (calls, tools, ex
     if (failure) break;
     const tool = tools.get(call.name);
     let invalid = call.argumentsError;
-    if (!invalid && tool && !Check(tool.parameters, call.arguments)) invalid = 'Schema mismatch';
+    let prepared: ReturnType<typeof prepareTool> | undefined;
+    if (!invalid && tool) {
+      try {
+        prepared = prepareTool(tool, call.arguments);
+      } catch {
+        invalid = 'Schema mismatch';
+      }
+    }
     let parallel = false;
     if (!invalid && tool?.isConcurrencySafe) {
       try {
@@ -85,7 +91,7 @@ export const executeTools: ToolExecutorPort['execute'] = async (calls, tools, ex
     const run = async () => {
       const rejection = execution.start?.(call);
       if (rejection) return toolFailure(call, rejection.reason, rejection.outcome);
-      return executeTool(call, tool, execution, batchSignal, invalid);
+      return executeTool(call, tool, prepared, execution, batchSignal, invalid);
     };
     if (parallel) {
       start(run);
@@ -117,6 +123,7 @@ export const toolFailure = (
 async function executeTool(
   call: ToolCallPart,
   tool: ToolDefinition | undefined,
+  prepared: ReturnType<typeof prepareTool> | undefined,
   execution: Parameters<ToolExecutorPort['execute']>[2],
   signal: AbortSignal,
   invalid?: string,
@@ -133,16 +140,18 @@ async function executeTool(
     if (!tool) throw new Error('Tool is no longer available: ' + call.name);
     if (invalid) throw new Error('Invalid arguments for ' + call.name + ': ' + invalid);
     const background = execution.background?.(call);
-    task = startTool(
+    task = invokeTool(
       execution.tasks,
-      tool,
+      background?.context ? prepareTool(tool, call.arguments, background.context) : prepared!,
       call.id,
-      call.arguments,
       background
         ? {
             ...background,
             ownerTask: undefined,
-            creator: execution.ownerTask?.id,
+            metadata: {
+              ...background.metadata,
+              ...(execution.ownerTask && { creator: execution.ownerTask.id }),
+            },
             resourceId: background.resourceId ?? execution.resourceId,
             retain: true,
           }

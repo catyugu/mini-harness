@@ -126,7 +126,7 @@ export class Delegation {
       { message: request.task, model },
       {
         provider: this.provider,
-        creator,
+        metadata: creator ? { creator } : undefined,
         acquire: (cancellation) => this.semaphore.acquire(cancellation),
       },
     );

@@ -30,8 +30,8 @@ export function setup(ctx: Context) {
         model: Type.Optional(Type.String({ maxLength: 160 })),
       }),
       isConcurrencySafe: () => true,
-      execute: async (_callId, args, signal, _update, context) => {
-        const child = delegation.delegate(id, args, signal, context?.task.id);
+      execute: async (args, { signal, task }) => {
+        const child = delegation.delegate(id, args, signal, task.id);
         return { content: [{ type: 'text', text: JSON.stringify(child) }], details: child };
       },
     });

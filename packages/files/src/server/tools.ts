@@ -49,7 +49,7 @@ export function fileTools(cwd: string, access: () => RootedFileAccess): ToolDefi
         { path: pathSchema, offset: Type.Optional(Type.Integer({ minimum: 1 })), limit: limitSchema },
         { additionalProperties: false },
       ),
-      async execute(_id, { path, offset = 1, limit = 2000 }, signal) {
+      async execute({ path, offset = 1, limit = 2000 }, { signal }) {
         const files = access();
         signal?.throwIfAborted();
         const bytes = await readLimited(files, path, undefined, signal).catch((error: unknown) => {
@@ -88,7 +88,7 @@ export function fileTools(cwd: string, access: () => RootedFileAccess): ToolDefi
         { path: pathSchema, content: Type.String({ maxLength: 2 * 1024 * 1024 }) },
         { additionalProperties: false },
       ),
-      async execute(_id, { path, content }, signal) {
+      async execute({ path, content }, { signal }) {
         const files = access();
         signal?.throwIfAborted();
         await files.mkdir(dirname(resolve(cwd, path)));
@@ -119,7 +119,7 @@ export function fileTools(cwd: string, access: () => RootedFileAccess): ToolDefi
         },
         { additionalProperties: false },
       ),
-      async execute(_id, { path, edits }, signal) {
+      async execute({ path, edits }, { signal }) {
         const files = access();
         signal?.throwIfAborted();
         let text = textFile(await readLimited(files, path, undefined, signal));
@@ -145,7 +145,7 @@ export function fileTools(cwd: string, access: () => RootedFileAccess): ToolDefi
         { path: Type.Optional(pathSchema), limit: limitSchema },
         { additionalProperties: false },
       ),
-      async execute(_id, { path = '.', limit = 2000 }, signal) {
+      async execute({ path = '.', limit = 2000 }, { signal }) {
         const files = access();
         signal?.throwIfAborted();
         const entries = await files.entries(resolve(cwd, path));
@@ -172,7 +172,7 @@ export function fileTools(cwd: string, access: () => RootedFileAccess): ToolDefi
         },
         { additionalProperties: false },
       ),
-      async execute(_id, { pattern, path = '.', limit = 1000 }, signal) {
+      async execute({ pattern, path = '.', limit = 1000 }, { signal }) {
         const files = access();
         signal?.throwIfAborted();
         const matches = await new WorkspaceSearch(cwd, files).find(pattern, path, limit, signal);
@@ -198,7 +198,7 @@ export function fileTools(cwd: string, access: () => RootedFileAccess): ToolDefi
         },
         { additionalProperties: false },
       ),
-      async execute(_id, input, signal) {
+      async execute(input, { signal }) {
         const files = access();
         signal?.throwIfAborted();
         const { matches, limited } = await new WorkspaceSearch(cwd, files).grep(input, signal);

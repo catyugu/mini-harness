@@ -229,7 +229,7 @@ export const apply = (ctx) => {
     }) : undefined, { prepend: true });
     ctx.on("agent/model-retry", ({ error, attempt }) => error === 'transient transport failure' && attempt === 1 ? {} : undefined);
     ctx.effect(() => ctx.harnessTools.register({ name: 'check', description: 'Check mode', parameters: { type: 'object' },
-      async execute(_id, { mode }) {
+      async execute({ mode }) {
         if (mode !== 'allowed') throw new Error('denied input');
         return { content: [{ type: 'text', text: 'Value' }] };
       }
@@ -331,7 +331,7 @@ test('a failed model-visible transform preserves the execution and never sends t
 export const inject = ["harnessTools"];
 export const apply = (ctx) => {
     ctx.effect(() => ctx.harnessTools.register({ name: 'sensitive', description: 'Read value', parameters: { type: 'object' },
-      async execute(_id, _args, _signal, update) {
+      async execute(_args, { update }) {
         update({ content: [{ type: 'text', text: 'private progress' }] });
         return { content: [{ type: 'text', text: 'private value' }] };
       }

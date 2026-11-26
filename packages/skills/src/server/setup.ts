@@ -60,7 +60,7 @@ export function setup(ctx: Context) {
             { name: Type.String({ minLength: 1, maxLength: 64 }) },
             { additionalProperties: false },
           ),
-          async execute(_callId, { name }, signal) {
+          async execute({ name }, { signal }) {
             signal?.throwIfAborted();
             const skill = await loader.load(sessions.workspacePath(sessionId), name);
             signal?.throwIfAborted();

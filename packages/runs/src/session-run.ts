@@ -1,3 +1,4 @@
+import { toolAvailable } from '@mini-harness/tools/execution';
 import { displayMessage } from '@mini-harness/sessions/projection';
 import { conversationTools } from './tool-selection.ts';
 import type { Context } from 'mini-harness/cordis';
@@ -55,7 +56,7 @@ const textOf = (message: NativeAssistantMessage) =>
     .join('');
 interface SessionPrompt {
   signal: AbortSignal;
-  task?: TaskContext;
+  task: TaskContext;
   source?: InputSource;
   submissionId?: string;
   choice?: ModelChoice;
@@ -300,7 +301,7 @@ export class SessionRun {
           step,
           { systemPrompt, messages: current.contextMessages, thinkingLevel: current.thinkingLevel },
           (content) => {
-            for (const [name, tool] of advertisedTools) if (!tool.available()) advertisedTools.delete(name);
+            for (const [name, tool] of advertisedTools) if (!toolAvailable(tool)) advertisedTools.delete(name);
             const available = toolMetadata
               .filter(({ name }) => advertisedTools.has(name))
               .map(({ name, description, parameters }) => ({ name, description, parameters }));

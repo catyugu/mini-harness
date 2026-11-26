@@ -1,6 +1,6 @@
 # Agent
 
-`harnessAgent.run(ctx, input)` executes model turns, streams text and hands tool calls to a Tool Executor. Pass a model request and tool definitions for an in-memory transcript. A conversation can supply a fresh request at each turn, consume events and persist results through Sessions.
+`harnessAgent.run(ctx, input)` executes model turns, streams text and hands tool calls to a Tool Executor. Submit a task explicitly and pass its TaskContext, a model request and tool definitions for an in-memory transcript. A conversation can supply a fresh request at each turn, consume events and persist results through Sessions.
 
 `harnessToolExecutor` presents tool definitions to the model, interprets its response and executes calls using the strategy selected by the caller. The Tools package supplies the default executor. Replacements may reuse `executeTools` from `mini-harness/tools/execution` or deliver their own results directly. The Agent checks tool call and result identities before the next model request.
 

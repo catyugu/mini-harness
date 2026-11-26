@@ -1,3 +1,4 @@
+import { startTool } from '@mini-harness/tools/execution';
 import { isViewMessage } from '@mini-harness/sessions/message';
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -187,7 +188,7 @@ test(
       'delegate tool',
     );
     const start = (task: string) =>
-      delegate.execute(task, { task, provider: 'local-mock', model: 'mock-model' });
+      startTool(app.runtime.plugins.ctx.harnessTasks, delegate, task, { task, provider: 'local-mock', model: 'mock-model' }).result;
     const first = await start('First child');
     assert.ok(entered[0] && entered[1]);
     await entered[0].promise;

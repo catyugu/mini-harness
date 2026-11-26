@@ -1,3 +1,4 @@
+import { startTool, toolAvailable } from '../src/execution.ts';
 import { Context } from 'mini-harness/cordis';
 import toolsPlugin from '../src/manifest.ts';
 import { createScopeKey } from '@mini-harness/plugin-api/scopes';
@@ -12,7 +13,8 @@ import { TaskRuntime } from '@mini-harness/tasks/runtime';
 test('scoped tools inherit locally and disposal aborts and drains active execution', async () => {
   const workspace = createScopeKey();
   const child = createScopeKey(workspace);
-  const registry = new ToolRegistry(new TaskRuntime());
+  const tasks = new TaskRuntime();
+  const registry = new ToolRegistry(tasks);
   const make = (text: string) =>
     defineTool({
       name: 'inspect',
@@ -36,7 +38,7 @@ test('scoped tools inherit locally and disposal aborts and drains active executi
       name: 'wait',
       description: 'Wait',
       parameters: Type.Object({}),
-      async execute(_id, _args, signal) {
+      async execute(_args, { signal }) {
         entered();
         await new Promise<void>((_resolve, reject) =>
           signal?.addEventListener('abort', () => reject(signal.reason), { once: true }),
@@ -45,10 +47,12 @@ test('scoped tools inherit locally and disposal aborts and drains active executi
       },
     }),
   );
-  const pending = expectPresent(
-    registry.list({ scope: child }).find(({ name }) => name === 'wait'),
-    'wait tool',
-  ).execute('call', {});
+  const pending = startTool(
+    tasks,
+    expectPresent(registry.list({ scope: child }).find(({ name }) => name === 'wait'), 'wait tool'),
+    'call',
+    {},
+  ).result;
   const rejected = assert.rejects(pending, /no longer available/);
   await ready;
   await dispose();
@@ -62,7 +66,8 @@ test('scoped tools inherit locally and disposal aborts and drains active executi
 test('a scoped replacement invalidates existing leases and removal restores inheritance', async () => {
   const parent = createScopeKey();
   const child = createScopeKey(parent);
-  const registry = new ToolRegistry(new TaskRuntime());
+  const tasks = new TaskRuntime();
+  const registry = new ToolRegistry(tasks);
   const make = (text: string) =>
     defineTool({
       name: 'inspect',
@@ -76,13 +81,13 @@ test('a scoped replacement invalidates existing leases and removal restores inhe
   const original = registry.list({ scope: child })[0];
   const remove = registry.register(make('scoped'), { scope: parent });
   assert.throws(() => registry.register(make('duplicate'), { scope: parent }), /Duplicate entry in scope/);
-  assert.equal(original.available(), false);
-  await assert.rejects(original.execute('old', {}), /no longer available/);
+  assert.equal(toolAvailable(original), false);
+  assert.throws(() => startTool(tasks, original, 'old', {}), /no longer available/);
   const replacement = registry.list({ scope: child })[0];
-  assert.deepEqual((await replacement.execute('call', {})).content, [{ type: 'text', text: 'scoped' }]);
+  assert.deepEqual((await startTool(tasks, replacement, 'call', {}).result).content, [{ type: 'text', text: 'scoped' }]);
   assert.equal(registry.list()[0].description, 'application');
   await remove();
-  await assert.rejects(replacement.execute('disposed', {}), /no longer available/);
+  assert.throws(() => startTool(tasks, replacement, 'disposed', {}), /no longer available/);
   assert.equal(registry.list({ scope: child })[0].description, 'application');
 });
 
@@ -104,7 +109,7 @@ test('Tools activates and registers a definition without Sessions or a policy pr
       }),
     );
     try {
-      assert.deepEqual((await tools.list()[0].execute('call', {})).content, [
+      assert.deepEqual((await startTool(ctx.harnessTasks, tools.list()[0], 'call', {}).result).content, [
         { type: 'text', text: 'ready' },
       ]);
     } finally {
@@ -131,8 +136,8 @@ test('a registered tool uses one task for inline and independent background call
       name: 'work',
       description: 'Work',
       parameters: Type.Object({ hold: Type.Boolean() }),
-      async execute(_id, args, _signal, _update, context) {
-        assert.ok(context);
+      async execute(args, { task }) {
+        assert.ok(task);
         if (args.hold) {
           ready();
           await gate;
@@ -142,9 +147,9 @@ test('a registered tool uses one task for inline and independent background call
     }),
   );
   const tool = registry.list({ resourceId: 'session' })[0];
-  assert.equal((await tool.execute('inline', { hold: false })).content[0].type, 'text');
+  assert.equal((await startTool(tasks, tool, 'inline', { hold: false }).result).content[0].type, 'text');
   assert.equal(tasks.list().length, 0);
-  const background = tool.start('background', { hold: true }, { retain: true });
+  const background = startTool(tasks, tool, 'background', { hold: true }, { retain: true });
   await entered;
   assert.equal(tasks.list('session:session').length, 1);
   assert.equal(tasks.get(background.id)?.state, 'running');

@@ -137,8 +137,8 @@ export class Runs implements RunPort {
   }
 
   taskChanged({ type, task }: TaskEvent) {
-    if (task.type !== 'agent-run' || !task.resourceId) return;
-    const id = task.resourceId;
+    if (task.type !== 'agent-run' || !task.owner.startsWith('session:')) return;
+    const id = task.owner.slice(8);
     const activity = this.work.get(id);
     if (!activity) return;
     if (type === 'created') {
@@ -184,7 +184,6 @@ export class Runs implements RunPort {
       thinkingLevel,
       revision,
       acquire,
-      creator,
       metadata,
       provider,
     }: RunOptions,
@@ -216,18 +215,15 @@ export class Runs implements RunPort {
       const task = this.tasks.start(
         {
           owner: 'session:' + id,
-          resourceId: id,
           type: 'agent-run',
-          creator,
           metadata,
           provider,
           signal,
           acquire,
-          projectResult: (answer) => answer,
         },
         async (task) => {
           try {
-            return await this.withAgentContext(id, activity, task.signal, (ctx, signal) =>
+            const answer = await this.withAgentContext(id, activity, task.signal, (ctx, signal) =>
               this.sessionRun.prompt(ctx, record, prepared.text, publish, {
                 fallback,
                 beginSubmission: () => {
@@ -248,6 +244,8 @@ export class Runs implements RunPort {
                 },
               }),
             );
+            task.setResult(answer);
+            return answer;
           } catch (error) {
             task.signal.throwIfAborted();
             throw error;
@@ -455,7 +453,7 @@ export class Runs implements RunPort {
     const activity = this.reserve(id);
     try {
       const task = this.tasks.start(
-        { owner: 'session:' + id, resourceId: id, type: 'compaction' },
+        { owner: 'session:' + id, type: 'compaction' },
         ({ signal }) =>
           this.withAgentContext(id, activity, signal, (ctx, signal) =>
             this.sessionRun.compact(ctx, id, signal),

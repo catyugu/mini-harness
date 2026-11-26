@@ -12,7 +12,7 @@ export interface RunInput {
   attachments?: Attachment[];
 }
 
-export type RunSubmission = Pick<TaskOptions, 'signal' | 'acquire' | 'creator' | 'metadata' | 'provider'>;
+export type RunSubmission = Pick<TaskOptions, 'signal' | 'acquire' | 'metadata' | 'provider'>;
 
 export interface RunPort {
   readonly size: number;

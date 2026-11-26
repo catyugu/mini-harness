@@ -1,5 +1,4 @@
 import type { Context } from 'mini-harness/cordis';
-import type { TaskContext } from '@mini-harness/tasks/api';
 import { isDeepStrictEqual } from 'node:util';
 import {
   validateNativeMessage,
@@ -14,15 +13,7 @@ export class AgentLoop implements AgentPort {
   constructor(private readonly limit: () => number) {}
 
   async run(ctx: Context, input: AgentRun) {
-    if (input.task) return this.loop(ctx, input, input.task);
-    return ctx.harnessTasks.start(
-      { owner: 'agent', type: 'agent-run', signal: input.signal, retain: false },
-      (task) => this.loop(ctx, { ...input, signal: task.signal }, task),
-    ).result;
-  }
-
-  private async loop(ctx: Context, input: AgentRun, task: TaskContext) {
-    const { signal } = input;
+    const { signal, task } = input;
     const llm = ctx.get('harnessLlm');
     if (!llm) throw new Error('Required service is unavailable: harnessLlm');
     const maxTurns = this.limit();

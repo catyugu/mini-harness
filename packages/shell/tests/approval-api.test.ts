@@ -1,3 +1,4 @@
+import { startTool } from '@mini-harness/tools/execution';
 import { isViewMessage } from '@mini-harness/sessions/message';
 import { conversationTools } from '@mini-harness/runs/tool-selection';
 import { expectPresent } from '../../../test/support/required.ts';
@@ -295,7 +296,9 @@ test('independent shell calls use one task, retain output channels and do not du
     .list({ resourceId: session.id, scope: ctx.harnessSessions.runScope(session.id) })
     .find(({ name }) => name === 'sandbox_shell');
   assert.ok(tool);
-  const handle = tool.start(
+  const handle = startTool(
+    ctx.harnessTasks,
+    tool,
     'background-shell',
     { command: 'echo task-output' },
     { owner: 'session:' + session.id, retain: true },

@@ -1,5 +1,5 @@
 import type { Context } from 'mini-harness/cordis';
-import type { TaskContext, TaskData, TaskHandle, TaskOptions } from '@mini-harness/tasks/api';
+import type { TaskContext, TaskData, TaskOptions } from '@mini-harness/tasks/api';
 import type { ScopeKey } from '@mini-harness/plugin-api/scopes';
 import type { Static, TSchema } from 'typebox';
 import type { TextPart, ImagePart, NativeToolMessage } from '@mini-harness/llm/api';
@@ -33,13 +33,7 @@ export interface ToolDefinition<Arguments = Record<string, any>> extends ToolSch
   isConcurrencySafe?(args: Arguments): boolean;
   /** Optional compact serializable projection for retained calls. */
   projectResult?(result: ToolResult): TaskData;
-  execute(
-    callId: string,
-    args: Arguments,
-    signal?: AbortSignal,
-    onUpdate?: (update: ToolUpdate) => void,
-    context?: ToolContext,
-  ): Promise<ToolResult>;
+  execute(args: Arguments, context: ToolContext): Promise<ToolResult>;
 }
 
 export interface ToolFactory {
@@ -54,15 +48,15 @@ export interface ToolSelection {
 }
 
 export interface ToolContext {
+  callId: string;
   task: TaskContext;
+  signal: AbortSignal;
+  update(update: ToolUpdate): void;
   /** Present for inline calls made by another task. */
   owner?: TaskContext;
 }
 
-export interface ToolInvocation
-  extends Partial<
-    Pick<TaskOptions<ToolResult>, 'owner' | 'creator' | 'signal' | 'retain' | 'projectResult'>
-  > {
+export interface ToolInvocation extends Partial<Pick<TaskOptions, 'owner' | 'signal' | 'retain' | 'metadata'>> {
   resourceId?: string;
   ownerTask?: TaskContext;
   /** Resolve a factory against a long-lived composition when starting independent work. */
@@ -70,14 +64,9 @@ export interface ToolInvocation
   onUpdate?(update: ToolUpdate): void;
 }
 
-export interface RegisteredTool extends ToolDefinition {
-  start(callId: string, args: Record<string, unknown>, options?: ToolInvocation): TaskHandle<ToolResult>;
-  available(): boolean;
-}
-
 export interface ToolPort {
   register(tool: ToolDefinition | ToolFactory): () => Promise<void>;
-  list(selection?: ToolSelection): RegisteredTool[];
+  list(selection?: ToolSelection): ToolDefinition[];
 }
 
 export function isToolContent(value: unknown): value is ToolResult['content'] {

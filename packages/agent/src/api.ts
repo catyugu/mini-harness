@@ -37,7 +37,7 @@ export type AgentEvent =
 
 export type AgentRun = {
   signal: AbortSignal;
-  task?: TaskContext;
+  task: TaskContext;
   onEvent?(event: AgentEvent): void;
   retry?(failure: ModelFailure): ModelRetry | undefined | Promise<ModelRetry | undefined>;
 } & (

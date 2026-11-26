@@ -3,17 +3,16 @@ import { toolNamePattern } from '@mini-harness/llm/vocabulary';
 import { Service, type Context } from 'mini-harness/cordis';
 import { randomUUID } from 'node:crypto';
 import { terminal, type TaskPort } from '@mini-harness/tasks/api';
-import { invokeTool } from './invocation.ts';
+import { bindTool } from './invocation.ts';
 import {
   type ToolDefinition,
-  type RegisteredTool,
   type ToolPort,
   type ToolFactory,
   type ToolSelection,
 } from './api.ts';
 interface ToolRegistration {
   name: string;
-  resolve(selection: ToolSelection, caller?: Context): RegisteredTool;
+  resolve(selection: ToolSelection, caller?: Context): ToolDefinition;
   visible(resourceId?: string): boolean;
 }
 
@@ -52,43 +51,18 @@ export class ToolRegistry {
       visible: (resourceId) =>
         !expired() && (!factory || (resourceId !== undefined && (factory.visible?.(resourceId) ?? true))),
       resolve(selection, caller) {
-        const tool = factory
-          ? factory.resolve(selection.resourceId!, caller)
-          : (definition as ToolDefinition);
-        if (tool.name !== name) throw new Error('Tool binding changed its registered name: ' + name);
-        const available = () => registry.selected(name, selection) === entry;
-        const start: RegisteredTool['start'] = (callId, args, options = {}) => {
-          if (!available()) throw unavailable();
-          const resolved =
-            factory && options.context ? factory.resolve(selection.resourceId!, options.context) : tool;
-          if (resolved.name !== name) throw new Error('Tool binding changed its registered name: ' + name);
-          return invokeTool(
-            registry.tasks,
-            {
-              ...resolved,
-              execute(...args) {
-                if (!available()) throw unavailable();
-                return resolved.execute(...args);
-              },
-            },
-            callId,
-            args,
-            {
-              ...options,
-              resourceId: selection.resourceId ?? options.resourceId,
-              provider: owner,
-              registration,
-            },
-          );
+        const resolve = (context?: Context) => {
+          const tool = factory ? factory.resolve(selection.resourceId!, context ?? caller) : (definition as ToolDefinition);
+          if (tool.name !== name) throw new Error('Tool binding changed its registered name: ' + name);
+          return tool;
         };
-        return {
-          ...tool,
-          available,
-          start,
-          async execute(callId, args, signal, update) {
-            return start(callId, args, { signal, onUpdate: update }).result;
-          },
-        };
+        return bindTool(resolve(), {
+          provider: owner,
+          registration,
+          resourceId: selection.resourceId,
+          available: () => registry.selected(name, selection) === entry,
+          resolve,
+        });
       },
     };
     const remove = this.tools.add(scope, name, entry);
@@ -119,7 +93,7 @@ export class ToolRegistry {
         .reverse()
         .flatMap((layer) => [...layer.keys()]),
     );
-    const available: RegisteredTool[] = [];
+    const available: ToolDefinition[] = [];
     for (const name of names) {
       const selected = this.selected(name, selection);
       if (selected) available.push(selected.resolve(selection, caller));

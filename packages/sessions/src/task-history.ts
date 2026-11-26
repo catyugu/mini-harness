@@ -14,7 +14,7 @@ export function bindTaskHistory(ctx: Context, sessions: SessionStore) {
   });
   ctx.on('tasks/record', ({ task, output }) => {
     const id = sessionId(task.owner);
-    if (id === undefined) return;
+    if (id === undefined || task.parentId) return;
     const run = ctx.bail('sessions/task-details', id, task);
     // The assistant answer already exists in the message log.
     sessions.log(id).append({ type: 'task', task: run ? { ...task, result: undefined } : task, output, run });

@@ -26,7 +26,6 @@ const describe = (error: unknown) => (error instanceof Error ? error.message : S
 const clone = <T>(value: T): T => structuredClone(value);
 // Observation data crosses the JSON persistence boundary, unlike handle results.
 const jsonData = <T>(value: T): T => (value === undefined ? value : JSON.parse(JSON.stringify(value)));
-const taskOwner = (id: string) => 'task:' + id;
 
 export class TaskRuntime implements TaskPort {
   private readonly entries = new Map<string, Entry>();
@@ -45,7 +44,7 @@ export class TaskRuntime implements TaskPort {
   service(): TaskPort {
     const runtime = this;
     return Service.track<TaskPort>({
-      start<T>(options: TaskOptions<T>, execute: (context: TaskContext) => Promise<T>) {
+      start<T>(options: TaskOptions, execute: (context: TaskContext) => Promise<T>) {
         return runtime.start({ ...options, provider: options.provider ?? Service.caller(this) }, execute);
       },
       get: runtime.get.bind(runtime),
@@ -72,13 +71,13 @@ export class TaskRuntime implements TaskPort {
     });
   }
 
-  start<T>(options: TaskOptions<T>, execute: (context: TaskContext) => Promise<T>): TaskHandle<T> {
+  start<T>(options: TaskOptions, execute: (context: TaskContext) => Promise<T>): TaskHandle<T> {
     if (this.closing) throw new Error('Task runtime is closing');
-    const { signal: lifetime, provider, acquire, retain = true, projectResult, ...metadata } = options;
+    const { signal: lifetime, provider, acquire, retain = true, ...metadata } = options;
     if (this.removing.has(options.owner)) throw new Error('Task owner has been removed');
     this.domain.admit?.(options.owner);
-    const parent = options.owner.startsWith('task:') ? this.entries.get(options.owner.slice(5)) : undefined;
-    if (options.owner.startsWith('task:') && (!parent || parent.finishing || terminal(parent.snapshot.state)))
+    const parent = options.parentId ? this.entries.get(options.parentId) : undefined;
+    if (options.parentId && (!parent || parent.finishing || terminal(parent.snapshot.state)))
       throw new Error('Task owner has ended');
     const controller = new AbortController();
     const signals = [controller.signal, lifetime, provider?.fiber.signal, parent?.handle?.signal].filter(
@@ -122,10 +121,15 @@ export class TaskRuntime implements TaskPort {
       transition({ state: 'running', startedAt: snapshot.startedAt ?? new Date().toISOString() });
     };
     let admissionFailure: { error: unknown } | undefined;
+    let projected: TaskSnapshot['result'];
     const context: TaskContext = {
       id: snapshot.id,
+      owner: snapshot.owner,
       signal,
       update: (progress) => update({ progress: jsonData(progress) }),
+      setResult: (result) => {
+        projected = jsonData(result);
+      },
       write: (text, channel = 'log') => {
         if (terminal(snapshot.state) || !text) return;
         entry.output.write(text, channel);
@@ -162,12 +166,10 @@ export class TaskRuntime implements TaskPort {
     const run = async () => {
       let value: T;
       let failure: { error: unknown } | undefined;
-      let projected: TaskSnapshot['result'];
       try {
         await enter();
         signal.throwIfAborted();
         value = await execute(context);
-        if (!signal.aborted && projectResult) projected = jsonData(projectResult(value));
       } catch (error) {
         failure = { error };
       }
@@ -177,8 +179,8 @@ export class TaskRuntime implements TaskPort {
       } catch (error) {
         failure ??= { error };
       }
-      await this.drainOwned(
-        taskOwner(snapshot.id),
+      await this.drain(
+        this.children(snapshot.id),
         signal.aborted ? signal.reason : new Error('Task owner ended'),
       );
       failure = admissionFailure ?? failure;
@@ -330,15 +332,23 @@ export class TaskRuntime implements TaskPort {
     return [...this.entries.values()].filter(({ snapshot }) => snapshot.owner === owner);
   }
 
-  private async drainOwned(owner: string, reason?: unknown) {
-    const handles = this.owned(owner).flatMap(({ handle }) => (handle ? [handle] : []));
+  private children(id: string) {
+    return [...this.entries.values()].filter(({ snapshot }) => snapshot.parentId === id);
+  }
+
+  private async drain(entries: Entry[], reason?: unknown) {
+    const handles = entries.flatMap(({ handle }) => (handle ? [handle] : []));
     for (const handle of handles) handle.cancel(reason);
     await Promise.allSettled(handles.map(({ result }) => result));
   }
 
   private forgetTree(entry: Entry) {
     // All descendants have settled before an owning task can reach terminal state.
-    for (const child of this.owned(taskOwner(entry.snapshot.id))) this.forgetTree(child);
+    for (const child of this.children(entry.snapshot.id)) this.forgetTree(child);
+    this.forget(entry);
+  }
+
+  private forget(entry: Entry) {
     if (this.entries.delete(entry.snapshot.id)) this.notify('deleted', entry.snapshot);
   }
 
@@ -349,11 +359,9 @@ export class TaskRuntime implements TaskPort {
     let remaining = history.length;
     for (const entry of history) {
       if (remaining <= 256 && bytes <= 16 * 1024 * 1024) break;
-      if (!this.entries.has(entry.snapshot.id)) continue;
-      this.forgetTree(entry);
-      const retained = history.filter((item) => this.entries.has(item.snapshot.id));
-      remaining = retained.length;
-      bytes = retained.reduce((sum, item) => sum + (item.retainedBytes ?? 0), 0);
+      this.forget(entry);
+      remaining--;
+      bytes -= entry.retainedBytes ?? 0;
     }
   }
 
@@ -362,7 +370,7 @@ export class TaskRuntime implements TaskPort {
     if (existing) return existing;
     const operation = Promise.resolve()
       .then(async () => {
-        await this.drainOwned(owner);
+        await this.drain(this.owned(owner));
         for (const entry of this.owned(owner)) this.forgetTree(entry);
       })
       .finally(() => this.removing.delete(owner));
@@ -376,8 +384,6 @@ export class TaskRuntime implements TaskPort {
 
   async stop() {
     this.seal();
-    const handles = [...this.entries.values()].flatMap(({ handle }) => (handle ? [handle] : []));
-    for (const handle of handles) handle.cancel(new TaskInterrupted());
-    await Promise.allSettled(handles.map(({ result }) => result));
+    await this.drain([...this.entries.values()], new TaskInterrupted());
   }
 }

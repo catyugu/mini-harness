@@ -1,4 +1,4 @@
-import type { TaskData, TaskSnapshot, TaskState } from '@mini-harness/tasks/api';
+import type { TaskSnapshot, TaskState } from '@mini-harness/tasks/api';
 
 /** Only conversation-specific facts; lifecycle state belongs to the task. */
 export interface RunDetails {
@@ -14,8 +14,6 @@ export interface RunInfo extends RunDetails {
   startedAt: string;
   /** Actual admission time; startedAt is the existing UI's acceptance timestamp. */
   executedAt?: string;
-  creator?: string;
-  taskMetadata?: Readonly<Record<string, TaskData>>;
   finishedAt?: string;
   error?: string;
 }
@@ -29,8 +27,6 @@ export function projectRun(sessionId: string, task: TaskSnapshot, details: RunDe
     startedAt: task.createdAt,
     executedAt: task.startedAt,
     finishedAt: task.finishedAt,
-    creator: task.creator,
-    taskMetadata: task.metadata,
     error: task.error,
   };
 }

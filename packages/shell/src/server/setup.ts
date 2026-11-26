@@ -33,7 +33,7 @@ export function setup(ctx: Context) {
           }),
         );
       },
-      execute: async (_id, args, signal, update, context): Promise<ToolResult> => {
+      execute: async (args, { signal, update, task }): Promise<ToolResult> => {
         const cwd = workspace.workspacePath(sessionId);
         if (!cwd) throw new DomainError('unavailable', 'Shell requires a workspace');
         const allowed = () => caller.get('harnessToolPolicy')?.(sessionId, { name: 'sandbox_shell' }) ?? true;
@@ -128,7 +128,7 @@ export function setup(ctx: Context) {
             command,
             timeoutSeconds,
             signal,
-            context?.task.write,
+            task.write,
           );
           const cancelled = output.reason === 'cancelled';
           return {

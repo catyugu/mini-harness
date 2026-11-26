@@ -1,73 +1,82 @@
 import { Check } from 'typebox/value';
 import type { Context } from 'mini-harness/cordis';
 import type { TaskData, TaskPort } from '@mini-harness/tasks/api';
-import {
-  isToolContent,
-  type RegisteredTool,
-  type ToolDefinition,
-  type ToolInvocation,
-  type ToolResult,
-} from './api.ts';
+import { isToolContent, type ToolDefinition, type ToolInvocation, type ToolResult } from './api.ts';
 
-interface Invocation extends ToolInvocation {
+const bindingKey = Symbol('tool binding');
+
+interface Binding {
   provider?: Context;
-  registration?: string;
+  registration: string;
+  resourceId?: string;
+  available(): boolean;
+  resolve(context: Context): ToolDefinition;
 }
 
-/** The actual call is a single task, whether the caller waits or retains it for later. */
+type BoundTool = ToolDefinition & { [bindingKey]?: Binding };
+
+export function bindTool(tool: ToolDefinition, binding: Binding): ToolDefinition {
+  return { ...tool, [bindingKey]: binding } as BoundTool;
+}
+
+export function toolAvailable(tool: ToolDefinition) {
+  return (tool as BoundTool)[bindingKey]?.available() ?? true;
+}
+
+export function prepareTool(tool: ToolDefinition, args: Record<string, unknown>, context?: Context) {
+  const binding = (tool as BoundTool)[bindingKey];
+  const definition = context && binding ? binding.resolve(context) : tool;
+  if (!Check(definition.parameters, args))
+    throw new Error('Invalid arguments for ' + definition.name + ': Schema mismatch');
+  return { tool: definition, binding, args };
+}
+
+/** The single invocation boundary for registered and standalone tools. */
 export function invokeTool(
   tasks: TaskPort,
-  tool: ToolDefinition,
+  { tool, binding, args }: ReturnType<typeof prepareTool>,
   callId: string,
-  args: Record<string, unknown>,
-  options: Invocation = {},
+  options: ToolInvocation = {},
 ) {
-  if (!Check(tool.parameters, args))
-    throw new Error('Invalid arguments for ' + tool.name + ': Schema mismatch');
-  const {
-    owner,
-    creator,
-    signal,
-    retain = false,
-    provider,
-    registration,
-    resourceId,
-    ownerTask,
-    projectResult,
-    onUpdate,
-  } = options;
+  const assertAvailable = () => {
+    if (binding && !binding.available()) throw new Error('Tool is no longer available: ' + tool.name);
+  };
+  assertAvailable();
+  const { owner, signal, retain = false, ownerTask, onUpdate, context, metadata } = options;
+  const resourceId = binding?.resourceId ?? options.resourceId;
   return tasks.start<ToolResult>(
     {
-      owner:
-        owner ??
-        (ownerTask ? 'task:' + ownerTask.id : resourceId ? 'session:' + resourceId : 'tool:' + tool.name),
-      creator: creator ?? ownerTask?.id,
-      resourceId,
+      owner: owner ?? ownerTask?.owner ?? (resourceId ? 'session:' + resourceId : 'tool:' + tool.name),
+      parentId: ownerTask?.id,
       name: tool.label ?? tool.name,
       type: 'tool-call',
-      metadata: { callId, tool: tool.name, ...(registration ? { registration } : {}) },
-      provider,
+      metadata: {
+        ...metadata,
+        callId,
+        tool: tool.name,
+        ...(ownerTask && { creator: ownerTask.id }),
+        ...(binding && { registration: binding.registration }),
+        ...(resourceId && { resourceId }),
+      },
+      provider: binding?.provider ?? context,
       signal,
       retain,
-      projectResult:
-        projectResult ??
-        (retain
-          ? (tool.projectResult ?? ((result) => JSON.parse(JSON.stringify(result)) as TaskData))
-          : undefined),
     },
     async (task) => {
-      const result = await tool.execute(
+      assertAvailable();
+      const result = await tool.execute(args, {
         callId,
-        args,
-        task.signal,
-        (update) => {
+        task,
+        signal: task.signal,
+        owner: ownerTask,
+        update(update) {
           task.update(JSON.parse(JSON.stringify(update)) as TaskData);
           onUpdate?.(update);
         },
-        { task, owner: ownerTask },
-      );
+      });
       if (!result || !isToolContent(result.content))
         throw new Error('Invalid result from tool: ' + tool.name);
+      if (retain) task.setResult(tool.projectResult?.(result) ?? (JSON.parse(JSON.stringify(result)) as TaskData));
       return result;
     },
   );
@@ -80,7 +89,5 @@ export function startTool(
   args: Record<string, unknown>,
   options: ToolInvocation = {},
 ) {
-  return 'start' in tool && typeof tool.start === 'function'
-    ? (tool as RegisteredTool).start(callId, args, options)
-    : invokeTool(tasks, tool, callId, args, { ...options, provider: options.context });
+  return invokeTool(tasks, prepareTool(tool, args, options.context), callId, options);
 }

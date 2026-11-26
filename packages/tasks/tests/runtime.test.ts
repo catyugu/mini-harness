@@ -102,14 +102,14 @@ test('ownership, not creation, controls cancellation and deletion', async () => 
   });
   await entered.promise;
   const childEntered = gate();
-  const child = runtime.start({ owner: 'task:' + parent.id, creator: parent.id }, async ({ signal }) => {
+  const child = runtime.start({ owner: 'session:parent', parentId: parent.id }, async ({ signal }) => {
     childEntered.release();
     signal.throwIfAborted();
     await new Promise<void>((_, reject) => {
       signal.addEventListener('abort', () => reject(signal.reason), { once: true });
     });
   });
-  const background = runtime.start({ owner: 'session:parent', creator: parent.id }, async () => {
+  const background = runtime.start({ owner: 'session:parent', metadata: { creator: parent.id } }, async () => {
     await released.promise;
     return 'independent';
   });
@@ -233,8 +233,8 @@ test('terminal observation cannot retroactively cancel a wait', async () => {
 
 test('forgetting an ephemeral parent also removes retained descendants', async () => {
   const runtime = new TaskRuntime();
-  const parent = runtime.start({ owner: 'one', retain: false }, async ({ id }) => {
-    const child = runtime.start({ owner: 'task:' + id }, async () => 'done');
+  const parent = runtime.start({ owner: 'one', retain: false }, async ({ id, owner }) => {
+    const child = runtime.start({ owner, parentId: id }, async () => 'done');
     await child.result;
     assert.ok(runtime.get(child.id));
   });
@@ -316,8 +316,11 @@ test('observation data is detached from arbitrary result objects', async () => {
   const metadata = { nested: { value: 'original' } };
   const result = { value: 'answer' };
   const handle = runtime.start<{ value: string }>(
-    { owner: 'one', metadata, projectResult: (value) => value },
-    async () => result,
+    { owner: 'one', metadata },
+    async (task) => {
+      task.setResult(result);
+      return result;
+    },
   );
   metadata.nested.value = 'modified';
   assert.strictEqual(await handle.result, result);
