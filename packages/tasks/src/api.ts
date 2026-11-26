@@ -14,7 +14,7 @@ export const terminal = (state: TaskState) =>
 export type TaskAdmission = (signal: AbortSignal) => Promise<() => void>;
 
 export interface TaskOptions {
-  /** An application-defined lifetime key, independent of the task that created this work. */
+  /** A resource lifetime key or another task's ID, independent of the creator. */
   owner: string;
   creator?: string;
   name?: string;
@@ -23,6 +23,8 @@ export interface TaskOptions {
   metadata?: Readonly<Record<string, unknown>>;
   signal?: AbortSignal;
   acquire?: TaskAdmission;
+  /** Persist a lifecycle transition in the task's domain before it is published. */
+  record?(task: TaskSnapshot): void;
 }
 
 export interface TaskSnapshot {

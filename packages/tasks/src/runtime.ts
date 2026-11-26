@@ -15,6 +15,7 @@ interface Entry {
   handle: TaskHandle;
   output: { sequence: number; text: string }[];
   bytes: number;
+  finishing: boolean;
 }
 
 const outputLimit = 1024 * 1024;
@@ -24,6 +25,7 @@ export class TaskRuntime implements TaskPort {
   private readonly entries = new Map<string, Entry>();
   private readonly listeners = new Set<(task: TaskSnapshot) => void>();
   private closing = false;
+  private readonly removing = new Set<string>();
 
   service(): TaskPort {
     const runtime = this;
@@ -49,10 +51,17 @@ export class TaskRuntime implements TaskPort {
 
   start<T>(options: TaskOptions, execute: (context: TaskContext) => Promise<T>): TaskHandle<T> {
     if (this.closing) throw new Error('Task runtime is closing');
-    const { signal: lifetime, acquire, ...metadata } = options;
-    lifetime?.throwIfAborted();
+    const { signal: lifetime, acquire, record, ...metadata } = options;
+    if (this.removing.has(options.owner)) throw new Error('Task owner is being removed');
+    const parent = this.entries.get(options.owner);
+    if (parent && (parent.finishing || terminal(parent.snapshot.state)))
+      throw new Error('Task owner has ended');
     const controller = new AbortController();
-    const signal = lifetime ? AbortSignal.any([lifetime, controller.signal]) : controller.signal;
+    const signals = [controller.signal, lifetime, parent?.handle.signal].filter(
+      (signal): signal is AbortSignal => signal !== undefined,
+    );
+    const signal = AbortSignal.any(signals);
+    signal.throwIfAborted();
     const snapshot: TaskSnapshot = {
       ...metadata,
       id: randomUUID(),
@@ -61,6 +70,7 @@ export class TaskRuntime implements TaskPort {
       cancellationRequested: false,
       outputCursor: 0,
     };
+    record?.({ ...snapshot });
     let release: (() => void) | undefined;
     const relinquish = () => {
       const held = release;
@@ -72,11 +82,15 @@ export class TaskRuntime implements TaskPort {
       Object.assign(snapshot, patch);
       this.publish(snapshot);
     };
+    const transition = (patch: Partial<TaskSnapshot>) => {
+      record?.({ ...snapshot, ...patch });
+      update(patch);
+    };
     const enter = async () => {
       signal.throwIfAborted();
       release = await acquire?.(signal);
       signal.throwIfAborted();
-      update({ state: 'running', startedAt: snapshot.startedAt ?? new Date().toISOString() });
+      transition({ state: 'running', startedAt: snapshot.startedAt ?? new Date().toISOString() });
     };
     const context: TaskContext = {
       id: snapshot.id,
@@ -96,41 +110,54 @@ export class TaskRuntime implements TaskPort {
         if (snapshot.state !== 'running') throw new Error('Only a running task can suspend');
         signal.throwIfAborted();
         relinquish();
-        update({ state: 'waiting' });
+        transition({ state: 'waiting' });
         const result = await wait(signal);
         signal.throwIfAborted();
-        update({ state: 'queued' });
+        transition({ state: 'queued' });
         await enter();
         return result;
       },
     };
     const cancelled = () => update({ cancellationRequested: true });
-    const settle = (state: TaskSnapshot['state'], patch: Partial<TaskSnapshot>) => {
-      signal.removeEventListener('abort', cancelled);
-      update({ ...patch, state, finishedAt: new Date().toISOString() });
-    };
     const result = Promise.resolve().then(async () => {
+      let value: T;
+      let failure: { error: unknown } | undefined;
       try {
-        let value: T;
-        try {
-          await enter();
-          value = await execute(context);
-        } finally {
-          relinquish();
-        }
-        signal.throwIfAborted();
-        settle('completed', { result: value });
-        return value;
+        await enter();
+        value = await execute(context);
       } catch (error) {
-        const reason = signal.aborted ? signal.reason : error;
-        settle(
-          signal.aborted ? (reason instanceof TaskInterrupted ? 'interrupted' : 'cancelled') : 'failed',
-          {
-            error: describe(reason),
-          },
-        );
-        throw reason;
+        failure = { error };
       }
+      entry.finishing = true;
+      try {
+        relinquish();
+      } catch (error) {
+        failure ??= { error };
+      }
+      await this.drainOwned(snapshot.id, signal.aborted ? signal.reason : new Error('Task owner ended'));
+      if (!failure && signal.aborted) failure = { error: signal.reason };
+      signal.removeEventListener('abort', cancelled);
+      const error = failure?.error;
+      const aborted = signal.aborted && (
+        error === signal.reason ||
+        (error instanceof Error && (error.name === 'AbortError' || error.cause === signal.reason))
+      );
+      const reason = aborted ? signal.reason : error;
+      const state = failure
+        ? aborted
+          ? reason instanceof TaskInterrupted ? 'interrupted' : 'cancelled'
+          : 'failed'
+        : 'completed';
+      const finishedAt = new Date().toISOString();
+      try {
+        transition(failure ? { state, error: describe(reason), finishedAt } : { state, result: value!, finishedAt });
+      } catch (error) {
+        // A durable projection failure must reject the task, not acknowledge success.
+        update({ state: 'failed', error: describe(error), finishedAt });
+        throw error;
+      }
+      if (failure) throw reason;
+      return value!;
     });
     const handle: TaskHandle<T> = {
       id: snapshot.id,
@@ -142,7 +169,7 @@ export class TaskRuntime implements TaskPort {
         return true;
       },
     };
-    const entry: Entry = { snapshot, handle, output: [], bytes: 0 };
+    const entry: Entry = { snapshot, handle, output: [], bytes: 0, finishing: false };
     this.entries.set(handle.id, entry);
     signal.addEventListener('abort', cancelled, { once: true });
     void result.catch(() => {});
@@ -222,11 +249,27 @@ export class TaskRuntime implements TaskPort {
     };
   }
 
+  private owned(owner: string) {
+    return [...this.entries.values()].filter(({ snapshot }) => snapshot.owner === owner);
+  }
+
+  private async drainOwned(owner: string, reason?: unknown) {
+    const active = this.owned(owner).filter(({ snapshot }) => !terminal(snapshot.state));
+    for (const { handle } of active) handle.cancel(reason);
+    await Promise.allSettled(active.map(({ handle }) => handle.result));
+  }
+
   async removeOwner(owner: string) {
-    const entries = [...this.entries.values()].filter(({ snapshot }) => snapshot.owner === owner);
-    for (const { handle } of entries) handle.cancel();
-    await Promise.allSettled(entries.map(({ handle }) => handle.result));
-    for (const { handle } of entries) this.entries.delete(handle.id);
+    this.removing.add(owner);
+    try {
+      await this.drainOwned(owner);
+      for (const { handle } of this.owned(owner)) {
+        await this.removeOwner(handle.id);
+        this.entries.delete(handle.id);
+      }
+    } finally {
+      this.removing.delete(owner);
+    }
   }
 
   seal() {

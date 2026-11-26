@@ -86,3 +86,45 @@ test('queued cancellation does not run user code; shutdown interrupts active wor
   assert.equal(runtime.get(running.id)?.state, 'interrupted');
   assert.throws(() => runtime.start({ owner: 'three' }, async () => {}), /closing/);
 });
+
+test('ownership, not creation, controls cancellation and deletion', async () => {
+  const runtime = new TaskRuntime();
+  const entered = gate();
+  const released = gate();
+  const parent = runtime.start({ owner: 'session:parent' }, async ({ signal }) => {
+    entered.release();
+    await released.promise;
+    signal.throwIfAborted();
+  });
+  await entered.promise;
+  const child = runtime.start({ owner: parent.id, creator: parent.id }, async ({ signal }) => {
+    await new Promise<void>((_, reject) => {
+      signal.addEventListener('abort', () => reject(signal.reason), { once: true });
+    });
+  });
+  const background = runtime.start({ owner: 'session:parent', creator: parent.id }, async () => {
+    await released.promise;
+    return 'independent';
+  });
+  await runtime.wait(child.id, ({ state }) => state === 'running');
+  parent.cancel();
+  released.release();
+  await assert.rejects(parent.result);
+  await assert.rejects(child.result);
+  assert.equal(await background.result, 'independent');
+  assert.equal(runtime.get(child.id)?.state, 'cancelled');
+  await runtime.removeOwner('session:parent');
+  assert.equal(runtime.list().length, 0);
+});
+
+test('a durable projection fault cannot acknowledge a successful task', async () => {
+  const runtime = new TaskRuntime();
+  const task = runtime.start({
+    owner: 'session:one',
+    record(snapshot) {
+      if (snapshot.state === 'completed') throw new Error('write failed');
+    },
+  }, async () => 'not acknowledged');
+  await assert.rejects(task.result, /write failed/);
+  assert.equal(runtime.get(task.id)?.state, 'failed');
+});
