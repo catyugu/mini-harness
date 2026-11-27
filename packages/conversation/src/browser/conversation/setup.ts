@@ -24,10 +24,10 @@ const setup = (ctx: Context) => {
         section: { title: 'General', icon: 'settings', order: 10 },
         render({ bind }) {
           const content = fromMarkup(
-            '<div class="settings-preference"><label class="switch-line"><span><strong>Add instructions</strong><small>Default sending mode for conversations without a selection.</small></span></label></div>',
+            '<div class="settings-preference"><label class="switch-line"><span><strong>Default sending mode</strong><small>Default handling of new messages while the agent is running.</small></span></label></div>',
           );
           const control = document.createElement('select');
-          control.setAttribute('aria-label', 'Add instructions');
+          control.setAttribute('aria-label', 'Default sending mode');
           for (const mode of messageModes) control.add(new Option(modeLabel[mode], mode));
           required(content.querySelector('label')).append(control);
           content.append(

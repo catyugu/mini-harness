@@ -28,6 +28,11 @@ test('context settings and statistics stay usable at desktop and mobile widths',
     const global = page.getByRole('dialog', { name: 'Settings', exact: true });
     const trigger = global.getByRole('spinbutton', { name: 'Trigger threshold (%)' });
     const globalAuto = global.getByRole('switch', { name: 'Auto compaction' });
+    const globalModel = global.getByRole('button', { name: 'Summary model' });
+    await expect(globalModel).toHaveText('Current model');
+    await globalModel.click();
+    await global.getByRole('option', { name: /Mock Model/ }).click();
+    await expect(globalModel).toHaveText('Mock Model');
     await expect(trigger).toHaveValue('80');
     await trigger.fill('90');
     await globalAuto.uncheck();
@@ -37,11 +42,13 @@ test('context settings and statistics stay usable at desktop and mobile widths',
     expect(readWebProfile(paths).configuration('context-management')).toMatchObject({
       autoCompact: false,
       triggerRatio: 0.9,
+      summaryModel: { provider: 'local-mock', id: 'mock-model' },
     });
     await restore.click();
     await expect(restore).toBeEnabled();
     await expect(trigger).toHaveValue('80');
     await expect(globalAuto).toBeChecked();
+    await expect(globalModel).toHaveText('Current model');
     expect(readWebProfile(paths).configuration('context-management')).toMatchObject({
       autoCompact: true,
       triggerRatio: 0.8,
@@ -53,6 +60,13 @@ test('context settings and statistics stay usable at desktop and mobile widths',
     const auto = config.getByRole('switch', { name: 'Auto compaction' });
     await settings.click();
     await expect(auto).toBeChecked();
+    const summaryModel = config.getByRole('button', { name: 'Summary model' });
+    await expect(summaryModel).toHaveText('Current model');
+    const label = summaryModel.locator('span');
+    await expect.poll(() => label.evaluate((node) => node.scrollWidth <= node.clientWidth)).toBe(true);
+    await summaryModel.click();
+    await config.getByRole('option', { name: /Mock Model/ }).click();
+    await expect(summaryModel).toHaveText('Mock Model');
     await expect(config.getByRole('button', { name: 'Compact now' })).toHaveCount(0);
     await auto.uncheck();
     await config.getByRole('button', { name: 'Apply' }).click();
@@ -92,8 +106,10 @@ test('context settings and statistics stay usable at desktop and mobile widths',
     await page.reload();
     await settings.click();
     await expect(auto).not.toBeChecked();
+    await expect(summaryModel).toHaveText('Mock Model');
     await config.getByRole('button', { name: 'Restore Default' }).click();
     await expect(auto).toBeChecked();
+    await expect(summaryModel).toHaveText('Current model');
     await page.keyboard.press('Escape');
     await page.getByRole('button', { name: 'Toggle navigation' }).click();
     await page.getByRole('button', { name: 'Settings', exact: true }).click();

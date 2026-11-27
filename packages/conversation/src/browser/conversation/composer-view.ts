@@ -16,16 +16,22 @@ export function mountComposer(ctx: Context, signal: AbortSignal) {
           <div id="draftMode" class="draft-mode" hidden><span></span><button type="button" aria-label="Cancel editing">Cancel</button></div>
           <div id="promptEditor"></div>
           <div class="composer-footer">
-            <div id="composerExtensions" class="composer-tools"></div>
-            <button id="permissionSelect" class="permission-select" type="button" aria-haspopup="listbox" aria-expanded="false" aria-controls="permissionResults"></button>
-            <div id="permissionPicker" class="ui-popover permission-picker" popover="auto">
-              <div id="permissionResults" role="listbox" aria-label="Conversation permissions"></div>
+            <div class="composer-leading">
+              <div id="composerExtensions" class="composer-tools"></div>
+              <button id="permissionSelect" class="permission-select" type="button" aria-haspopup="listbox" aria-expanded="false" aria-controls="permissionResults"></button>
+              <div id="permissionPicker" class="ui-popover permission-picker" popover="auto">
+                <div id="permissionResults" role="listbox" aria-label="Conversation permissions"></div>
+              </div>
+              <div id="composerOptions" class="composer-tools"></div>
             </div>
-            <div id="composerOptions" class="composer-tools"></div>
-            <div id="composerTrailing" class="composer-trailing"></div>
-            <select id="messageMode" class="small-button" aria-label="Message sending mode" hidden></select>
-            <button id="stop" type="button" aria-label="Stop response" hidden data-icon="stop"></button>
-            <button id="send" type="submit" aria-label="Send" data-icon="send"></button>
+            <div class="composer-secondary">
+              <div id="composerTrailing" class="composer-trailing"></div>
+              <select id="messageMode" class="small-button" aria-label="Message sending mode" hidden></select>
+              <div class="composer-actions">
+                <button id="stop" type="button" aria-label="Stop response" hidden data-icon="stop"></button>
+                <button id="send" type="submit" aria-label="Send" data-icon="send"></button>
+              </div>
+            </div>
           </div>
         </form>`) as HTMLFormElement;
   const { element } = scopedElements(composer);

@@ -162,6 +162,7 @@
   display: none;
 }
 .composer {
+  container-type: inline-size;
   padding: 8px 10px 6px;
   border: 1px solid var(--border);
   background: var(--surface);
@@ -188,13 +189,37 @@
   resize: none;
   overflow: auto;
 }
-.composer-footer {
+.composer-footer,
+.composer-leading,
+.composer-secondary,
+.composer-actions {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 6px;
+  min-width: 0;
+}
+.composer-footer {
+  flex-wrap: wrap;
   min-height: var(--control);
   padding-left: 4px;
+}
+.composer-leading {
+  flex-wrap: wrap;
+}
+.composer-secondary {
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.composer-actions {
+  flex: none;
+  margin-left: auto;
+}
+@container (max-width: 640px) {
+  .composer-footer {
+    flex-direction: column;
+    align-items: stretch;
+  }
 }
 #send,
 #stop {
@@ -420,9 +445,6 @@ button.file-card:hover {
   .conversation {
     --content-gutter: 12px;
   }
-  .composer-footer {
-    justify-content: flex-end;
-  }
   .composer .cm-content {
     font-size: 16px;
   }
@@ -433,15 +455,25 @@ button.file-card:hover {
   }
 }
 .composer-trailing {
-  display: contents;
+  display: flex;
+  align-items: center;
+  flex: 1 1 160px;
+  flex-wrap: wrap;
+  min-width: 0;
+  gap: 6px;
+}
+.composer-trailing:empty {
+  display: none;
 }
 .composer-tools:empty {
   display: none;
 }
 .composer-tools {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 2px;
+  min-width: 0;
 }
 #send,
 #stop {
@@ -519,11 +551,6 @@ button.file-card:hover {
 .tool-arguments {
   border-bottom: 1px solid var(--border);
   color: var(--muted);
-}
-@media (max-width: 860px) {
-  .composer-footer {
-    justify-content: initial;
-  }
 }
 .attachments {
   display: flex;
@@ -628,19 +655,11 @@ button.file-card:hover {
   overflow: auto;
 }
 #messageMode {
+  flex: none;
   margin: 0;
   max-width: 105px;
 }
 @media (max-width: 560px) {
-  .composer-footer {
-    flex-wrap: wrap;
-  }
-  .composer-tools {
-    flex-shrink: 0;
-  }
-  .permission-select {
-    flex-shrink: 0;
-  }
   .composer-tools .icon-button {
     min-width: 32px;
     width: 32px;

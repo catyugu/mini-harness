@@ -85,6 +85,18 @@ test('file inspection, responsive themes and reduced viewport height keep contro
         await panel.getByRole('button', { name: 'Source', exact: true }).click();
         await expect(panel.locator('.file-preview')).toContainText('Readable code');
         await panel.getByRole('button', { name: 'Source', exact: true }).click();
+        if (width === 1920) {
+          await page.setViewportSize({ width: 900, height: 700 });
+          await expect(page.getByRole('dialog', { name: 'Workspace panel' })).toBeVisible();
+          await expect(panel.getByRole('tab', { name: 'notes.md', exact: true })).toHaveAttribute(
+            'aria-selected',
+            'true',
+          );
+          await expect(panel.getByRole('heading', { name: 'Visible file' })).toBeVisible();
+          await page.setViewportSize({ width, height: 700 });
+          await expect(page.getByRole('complementary', { name: 'Workspace panel' })).toBeVisible();
+          await expect(panel.getByRole('heading', { name: 'Visible file' })).toBeVisible();
+        }
         expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
         await expectInViewport(panel, { width, height: 700 });
         await panel.getByRole('button', { name: 'Close workspace panel' }).click();

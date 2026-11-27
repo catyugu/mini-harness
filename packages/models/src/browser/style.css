@@ -94,13 +94,18 @@
 }
 
 .model-controls {
-  display: contents;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
+  gap: 6px;
 }
 .model-select {
   display: flex;
   align-items: center;
   gap: 6px;
-  max-width: min(36vw, 260px);
+  max-width: 260px;
   min-width: 0;
   border: 0;
   border-radius: 8px;
@@ -108,6 +113,10 @@
   padding: 6px 8px;
   font-size: var(--font-meta);
   margin-left: auto;
+}
+.model-controls > .model-select:first-child {
+  flex: 1 1 40px;
+  min-width: 40px;
 }
 .model-select:hover {
   background: var(--hover);
@@ -230,11 +239,8 @@
 }
 
 @media (max-width: 560px) {
-  .composer-footer .model-select {
-    flex: 1 1 90px;
-    max-width: initial;
+  .model-controls .model-select {
     min-height: 40px;
-    margin-left: 0;
   }
   #thinkingLevel {
     min-height: 40px;
