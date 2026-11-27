@@ -480,19 +480,58 @@ export const apply = (ctx) => {
   }
 });
 
-
 test('built-in tool views distinguish calls and retain their content after replay', async ({ page }) => {
   const longPath = 'missing/' + 'long-path/'.repeat(60) + 'sample.txt';
   const calls: { tool: string; args: Record<string, unknown>; summary: RegExp; output: string }[] = [
-    { tool: 'read', args: { path: 'sample.txt', offset: 1, limit: 2 }, summary: /read.*sample\.txt.*offset 1.*limit 2.*Done/, output: 'original text' },
-    { tool: 'edit', args: { path: 'sample.txt', edits: [{ oldText: 'original text', newText: 'updated text' }] }, summary: /edit.*sample\.txt.*Done/, output: 'Applied 1 edit' },
-    { tool: 'find', args: { pattern: '*.txt' }, summary: /find.*\*\.txt.* in \..*Done/, output: 'sample.txt' },
-    { tool: 'grep', args: { pattern: 'updated', path: '.', glob: '*.txt' }, summary: /grep.*updated.* in \..*\*\.txt.*Done/, output: 'updated text' },
-    { tool: 'load_skill', args: { name: 'fixture-review' }, summary: /load skill.*fixture-review.*Done/, output: 'Review the fixture carefully.' },
-    { tool: 'read_context', args: { entry: 'abcdef1234567890', offset: 0, limit: 128 }, summary: /read context.*abcdef1234567890.*offset 0.*limit 128.*Failed/, output: 'Original message not found' },
+    {
+      tool: 'read',
+      args: { path: 'sample.txt', offset: 1, limit: 2 },
+      summary: /read.*sample\.txt.*offset 1.*limit 2.*Done/,
+      output: 'original text',
+    },
+    {
+      tool: 'edit',
+      args: { path: 'sample.txt', edits: [{ oldText: 'original text', newText: 'updated text' }] },
+      summary: /edit.*sample\.txt.*Done/,
+      output: 'Applied 1 edit',
+    },
+    {
+      tool: 'find',
+      args: { pattern: '*.txt' },
+      summary: /find.*\*\.txt.* in \..*Done/,
+      output: 'sample.txt',
+    },
+    {
+      tool: 'grep',
+      args: { pattern: 'updated', path: '.', glob: '*.txt' },
+      summary: /grep.*updated.* in \..*\*\.txt.*Done/,
+      output: 'updated text',
+    },
+    {
+      tool: 'load_skill',
+      args: { name: 'fixture-review' },
+      summary: /load skill.*fixture-review.*Done/,
+      output: 'Review the fixture carefully.',
+    },
+    {
+      tool: 'read_context',
+      args: { entry: 'abcdef1234567890', offset: 0, limit: 128 },
+      summary: /read context.*abcdef1234567890.*offset 0.*limit 128.*Failed/,
+      output: 'Original message not found',
+    },
     { tool: 'task_control', args: { action: 'list' }, summary: /task control.*list.*Done/, output: '[]' },
-    { tool: 'send_message', args: { sessionId: 'missing-child', message: 'Follow-up for child' }, summary: /send message.*missing-child.*Follow-up for child.*Failed/, output: 'Choose a direct parent or child conversation' },
-    { tool: 'read', args: { path: longPath }, summary: /read.*missing\/long-path\/.*sample\.txt.*Failed/, output: longPath },
+    {
+      tool: 'send_message',
+      args: { sessionId: 'missing-child', message: 'Follow-up for child' },
+      summary: /send message.*missing-child.*Follow-up for child.*Failed/,
+      output: 'Choose a direct parent or child conversation',
+    },
+    {
+      tool: 'read',
+      args: { path: longPath },
+      summary: /read.*missing\/long-path\/.*sample\.txt.*Failed/,
+      output: longPath,
+    },
   ];
   let index = 0;
   const mock = await createMockProvider(({ messages }) => {
@@ -504,7 +543,10 @@ test('built-in tool views distinguish calls and retain their content after repla
   writeFileSync(join(paths.cwd, 'sample.txt'), 'original text');
   const skill = join(paths.home, 'skills', 'fixture-review');
   mkdirSync(skill, { recursive: true });
-  writeFileSync(join(skill, 'SKILL.md'), '---\nname: fixture-review\ndescription: Review a fixture\n---\nReview the fixture carefully.');
+  writeFileSync(
+    join(skill, 'SKILL.md'),
+    '---\nname: fixture-review\ndescription: Review a fixture\n---\nReview the fixture carefully.',
+  );
   const service = await startIsolatedHost(paths);
   try {
     await page.goto(service.url + '/#token=' + service.token);
@@ -534,14 +576,22 @@ test('built-in tool views distinguish calls and retain their content after repla
     await page.setViewportSize({ width: 320, height: 844 });
     const header = cards.last().locator('summary').first();
     await expect(header).toHaveAccessibleName(calls.at(-1)!.summary);
-    await expect.poll(() => header.evaluate((node) => {
-      const row = node.getBoundingClientRect();
-      const status = node.querySelector('.tool-state')!.getBoundingClientRect();
-      const duration = node.querySelector('.tool-duration')!.getBoundingClientRect();
-      const summary = node.querySelector<HTMLElement>('.file-tool-target');
-      return status.right <= row.right + 1 && duration.right <= status.left + 1 &&
-        !!summary && summary.scrollWidth > summary.clientWidth;
-    })).toBe(true);
+    await expect
+      .poll(() =>
+        header.evaluate((node) => {
+          const row = node.getBoundingClientRect();
+          const status = node.querySelector('.tool-state')!.getBoundingClientRect();
+          const duration = node.querySelector('.tool-duration')!.getBoundingClientRect();
+          const summary = node.querySelector<HTMLElement>('.file-tool-target');
+          return (
+            status.right <= row.right + 1 &&
+            duration.right <= status.left + 1 &&
+            !!summary &&
+            summary.scrollWidth > summary.clientWidth
+          );
+        }),
+      )
+      .toBe(true);
   } finally {
     await page.close();
     await service.stop();
