@@ -1,11 +1,6 @@
 import { DomainError } from '@mini-harness/platform/errors';
 import { thinkingLevels } from '@mini-harness/llm/vocabulary';
-import {
-  maxModelTokens,
-  modelDefaults,
-  providerApiPattern,
-  providerIdPattern,
-} from '../shared/catalog.ts';
+import { maxModelTokens, modelDefaults, providerApiPattern, providerIdPattern } from '../shared/catalog.ts';
 import type { CatalogModel, CatalogProvider } from './store-api.ts';
 
 export interface ProviderConnection {
@@ -145,7 +140,11 @@ export function editModels(value: unknown, previous: readonly ModelConfig[], bui
   });
 }
 
-export function parseCustom(id: string, value: unknown, models = parseModels(record(value)?.models)): CustomConfig {
+export function parseCustom(
+  id: string,
+  value: unknown,
+  models = parseModels(record(value)?.models),
+): CustomConfig {
   const entry = record(value);
   if (!entry) throw invalid('Invalid provider configuration: ' + id);
   if (entry.apiKey !== undefined && (typeof entry.apiKey !== 'string' || entry.apiKey.startsWith('!')))

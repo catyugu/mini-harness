@@ -146,7 +146,10 @@ export class ModelStore implements ModelStorePort {
     return { ...provider, baseUrl, models, endpointOverride: override.baseUrl };
   }
 
-  private custom(id: string, { api, baseUrl, name, headers, apiKey: key, models }: ProviderConfiguration['providers'][string]): CatalogProvider {
+  private custom(
+    id: string,
+    { api, baseUrl, name, headers, apiKey: key, models }: ProviderConfiguration['providers'][string],
+  ): CatalogProvider {
     const connection = { api, baseUrl };
     return {
       id,
@@ -309,7 +312,10 @@ export class ModelStore implements ModelStorePort {
       if (builtin) {
         if (values.create) throw new DomainError('conflict', 'A provider with this ID already exists');
         if (key && !builtin.canSetKey) throw invalid('This provider does not accept an API key');
-        const previous = values.fromDefaults !== true && Object.hasOwn(next.builtins, id) ? (next.builtins[id].models ?? []) : [];
+        const previous =
+          values.fromDefaults !== true && Object.hasOwn(next.builtins, id)
+            ? (next.builtins[id].models ?? [])
+            : [];
         const models = values.models === undefined ? undefined : editModels(values.models, previous, builtin);
         const override = parseOverride({ baseUrl: values.baseUrl }, models);
         if (
@@ -328,13 +334,17 @@ export class ModelStore implements ModelStorePort {
         if (!values.create && !previous) throw new DomainError('not_found', 'Unknown provider');
         next.providers = {
           ...next.providers,
-          [id]: parseCustom(id, {
-            name: values.name,
-            api: values.api,
-            baseUrl: values.baseUrl,
-            apiKey: previous?.apiKey,
-            headers: previous?.headers,
-          }, editModels(values.models, previous?.models ?? [])),
+          [id]: parseCustom(
+            id,
+            {
+              name: values.name,
+              api: values.api,
+              baseUrl: values.baseUrl,
+              apiKey: previous?.apiKey,
+              headers: previous?.headers,
+            },
+            editModels(values.models, previous?.models ?? []),
+          ),
         };
       }
       await this.commit(id, next, key ? { value: { type: 'api_key', key } } : undefined);
