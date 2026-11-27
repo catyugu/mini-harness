@@ -84,7 +84,11 @@ export function setup(ctx: Context) {
               origin: { source: 'agent', senderSessionId: id, taskId: executionId },
             });
             const receipt = { messageId, taskId };
-            return { state: 'finished', content: [{ type: 'text', text: JSON.stringify(receipt) }], details: receipt };
+            return {
+              state: 'finished',
+              content: [{ type: 'text', text: JSON.stringify(receipt) }],
+              details: receipt,
+            };
           },
         }),
     }),

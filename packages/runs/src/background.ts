@@ -134,7 +134,10 @@ const plugin: Plugin.Object = {
     const output = (task: TaskSnapshot, cursor?: number) =>
       tasks.readOutput(task.id, cursor) ??
       sessions.taskOutput(task.owner.slice('session:'.length), task.id, cursor);
-    const json = (data: unknown): ToolResult => ({ state: 'finished', content: [{ type: 'text' as const, text: JSON.stringify(data) }] });
+    const json = (data: unknown): ToolResult => ({
+      state: 'finished',
+      content: [{ type: 'text' as const, text: JSON.stringify(data) }],
+    });
     ctx.effect(() =>
       ctx.harnessTools.register({
         name: 'start_background',

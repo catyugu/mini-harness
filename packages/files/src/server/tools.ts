@@ -70,7 +70,10 @@ export function fileTools(
         signal.throwIfAborted();
         if (mimeType) {
           if (bytes.length > 6 * 1024 * 1024) throw new Error('Image exceeds the 6 MiB input limit');
-          return { state: 'finished', content: [{ type: 'image', mimeType, data: bytes.toString('base64') }] };
+          return {
+            state: 'finished',
+            content: [{ type: 'image', mimeType, data: bytes.toString('base64') }],
+          };
         }
         const lines = textFile(bytes).split('\n');
         if (offset > lines.length) throw new Error('Offset exceeds file length (' + lines.length + ' lines)');

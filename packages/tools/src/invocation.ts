@@ -47,7 +47,8 @@ export async function executePreparedTool(
     update: onUpdate ?? (() => {}),
     write: write ?? (() => {}),
   });
-  if (!result || !toolResultStates.includes(result.state) || !isToolContent(result.content)) throw new Error('Invalid result from tool: ' + tool.name);
+  if (!result || !toolResultStates.includes(result.state) || !isToolContent(result.content))
+    throw new Error('Invalid result from tool: ' + tool.name);
   return result;
 }
 

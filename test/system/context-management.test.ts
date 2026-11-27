@@ -93,7 +93,11 @@ test('a single user turn supports repeated token-budget compaction while tools e
         parameters: Type.Object({}),
         async execute() {
           calls++;
-          return { state: 'finished', content: [{ type: 'text', text: 'Probe result ' + calls }], elapsedMs: 12 };
+          return {
+            state: 'finished',
+            content: [{ type: 'text', text: 'Probe result ' + calls }],
+            elapsedMs: 12,
+          };
         },
       }),
     ),

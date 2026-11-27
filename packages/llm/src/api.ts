@@ -257,8 +257,7 @@ export function validateNativeMessage(message: NativeMessage) {
       typeof message.toolName !== 'string' ||
       !toolResultStates.includes(message.state) ||
       (message.detailKeys !== undefined &&
-        (!Array.isArray(message.detailKeys) ||
-          !message.detailKeys.every((key) => typeof key === 'string'))))
+        (!Array.isArray(message.detailKeys) || !message.detailKeys.every((key) => typeof key === 'string'))))
   )
     throw new Error('Invalid tool result');
 }
