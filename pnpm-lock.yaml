@@ -473,9 +473,15 @@ importers:
       '@mini-harness/tools':
         specifier: workspace:*
         version: link:../tools
+      '@mini-harness/ui-primitives':
+        specifier: workspace:*
+        version: link:../ui-primitives
 
   packages/skills:
     dependencies:
+      '@mini-harness/conversation':
+        specifier: workspace:*
+        version: link:../conversation
       '@mini-harness/platform':
         specifier: workspace:*
         version: link:../platform
@@ -497,6 +503,9 @@ importers:
 
   packages/subagents:
     dependencies:
+      '@mini-harness/conversation':
+        specifier: workspace:*
+        version: link:../conversation
       '@mini-harness/llm':
         specifier: workspace:*
         version: link:../llm

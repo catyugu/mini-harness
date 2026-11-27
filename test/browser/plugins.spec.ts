@@ -124,14 +124,14 @@ export function apply(ctx, config) {
       } }, browserPluginSettings(ctx)));
     }
     ctx.effect(() => ctx.miniComposer.command({ name: 'example', description: 'Add a plugin note', run: () => miniComposer.insert('Plugin note') }));
-    ctx.effect(() => ctx.miniMessages.registerTool('ls', () => { const node = document.createElement('p'); node.textContent = 'Custom listing result'; return node; }, 'body', 1));
+    ctx.effect(() => ctx.miniMessages.registerTool('ls', () => { const node = document.createElement('p'); node.textContent = 'Custom listing result'; return { node, update() {} }; }, 'body', 1));
     ctx.effect(() => ctx.miniMessages.registerTool('ls', () => {
       const node = document.createElement('span');
       node.className = 'ui-truncate';
       const label = document.createElement('strong');
       label.textContent = 'Custom directory';
       node.append(label, ' ' + 'long-path/'.repeat(30));
-      return node;
+      return { node, update() {} };
     }, 'summary', 1));
   }
 `,

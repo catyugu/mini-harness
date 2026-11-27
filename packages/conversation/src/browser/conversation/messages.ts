@@ -7,16 +7,16 @@ import type {
   MessageActionContext,
   MessageActionTarget,
   TurnFooterRenderer,
-  ToolView,
+  ToolPlacement,
 } from '../history-api.ts';
 import { icon } from '@mini-harness/ui-primitives/icons';
 import { markdownSource, renderMarkdown } from '@mini-harness/ui-primitives/markdown';
-import { textOutput, rasterImage } from '@mini-harness/ui-primitives/primitives';
 import { attachmentView } from './attachment-view.ts';
 import { renderReferences } from './file-references.ts';
 import type { MessageExtensions } from './message-extensions.ts';
 import { groupHistory, textOf } from './timeline.ts';
 import { notificationLabel } from './notification.ts';
+import { createToolCard, type ToolCardData } from './tool-card.ts';
 
 export function createMessageView(
   ctx: Context,
@@ -27,13 +27,14 @@ export function createMessageView(
   current: () => { workspaceId?: string; sessionId?: string; leafId?: string | null },
   retryLast: () => void,
 ) {
-  const toolItems = new WeakMap<HTMLDetailsElement, Parameters<typeof toolCard>[0]>();
+  const toolCards = new Map<HTMLElement, ReturnType<typeof createToolCard>>();
   const resources = new Map<HTMLElement, AbortController>();
   signal.addEventListener(
     'abort',
     () => {
       for (const resource of resources.values()) resource.abort();
       resources.clear();
+      toolCards.clear();
     },
     { once: true },
   );
@@ -194,74 +195,16 @@ export function createMessageView(
       renderMessageActions(wrapper);
   }
 
-  function toolCard(data: ToolView & { id?: string; elapsedMs?: number }, card?: HTMLDetailsElement) {
-    const item = card ?? document.createElement('details');
-    toolItems.set(item, data);
-    item.className = 'tool-card ui-record ui-disclosure';
-    item.dataset.state = data.state;
-    resources.get(item)?.abort();
+  function toolCard(data: ToolCardData, card?: HTMLDetailsElement) {
+    if (card) {
+      toolCards.get(card)!.update(data);
+      return card;
+    }
     const resource = new AbortController();
-    resources.set(item, resource);
-    const summary = document.createElement('summary');
-    const name = document.createElement('strong');
-    name.className = 'ui-record-label ui-truncate';
-    name.textContent = data.name.replaceAll('_', ' ');
-    name.title = data.name;
-    const status = document.createElement('span');
-    status.className = 'tool-state';
-    const labels: Record<string, string> = {
-      finished: 'Done',
-      running: 'Running',
-      approval: 'Waiting for approval',
-      denied: 'Denied',
-      skipped: 'Skipped',
-      cancelled: 'Cancelled',
-      error: 'Failed',
-    };
-    const customStatus = extensions.render(data, resource.signal, 'status');
-    if (customStatus) status.append(customStatus);
-    else status.textContent = labels[data.state] ?? data.state;
-    summary.append(icon('chevron'), name);
-    const annotation = extensions.render(data, resource.signal, 'summary');
-    if (annotation) {
-      const slot = document.createElement('span');
-      slot.className = 'tool-summary-slot';
-      slot.append(annotation);
-      summary.append(slot);
-    }
-    const elapsed = data.elapsedMs;
-    if (elapsed !== undefined && Number.isFinite(elapsed)) {
-      const duration = document.createElement('span');
-      duration.className = 'tool-duration';
-      duration.textContent =
-        elapsed < 1000 ? Math.round(elapsed) + ' ms' : (elapsed / 1000).toFixed(1) + ' s';
-      summary.append(duration);
-    }
-    summary.append(status);
-    const body = document.createElement('div');
-    body.className = 'tool-content';
-    const custom = extensions.render(data, resource.signal, 'body');
-    if (custom) body.append(custom);
-    else {
-      const output = textOf(data.content) || Object.values(data.streams ?? {}).join('');
-      if (output) body.append(textOutput(output));
-      for (const block of typeof data.content === 'string' ? [] : (data.content ?? [])) {
-        if (block.type !== 'image') continue;
-        const image = rasterImage(block.mimeType, block.data, 'Tool output');
-        if (image) body.append(image);
-      }
-    }
-    const action = extensions.render(data, resource.signal, 'action');
-    if (action) {
-      body.append(action);
-    }
-    const oldSummary = item.firstElementChild;
-    const oldBody = item.lastElementChild;
-    if (oldSummary && oldBody) {
-      oldSummary.replaceChildren(...summary.children);
-      oldBody.replaceWith(body);
-    } else item.append(summary, body);
-    return item;
+    const view = createToolCard(data, extensions, resource.signal);
+    toolCards.set(view.node, view);
+    resources.set(view.node, resource);
+    return view.node;
   }
 
   function renderUser(message: Extract<ViewMessage, { role: 'user' }>) {
@@ -328,16 +271,15 @@ export function createMessageView(
     return entry;
   }
 
-  function refreshTools(name: string) {
-    for (const card of messages.querySelectorAll<HTMLDetailsElement>('details.tool-card')) {
-      const tool = toolItems.get(card);
-      if (tool?.name === name) toolCard(tool, card);
-    }
+  function refreshTools(name: string, placement: ToolPlacement) {
+    for (const card of toolCards.values()) if (card.name === name) card.refresh(placement);
+    scrollToEnd();
   }
 
   function remove(node: HTMLElement) {
     resources.get(node)?.abort();
     resources.delete(node);
+    toolCards.delete(node);
     node.remove();
   }
 
@@ -388,6 +330,22 @@ export function createMessageView(
     scrollToEnd();
   }
 
+  const progressKey = (runId: string | undefined, callId: string) =>
+    'tool-progress:' + JSON.stringify([runId, callId]);
+
+  function updateTools(runId: string | undefined, tools: Parameters<typeof groupHistory>[3]) {
+    const existing = [...nodes.keys()].filter(key => key.startsWith('tool-progress:'));
+    if (existing.length !== tools.length || tools.some(tool => !nodes.has(progressKey(runId, tool.id)))) return false;
+    for (const tool of tools) {
+      const entry = nodes.get(progressKey(runId, tool.id))!;
+      if (entry.source === tool) continue;
+      toolCards.get(entry.node)!.update(tool);
+      entry.source = tool;
+    }
+    scrollToEnd();
+    return true;
+  }
+
   function history(
     entries: readonly HistoryEntry[],
     run: RunInfo | undefined,
@@ -401,8 +359,6 @@ export function createMessageView(
       markdownSource.delete(preview);
     }
     const pending = new Set(nodes.keys());
-    const progressKey = (runId: string | undefined, callId: string) =>
-      'tool-progress:' + JSON.stringify([runId, callId]);
     function retain<T extends HTMLElement>(key: string, source: unknown, render: (prior?: T) => T) {
       pending.delete(key);
       const prior = nodes.get(key);
@@ -458,7 +414,6 @@ export function createMessageView(
               {
                 name: part.toolName,
                 state: part.toolState,
-                id: part.toolCallId,
                 content: part.content,
                 arguments: part.arguments,
                 details: part.details,
@@ -546,6 +501,7 @@ export function createMessageView(
     reset,
     follow,
     refreshTools,
+    updateTools,
     refreshActions,
     partial(text: string) {
       if (!text || !messages.contains(preview)) return false;

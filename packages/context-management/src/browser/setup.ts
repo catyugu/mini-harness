@@ -1,7 +1,7 @@
 import type { Context } from 'mini-harness/cordis';
 import type {} from '@mini-harness/conversation/browser/composer-api';
 import type {} from '@mini-harness/conversation/browser/conversation-api';
-import type {} from '@mini-harness/conversation/browser/history-api';
+import type { ToolView } from '@mini-harness/conversation/browser/history-api';
 import type {} from '@mini-harness/conversation/browser/navigation-api';
 import type {} from '@mini-harness/settings/browser/api';
 import type {} from '@mini-harness/ui-slots/browser/api';
@@ -381,42 +381,47 @@ function mountStats(ctx: Context) {
 
 function setup(ctx: Context) {
   ctx.inject(['miniMessages'], (history) => {
-    history.effect(() =>
-      history.miniMessages.registerTool(
-        'read_context',
-        ({ arguments: args }) => {
-          if (!args || typeof args !== 'object') return;
-          const input = args as Record<string, unknown>;
-          if (typeof input.entry !== 'string') return;
-          let text = input.entry;
+    history.effect(() => history.miniMessages.registerTool('read_context', () => {
+      const node = document.createElement('code');
+      node.className = 'context-tool-summary ui-truncate';
+      return { node, update({ arguments: args }) {
+        const input = args && typeof args === 'object' ? args as Record<string, unknown> : {};
+        let text = typeof input.entry === 'string' ? input.entry : '';
+        if (text) {
           if (typeof input.image === 'number') text += ' · image ' + input.image;
           if (typeof input.offset === 'number') text += ' · offset ' + input.offset;
           if (typeof input.limit === 'number') text += ' · limit ' + input.limit;
           if (input.raw === true) text += ' · raw';
-          const node = document.createElement('code');
-          node.className = 'context-tool-summary ui-truncate';
-          node.textContent = text;
-          return node;
-        },
-        'summary',
-      ),
-    );
-    history.effect(() =>
-      history.miniMessages.registerTool('read_context', ({ content }) => {
-        const node = document.createElement('div');
-        node.className = 'context-tool-body';
-        if (typeof content === 'string') node.append(textOutput(content));
-        else
-          for (const block of content ?? []) {
-            if (block.type === 'text' && block.text) node.append(textOutput(block.text));
-            if (block.type === 'image') {
-              const image = rasterImage(block.mimeType, block.data, 'Context image');
-              if (image) node.append(image);
-            }
+        }
+        if (node.textContent !== text) node.textContent = text;
+        node.hidden = !text;
+      } };
+    }, 'summary'));
+    history.effect(() => history.miniMessages.registerTool('read_context', () => {
+      const node = document.createElement('div');
+      node.className = 'context-tool-body';
+      let previous: ToolView['content'];
+      return { node, update({ content }) {
+        if (previous === content) return;
+        previous = content;
+        const blocks = typeof content === 'string' ? [{ type: 'text' as const, text: content }] : content ?? [];
+        const children: HTMLElement[] = [];
+        for (const block of blocks) {
+          const existing = node.children[children.length];
+          if (block.type === 'text' && block.text) {
+            const output = existing instanceof HTMLPreElement ? existing : textOutput('');
+            if (output.textContent !== block.text) output.textContent = block.text;
+            children.push(output);
+          } else if (block.type === 'image') {
+            const image = rasterImage(block.mimeType, block.data, 'Context image');
+            if (image) children.push(existing instanceof HTMLImageElement && existing.src === image.src ? existing : image);
           }
-        return node;
-      }),
-    );
+        }
+        for (const [index, child] of children.entries())
+          if (node.children[index] !== child) node.insertBefore(child, node.children[index] ?? null);
+        while (node.children.length > children.length) node.lastElementChild!.remove();
+      } };
+    }));
     history.effect(() =>
       history.miniMessages.registerRecord('context-management', 'checkpoint', (record) => {
         if (typeof record.content !== 'string') throw new Error('Invalid checkpoint summary');

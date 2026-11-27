@@ -5,7 +5,6 @@ import type {
   RecordRenderer,
   ToolRenderer,
   ToolPlacement,
-  ToolView,
   TurnFooterRenderer,
 } from '../history-api.ts';
 
@@ -135,21 +134,26 @@ export class MessageExtensions {
   }
 
   registerTool(name: string, render: ToolRenderer, placement: ToolPlacement = 'body', priority = 0) {
-    return this.replace(this.tools[placement], name, render, 'tools', priority);
+    const registry = this.tools[placement];
+    const prior = registry.get(name);
+    const remove = registry.add(name, render, priority);
+    const change = () => this.events.dispatchEvent(new CustomEvent('tools', { detail: { name, placement } }));
+    if (prior !== registry.get(name)) change();
+    return () => {
+      const selected = registry.get(name);
+      remove();
+      if (selected !== registry.get(name)) change();
+    };
   }
 
-  subscribeToTools(listener: (name: string) => void, signal: AbortSignal) {
-    this.events.addEventListener(
-      'tools',
-      (event) => {
-        if (event instanceof CustomEvent && typeof event.detail === 'string') listener(event.detail);
-      },
-      { signal },
-    );
+  subscribeToTools(listener: (name: string, placement: ToolPlacement) => void, signal: AbortSignal) {
+    this.events.addEventListener('tools', (event) => {
+      const { name, placement } = (event as CustomEvent<{ name: string; placement: ToolPlacement }>).detail;
+      listener(name, placement);
+    }, { signal });
   }
 
-  render(tool: ToolView, signal: AbortSignal, placement: ToolPlacement = 'body') {
-    const render = this.tools[placement].get(tool.name);
-    if (render) return this.renderWithLifetime(signal, (lifetime) => render(tool, lifetime));
+  toolRenderer(name: string, placement: ToolPlacement) {
+    return this.tools[placement].get(name);
   }
 }

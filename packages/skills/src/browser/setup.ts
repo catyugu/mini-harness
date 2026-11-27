@@ -1,3 +1,4 @@
+import type { ToolView } from '@mini-harness/conversation/browser/history-api';
 import { browserRequest } from '@mini-harness/ui-runtime/http';
 import type { Context } from 'mini-harness/cordis';
 import { workspaceRoute } from '@mini-harness/workspaces/browser/route';
@@ -5,39 +6,38 @@ import { iconButton, textOutput } from '@mini-harness/ui-primitives/primitives';
 
 const setup = (ctx: Context) => {
   ctx.inject(['miniMessages'], (history) => {
-    history.effect(() =>
-      history.miniMessages.registerTool(
-        'load_skill',
-        ({ arguments: args }) => {
-          if (!args || typeof args !== 'object' || !('name' in args) || typeof args.name !== 'string') return;
-          const node = document.createElement('span');
-          node.className = 'skill-tool-summary ui-truncate';
-          node.textContent = args.name;
-          return node;
-        },
-        'summary',
-      ),
-    );
-    history.effect(() =>
-      history.miniMessages.registerTool('load_skill', ({ arguments: args, content }) => {
-        const node = document.createElement('div');
-        node.className = 'skill-tool-body';
-        if (args && typeof args === 'object' && 'name' in args && typeof args.name === 'string') {
-          const name = document.createElement('strong');
-          name.textContent = args.name;
-          node.append(name);
+    function nameOf(args: unknown) {
+      return args && typeof args === 'object' && 'name' in args && typeof args.name === 'string' ? args.name : '';
+    }
+    history.effect(() => history.miniMessages.registerTool('load_skill', () => {
+      const node = document.createElement('span');
+      node.className = 'skill-tool-summary ui-truncate';
+      return { node, update(tool) {
+        const name = nameOf(tool.arguments);
+        if (node.textContent !== name) node.textContent = name;
+        node.hidden = !name;
+      } };
+    }, 'summary'));
+    history.effect(() => history.miniMessages.registerTool('load_skill', () => {
+      const node = document.createElement('div');
+      node.className = 'skill-tool-body';
+      const title = document.createElement('strong');
+      const output = textOutput('');
+      node.append(title, output);
+      let previous: ToolView['content'];
+      return { node, update({ arguments: args, content }) {
+        const name = nameOf(args);
+        if (title.textContent !== name) title.textContent = name;
+        title.hidden = !name;
+        if (content !== previous) {
+          previous = content;
+          const text = typeof content === 'string' ? content :
+            content?.filter(block => block.type === 'text').map(block => block.text).join('\n') ?? '';
+          if (output.textContent !== text) output.textContent = text;
         }
-        const text =
-          typeof content === 'string'
-            ? content
-            : content
-                ?.filter((block) => block.type === 'text')
-                .map((block) => block.text)
-                .join('\n');
-        if (text) node.append(textOutput(text));
-        return node;
-      }),
-    );
+        output.hidden = !output.textContent;
+      } };
+    }));
   });
   const signal = ctx.fiber.signal;
   const services = ctx.harnessBrowser;

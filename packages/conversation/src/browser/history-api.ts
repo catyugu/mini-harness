@@ -3,7 +3,12 @@ import type { LiveRecord } from '@mini-harness/runs/stream';
 import type { MessageContent, ViewMessage } from '@mini-harness/sessions/message';
 
 export type ToolPlacement = 'body' | 'action' | 'summary' | 'status';
-export type ToolRenderer = (tool: ToolView, signal: AbortSignal) => HTMLElement | undefined;
+export interface ToolRenderInstance {
+  readonly node: HTMLElement;
+  update(tool: Readonly<ToolView>): void;
+}
+
+export type ToolRenderer = (signal: AbortSignal) => ToolRenderInstance;
 export interface ToolView {
   name: string;
   state: string;

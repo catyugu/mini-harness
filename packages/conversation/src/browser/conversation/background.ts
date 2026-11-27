@@ -404,118 +404,112 @@ function setup(ctx: Context) {
     if (open()) for (const row of rows.values()) row.tick();
   }, 1000);
   ctx.effect(() => () => clearInterval(interval));
-  const receipt = ({ details, content, arguments: args }: ToolView, signal: AbortSignal) => {
-    const body = document.createElement('div');
-    body.className = 'background-tool-body';
-    if (args && typeof args === 'object' && 'tool' in args && typeof args.tool === 'string') {
-      const label = document.createElement('strong');
-      label.textContent = args.tool;
-      body.append(label);
-      if ('arguments' in args && args.arguments !== undefined)
-        body.append(textOutput(JSON.stringify(args.arguments, null, 2)));
-    }
-    const taskId = details?.taskId;
-    if (typeof taskId !== 'string') {
-      const output =
-        typeof content === 'string'
-          ? content
-          : content
-              ?.filter((block) => block.type === 'text')
-              .map((block) => block.text)
-              .join('\n');
-      if (output) body.append(textOutput(output));
-      return body;
-    }
+  function toolInput(args: unknown) {
+    return args && typeof args === 'object' ? args as Record<string, unknown> : {};
+  }
+  function contentText(content: ToolView['content']) {
+    return typeof content === 'string' ? content :
+      content?.filter(block => block.type === 'text').map(block => block.text).join('\n') ?? '';
+  }
+  const receipt = (signal: AbortSignal) => {
     const node = document.createElement('div');
-    node.className = 'task-receipt';
+    node.className = 'background-tool-body';
+    const title = document.createElement('strong');
+    const input = textOutput('');
+    const line = document.createElement('div');
+    line.className = 'task-receipt';
     const text = document.createElement('span');
-    node.append(text);
     const view = button('View task', 'quiet');
+    line.append(text, view);
+    const output = textOutput('');
+    node.append(title, input, line, output);
+    let taskId: string | undefined;
+    let receiptOutput = '';
+    let previousArgs: unknown = Symbol();
     view.onclick = () => {
       const task = tasks.find(({ id }) => id === taskId);
       if (!task) return;
-      dismissed.delete(taskId);
+      dismissed.delete(task.id);
       if (!live(task)) finishedOpen = true;
       render();
       if (!open()) panel.showPopover();
-      if (expanded?.id !== taskId) showOutput(task);
+      if (expanded?.id !== task.id) showOutput(task);
     };
-    node.append(view);
-    body.append(node);
-    const output = textOutput('');
-    output.hidden = true;
-    body.append(output);
-    const update = () => {
+    function refreshReceipt() {
       const task = tasks.find(({ id }) => id === taskId);
-      text.textContent = task ? label(task) + ' · ' + status(task) : 'Accepted';
-      const result = task && (resultText(task.result) || resultText(task.progress) || task.error);
-      output.textContent = result || '';
+      const caption = task ? label(task) + ' · ' + status(task) : 'Accepted';
+      if (text.textContent !== caption) text.textContent = caption;
+      line.hidden = !taskId;
+      const result = taskId ? (task && (resultText(task.result) || resultText(task.progress) || task.error)) ?? '' : receiptOutput;
+      if (output.textContent !== result) output.textContent = result;
       output.hidden = !result;
-    };
-    events.addEventListener('change', update, { signal });
-    update();
-    return body;
+    }
+    events.addEventListener('change', refreshReceipt, { signal });
+    return { node, update({ details, content, arguments: args }: ToolView) {
+      if (args !== previousArgs) {
+        previousArgs = args;
+        const value = toolInput(args);
+        const label = typeof value.tool === 'string' ? value.tool : '';
+        const shown = label && value.arguments !== undefined ? JSON.stringify(value.arguments, null, 2) : '';
+        if (title.textContent !== label) title.textContent = label;
+        if (input.textContent !== shown) input.textContent = shown;
+        title.hidden = !label;
+        input.hidden = !shown;
+      }
+      taskId = typeof details?.taskId === 'string' ? details.taskId : undefined;
+      receiptOutput = contentText(content);
+      refreshReceipt();
+    } };
   };
-  ctx.effect(() =>
-    ctx.miniMessages.registerTool(
-      'start_background',
-      ({ arguments: args, details }) => {
-        if (!args || typeof args !== 'object' || !('tool' in args) || typeof args.tool !== 'string') return;
-        const node = document.createElement('span');
-        node.className = 'background-tool-summary ui-truncate';
-        const tool = document.createElement('code');
-        tool.textContent = args.tool;
-        node.append(tool, typeof details?.taskId === 'string' ? ' · ' + details.taskId : '');
-        return node;
-      },
-      'summary',
-    ),
-  );
-  ctx.effect(() =>
-    ctx.miniMessages.registerTool(
-      'task_control',
-      ({ arguments: args }) => {
-        if (!args || typeof args !== 'object') return;
-        const input = args as Record<string, unknown>;
-        if (typeof input.action !== 'string') return;
-        const node = document.createElement('span');
-        node.className = 'background-tool-summary ui-truncate';
-        const action = document.createElement('strong');
-        action.textContent = input.action;
-        node.append(action, typeof input.taskId === 'string' ? ' · ' + input.taskId : '');
-        return node;
-      },
-      'summary',
-    ),
-  );
+  ctx.effect(() => ctx.miniMessages.registerTool('start_background', () => {
+    const node = document.createElement('span');
+    node.className = 'background-tool-summary ui-truncate';
+    const label = document.createElement('code');
+    const id = document.createTextNode('');
+    node.append(label, id);
+    return { node, update({ arguments: args, details }) {
+      const input = toolInput(args);
+      const tool = typeof input.tool === 'string' ? input.tool : '';
+      const target = typeof details?.taskId === 'string' ? ' · ' + details.taskId : '';
+      if (label.textContent !== tool) label.textContent = tool;
+      if (id.data !== target) id.data = target;
+      node.hidden = !tool;
+    } };
+  }, 'summary'));
+  ctx.effect(() => ctx.miniMessages.registerTool('task_control', () => {
+    const node = document.createElement('span');
+    node.className = 'background-tool-summary ui-truncate';
+    const action = document.createElement('strong');
+    const id = document.createTextNode('');
+    node.append(action, id);
+    return { node, update({ arguments: args }) {
+      const input = toolInput(args);
+      const name = typeof input.action === 'string' ? input.action : '';
+      const target = typeof input.taskId === 'string' ? ' · ' + input.taskId : '';
+      if (action.textContent !== name) action.textContent = name;
+      if (id.data !== target) id.data = target;
+      node.hidden = !name;
+    } };
+  }, 'summary'));
   ctx.effect(() => ctx.miniMessages.registerTool('start_background', receipt));
-  ctx.effect(() =>
-    ctx.miniMessages.registerTool('task_control', ({ content }) => {
-      const body = document.createElement('div');
-      body.className = 'background-tool-body';
-      const output =
-        typeof content === 'string'
-          ? content
-          : content
-              ?.filter((block) => block.type === 'text')
-              .map((block) => block.text)
-              .join('\n');
-      if (output) body.append(textOutput(output));
-      return body;
-    }),
-  );
-  ctx.effect(() =>
-    ctx.miniMessages.registerTool(
-      'start_background',
-      ({ details }) => {
-        if (details?.state !== 'accepted') return;
-        const node = document.createElement('span');
-        node.textContent = 'Accepted';
-        return node;
-      },
-      'status',
-    ),
-  );
+  ctx.effect(() => ctx.miniMessages.registerTool('task_control', () => {
+    const node = document.createElement('div');
+    node.className = 'background-tool-body';
+    const output = textOutput('');
+    node.append(output);
+    return { node, update({ content }) {
+      const text = contentText(content);
+      if (output.textContent !== text) output.textContent = text;
+      output.hidden = !text;
+    } };
+  }));
+  ctx.effect(() => ctx.miniMessages.registerTool('start_background', () => {
+    const node = document.createElement('span');
+    return { node, update({ details }) {
+      const text = details?.state === 'accepted' ? 'Accepted' : '';
+      if (node.textContent !== text) node.textContent = text;
+    } };
+  }, 'status'));
   void refresh();
 }
 

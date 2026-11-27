@@ -35,6 +35,7 @@ test('renders Markdown and tool results, and stops a pending reply', async ({ pa
     }
     if (last.content === 'Change course') return 'Steering accepted';
     if (last.content === 'Stop this tool') return { tool: 'wait_for_stop', args: {} };
+    if (last.content === 'Stream a tool') return { tool: 'stream_fixture', args: { label: 'Stream fixture' } };
     if (last.content.startsWith('Write a continuation checkpoint')) return checkpointFixture;
     if (last.content === 'Reuse the tool ID')
       return { tool: 'read', args: { path: 'sample.txt' }, callId: 'reused-tool' };
@@ -56,6 +57,7 @@ test('renders Markdown and tool results, and stops a pending reply', async ({ pa
     'bad-renderer',
     {},
     `
+import { existsSync } from 'node:fs';
 export const inject = ["harnessSessions", "harnessTools"];
 export const apply = (ctx) => {
       ctx.effect(() => ctx.harnessTools.register({
@@ -63,6 +65,24 @@ export const apply = (ctx) => {
         async execute(_args, { signal }) {
           signal.throwIfAborted();
           await new Promise((_, reject) => signal.addEventListener("abort", () => reject(signal.reason), { once: true }));
+        }
+      }));
+      ctx.effect(() => ctx.harnessTools.register({
+        name: 'stream_fixture', description: 'Stream controlled output', parameters: {
+          type: 'object', properties: { label: { type: 'string' } }, required: ['label']
+        },
+        async execute(_args, { signal, write }) {
+          const gate = async (name) => {
+            while (!existsSync(name)) {
+              signal.throwIfAborted();
+              await new Promise(resolve => setTimeout(resolve, 25));
+            }
+          };
+          write('First line\\n', 'stdout');
+          await gate(${JSON.stringify(join(paths.cwd, "stream-more"))});
+          write('Second line\\n', 'stdout');
+          await gate(${JSON.stringify(join(paths.cwd, "stream-finish"))});
+          return { content: [{ type: 'text', text: 'First line\\nSecond line\\nComplete' }], details: { finished: true }, detailKeys: ['finished'] };
         }
       }));
       ctx.on("agent/tool-result", async (_content, { sessionId, tool }) => {
@@ -94,7 +114,33 @@ export const apply = (ctx) => {
           });
         }
       }));
-      ctx.effect(() => ctx.miniMessages.registerTool('ls', (_tool, signal) => {
+      ctx.effect(() => ctx.miniMessages.registerTool('stream_fixture', () => {
+        const node = document.createElement('span');
+        node.textContent = 'Stream fixture';
+        return { node, update() {} };
+      }, 'summary'));
+      ctx.effect(() => ctx.miniMessages.registerTool('stream_fixture', signal => {
+        const node = document.createElement('div');
+        const output = document.createElement('pre');
+        output.setAttribute('aria-label', 'Fixture stream');
+        const action = document.createElement('button');
+        action.textContent = 'Fixture action';
+        node.append(output, action);
+        const mounted = Number(document.body.dataset.streamMounted ?? 0) + 1;
+        document.body.dataset.streamMounted = String(mounted);
+        signal.addEventListener('abort', () => {
+          document.body.dataset.streamReleased = String(Number(document.body.dataset.streamReleased ?? 0) + 1);
+        }, { once: true });
+        return { node, update(tool) {
+          const text = tool.streams?.stdout ?? (typeof tool.content === 'string' ? tool.content : tool.content?.map(block => block.text).join('') ?? '');
+          if (output.textContent !== text) output.textContent = text;
+        } };
+      }));
+      ctx.effect(() => ctx.miniMessages.registerTool('stream_fixture', () => {
+        const node = document.createElement('span');
+        return { node, update(tool) { node.textContent = tool.details?.finished ? 'Stream complete' : ''; } };
+      }, 'status'));
+      ctx.effect(() => ctx.miniMessages.registerTool('ls', (signal) => {
         document.body.dataset.activeFailedRenderers = String(Number(document.body.dataset.activeFailedRenderers ?? 0) + 1);
         signal.addEventListener('abort', () => {
           document.body.dataset.activeFailedRenderers = String(Number(document.body.dataset.activeFailedRenderers) - 1);
@@ -268,6 +314,33 @@ export const apply = (ctx) => {
     await expect(cancelled.locator('.tool-state')).toHaveText('Cancelled');
     await page.reload();
     await expect(cancelled.locator('.tool-state')).toHaveText('Cancelled');
+
+    await prompt.fill('Stream a tool');
+    await page.getByRole('button', { name: 'Send', exact: true }).click();
+    const stream = page.locator('.tool-card').last();
+    const header = stream.locator('summary');
+    await expect(header).toHaveAccessibleName(/stream fixture.*Running/i);
+    await header.click();
+    const output = stream.getByLabel('Fixture stream');
+    await expect(output).toHaveText('First line');
+    const summary = expectPresent(await header.elementHandle(), 'stream summary');
+    const pre = expectPresent(await output.elementHandle(), 'stream output');
+    const action = expectPresent(await stream.getByRole('button', { name: 'Fixture action' }).elementHandle(), 'stream action');
+    await action.focus();
+    writeFileSync(join(paths.cwd, 'stream-more'), '');
+    await expect(output).toHaveText(/First line\s+Second line/);
+    await expect(stream.getByRole('button', { name: 'Fixture action' })).toBeFocused();
+    expect(await pre.evaluate(node => node.isConnected)).toBe(true);
+    expect(await summary.evaluate(node => node.isConnected)).toBe(true);
+    expect(await action.evaluate(node => node.isConnected)).toBe(true);
+    writeFileSync(join(paths.cwd, 'stream-finish'), '');
+    await expect(header).toHaveAccessibleName(/Stream complete/);
+    await expect(output).toHaveText(/First line\s+Second line\s+Complete/);
+    expect(await pre.evaluate(node => node.isConnected)).toBe(true);
+    expect(await action.evaluate(node => node.isConnected)).toBe(true);
+    await expect(page.locator('body')).toHaveAttribute('data-stream-mounted', '1');
+    await page.getByRole('button', { name: 'New conversation', exact: true }).click();
+    await expect(page.locator('body')).toHaveAttribute('data-stream-released', '1');
   } finally {
     release();
     resumeSteering();

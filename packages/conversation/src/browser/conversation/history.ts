@@ -29,17 +29,25 @@ export function mountHistory(ctx: Context, extensions: MessageExtensions, signal
   );
 
   let selected: string | undefined;
+  let renderedTools: ReturnType<typeof control.get>['tools'];
   function render() {
     const { session, history, run, partial, tools, records } = control.get();
     if (!history || selected !== session?.id) view.reset();
     selected = session?.id;
+    renderedTools = tools;
     if (history) view.history(history.timeline, run, partial, tools, records);
   }
   extensions.subscribe(view.refreshActions, signal);
   extensions.subscribeToTools(view.refreshTools, signal);
   extensions.subscribeToFooters(render, signal);
   extensions.subscribeToRecords(render, signal);
-  control.subscribe(['session', 'history', 'run', 'tools', 'records'], render, signal);
+  control.subscribe(['session', 'history', 'run', 'records'], render, signal);
+  control.subscribe(['tools'], () => {
+    const { tools, run } = control.get();
+    if (tools === renderedTools) return;
+    if (view.updateTools(run?.id, tools)) renderedTools = tools;
+    else render();
+  }, signal);
   control.subscribe(
     ['partial'],
     () => {

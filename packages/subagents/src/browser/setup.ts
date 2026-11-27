@@ -1,4 +1,5 @@
 import type { Context } from 'mini-harness/cordis';
+import type { ToolView } from '@mini-harness/conversation/browser/history-api';
 import { isRunning, type RunInfo } from '@mini-harness/sessions/run-state';
 import { icon } from '@mini-harness/ui-primitives/icons';
 import { bindPopover, fromMarkup, required, textOutput } from '@mini-harness/ui-primitives/primitives';
@@ -120,120 +121,104 @@ const setup = (ctx: Context) => {
     if (panel.matches(':popover-open')) tick();
   }, 1000);
   ctx.effect(() => () => clearInterval(timer));
-  ctx.effect(() =>
-    ctx.miniMessages.registerTool(
-      'delegate',
-      ({ arguments: args }) => {
-        if (!args || typeof args !== 'object' || !('task' in args) || typeof args.task !== 'string') return;
-        const node = document.createElement('span');
-        node.className = 'subagent-tool-summary ui-truncate';
-        node.textContent = args.task;
-        return node;
-      },
-      'summary',
-    ),
-  );
-  ctx.effect(() =>
-    ctx.miniMessages.registerTool(
-      'send_message',
-      ({ arguments: args }) => {
-        if (!args || typeof args !== 'object') return;
-        const input = args as Record<string, unknown>;
-        if (typeof input.sessionId !== 'string') return;
-        const node = document.createElement('span');
-        node.className = 'subagent-tool-summary ui-truncate';
-        const target = document.createElement('code');
-        target.textContent = input.sessionId;
-        node.append(target, typeof input.message === 'string' ? ': ' + input.message : '');
-        return node;
-      },
-      'summary',
-    ),
-  );
-  ctx.effect(() =>
-    ctx.miniMessages.registerTool('delegate', ({ arguments: args, details, content }, lifetime) => {
-      const body = document.createElement('div');
-      body.className = 'subagent-tool-body';
-      if (args && typeof args === 'object' && 'task' in args && typeof args.task === 'string')
-        body.append(textOutput(args.task));
-      const sessionId = details?.sessionId;
-      if (typeof sessionId !== 'string') {
-        const output =
-          typeof content === 'string'
-            ? content
-            : content
-                ?.filter((block) => block.type === 'text')
-                .map((block) => block.text)
-                .join('\n');
-        if (output) body.append(textOutput(output));
-        return body;
-      }
-      const text = document.createElement('span');
-      text.className = 'subagent-receipt';
-      const update = () => {
-        const child = services.session(sessionId);
-        text.textContent = child
-          ? child.title + ' · ' + runStatus(child.run, child.waitingApproval)
-          : 'Accepted';
-      };
-      services.onConversationChange(update, lifetime);
-      update();
-      body.append(text);
-      return body;
-    }),
-  );
-  ctx.effect(() =>
-    ctx.miniMessages.registerTool('send_message', ({ arguments: args, content }) => {
-      const body = document.createElement('div');
-      body.className = 'subagent-tool-body';
-      if (args && typeof args === 'object') {
-        const input = args as Record<string, unknown>;
-        if (typeof input.sessionId === 'string') {
-          const target = document.createElement('code');
-          target.textContent = input.sessionId;
-          body.append(target);
-        }
-        if (typeof input.message === 'string') body.append(textOutput(input.message));
-      }
-      const output =
-        typeof content === 'string'
-          ? content
-          : content
-              ?.filter((block) => block.type === 'text')
-              .map((block) => block.text)
-              .join('\n');
-      if (output) body.append(textOutput(output));
-      return body;
-    }),
-  );
-  ctx.effect(() =>
-    ctx.miniMessages.registerTool(
-      'delegate',
-      ({ details }) => {
-        const sessionId = details?.sessionId;
-        if (typeof sessionId !== 'string') return;
-        const button = document.createElement('button');
-        button.type = 'button';
-        button.className = 'link-button';
-        button.append(icon('chevron'), document.createTextNode(' Open child conversation'));
-        button.onclick = () => services.openConversation(sessionId);
-        return button;
-      },
-      'action',
-    ),
-  );
-  ctx.effect(() =>
-    ctx.miniMessages.registerTool(
-      'delegate',
-      ({ details }) => {
-        if (details?.state !== 'accepted') return;
-        const node = document.createElement('span');
-        node.textContent = 'Accepted';
-        return node;
-      },
-      'status',
-    ),
-  );
+  function argsOf(args: unknown): Record<string, unknown> {
+    return args && typeof args === 'object' ? args as Record<string, unknown> : {};
+  }
+  function stringOf(value: unknown) { return typeof value === 'string' ? value : ''; }
+  function resultOf(content: ToolView['content']) {
+    return typeof content === 'string' ? content :
+      content?.filter(block => block.type === 'text').map(block => block.text).join('\n') ?? '';
+  }
+  ctx.effect(() => ctx.miniMessages.registerTool('delegate', () => {
+    const node = document.createElement('span');
+    node.className = 'subagent-tool-summary ui-truncate';
+    return { node, update({ arguments: args }) {
+      const task = stringOf(argsOf(args).task);
+      if (node.textContent !== task) node.textContent = task;
+      node.hidden = !task;
+    } };
+  }, 'summary'));
+  ctx.effect(() => ctx.miniMessages.registerTool('send_message', () => {
+    const node = document.createElement('span');
+    node.className = 'subagent-tool-summary ui-truncate';
+    const target = document.createElement('code');
+    const message = document.createTextNode('');
+    node.append(target, message);
+    return { node, update({ arguments: args }) {
+      const input = argsOf(args);
+      const id = stringOf(input.sessionId);
+      const value = typeof input.message === 'string' ? ': ' + input.message : '';
+      if (target.textContent !== id) target.textContent = id;
+      if (message.data !== value) message.data = value;
+      node.hidden = !id;
+    } };
+  }, 'summary'));
+  ctx.effect(() => ctx.miniMessages.registerTool('delegate', lifetime => {
+    const node = document.createElement('div');
+    node.className = 'subagent-tool-body';
+    const task = textOutput('');
+    const receipt = document.createElement('span');
+    receipt.className = 'subagent-receipt';
+    const output = textOutput('');
+    node.append(task, receipt, output);
+    let sessionId: string | undefined;
+    function refresh() {
+      const child = sessionId ? services.session(sessionId) : undefined;
+      const text = child ? child.title + ' · ' + runStatus(child.run, child.waitingApproval) : 'Accepted';
+      if (receipt.textContent !== text) receipt.textContent = text;
+      receipt.hidden = !sessionId;
+    }
+    services.onConversationChange(refresh, lifetime);
+    return { node, update({ arguments: args, details, content }) {
+      const input = stringOf(argsOf(args).task);
+      if (task.textContent !== input) task.textContent = input;
+      task.hidden = !input;
+      sessionId = typeof details?.sessionId === 'string' ? details.sessionId : undefined;
+      refresh();
+      const result = sessionId ? '' : resultOf(content);
+      if (output.textContent !== result) output.textContent = result;
+      output.hidden = !result;
+    } };
+  }));
+  ctx.effect(() => ctx.miniMessages.registerTool('send_message', () => {
+    const node = document.createElement('div');
+    node.className = 'subagent-tool-body';
+    const target = document.createElement('code');
+    const message = textOutput('');
+    const output = textOutput('');
+    node.append(target, message, output);
+    return { node, update({ arguments: args, content }) {
+      const input = argsOf(args);
+      const id = stringOf(input.sessionId);
+      const text = stringOf(input.message);
+      const result = resultOf(content);
+      if (target.textContent !== id) target.textContent = id;
+      if (message.textContent !== text) message.textContent = text;
+      if (output.textContent !== result) output.textContent = result;
+      target.hidden = !id;
+      message.hidden = !text;
+      output.hidden = !result;
+    } };
+  }));
+  ctx.effect(() => ctx.miniMessages.registerTool('delegate', () => {
+    const node = document.createElement('button');
+    node.type = 'button';
+    node.className = 'link-button';
+    node.append(icon('chevron'), document.createTextNode(' Open child conversation'));
+    let target: string | undefined;
+    node.onclick = () => { if (target) services.openConversation(target); };
+    return { node, update({ details }) {
+      target = typeof details?.sessionId === 'string' ? details.sessionId : undefined;
+      node.hidden = !target;
+    } };
+  }, 'action'));
+  ctx.effect(() => ctx.miniMessages.registerTool('delegate', () => {
+    const node = document.createElement('span');
+    return { node, update({ details }) {
+      const label = details?.state === 'accepted' ? 'Accepted' : '';
+      if (node.textContent !== label) node.textContent = label;
+    } };
+  }, 'status'));
 };
 export default {
   inject: ['harnessBrowser', 'miniSessions', 'miniMessages', 'miniSlots'],

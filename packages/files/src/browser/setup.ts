@@ -24,36 +24,61 @@ function fileTarget({ name, arguments: args }: ToolView) {
       if (typeof input.limit === 'number') detail += ' · limit ' + input.limit;
     }
   }
+  return { subject, detail };
+}
+
+function targetView() {
   const node = document.createElement('span');
   node.className = 'file-tool-target';
   const primary = document.createElement('code');
-  primary.textContent = subject;
-  node.append(primary, detail);
-  return node;
+  const secondary = document.createTextNode('');
+  node.append(primary, secondary);
+  let previous: unknown = Symbol();
+  return {
+    node,
+    update(tool: ToolView) {
+      if (previous === tool.arguments) return;
+      previous = tool.arguments;
+      const target = fileTarget(tool);
+      node.hidden = !target;
+      if (!target) return;
+      if (primary.textContent !== target.subject) primary.textContent = target.subject;
+      if (secondary.data !== target.detail) secondary.data = target.detail;
+    },
+  };
 }
 
-function fileSummary(tool: ToolView) {
-  const node = fileTarget(tool);
-  node?.classList.add('ui-truncate');
-  return node;
+function fileSummary() {
+  const view = targetView();
+  view.node.classList.add('ui-truncate');
+  return view;
 }
 
-function fileBody(tool: ToolView) {
+function fileBody() {
   const node = document.createElement('div');
   node.className = 'file-tool-body';
-  const target = fileTarget(tool);
-  if (target) node.append(target);
-  const args = tool.arguments;
+  const target = targetView();
+  const input = document.createElement('div');
+  const result = document.createElement('div');
+  node.append(target.node, input, result);
+  let previousArgs: unknown = Symbol();
+  let previousContent: ToolView['content'];
+  function updateInput(tool: ToolView) {
+    const args = tool.arguments;
+    if (previousArgs === args) return;
+    previousArgs = args;
+    target.update(tool);
+    input.replaceChildren();
   if (args && typeof args === 'object') {
     if (tool.name === 'write' && 'content' in args && typeof args.content === 'string') {
       const label = document.createElement('span');
       label.textContent = 'Requested content';
-      node.append(label, textOutput(args.content));
+      input.append(label, textOutput(args.content));
     }
     if (tool.name === 'edit' && 'edits' in args && Array.isArray(args.edits)) {
       const label = document.createElement('span');
       label.textContent = 'Requested edits';
-      node.append(label);
+      input.append(label);
       for (const edit of args.edits) {
         if (!edit || typeof edit.oldText !== 'string' || typeof edit.newText !== 'string') continue;
         const before = textOutput(edit.oldText);
@@ -62,20 +87,36 @@ function fileBody(tool: ToolView) {
         const after = textOutput(edit.newText);
         after.classList.add('file-edit-after');
         after.setAttribute('aria-label', 'After');
-        node.append(before, after);
+        input.append(before, after);
       }
     }
   }
-  if (typeof tool.content === 'string') node.append(textOutput(tool.content));
-  else
-    for (const block of tool.content ?? []) {
-      if (block.type === 'text' && block.text) node.append(textOutput(block.text));
+    input.hidden = !input.childElementCount;
+  }
+  function updateResult(tool: ToolView) {
+    if (previousContent === tool.content) return;
+    previousContent = tool.content;
+    const blocks = typeof tool.content === 'string' ? [{ type: 'text' as const, text: tool.content }] : tool.content ?? [];
+    const children: HTMLElement[] = [];
+    for (const block of blocks) {
+      const existing = result.children[children.length];
+      if (block.type === 'text' && block.text) {
+        const output = existing instanceof HTMLPreElement ? existing : textOutput('');
+        if (output.textContent !== block.text) output.textContent = block.text;
+        children.push(output);
+      }
       if (block.type === 'image') {
         const image = rasterImage(block.mimeType, block.data, 'File image');
-        if (image) node.append(image);
+        if (image) children.push(existing instanceof HTMLImageElement && existing.src === image.src ? existing : image);
       }
     }
-  return node;
+    for (const [index, child] of children.entries())
+      if (result.children[index] !== child) result.insertBefore(child, result.children[index] ?? null);
+    while (result.children.length > children.length) result.lastElementChild!.remove();
+    result.hidden = !children.length;
+  }
+  input.hidden = result.hidden = true;
+  return { node, update(tool: ToolView) { updateInput(tool); updateResult(tool); } };
 }
 
 function setup(ctx: Context) {
