@@ -11,12 +11,12 @@ import { icon } from '@mini-harness/ui-primitives/icons';
 import { maxModelTokens, modelDefaults, type ProviderModelDefinition } from '../shared/pi-provider.ts';
 
 export function catalogEditor() {
-  const root = fromMarkup(`<section class="catalog-editor">
-    <div class="catalog-heading"><h3>Model catalog</h3><div class="ui-actions"></div></div>
-    <div class="catalog-rows"></div>
+  const root = fromMarkup(`<section class="model-catalog-editor">
+    <div class="model-catalog-heading"><h3>Model catalog</h3><div class="ui-actions"></div></div>
+    <div class="model-catalog-rows"></div>
   </section>`);
   const actions = required(root.querySelector('.ui-actions'));
-  const list = required(root.querySelector('.catalog-rows'));
+  const list = required(root.querySelector('.model-catalog-rows'));
   const add = button('Add model', 'quiet');
   root.append(add);
   const readers = new WeakMap<Element, () => ProviderModelDefinition>();
@@ -29,17 +29,17 @@ export function catalogEditor() {
   }
 
   function addRow(model?: ProviderModelDefinition) {
-    const node = fromMarkup(`<div class="catalog-model" role="group" aria-label="Model">
-      <div class="catalog-row">
+    const node = fromMarkup(`<div class="model-catalog-model" role="group" aria-label="Model">
+      <div class="model-catalog-row">
         <input class="ui-input" aria-label="Model ID" placeholder="Model ID" maxlength="160" required>
-        <input class="ui-input catalog-name" aria-label="Display name" placeholder="Display name" maxlength="160">
+        <input class="ui-input model-catalog-name" aria-label="Display name" placeholder="Display name" maxlength="160">
       </div>
-      <div class="catalog-advanced" hidden>
-        <div class="catalog-grid">
+      <div class="model-catalog-advanced" hidden>
+        <div class="model-catalog-grid">
           <label class="ui-field">Context window<input type="number" min="1" max="${maxModelTokens}" required></label>
           <label class="ui-field">Max output tokens<input type="number" min="1" max="${maxModelTokens}" required></label>
         </div>
-        <div class="catalog-capabilities">
+        <div class="model-catalog-capabilities">
           <span>Input types</span>
           <label><input type="checkbox"> Text</label>
           <label><input type="checkbox"> Image</label>
@@ -47,8 +47,8 @@ export function catalogEditor() {
       </div>
     </div>`);
     const [id, name, context, tokens, text, image] = node.querySelectorAll('input');
-    const advanced = required(node.querySelector<HTMLElement>('.catalog-advanced'));
-    const row = required(node.querySelector('.catalog-row'));
+    const advanced = required(node.querySelector<HTMLElement>('.model-catalog-advanced'));
+    const row = required(node.querySelector('.model-catalog-row'));
     const reasoning = toggle('Reasoning', model?.reasoning ?? false);
     advanced.append(field('Reasoning', reasoning, 'compact'));
     id.value = model?.id ?? '';
@@ -69,7 +69,7 @@ export function catalogEditor() {
     const expand = iconButton('Advanced model settings', 'chevron');
     const remove = iconButton('Remove model', 'trash');
     const handle = fromMarkup(
-      '<span class="catalog-drag" title="Drag to reorder" aria-label="Drag to reorder"></span>',
+      '<span class="model-catalog-drag" title="Drag to reorder" aria-label="Drag to reorder"></span>',
     );
     handle.append(icon({ path: 'M9 5h.01M15 5h.01M9 12h.01M15 12h.01M9 19h.01M15 19h.01' }));
     let target: HTMLElement | undefined;
@@ -88,7 +88,7 @@ export function catalogEditor() {
       clearTarget();
       const candidate = document
         .elementFromPoint(event.clientX, event.clientY)
-        ?.closest<HTMLElement>('.catalog-model');
+        ?.closest<HTMLElement>('.model-catalog-model');
       if (!candidate || candidate === node || candidate.parentElement !== list) return;
       target = candidate;
       const rect = candidate.getBoundingClientRect();
