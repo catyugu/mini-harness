@@ -341,7 +341,11 @@ export class PluginHost implements ProfileScopes, ProfileConfigurationPort {
       void this.ctx.parallel('profile/graph-settled').catch((error) => this.ctx.logger.error(error));
   }
 
-  private async apply(settings: ProfileConfiguration, starting: boolean, released?: ReadonlySet<ScopeAddress>) {
+  private async apply(
+    settings: ProfileConfiguration,
+    starting: boolean,
+    released?: ReadonlySet<ScopeAddress>,
+  ) {
     const changed = !starting && !isDeepStrictEqual(settings, this.settings);
     const transaction = (this.transaction = {});
     const work = this.lifecycle.run(transaction, () =>
