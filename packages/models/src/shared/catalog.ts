@@ -29,6 +29,11 @@ export interface ProviderModel {
   thinkingLevels?: ThinkingLevel[];
 }
 
+/** Editable metadata with an explicit native template; absent means an independent definition. */
+export interface ProviderModelDefinition extends ProviderModel {
+  templateId?: string;
+}
+
 export interface ProviderInfo {
   id: string;
   name: string;
@@ -38,7 +43,7 @@ export interface ProviderInfo {
   custom: boolean;
   baseUrl: string;
   api: string;
-  models: ProviderModel[];
+  models: ProviderModelDefinition[];
   defaultBaseUrl: string;
   endpointCustomized: boolean;
   modelsCustomized: boolean;

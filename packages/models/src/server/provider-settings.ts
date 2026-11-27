@@ -1,6 +1,13 @@
 import { DomainError } from '@mini-harness/platform/errors';
 import { thinkingLevels } from '@mini-harness/llm/vocabulary';
-import { maxModelTokens, modelDefaults, providerApiPattern, providerIdPattern } from '../shared/catalog.ts';
+import {
+  maxModelTokens,
+  modelDefaults,
+  providerApiPattern,
+  providerIdPattern,
+  type ProviderModel,
+  type ProviderModelDefinition,
+} from '../shared/catalog.ts';
 import type { CatalogModel, CatalogProvider } from './store-api.ts';
 
 export interface ProviderConnection {
@@ -9,11 +16,12 @@ export interface ProviderConnection {
 }
 
 type RecordValue = Record<string, unknown>;
-type ModelConfig = Partial<Omit<CatalogModel, 'id' | 'thinkingLevels'>> & { id: string; templateId?: string };
+type ModelConfig = Omit<ProviderModel, 'thinkingLevels'>;
+type BuiltinModelConfig = ModelConfig & Pick<ProviderModelDefinition, 'templateId'>;
 
 export interface ProviderOverride {
   baseUrl?: string;
-  models?: ModelConfig[];
+  models?: BuiltinModelConfig[];
 }
 export interface CustomConfig extends ProviderConnection {
   name: string;
@@ -72,79 +80,37 @@ function modelName(value: unknown, id: string) {
   return value.trim() || id;
 }
 
-/** Interpret persisted model fields at the configuration boundary. */
-function parseModel(raw: unknown): ModelConfig {
-  const entry = record(raw);
-  if (!entry) throw invalid('Invalid model configuration');
+/** Parse independent model fields, inheriting only from an explicitly selected native template. */
+function parseModel(entry: RecordValue, baseline?: ProviderModel): ModelConfig {
   const id = modelId(entry.id);
-  const result: ModelConfig = { id };
-  if (entry.templateId !== undefined) result.templateId = modelId(entry.templateId);
-  if (entry.name !== undefined) result.name = modelName(entry.name, id);
-  for (const field of ['contextWindow', 'maxTokens'] as const) {
-    const value = entry[field];
-    if (value === undefined) continue;
-    if (!modelCapacity(value)) throw invalid('Invalid model token limits for ' + id);
-    result[field] = value;
-  }
-  if (entry.input !== undefined) {
-    if (
-      !Array.isArray(entry.input) ||
-      !entry.input.length ||
-      new Set(entry.input).size !== entry.input.length ||
-      entry.input.some((value: unknown) => value !== 'text' && value !== 'image')
-    )
-      throw invalid('Invalid model input modalities for ' + id);
-    result.input = entry.input;
-  }
-  if (entry.reasoning !== undefined) {
-    if (typeof entry.reasoning !== 'boolean') throw invalid('Invalid reasoning capability for ' + id);
-    result.reasoning = entry.reasoning;
-  }
-  if (entry.api !== undefined) result.api = protocol(entry.api);
-  if (entry.baseUrl !== undefined) result.baseUrl = endpoint(entry.baseUrl);
-  // Pi owns the nested protocol-specific options. Only those fields cross this boundary.
-  const { cost, headers, compat, thinkingLevelMap } = entry;
-  for (const [name, value] of Object.entries({ cost, headers, compat, thinkingLevelMap })) {
-    if (value === undefined) continue;
-    if (!record(value)) throw invalid('Invalid model ' + name + ' for ' + id);
-    Object.assign(result, { [name]: value });
-  }
-  return result;
+  const name = modelName(entry.name ?? baseline?.name, id);
+  const input = entry.input ?? baseline?.input ?? ['text'];
+  const reasoning = entry.reasoning ?? baseline?.reasoning ?? false;
+  const contextWindow = entry.contextWindow ?? baseline?.contextWindow ?? modelDefaults.contextWindow;
+  const maxTokens = entry.maxTokens ?? baseline?.maxTokens ?? modelDefaults.maxTokens;
+  if (!modelCapacity(contextWindow) || !modelCapacity(maxTokens))
+    throw invalid('Invalid model token limits for ' + id);
+  if (
+    !Array.isArray(input) || !input.length || new Set(input).size !== input.length ||
+    input.some((value: unknown) => value !== 'text' && value !== 'image')
+  )
+    throw invalid('Invalid model input modalities for ' + id);
+  if (typeof reasoning !== 'boolean') throw invalid('Invalid reasoning capability for ' + id);
+  return { id, name, input, reasoning, contextWindow, maxTokens };
 }
 
-function parseModels(value: unknown, parse = parseModel): ModelConfig[] {
+function parseModels<T extends ModelConfig>(value: unknown, parse: (entry: RecordValue) => T): T[] {
   if (!Array.isArray(value)) throw invalid('Invalid model catalog');
-  const models = value.map(parse);
+  const models = value.map((raw) => {
+    const entry = record(raw);
+    if (!entry) throw invalid('Invalid model configuration');
+    return parse(entry);
+  });
   if (new Set(models.map(({ id }) => id)).size !== models.length) throw invalid('Duplicate Model ID');
   return models;
 }
 
-/** A draft edits visible attributes; sourceId is a reference to an existing definition, not a persisted field. */
-export function editModels(value: unknown, previous: readonly ModelConfig[], builtin?: CatalogProvider) {
-  return parseModels(value, (raw) => {
-    const row = record(raw);
-    if (!row) throw invalid('Invalid model configuration');
-    const edited = parseModel({
-      id: row.id,
-      name: row.name,
-      input: row.input,
-      contextWindow: row.contextWindow,
-      maxTokens: row.maxTokens,
-      reasoning: row.reasoning,
-    });
-    const source = row.sourceId === undefined ? undefined : modelId(row.sourceId);
-    const existing = previous.find(({ id }) => id === source);
-    if (existing) return { ...existing, ...edited };
-    const template = builtin?.models.find(({ id }) => id === source);
-    return template ? { ...edited, templateId: template.id } : edited;
-  });
-}
-
-export function parseCustom(
-  id: string,
-  value: unknown,
-  models = parseModels(record(value)?.models),
-): CustomConfig {
+export function parseCustom(id: string, value: unknown): CustomConfig {
   const entry = record(value);
   if (!entry) throw invalid('Invalid provider configuration: ' + id);
   if (entry.apiKey !== undefined && (typeof entry.apiKey !== 'string' || entry.apiKey.startsWith('!')))
@@ -159,18 +125,25 @@ export function parseCustom(
     name: modelName(entry.name, id),
     api: protocol(entry.api),
     baseUrl: endpoint(entry.baseUrl),
-    models: models.map(({ templateId: _templateId, ...model }) => model),
+    models: parseModels(entry.models, (model) => parseModel(model)),
     apiKey: entry.apiKey,
     headers: headers as CustomConfig['headers'],
   };
 }
 
-export function parseOverride(value: unknown, models?: ModelConfig[]): ProviderOverride {
+export function parseOverride(value: unknown, provider?: CatalogProvider): ProviderOverride {
   const entry = record(value);
   if (!entry) throw invalid('Invalid built-in provider override');
   return {
     baseUrl: entry.baseUrl === undefined || entry.baseUrl === '' ? undefined : endpoint(entry.baseUrl),
-    models: models ?? (entry.models === undefined ? undefined : parseModels(entry.models)),
+    models: entry.models === undefined ? undefined : parseModels(entry.models, (model): BuiltinModelConfig => {
+      const templateId = model.templateId === undefined ? undefined : modelId(model.templateId);
+      const baseline = provider?.models.find(({ id }) => id === templateId);
+      if (provider && templateId && !baseline) throw invalid('Unknown native model template: ' + templateId);
+      if (provider && !templateId && !provider.api)
+        throw invalid('This built-in provider has no protocol for new models');
+      return { ...parseModel(model, baseline), templateId };
+    }),
   };
 }
 
@@ -189,35 +162,19 @@ export function parseConfiguration(value: unknown): ProviderConfiguration {
   };
 }
 
-/** Resolve the saved definition once, retaining native adapter attributes from an explicit template. */
+/** Independent models use the provider connection; native derivatives retain the adapter definition. */
 export function resolveModel(
-  entry: ModelConfig,
+  model: ModelConfig,
   connection: ProviderConnection,
   baseline?: CatalogModel,
-  overrideUrl?: string,
 ): CatalogModel {
-  const { templateId: _templateId, id, ...values } = entry;
-  const reasoning = values.reasoning ?? baseline?.reasoning ?? false;
-  const map = record(record(values)?.thinkingLevelMap ?? record(baseline)?.thinkingLevelMap);
   return {
+    ...connection,
     ...baseline,
-    ...values,
-    id,
-    name: values.name ?? baseline?.name ?? id,
-    api: values.api ?? baseline?.api ?? connection.api,
-    baseUrl: overrideUrl ?? values.baseUrl ?? (baseline?.baseUrl || connection.baseUrl),
-    reasoning,
-    input: values.input ?? baseline?.input ?? ['text'],
-    contextWindow: values.contextWindow ?? baseline?.contextWindow ?? modelDefaults.contextWindow,
-    maxTokens: values.maxTokens ?? baseline?.maxTokens ?? modelDefaults.maxTokens,
-    thinkingLevels: reasoning
-      ? ((baseline?.reasoning && record(values)?.thinkingLevelMap === undefined
-          ? baseline.thinkingLevels
-          : undefined) ??
-        thinkingLevels.filter((level) => {
-          const mapped = map?.[level];
-          return mapped !== null && (mapped !== undefined || (level !== 'xhigh' && level !== 'max'));
-        }))
+    ...model,
+    thinkingLevels: model.reasoning
+      ? (baseline?.reasoning ? baseline.thinkingLevels : undefined) ??
+        thinkingLevels.filter((level) => level !== 'xhigh' && level !== 'max')
       : ['off'],
   };
 }

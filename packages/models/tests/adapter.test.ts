@@ -134,7 +134,7 @@ test('built-in edits retain native routing and credentials, including after rest
   await store.saveProvider({
     id,
     baseUrl: mock.url,
-    models: [{ id: model.id, sourceId: defaults[0].id, contextWindow: 32768, maxTokens: 1024 }],
+    models: [{ id: model.id, templateId: defaults[0].id, contextWindow: 32768, maxTokens: 1024 }],
   });
   await store.refresh();
   assert.deepEqual(store.resolve(model), model);
@@ -150,6 +150,23 @@ test('built-in edits retain native routing and credentials, including after rest
     events.push(event);
   assert.ok(events.some((event) => event.type === 'done' && event.message.stopReason === 'stop'));
   assert.equal(mock.requests.at(-1)?.model, model.id);
+  // A native template remains explicit even if an older override used the same model ID.
+  await store.saveProvider({
+    id,
+    baseUrl: mock.url,
+    models: [{ id: defaults[1].id, templateId: defaults[0].id }],
+  });
+  const original = store.defaultModels(id).find((model) => model.id === defaults[1].id)!;
+  await store.saveProvider({
+    id,
+    baseUrl: mock.url,
+    models: [{ ...original, name: 'Restored then edited' }],
+  });
+  assert.equal(store.providers().find((provider) => provider.id === id)?.models[0].templateId, original.id);
+  assert.deepEqual(
+    store.requestModel({ provider: id, id: original.id })?.model.contextWindow,
+    original.contextWindow,
+  );
   await store.saveProvider({ id, baseUrl: '' });
   const restored = store.providers().find((provider) => provider.id === id);
   assert.ok(restored && restored.storedCredential && !restored.custom);

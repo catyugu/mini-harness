@@ -5,7 +5,6 @@ import type { ModelChoice } from '@mini-harness/llm/vocabulary';
 import {
   resolveModel,
   credential,
-  editModels,
   endpoint,
   invalid,
   parseConfiguration,
@@ -134,16 +133,18 @@ export class ModelStore implements ModelStorePort {
     if (!override) return provider;
     const baseUrl = override.baseUrl ?? provider.baseUrl;
     const baseline = new Map(provider.models.map((model) => [model.id, model]));
-    const models =
-      override.models?.map((model) =>
-        resolveModel(
-          model,
-          provider,
-          model.templateId ? baseline.get(model.templateId) : undefined,
-          override.baseUrl,
-        ),
-      ) ?? (override.baseUrl ? provider.models.map((model) => ({ ...model, baseUrl })) : provider.models);
-    return { ...provider, baseUrl, models, endpointOverride: override.baseUrl };
+    const models = override.models?.flatMap(({ templateId, ...model }) => {
+      const template = templateId ? baseline.get(templateId) : undefined;
+      // A native template removed by an adapter update cannot be resolved as an independent model.
+      if (templateId ? !template : !provider.api) return [];
+      return resolveModel(model, provider, template);
+    }) ?? provider.models;
+    return {
+      ...provider,
+      baseUrl,
+      models: override.baseUrl ? models.map((model) => ({ ...model, baseUrl })) : models,
+      endpointOverride: override.baseUrl,
+    };
   }
 
   private custom(
@@ -262,7 +263,12 @@ export class ModelStore implements ModelStorePort {
         custom: !defaults.has(id),
         baseUrl,
         api,
-        models: models.map(capabilities),
+        models: models.map((model) => ({
+          ...capabilities(model),
+          templateId: defaults.has(id)
+            ? (override?.models ? override.models.find(({ id }) => id === model.id)?.templateId : model.id)
+            : undefined,
+        })),
         defaultBaseUrl: defaults.get(id)?.baseUrl ?? '',
         endpointCustomized: override?.baseUrl !== undefined,
         modelsCustomized: override?.models !== undefined,
@@ -273,7 +279,7 @@ export class ModelStore implements ModelStorePort {
   defaultModels(id: string) {
     const builtin = this.defaultProviders().get(id);
     if (!builtin) throw new DomainError('not_found', 'Unknown built-in provider');
-    return builtin.models.map(capabilities);
+    return builtin.models.map((model) => ({ ...capabilities(model), templateId: model.id }));
   }
 
   authStatus(id: string) {
@@ -312,18 +318,7 @@ export class ModelStore implements ModelStorePort {
       if (builtin) {
         if (values.create) throw new DomainError('conflict', 'A provider with this ID already exists');
         if (key && !builtin.canSetKey) throw invalid('This provider does not accept an API key');
-        const previous =
-          values.fromDefaults !== true && Object.hasOwn(next.builtins, id)
-            ? (next.builtins[id].models ?? [])
-            : [];
-        const models = values.models === undefined ? undefined : editModels(values.models, previous, builtin);
-        const override = parseOverride({ baseUrl: values.baseUrl }, models);
-        if (
-          override.models?.some(
-            (model) => !builtin.api && !builtin.models.some(({ id }) => id === model.templateId),
-          )
-        )
-          throw invalid('This built-in provider has no protocol for new models');
+        const override = parseOverride(values, builtin);
         if (override.baseUrl !== undefined || override.models !== undefined)
           next.builtins = { ...next.builtins, [id]: override };
         else delete next.builtins[id];
@@ -334,17 +329,11 @@ export class ModelStore implements ModelStorePort {
         if (!values.create && !previous) throw new DomainError('not_found', 'Unknown provider');
         next.providers = {
           ...next.providers,
-          [id]: parseCustom(
-            id,
-            {
-              name: values.name,
-              api: values.api,
-              baseUrl: values.baseUrl,
-              apiKey: previous?.apiKey,
-              headers: previous?.headers,
-            },
-            editModels(values.models, previous?.models ?? []),
-          ),
+          [id]: parseCustom(id, {
+            ...values,
+            apiKey: previous?.apiKey,
+            headers: previous?.headers,
+          }),
         };
       }
       await this.commit(id, next, key ? { value: { type: 'api_key', key } } : undefined);

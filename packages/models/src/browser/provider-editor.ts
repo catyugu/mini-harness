@@ -1,7 +1,7 @@
 import type { Context } from 'mini-harness/cordis';
 import { browserRequest, payload } from '@mini-harness/ui-runtime/http';
 import { button, field, fromMarkup, required } from '@mini-harness/ui-primitives/primitives';
-import type { ProtocolInfo, ProviderInfo, ProviderModel } from '../shared/catalog.ts';
+import type { ProtocolInfo, ProviderInfo, ProviderModel, ProviderModelDefinition } from '../shared/catalog.ts';
 import { catalogEditor, selectDiscovered } from './catalog-editor.ts';
 
 export function providerEditor(
@@ -73,7 +73,6 @@ export function providerEditor(
   const builtin = () => (custom() ? undefined : (provider ?? availableById.get(picker.value)));
   let discovery: AbortController | undefined;
   let restore: AbortController | undefined;
-  let fromDefaults = false;
 
   function resetDiscovery() {
     discovery?.abort();
@@ -95,7 +94,6 @@ export function providerEditor(
   function updateFields() {
     restore?.abort();
     restore = undefined;
-    fromDefaults = false;
     restoreModels.disabled = false;
     const isCustom = custom();
     const selected = isCustom ? provider : builtin();
@@ -146,7 +144,7 @@ export function providerEditor(
     restoreModels.disabled = true;
     error.textContent = '';
     try {
-      const models = await browserRequest<ProviderModel[]>(
+      const models = await browserRequest<ProviderModelDefinition[]>(
         ctx,
         '/providers/' + encodeURIComponent(selected.id) + '/default-models',
         {
@@ -154,7 +152,6 @@ export function providerEditor(
         },
       );
       if (!controller.signal.aborted && !signal.aborted) {
-        fromDefaults = true;
         catalog.reset(models, false);
       }
     } catch (failure) {
@@ -242,7 +239,6 @@ export function providerEditor(
           baseUrl: endpoint.value.trim(),
           key: key.value.trim(),
           models: catalog.customized() ? catalog.models() : undefined,
-          fromDefaults: fromDefaults || undefined,
         }),
         signal,
       });
