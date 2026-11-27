@@ -27,7 +27,7 @@ function openaiListing(baseUrl: string, key: string): ListingRequest {
   const { url, headers } = request(baseUrl);
   url.pathname = url.pathname.replace(/\/$/, '') + '/models';
   if (key) headers.set('authorization', 'Bearer ' + key);
-  return { url, headers, read: (body) => Array.isArray(body?.data) ? { rows: body.data } : undefined };
+  return { url, headers, read: (body) => (Array.isArray(body?.data) ? { rows: body.data } : undefined) };
 }
 
 function anthropicListing(baseUrl: string, key: string): ListingRequest {
@@ -37,10 +37,13 @@ function anthropicListing(baseUrl: string, key: string): ListingRequest {
   headers.set('anthropic-version', '2023-06-01');
   if (key) headers.set('x-api-key', key);
   return {
-    url, headers, cursor: 'after_id',
-    read: (body) => Array.isArray(body?.data)
-      ? { rows: body.data, next: body.has_more ? label(body.last_id) : undefined }
-      : undefined,
+    url,
+    headers,
+    cursor: 'after_id',
+    read: (body) =>
+      Array.isArray(body?.data)
+        ? { rows: body.data, next: body.has_more ? label(body.last_id) : undefined }
+        : undefined,
   };
 }
 
@@ -50,36 +53,51 @@ function geminiListing(baseUrl: string, key: string): ListingRequest {
   url.searchParams.set('pageSize', '1000');
   if (key) headers.set('x-goog-api-key', key);
   return {
-    url, headers, cursor: 'pageToken',
-    read: (body) => Array.isArray(body?.models) ? { rows: body.models, next: label(body.nextPageToken) } : undefined,
+    url,
+    headers,
+    cursor: 'pageToken',
+    read: (body) =>
+      Array.isArray(body?.models) ? { rows: body.models, next: label(body.nextPageToken) } : undefined,
   };
 }
 
 export const protocols = new Map<string, Protocol>([
-  ['openai-completions', {
-    label: 'OpenAI Chat Completions',
-    load: () => import('@earendil-works/pi-ai/api/openai-completions'),
-    listing: openaiListing,
-    parse: (raw) => parseModel(raw, false),
-  }],
-  ['openai-responses', {
-    label: 'OpenAI Responses',
-    load: () => import('@earendil-works/pi-ai/api/openai-responses'),
-    listing: openaiListing,
-    parse: (raw) => parseModel(raw, false),
-  }],
-  ['anthropic-messages', {
-    label: 'Anthropic Messages',
-    load: () => import('@earendil-works/pi-ai/api/anthropic-messages'),
-    listing: anthropicListing,
-    parse: (raw) => parseModel(raw, false),
-  }],
-  ['google-generative-ai', {
-    label: 'Google Generative AI',
-    load: () => import('@earendil-works/pi-ai/api/google-generative-ai'),
-    listing: geminiListing,
-    parse: (raw) => parseModel(raw, true),
-  }],
+  [
+    'openai-completions',
+    {
+      label: 'OpenAI Chat Completions',
+      load: () => import('@earendil-works/pi-ai/api/openai-completions'),
+      listing: openaiListing,
+      parse: (raw) => parseModel(raw, false),
+    },
+  ],
+  [
+    'openai-responses',
+    {
+      label: 'OpenAI Responses',
+      load: () => import('@earendil-works/pi-ai/api/openai-responses'),
+      listing: openaiListing,
+      parse: (raw) => parseModel(raw, false),
+    },
+  ],
+  [
+    'anthropic-messages',
+    {
+      label: 'Anthropic Messages',
+      load: () => import('@earendil-works/pi-ai/api/anthropic-messages'),
+      listing: anthropicListing,
+      parse: (raw) => parseModel(raw, false),
+    },
+  ],
+  [
+    'google-generative-ai',
+    {
+      label: 'Google Generative AI',
+      load: () => import('@earendil-works/pi-ai/api/google-generative-ai'),
+      listing: geminiListing,
+      parse: (raw) => parseModel(raw, true),
+    },
+  ],
 ]);
 
 export function protocolOptions() {

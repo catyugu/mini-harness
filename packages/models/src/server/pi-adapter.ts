@@ -77,9 +77,7 @@ export class PiLlm implements LlmAdapter {
     const selected = this.store.requestModel(choice);
     return Boolean(
       selected &&
-        (this.builtin.getProvider(choice.provider)
-          ? selected.model.api
-          : protocols.has(selected.model.api)),
+        (this.builtin.getProvider(choice.provider) ? selected.model.api : protocols.has(selected.model.api)),
     );
   }
 

@@ -8,7 +8,12 @@ import { providerEditor } from './provider-editor.ts';
 const listed = ({ configured, custom, endpointCustomized, modelsCustomized }: ProviderInfo) =>
   configured || custom || endpointCustomized || modelsCustomized;
 
-export function providerManager(ctx: Context, providers: () => ProviderInfo[], protocols: () => ProtocolInfo[], signal: AbortSignal) {
+export function providerManager(
+  ctx: Context,
+  providers: () => ProviderInfo[],
+  protocols: () => ProtocolInfo[],
+  signal: AbortSignal,
+) {
   const content = fromMarkup(`<div class="model-settings">
     <div class="provider-list"></div>
     <div class="provider-add"></div>

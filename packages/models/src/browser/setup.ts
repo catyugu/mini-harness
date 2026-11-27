@@ -12,10 +12,13 @@ const setup = async (ctx: Context) => {
   const { miniSettings: settings } = ctx;
   const state = new RemoteStore(async () => {
     const [{ models, recent, canManageProviders, protocols }, providers] = await Promise.all([
-      browserRequest<Pick<ModelCatalog, 'models'> & { recent: ModelChoice; canManageProviders: boolean; protocols: ProtocolInfo[] }>(
-        ctx,
-        '/models',
-      ),
+      browserRequest<
+        Pick<ModelCatalog, 'models'> & {
+          recent: ModelChoice;
+          canManageProviders: boolean;
+          protocols: ProtocolInfo[];
+        }
+      >(ctx, '/models'),
       browserRequest<ModelCatalog['providers']>(ctx, '/providers'),
     ]);
     return { models, providers, recent, canManageProviders, protocols };
@@ -78,7 +81,12 @@ const setup = async (ctx: Context) => {
             hint.textContent = 'Models are provided by plugins.';
             return hint;
           }
-          const manager = providerManager(ctx, () => state.get().providers, () => state.get().protocols, signal);
+          const manager = providerManager(
+            ctx,
+            () => state.get().providers,
+            () => state.get().protocols,
+            signal,
+          );
           settings.onClose(manager.reset, signal);
           state.subscribe(manager.render, signal);
           return manager.content;
