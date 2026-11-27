@@ -1,14 +1,9 @@
-import type { Api, Model } from '@earendil-works/pi-ai';
+import type { Api, Credential, CredentialStore, Model } from '@earendil-works/pi-ai';
 import type { ModelChoice } from '@mini-harness/llm/vocabulary';
 import type { ModelSource } from './api.ts';
 import type { ModelSummary } from '../shared/catalog.ts';
 import type { ProtocolInfo, ProviderInfo, ProviderModelDefinition } from '../shared/pi-provider.ts';
-import type { ModelStore } from './store.ts';
 import type { ProviderConnection } from './provider-settings.ts';
-
-export type Credential =
-  | { type: 'api_key'; key?: string; env?: Record<string, string> }
-  | { type: 'oauth'; refresh: string; access: string; expires: number; [key: string]: unknown };
 
 export type AuthStatus = { configured: boolean; source?: string };
 export type CatalogModel = Model<Api>;
@@ -39,8 +34,8 @@ export interface ProviderAdministrationPort {
 export interface ModelStorePort extends ModelSource, ProviderAdministrationPort {
   available(): Promise<ModelSummary[]>;
   requestModel(choice: ModelChoice): { provider: CatalogProvider; model: CatalogModel } | undefined;
+  readonly credentials: CredentialStore;
   apiKey(provider: CatalogProvider): Promise<string | undefined>;
-  readonly credentials: ModelStore['credentials'];
   registerDefaults(providers: readonly CatalogProvider[]): Promise<() => Promise<void>>;
 }
 

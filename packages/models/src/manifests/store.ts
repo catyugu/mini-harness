@@ -1,5 +1,6 @@
-import type { Plugin } from 'mini-harness/cordis';
+import { Context, type Plugin } from 'mini-harness/cordis';
 import type { PluginInfo } from '@mini-harness/plugin-api/descriptor';
+import { scopeOf } from '@mini-harness/plugin-api/scopes';
 import { ModelStore } from '../server/store.ts';
 
 export const metadata: PluginInfo = {
@@ -11,6 +12,11 @@ const plugin: Plugin.Object = {
   inject: ['harnessState'],
   provide: ['harnessModelStore'],
   async apply(ctx) {
+    if (
+      scopeOf(ctx) ||
+      ctx[Context.isolate].harnessModelStore !== ctx[Context.root][Context.isolate].harnessModelStore
+    )
+      throw new Error('The model store belongs to the application scope');
     const store = new ModelStore(
       ctx.harnessState.paths.home,
       (kind) => {
@@ -18,9 +24,11 @@ const plugin: Plugin.Object = {
       },
       (error) => ctx.logger.warn(String(error)),
     );
-    ctx.effect(() => () => store.close());
+    ctx.effect(() => {
+      ctx.provide('harnessModelStore', store);
+      return () => store.close();
+    });
     await store.refresh();
-    ctx.provide('harnessModelStore', store);
   },
 };
 

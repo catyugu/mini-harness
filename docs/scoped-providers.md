@@ -53,6 +53,8 @@ Workspaces and Sessions own resource identity and ancestry. Each domain register
 
 Plugins watches configured compositions and the ancestor bindings they need. An absent resource leaves its composition inactive. Unloading the domain owner releases its resolver and dependent compositions while retaining their configuration; unrelated siblings continue. Deleting the resource also removes its scoped configuration and private plugin data through the domain deletion workflow. [Session coordination](subsystems/sessions.md) covers the durable deletion order.
 
+The built-in workspace catalog, session registry and model store are application resource owners. Mount each once in the application composition. Scoped model sources, adapters and tools can inherit these resources and register their own capabilities. Plugins with independent persistent state use their entry-specific plugin data directory.
+
 Runtime scope keys are opaque objects. Sessions exposes standing and execution identities through `scope(id)` and `runScope(id)`; workspace ancestry follows the optional Workspace provider's lifetime. The Web plugin editor manages top-level entries only. These are contribution-routing mechanisms, not access boundaries: read-only conversation policy and File Access retain their own contracts; the Process Execution provider controls where commands run.
 
 See [composition](subsystems/composition.md), [Plugins](../packages/plugins/README.md) and the [scoped example](examples/scoped-tool/plugin.ts) for the cooperating owners.

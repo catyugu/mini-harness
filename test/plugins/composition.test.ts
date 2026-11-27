@@ -17,6 +17,34 @@ const examples = fileURLToPath(new URL('../../docs/examples/', import.meta.url))
 function copyExample(directory: string, id: string) {
   cpSync(join(examples, id), join(directory, id), { recursive: true });
 }
+test('configured scopes share application resource owners', async (t) => {
+  const { app } = await fixture(t);
+  const root = app.runtime.plugins.ctx;
+  const workspace = root.harnessWorkspaces.defaultId!;
+  const session = root.harnessSessions.create({ workspaceId: workspace });
+  const address = `session:${session.id}` as const;
+
+  for (const [name, service, description] of [
+    ['model-store', 'harnessModelStore', 'model store'],
+    ['sessions', 'harnessSessions', 'session registry'],
+    ['workspaces', 'harnessWorkspaces', 'workspace catalog'],
+  ] as const) {
+    await assert.rejects(
+      app.runtime.configuration.update({
+        scopes: {
+          [address]: {
+            isolate: [service],
+            entries: { duplicate: { name: '@mini-harness/' + name, disabled: false } },
+          },
+        },
+      }),
+      new RegExp(description + ' belongs to the application scope'),
+    );
+    assert.equal(root.harnessProfileScopes.context(address).get(service), root.get(service));
+  }
+  assert.equal(root.harnessSessions.get(session.id)?.workspaceId, workspace);
+});
+
 test('external services and their declared consumers compose through Cordis service ownership', async (t) => {
   const { paths, request } = await fixture(t);
   copyExample(paths.plugins, 'greeting-route');
@@ -642,7 +670,7 @@ export const apply = (ctx) => {
           }
         }
       };
-      ctx.provide('harnessLlm', { ...adapter, select: () => adapter });
+      ctx.provide('harnessLlm', { ...adapter, select: () => ({ ...adapter, matches: (candidate) => candidate === adapter }) });
     };
 `,
   );

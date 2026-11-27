@@ -1,6 +1,6 @@
 import { join } from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
-import { getSupportedThinkingLevels } from '@earendil-works/pi-ai';
+import { getSupportedThinkingLevels, type Credential, type CredentialStore } from '@earendil-works/pi-ai';
 import { DomainError } from '@mini-harness/platform/errors';
 import { readJson, writeJson } from '@mini-harness/platform/json';
 import type { ModelChoice } from '@mini-harness/llm/vocabulary';
@@ -19,77 +19,12 @@ import {
   type ProviderConfiguration,
 } from './provider-settings.ts';
 import { discover, protocolOptions } from './protocols.ts';
-import type { AuthStatus, CatalogModel, CatalogProvider, Credential, ModelStorePort } from './store-api.ts';
-
-/** One serialized, atomic store for all providers; SDKs never own our config files. */
-class FileCredentials {
-  private writes: Promise<unknown> = Promise.resolve();
-  private committed?: Record<string, Credential>;
-  constructor(private readonly file: string) {}
-  private values(): Record<string, Credential> {
-    const values = readJson<Record<string, Credential>>(this.file, {});
-    if (!values || Array.isArray(values) || typeof values !== 'object')
-      throw new Error('Invalid credential store');
-    return values;
-  }
-  snapshot(): Readonly<Record<string, Credential>> {
-    return (this.committed ??= this.values());
-  }
-  invalidate() {
-    this.committed = undefined;
-  }
-  async read(id: string) {
-    await this.writes;
-    const values = this.snapshot();
-    return Object.hasOwn(values, id) ? structuredClone(values[id]) : undefined;
-  }
-  async list() {
-    await this.writes;
-    return Object.entries(this.snapshot()).map(([providerId, credential]) => ({
-      providerId,
-      type: credential.type,
-    }));
-  }
-  private enqueue<T>(work: () => Promise<T>): Promise<T> {
-    const pending = this.writes.then(work);
-    this.writes = pending.catch(() => {});
-    return pending;
-  }
-  modify(
-    id: string,
-    fn: (current: Credential | undefined) => Promise<Credential | undefined>,
-    options?: { signal?: AbortSignal },
-  ) {
-    return this.enqueue(async () => {
-      options?.signal?.throwIfAborted();
-      const values = this.values();
-      const next = await fn(Object.hasOwn(values, id) ? values[id] : undefined);
-      options?.signal?.throwIfAborted();
-      if (next !== undefined) {
-        values[id] = next;
-        writeJson(this.file, values);
-      }
-      this.committed = values;
-      return Object.hasOwn(values, id) ? structuredClone(values[id]) : undefined;
-    });
-  }
-  delete(id: string, options?: { signal?: AbortSignal }) {
-    return this.enqueue(async () => {
-      options?.signal?.throwIfAborted();
-      const values = this.values();
-      delete values[id];
-      writeJson(this.file, values);
-      this.committed = values;
-    });
-  }
-  async settle() {
-    await this.writes;
-  }
-}
+import type { AuthStatus, CatalogModel, CatalogProvider, ModelStorePort } from './store-api.ts';
 
 export class ModelStore implements ModelStorePort {
-  readonly credentials: FileCredentials;
   private readonly file: string;
+  private readonly authFile: string;
+  private storedCredentials?: Record<string, Credential>;
   private defaults = new Set<readonly CatalogProvider[]>();
   private configuration: ProviderConfiguration = { providers: {}, builtins: {} };
   private readonly status = new Map<string, AuthStatus>();
@@ -104,8 +39,57 @@ export class ModelStore implements ModelStorePort {
     private readonly report: (error: unknown) => void = console.warn,
   ) {
     this.file = join(home, 'models.json');
-    this.credentials = new FileCredentials(join(home, 'auth.json'));
+    this.authFile = join(home, 'auth.json');
   }
+
+  private credentialValues() {
+    if (!this.storedCredentials) {
+      const values = readJson<Record<string, Credential>>(this.authFile, {});
+      if (!values || Array.isArray(values) || typeof values !== 'object')
+        throw new Error('Invalid credential store');
+      this.storedCredentials = values;
+    }
+    return this.storedCredentials;
+  }
+
+  private storedCredential(id: string) {
+    const values = this.credentialValues();
+    return Object.hasOwn(values, id) ? structuredClone(values[id]) : undefined;
+  }
+
+  private writeCredential(id: string, credential: Credential | null) {
+    const values = { ...this.credentialValues() };
+    if (credential === null) delete values[id];
+    else values[id] = credential;
+    writeJson(this.authFile, values);
+    this.storedCredentials = values;
+  }
+
+  readonly credentials: CredentialStore = {
+    read: async (id) => {
+      await this.writes;
+      return this.storedCredential(id);
+    },
+    list: async () => {
+      await this.writes;
+      return Object.entries(this.credentialValues()).map(([providerId, { type }]) => ({ providerId, type }));
+    },
+    modify: (id, modify, options) =>
+      this.enqueue(async () => {
+        options?.signal?.throwIfAborted();
+        const current = this.storedCredential(id);
+        const next = await modify(current);
+        options?.signal?.throwIfAborted();
+        if (next === undefined) return current;
+        this.writeCredential(id, next);
+        return structuredClone(next);
+      }),
+    delete: (id, options) =>
+      this.enqueue(() => {
+        options?.signal?.throwIfAborted();
+        this.writeCredential(id, null);
+      }),
+  };
 
   private enqueue<T>(work: () => T | Promise<T>) {
     const pending = this.writes.then(work);
@@ -134,7 +118,7 @@ export class ModelStore implements ModelStorePort {
     return this.enqueue(() => {
       const configuration = parseConfiguration(readJson(this.file, { providers: {} }));
       const providers = this.buildCatalog(configuration);
-      this.credentials.invalidate();
+      this.storedCredentials = undefined;
       this.publishCatalog(configuration, undefined, providers);
     });
   }
@@ -221,7 +205,7 @@ export class ModelStore implements ModelStorePort {
     if (!providers.length) return;
     let credentials: Readonly<Record<string, Credential>>;
     try {
-      credentials = this.credentials.snapshot();
+      credentials = this.credentialValues();
     } catch (error) {
       this.report(new Error('Could not read authentication configuration', { cause: error }));
       for (const { id } of providers) {
@@ -384,13 +368,12 @@ export class ModelStore implements ModelStorePort {
     return this.status.get(id) ?? { configured: false };
   }
 
-  private async commit(id: string, configuration: ProviderConfiguration, key?: string | null) {
+  private commit(id: string, configuration: ProviderConfiguration, key?: string | null) {
     const structural = !isDeepStrictEqual(configuration, this.configuration);
     const providers = structural ? this.buildCatalog(configuration) : undefined;
     if (structural) writeJson(this.file, configuration);
     try {
-      if (key === null) await this.credentials.delete(id);
-      else if (key !== undefined) await this.credentials.modify(id, async () => ({ type: 'api_key', key }));
+      if (key !== undefined) this.writeCredential(id, key === null ? null : { type: 'api_key', key });
     } catch (error) {
       try {
         if (structural) writeJson(this.file, this.configuration);
@@ -407,7 +390,7 @@ export class ModelStore implements ModelStorePort {
   }
 
   saveProvider(input: unknown) {
-    return this.enqueue(async () => {
+    return this.enqueue(() => {
       const values = record(input);
       if (!values) throw invalid('Invalid provider configuration');
       const id = providerId(values.id);
@@ -437,19 +420,19 @@ export class ModelStore implements ModelStorePort {
           headers: previous?.headers,
         });
       }
-      await this.commit(id, next, key || undefined);
+      this.commit(id, next, key || undefined);
       return id;
     });
   }
 
   removeProvider(input: unknown) {
-    return this.enqueue(async () => {
+    return this.enqueue(() => {
       const id = providerId(record(input)?.id);
       if (!this.effective.get(id)) throw new DomainError('not_found', 'Unknown provider');
       const next = structuredClone(this.configuration);
       delete next.providers[id];
       delete next.builtins[id];
-      await this.commit(id, next, null);
+      this.commit(id, next, null);
       return id;
     });
   }
@@ -458,7 +441,6 @@ export class ModelStore implements ModelStorePort {
     this.lifetime.abort();
     await this.writes;
     await Promise.all([...this.checks.values()].map(({ work }) => work));
-    await this.credentials.settle();
   }
 
   async apiKey(provider: CatalogProvider) {

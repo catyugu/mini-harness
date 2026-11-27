@@ -1,15 +1,26 @@
 import { waitFor } from '@mini-harness/platform/wait';
-import type { Context } from 'mini-harness/cordis';
+import { Context } from 'mini-harness/cordis';
+import { scopeOf } from '@mini-harness/plugin-api/scopes';
 import { WorkspaceCatalog } from './catalog.ts';
 import { HttpError, HttpReply } from '@mini-harness/transport/routes';
 const validId = /^[a-f0-9]{32}$/;
 
 /** Workspace identity, mutations and registered HTTP routes have one owner. */
 export function setup(ctx: Context) {
-  const catalog = new WorkspaceCatalog(ctx.harnessState.paths);
-  ctx.harnessProfileScopes.register(ctx, 'workspace', (id) => {
-    const key = catalog.scope(id);
-    return key && { key };
+  if (
+    scopeOf(ctx) ||
+    ctx[Context.isolate].harnessWorkspaces !== ctx[Context.root][Context.isolate].harnessWorkspaces
+  )
+    throw new Error('The workspace catalog belongs to the application scope');
+  const lifetime = ctx.fiber.signal;
+  let catalog!: WorkspaceCatalog;
+  ctx.effect(() => {
+    ctx.harnessProfileScopes.register(ctx, 'workspace', (id) => {
+      const key = catalog.scope(id);
+      return key && { key };
+    });
+    catalog = new WorkspaceCatalog(ctx.harnessState.paths);
+    return () => catalog.close();
   });
   ctx.effect(() => {
     const changed = (event: Event) => {
@@ -52,7 +63,7 @@ export function setup(ctx: Context) {
     add('DELETE', '/api/workspaces/:id', ({ params, signal }) => {
       const id = requireId(params.id);
       return waitFor(
-        catalog.remove(id, () => ctx.harnessProfileConfig.forgetScopes([`workspace:${id}`])),
+        catalog.remove(id, () => ctx.harnessProfileConfig.forgetScopes([`workspace:${id}`], lifetime)),
         signal,
       );
     });

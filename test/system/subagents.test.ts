@@ -75,7 +75,7 @@ test(
     await app.runtime.plugins.ctx.harnessRuns.current(childRecord.id)?.result;
     await app.runtime.plugins.ctx.harnessRuns.current(leafRecord.id)?.result;
     const leafRun = expectPresent(app.runtime.plugins.ctx.harnessRuns.info(leafRecord.id), 'leaf run');
-    assert.equal(app.runtime.plugins.ctx.harnessTasks.get(leafRun.id)?.outputCursor, 0);
+    assert.equal(app.runtime.plugins.ctx.harnessSessions.taskHistory(leafRun.id)?.outputCursor, 0);
     assert.deepEqual(app.runtime.plugins.ctx.harnessSessions.log(leafRecord.id).projection().model, {
       provider: 'local-mock',
       id: 'mock-model',
