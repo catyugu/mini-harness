@@ -1,7 +1,7 @@
 import { waitFor } from '@mini-harness/platform/wait';
 import { DomainError } from '@mini-harness/platform/errors';
 import type { Context } from 'mini-harness/cordis';
-import { saveProvider } from './provider-settings.ts';
+import { providerId } from './provider-settings.ts';
 
 export function setupAdministration(ctx: Context) {
   const recent = () => ctx.get('harnessModelPreference')?.recent() ?? { provider: '', id: '' };
@@ -28,50 +28,27 @@ export function setupAdministration(ctx: Context) {
   };
   ctx.effect(() => () => pending);
   add('GET', '/api/providers', () => providerAdministration()?.providers() ?? []);
+  add('GET', '/api/providers/:id/default-models', ({ params }) =>
+    admin().defaultModels(providerId(params.id)),
+  );
+  add('POST', '/api/providers/discovery', async ({ body, signal }) =>
+    admin().discoverModels(await body(), signal),
+  );
   for (const method of ['PUT', 'DELETE']) {
     add(method, '/api/providers', async ({ body, signal }) => {
-      const input = await body();
+      const input: unknown = await body();
       return write(async () => {
         signal.throwIfAborted();
-        const result = await saveProvider(
-          { paths: ctx.harnessState.paths, admin: admin() },
-          input,
-          method === 'DELETE',
-        );
+        const store = admin();
+        const id = await (method === 'PUT' ? store.saveProvider(input) : store.removeProvider(input));
         changed();
         const choice = recent();
-        if (choice.provider === input.id && !catalog.resolve(choice))
+        if (choice.provider === id && !catalog.resolve(choice))
           await waitFor(
             ctx.get('harnessModelPreference')?.remember({ provider: '', id: '' }) ?? Promise.resolve(),
             signal,
           );
-        return result;
-      });
-    });
-  }
-  for (const method of ['POST', 'DELETE']) {
-    add(method, '/api/credentials', async ({ body, signal }) => {
-      const input = await body();
-      return write(async () => {
-        signal.throwIfAborted();
-        if (typeof input?.provider !== 'string' || !/^[a-z0-9-]+$/.test(input.provider))
-          throw new DomainError('invalid_input', 'Invalid provider');
-        const store = admin();
-        if (!store.hasProvider(input.provider)) throw new DomainError('invalid_input', 'Unknown provider');
-        if (method === 'DELETE') {
-          await store.removeCredential(input.provider);
-        } else {
-          if (typeof input.key !== 'string' || !input.key.trim())
-            throw new DomainError('invalid_input', 'Invalid credential');
-          await store.storeCredential(input.provider, input.key.trim());
-        }
-        changed();
-        return {
-          ok: true,
-          persisted: true,
-          models: catalog.list(),
-          status: store.authStatus(input.provider),
-        };
+        return { id };
       });
     });
   }

@@ -111,6 +111,51 @@ test('credential updates serialize across providers and survive adapter replacem
   await replacement.close();
 });
 
+test('built-in edits retain native routing and credentials, including after restoring the catalog', async (t) => {
+  const mock = await createMockProvider();
+  const { root, paths } = createFixturePaths(mock.url);
+  const store = new ModelStore(paths.home);
+  t.after(async () => {
+    await store.close();
+    await mock.close();
+    rmSync(root, { recursive: true, force: true });
+  });
+  await store.refresh();
+  const adapter = new PiLlm(store);
+  await adapter.registerModels();
+  const id = 'groq';
+  const defaults = store.defaultModels(id);
+  assert.ok(defaults.length);
+
+  await store.saveProvider({ id, baseUrl: mock.url, key: 'groq-local-key', models: [] });
+  assert.deepEqual(store.providers().find((provider) => provider.id === id)?.models, []);
+  assert.equal(adapter.accepts({ provider: id, id: defaults[0].id }), false);
+  const model = { provider: id, id: 'registered-model' };
+  await store.saveProvider({
+    id,
+    baseUrl: mock.url,
+    models: [{ id: model.id, contextWindow: 32768, maxTokens: 1024 }],
+  });
+  assert.deepEqual(store.resolve(model), model);
+  assert.equal(adapter.accepts({ ...model, id: 'unregistered-model' }), false);
+  const events: LlmEvent[] = [];
+  for await (const event of adapter.stream({
+    model,
+    systemPrompt: '',
+    messages: [{ role: 'user', content: 'Use the saved built-in configuration', timestamp: Date.now() }],
+    signal: t.signal,
+  }))
+    events.push(event);
+  assert.ok(events.some((event) => event.type === 'done' && event.message.stopReason === 'stop'));
+  assert.equal(mock.requests.at(-1)?.model, model.id);
+  await store.saveProvider({ id, baseUrl: '' });
+  const restored = store.providers().find((provider) => provider.id === id);
+  assert.ok(restored && restored.storedCredential && !restored.custom);
+  assert.equal(restored.baseUrl, restored.defaultBaseUrl);
+  assert.deepEqual(restored.models, defaults);
+  assert.equal(adapter.accepts(model), false);
+});
+
 test('invalid provider refresh leaves the working catalog intact and unsupported images never issue a request', async (t) => {
   const mock = await createMockProvider();
   const { root, paths } = createFixturePaths(mock.url);
