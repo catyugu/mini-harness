@@ -69,14 +69,20 @@ const plugin: Plugin.Object = {
       return write;
     };
     ctx.provide('harnessModelPreference', { recent: () => ({ ...current }), remember });
-    ctx.effect(() => ctx.harnessChanges.subscribe((notice) => {
-      if (notice.type === 'change' && notice.domain === 'models' &&
-          (current.provider || current.id) && !ctx.harnessModels.resolve(current)) {
-        void remember({ provider: '', id: '' }).catch(() => {
-          /* The preference owner reports failed writes. */
-        });
-      }
-    }));
+    ctx.effect(() =>
+      ctx.harnessChanges.subscribe((notice) => {
+        if (
+          notice.type === 'change' &&
+          notice.domain === 'models' &&
+          (current.provider || current.id) &&
+          !ctx.harnessModels.resolve(current)
+        ) {
+          void remember({ provider: '', id: '' }).catch(() => {
+            /* The preference owner reports failed writes. */
+          });
+        }
+      }),
+    );
     ctx.on('harness/observe', (event) => {
       if (
         event.type === 'input-accepted' &&

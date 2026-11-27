@@ -85,7 +85,10 @@ export class ModelStore implements ModelStorePort {
   private effective = new Map<string, CatalogProvider>();
   private writes: Promise<unknown> = Promise.resolve();
 
-  constructor(home: string, private readonly changed = () => {}) {
+  constructor(
+    home: string,
+    private readonly changed = () => {},
+  ) {
     this.file = join(home, 'models.json');
     this.credentials = new FileCredentials(join(home, 'auth.json'));
   }
@@ -134,7 +137,12 @@ export class ModelStore implements ModelStorePort {
     const baseline = new Map(provider.models.map((model) => [model.id, model]));
     const models =
       override.models?.map((model) =>
-        resolveModel(model, provider, model.templateId ? baseline.get(model.templateId) : undefined, override.baseUrl),
+        resolveModel(
+          model,
+          provider,
+          model.templateId ? baseline.get(model.templateId) : undefined,
+          override.baseUrl,
+        ),
       ) ?? (override.baseUrl ? provider.models.map((model) => ({ ...model, baseUrl })) : provider.models);
     return { ...provider, baseUrl, models, endpointOverride: override.baseUrl };
   }
@@ -309,8 +317,7 @@ export class ModelStore implements ModelStorePort {
         const override = parseOverride({ baseUrl: values.baseUrl, models });
         if (
           override.models?.some(
-            (model) =>
-              !builtin.api && !builtin.models.some(({ id }) => id === model.templateId),
+            (model) => !builtin.api && !builtin.models.some(({ id }) => id === model.templateId),
           )
         )
           throw invalid('This built-in provider has no protocol for new models');

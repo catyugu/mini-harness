@@ -1,7 +1,13 @@
 import { DomainError } from '@mini-harness/platform/errors';
 import type { Api, Model } from '@earendil-works/pi-ai';
 import { thinkingLevels } from '@mini-harness/llm/vocabulary';
-import { maxModelTokens, modelDefaults, providerApiPattern, providerIdPattern, type ProviderModel } from '../shared/catalog.ts';
+import {
+  maxModelTokens,
+  modelDefaults,
+  providerApiPattern,
+  providerIdPattern,
+  type ProviderModel,
+} from '../shared/catalog.ts';
 import type { CatalogModel, CatalogProvider } from './store-api.ts';
 
 export interface ProviderConnection {
@@ -12,7 +18,8 @@ export interface ProviderConnection {
 type RecordValue = Record<string, unknown>;
 type AdapterOptions = Partial<Omit<Model<Api>, keyof ProviderModel | keyof ProviderConnection | 'provider'>>;
 type ModelConfig = Partial<Omit<ProviderModel, 'id' | 'thinkingLevels'>> &
-  AdapterOptions & Partial<ProviderConnection> & { id: string; templateId?: string };
+  AdapterOptions &
+  Partial<ProviderConnection> & { id: string; templateId?: string };
 
 export interface ProviderOverride {
   baseUrl?: string;
@@ -90,8 +97,12 @@ function parseModel(raw: unknown): ModelConfig {
     result[field] = value;
   }
   if (entry.input !== undefined) {
-    if (!Array.isArray(entry.input) || !entry.input.length || new Set(entry.input).size !== entry.input.length ||
-        entry.input.some((value: unknown) => value !== 'text' && value !== 'image'))
+    if (
+      !Array.isArray(entry.input) ||
+      !entry.input.length ||
+      new Set(entry.input).size !== entry.input.length ||
+      entry.input.some((value: unknown) => value !== 'text' && value !== 'image')
+    )
       throw invalid('Invalid model input modalities for ' + id);
     result.input = entry.input;
   }
@@ -124,8 +135,12 @@ export function editModels(value: unknown, previous: readonly ModelConfig[], bui
     const row = record(raw);
     if (!row) throw invalid('Invalid model configuration');
     const edited = parseModel({
-      id: row.id, name: row.name, input: row.input, contextWindow: row.contextWindow,
-      maxTokens: row.maxTokens, reasoning: row.reasoning,
+      id: row.id,
+      name: row.name,
+      input: row.input,
+      contextWindow: row.contextWindow,
+      maxTokens: row.maxTokens,
+      reasoning: row.reasoning,
     });
     const source = row.sourceId === undefined ? undefined : modelId(row.sourceId);
     const existing = previous.find(({ id }) => id === source);

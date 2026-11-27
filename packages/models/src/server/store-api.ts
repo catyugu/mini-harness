@@ -10,7 +10,8 @@ export type Credential =
   | { type: 'oauth'; refresh: string; access: string; expires: number; [key: string]: unknown };
 
 export type AuthStatus = { configured: boolean; source?: string };
-export type CatalogModel = ProviderModel & ProviderConnection &
+export type CatalogModel = ProviderModel &
+  ProviderConnection &
   Partial<Omit<Model<Api>, keyof ProviderModel | keyof ProviderConnection | 'provider'>>;
 export interface CatalogProvider extends ProviderConnection {
   id: string;
