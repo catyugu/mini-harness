@@ -4,6 +4,7 @@ import { getSupportedThinkingLevels } from '@earendil-works/pi-ai';
 import { DomainError } from '@mini-harness/platform/errors';
 import { readJson, writeJson } from '@mini-harness/platform/json';
 import type { ModelChoice } from '@mini-harness/llm/vocabulary';
+import type { ProviderInfo, ProviderModelDefinition } from '../shared/catalog.ts';
 import {
   resolveModel,
   credential,
@@ -311,7 +312,7 @@ export class ModelStore implements ModelStorePort {
     return selected && capabilities(selected.model);
   }
 
-  providers() {
+  providers(): ProviderInfo[] {
     const defaults = this.defaultProviders();
     return [...this.effective.values()].map(({ id, name, canSetKey, models, baseUrl, api }) => {
       const builtin = defaults.get(id);
@@ -341,7 +342,7 @@ export class ModelStore implements ModelStorePort {
     });
   }
 
-  defaultModels(id: string) {
+  defaultModels(id: string): ProviderModelDefinition[] {
     const builtin = this.defaultProviders().get(id);
     if (!builtin) throw new DomainError('not_found', 'Unknown built-in provider');
     return builtin.models.map((model) => ({ ...definition(model), templateId: model.id }));

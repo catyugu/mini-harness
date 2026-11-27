@@ -311,6 +311,10 @@ test(
   async (t) => {
     const mock = await createMockProvider();
     const { root, paths } = createFixturePaths(mock.url);
+    let release!: () => void;
+    const hold = new Promise<void>((resolve) => {
+      release = resolve;
+    });
     const changes: string[] = [];
     const errors: unknown[] = [];
     const store = new ModelStore(
@@ -319,6 +323,7 @@ test(
       (error) => errors.push(error),
     );
     t.after(async () => {
+      release();
       await store.close();
       await mock.close();
       rmSync(root, { recursive: true, force: true });
@@ -333,11 +338,6 @@ test(
     const started = new Promise<void>((resolve) => {
       entered = resolve;
     });
-    let release!: () => void;
-    const hold = new Promise<void>((resolve) => {
-      release = resolve;
-    });
-    t.after(release);
     let check = async (_signal: AbortSignal) => {
       entered();
       await hold;
