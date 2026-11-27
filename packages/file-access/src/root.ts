@@ -4,7 +4,14 @@ import { randomUUID } from 'node:crypto';
 import { constants } from 'node:fs';
 import { basename, dirname, relative, resolve, sep } from 'node:path';
 import type { FileAccessPort, RootedFileAccess } from './api.ts';
-import { checkType, directoryEntries, fileChunks, FileTypeError, openRegularFile, statPath } from './reader.ts';
+import {
+  checkType,
+  directoryEntries,
+  fileChunks,
+  FileTypeError,
+  openRegularFile,
+  statPath,
+} from './reader.ts';
 
 const windows = process.platform === 'win32';
 
@@ -153,10 +160,18 @@ class RootedFiles implements RootedFileAccess {
 
   async entries(path: string = this.cwd, signal?: AbortSignal) {
     const dir = await this.location(path);
-    return directoryEntries(await this.files.opendir(dir), (name) => Boolean(this.exclude?.(resolve(dir, name))), signal);
+    return directoryEntries(
+      await this.files.opendir(dir),
+      (name) => Boolean(this.exclude?.(resolve(dir, name))),
+      signal,
+    );
   }
 }
 
-export function rootedFileAccess(files: FileAccessPort, root: string, options?: { exclude?: (absolutePath: string) => boolean }): RootedFileAccess {
+export function rootedFileAccess(
+  files: FileAccessPort,
+  root: string,
+  options?: { exclude?: (absolutePath: string) => boolean },
+): RootedFileAccess {
   return new RootedFiles(files, resolve(root), options?.exclude);
 }

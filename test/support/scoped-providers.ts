@@ -8,7 +8,7 @@ import type { ProcessExecutionPort } from '@mini-harness/process-execution/api';
 /** Map one logical file to fixture bytes, retaining ordinary filesystem operations otherwise. */
 export function fileProvider(name: string, backingFile: string): FileAccessPort {
   const matches = (path: string) => basename(path) === name;
-  const target = (path: string) => matches(path) ? backingFile : path;
+  const target = (path: string) => (matches(path) ? backingFile : path);
   function stat(path: string): Promise<Stats>;
   function stat(path: string, options: { bigint: true }): Promise<BigIntStats>;
   function stat(path: string, options?: { bigint: true }) {
@@ -17,7 +17,7 @@ export function fileProvider(name: string, backingFile: string): FileAccessPort 
   return {
     ...fs,
     stat,
-    realpath: (path) => matches(path) ? Promise.resolve(path) : fs.realpath(path),
+    realpath: (path) => (matches(path) ? Promise.resolve(path) : fs.realpath(path)),
     lstat: (path) => fs.lstat(target(path)),
     open: (path, flags, mode) => fs.open(target(path), flags, mode),
   };

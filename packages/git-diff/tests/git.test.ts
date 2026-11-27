@@ -68,9 +68,10 @@ test('Git inspection includes staged, unstaged and untracked files and rejects o
   git('commit', '-qm', 'track state for denial test');
   rmSync(join(nestedState, 'secret.txt'));
   await assert.rejects(
-    new GitInspection(cwd, rootedFileAccess(access, cwd, { exclude: (path) => containsPath(nestedState, path) })).diff(
-      'private/secret.txt',
-    ),
+    new GitInspection(
+      cwd,
+      rootedFileAccess(access, cwd, { exclude: (path) => containsPath(nestedState, path) }),
+    ).diff('private/secret.txt'),
   );
   if (process.platform !== 'win32') {
     const outside = join(root, 'secret');
