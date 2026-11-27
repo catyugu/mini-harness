@@ -167,7 +167,7 @@ export const apply = (ctx) => {
     .filter(({ role }) => role === 'user');
   assert.deepEqual(
     messages.map(({ content }) => content),
-    ['Recovered', 'Manual'],
+    ['Recovered', 'Manual'].map((text) => [{ type: 'text', text }]),
   );
 
   const edit = await plugins.ctx.harnessRuns.reviseAndStart(session.id, {
@@ -239,7 +239,7 @@ export const apply = (ctx) => {
     ctx.on("agent/tool-result", (content, { tool }) => tool === 'check'
       ? [{ type: 'text', text: content[0].text + ' transformed' }] : undefined);
     ctx.on("conversation/tool-projection", ({ content, tool }) =>
-      tool === 'check' && Array.isArray(content) && content[0]?.text === 'Value transformed'
+      tool === 'check' && content[0]?.text === 'Value transformed'
         ? [{ type: 'text', text: 'Display value' }] : undefined);
   };
 `,
@@ -300,7 +300,7 @@ export const apply = (ctx) => {
       .filter((message) => message.role === 'toolResult')
       .map(({ toolCallId, state }) => [toolCallId, state]),
     [
-      ['denied', 'denied'],
+      ['denied', 'error'],
       ['allowed', 'finished'],
     ],
   );

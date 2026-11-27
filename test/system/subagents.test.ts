@@ -328,7 +328,7 @@ test(
         ({ origin }) => origin?.senderSessionId === childId && origin.taskId === childRun.id,
       ),
     );
-    assert.equal(parentInputs[0].content, 'Work started');
+    assert.deepEqual(parentInputs[0].content, [{ type: 'text', text: 'Work started' }]);
     assert.match(JSON.stringify(parentInputs[1].content), /Child run completed/);
   },
 );

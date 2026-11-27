@@ -210,8 +210,8 @@ const emptyUsage = () => ({
 
 function toProviderMessage(message: NativeMessage, selected: Model<Api>): Message {
   if (message.role === 'toolResult') {
-    const { state, ...result } = structuredClone(message);
-    return { ...result, isError: state !== 'finished' };
+    const { role, toolCallId, toolName, content, timestamp, state } = structuredClone(message);
+    return { role, toolCallId, toolName, content, timestamp, isError: state !== 'finished' };
   }
   if (message.role === 'user') return structuredClone(message);
   const { providerData, ...native } = structuredClone(message);

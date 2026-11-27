@@ -64,6 +64,8 @@ it never retries an unknown tool outcome automatically.
 
 ## Conversation branches and projections
 
+User, assistant and tool messages carry typed content-block arrays. Tool results carry a single terminal state.
+
 The event stream has one append sequence and a selected conversation branch.
 Messages, model choices, thinking settings, plugin records, context replacements and branch selections advance the conversation leaf. Run, inbox, model-attempt and session-setting records
 advance only the sequence. Operational changes therefore cannot invalidate a

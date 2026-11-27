@@ -155,7 +155,7 @@ test('GUI APIs configure providers, persist keys privately, discover Skills and 
     (await request('/sessions/' + sibling.id + '/attachments/' + user.attachments[0].id)).status,
     404,
   );
-  assert.equal(user.content, 'Read the image and text');
+  assert.deepEqual(user.content, [{ type: 'text', text: 'Read the image and text' }]);
   assert.doesNotMatch(JSON.stringify(user), /ATTACHED CONTENT/);
   assert.equal(history.title, 'Read the image and text');
   assert.equal(

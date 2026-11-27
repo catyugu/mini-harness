@@ -99,7 +99,7 @@ test('operational entries keep the transcript leaf stable and revision uses comp
       .projection()
       .timeline.filter(isViewMessage)
       .map(({ content }) => content),
-    ['revised'],
+    ['revised'].map((text) => [{ type: 'text', text }]),
   );
   assert.throws(() => log.revise(user('stale revision'), null, first.id), /Conversation changed/);
   assert.equal(log.projection().leafId, second.id);
@@ -109,7 +109,7 @@ test('operational entries keep the transcript leaf stable and revision uses comp
       .projection(first.id)
       .timeline.filter(isViewMessage)
       .map(({ content }) => content),
-    ['original'],
+    ['original'].map((text) => [{ type: 'text', text }]),
   );
   assert.deepEqual(log.projection(null).timeline.filter(isViewMessage), []);
   assert.equal(log.projection().leafId, second.id);
@@ -165,7 +165,7 @@ test('recovery discards only a torn final record and preserves every acknowledge
       .projection()
       .timeline.filter(isViewMessage)
       .map(({ content }) => content),
-    ['durable', 'after recovery'],
+    ['durable', 'after recovery'].map((text) => [{ type: 'text', text }]),
   );
 });
 
@@ -236,11 +236,11 @@ test('compaction and context edits change model context without deleting convers
       .projection()
       .timeline.filter(isViewMessage)
       .map(({ content }) => content),
-    ['old context', 'recent context', 'new question'],
+    ['old context', 'recent context', 'new question'].map((text) => [{ type: 'text', text }]),
   );
   assert.deepEqual(
     log.projection().contextMessages.map(({ content }) => content),
-    ['Summary of earlier conversation:\nSummary', 'redacted recent context', 'new question'],
+    ['Summary of earlier conversation:\nSummary', 'redacted recent context', 'new question'].map((text) => [{ type: 'text', text }]),
   );
   assert.equal(log.projection().contextEntryIds[1], keep.id);
   assert.equal(log.projection().contextEntryIds.length, log.projection().contextMessages.length);
@@ -248,7 +248,7 @@ test('compaction and context edits change model context without deleting convers
   log.revise(user('new branch'), keep.id, compacted.leafId);
   assert.deepEqual(
     log.context().contextMessages.map(({ content }) => content),
-    ['old context', 'recent context', 'new branch'],
+    ['old context', 'recent context', 'new branch'].map((text) => [{ type: 'text', text }]),
   );
   assert.deepEqual(log.context(compacted.leafId), compacted);
 });
@@ -326,7 +326,7 @@ test('display records resolve explicitly selected content on the committed branc
   assert.equal(log.projection(first.id).timeline.filter((entry) => entry.type === 'record').length, 0);
   assert.deepEqual(
     log.context().contextMessages.map(({ content }) => content),
-    ['before'],
+    ['before'].map((text) => [{ type: 'text', text }]),
   );
 });
 

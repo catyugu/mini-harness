@@ -155,7 +155,7 @@ export class ContextManagement {
             owner: { pluginId: owner, instanceId: owner },
             kind: 'checkpoint',
             title: 'Context compacted',
-            source: ['replacements', 0, 'insert', 0, 'content'],
+            source: ['replacements', 0, 'insert', 0, 'content', 0, 'text'],
           },
         ],
       },
