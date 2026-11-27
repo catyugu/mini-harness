@@ -46,6 +46,12 @@ test('durable retained tasks recover by ID without reconstructing execution hand
     });
   });
   await running;
+  assert.deepEqual(
+    ctx.harnessSessions
+      .taskSummaries(session.id, undefined, 1, new Set([run.id, unfinished.id]))
+      .map(({ id }) => id),
+    [done.id],
+  );
   // Simulate a committed task acceptance whose executor was lost without settlement.
   const lost = 'lost-task';
   ctx.harnessSessions.log(session.id).append({

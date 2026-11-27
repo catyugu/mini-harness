@@ -50,7 +50,12 @@ export interface SessionHistory {
   taskSummary(id: string): Omit<TaskSnapshot, 'result'> | undefined;
   taskHistory(id: string): TaskSnapshot | undefined;
   taskOutput(id: string, after?: number): TaskOutput | undefined;
-  taskSummaries(sessionId: string, type?: string, limit?: number): Omit<TaskSnapshot, 'result'>[];
+  taskSummaries(
+    sessionId: string,
+    type?: string,
+    limit?: number,
+    exclude?: ReadonlySet<string>,
+  ): Omit<TaskSnapshot, 'result'>[];
   readyInboxSessions(): string[];
   hasInbox(sessionId: string, messageId: string): boolean;
   logError(id: string): string | undefined;

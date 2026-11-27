@@ -13,12 +13,11 @@ export function relatedTasks(ctx: Context, id: string, includeChildren = true, d
   const live = new Map<string, TaskSnapshot>();
   for (const task of ctx.harnessTasks.list(new Set(scopes.keys())))
     if (task.type && scopes.get(task.owner) === task.type) live.set(task.id, task);
+  const liveIds = new Set(live.keys());
   const history = [...scopes].flatMap(([owner, type]) =>
-    sessions.taskSummaries(owner.slice('session:'.length), type, 50),
+    sessions.taskSummaries(owner.slice('session:'.length), type, 50, liveIds),
   );
-  const results = new Map<string, TaskSnapshot>(history.map((task) => [task.id, task]));
-  for (const task of live.values()) results.set(task.id, task);
-  const ordered = [...results.values()].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  const ordered = [...live.values(), ...history].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   const selected = [
     ...ordered.filter((task) => live.has(task.id) && !terminal(task.state)),
     ...ordered.filter((task) => !live.has(task.id) || terminal(task.state)).slice(0, 50),

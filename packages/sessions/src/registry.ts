@@ -388,8 +388,8 @@ export class SessionRegistry implements SessionStore {
     return this.taskOwners.get(id)?.output(id, after);
   }
 
-  taskSummaries(sessionId: string, type?: string, limit?: number) {
-    return this.tasksBySession.get(sessionId)?.summaries(type, limit) ?? [];
+  taskSummaries(sessionId: string, type?: string, limit?: number, exclude?: ReadonlySet<string>) {
+    return this.tasksBySession.get(sessionId)?.summaries(type, limit, exclude) ?? [];
   }
 
   readyInboxSessions() {

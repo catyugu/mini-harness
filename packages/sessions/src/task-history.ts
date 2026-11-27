@@ -40,10 +40,10 @@ export class TaskHistory {
     return Array.from(this.tasks.values(), ({ entry }) => entry);
   }
 
-  summaries(type?: string, limit = Infinity): Omit<TaskSnapshot, 'result'>[] {
+  summaries(type?: string, limit = Infinity, exclude?: ReadonlySet<string>): Omit<TaskSnapshot, 'result'>[] {
     const tasks = this.entries
       .map(({ task }) => task)
-      .filter((task) => type === undefined || task.type === type);
+      .filter((task) => (type === undefined || task.type === type) && !exclude?.has(task.id));
     if (limit !== Infinity) tasks.sort((a, b) => b.createdAt.localeCompare(a.createdAt)).splice(limit);
     return tasks.map(({ result: _, ...task }) => structuredClone(task));
   }
