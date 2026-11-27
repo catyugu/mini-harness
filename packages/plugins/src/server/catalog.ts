@@ -11,13 +11,16 @@ import {
   type EntryConfiguration,
 } from '@mini-harness/plugin-api/configuration';
 import type { ScopeAddress } from '@mini-harness/plugin-api/configuration';
-import { resolveConfig, type Context, type EntryOptions } from 'mini-harness/cordis';
-import { describePlugin, type ResolvedPlugin } from './descriptor.ts';
+import { resolveConfig, type Context, type EntryOptions, type Plugin } from 'mini-harness/cordis';
+import { describePlugin, type ResolvedEntryConfiguration, type ResolvedPlugin } from './descriptor.ts';
+import type { BrowserAssets } from './browser-assets.ts';
 import { resolveModule } from './module-resolution.ts';
 
 export interface ConfiguredPlugin {
-  descriptor: ResolvedPlugin;
   id: string;
+  server?: { module: string; plugin: Plugin };
+  resources?: BrowserAssets;
+  configurable: boolean;
   config: Record<string, unknown>;
   live: boolean;
 }
@@ -68,19 +71,25 @@ export class PluginCatalog {
     client: boolean,
     scopeAddress?: ScopeAddress,
   ): Promise<ResolvedPlugin> {
-    const name = entry.name;
+    const configuration: ResolvedEntryConfiguration = {
+      name: entry.name,
+      disabled: entry.disabled ?? false,
+      live: entry.live ?? false,
+      config: entry.config ?? {},
+    };
+    const name = configuration.name;
     const bundled = name && this.profile.locate(name);
     const external = !bundled;
     try {
       if (!name) throw new Error('Profile entry requires a module name: ' + id);
       const location = bundled || this.locateModule(name, this.profile.source(id, name));
       const key = scopeAddress ? scopeAddress + '/' + id : id;
-      const descriptor = await describePlugin(id, location, client, entry, this.resolved.get(key));
+      const descriptor = await describePlugin(id, location, client, configuration, this.resolved.get(key));
       return { ...descriptor, scopeAddress, external };
     } catch (error) {
       return {
         id,
-        configuration: entry,
+        configuration,
         scopeAddress,
         external,
         info: { title: id, description: name ?? '' },
@@ -166,22 +175,23 @@ export class PluginCatalog {
     });
   }
 
-  entry(plan: ConfiguredPlugin, context: Context, id = plan.id): EntryOptions {
-    const { descriptor } = plan;
-    const plugin = descriptor.native?.plugin;
-    if (!plugin || !descriptor.location) throw new Error('Missing server module: ' + plan.id);
-    return {
-      id,
-      context,
-      config: plan.config ?? {},
-      module: descriptor.location.url + '#' + (descriptor.location.exportName ?? 'default'),
-      live: plan.live,
-      load: () => plugin,
-      prepare: (ctx) => {
-        const changes = context.get('harnessChanges');
-        if (changes) ctx.effect(() => changes.register('plugin:' + plan.id));
-      },
-    };
+  entries(plans: ConfiguredPlugin[], context: Context, scope?: ScopeAddress): EntryOptions[] {
+    return plans.flatMap((plan) => {
+      const server = plan.server;
+      if (!server) return [];
+      return [{
+        id: scope ? scope + '/' + plan.id : plan.id,
+        context,
+        config: plan.config,
+        module: server.module,
+        live: plan.live,
+        load: () => server.plugin,
+        prepare: (ctx) => {
+          const changes = context.get('harnessChanges');
+          if (changes) ctx.effect(() => changes.register('plugin:' + plan.id));
+        },
+      }];
+    });
   }
 
   plans(
@@ -197,8 +207,19 @@ export class PluginCatalog {
       try {
         if (item.error) throw new DomainError('invalid_input', 'Invalid plugin ' + id + ': ' + item.error);
         const values = entry.config;
-        const config = item.native?.plugin ? structuredClone(values ?? {}) : this.configValues(item, values);
-        plans.push({ descriptor: item, id, config, live: entry.live ?? false });
+        const plugin = item.native?.plugin;
+        const config = plugin ? structuredClone(values) : this.configValues(item, values);
+        const server = plugin && item.location
+          ? { module: item.location.url + '#' + (item.location.exportName ?? 'default'), plugin }
+          : undefined;
+        plans.push({
+          id,
+          config,
+          live: entry.live,
+          server,
+          resources: item.resources,
+          configurable: Boolean(item.native?.Config || item.info.configSchema),
+        });
       } catch (error) {
         if (!unavailable?.(id, error)) throw error;
       }
@@ -206,12 +227,12 @@ export class PluginCatalog {
     return plans;
   }
 
-  configValues(descriptor: ResolvedPlugin, values: Record<string, unknown> | undefined) {
+  configValues(descriptor: ResolvedPlugin, values: Record<string, unknown>) {
     try {
       return resolveConfig(
         descriptor.native?.Config ??
           (descriptor.info.configSchema ? defineConfig(descriptor.info.configSchema) : undefined),
-        structuredClone(values ?? {}),
+        structuredClone(values),
       ) as Record<string, unknown>;
     } catch (error) {
       throw new DomainError(

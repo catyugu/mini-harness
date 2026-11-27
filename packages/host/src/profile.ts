@@ -441,9 +441,7 @@ export async function loadProfile(
         return true;
       });
       for (const [id, error] of await entries.update(
-        plans
-          .filter(({ descriptor }) => descriptor.native?.plugin)
-          .map((plan) => catalog.entry(plan, context)),
+        catalog.entries(plans, context),
       ))
         errors.set(id, error);
       return errors;

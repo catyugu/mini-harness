@@ -3,7 +3,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createRequire } from 'node:module';
 import { lstatSync, realpathSync } from 'node:fs';
 import { readJson } from '@mini-harness/platform/json';
-import type { EntryConfiguration, ScopeAddress } from '@mini-harness/plugin-api/configuration';
+import type { ScopeAddress } from '@mini-harness/plugin-api/configuration';
 import type { PluginInfo, PluginLocation } from '@mini-harness/plugin-api/descriptor';
 import { readBrowserAssets, type BrowserAssets } from './browser-assets.ts';
 import { loadPluginModule, resolveModule } from './module-resolution.ts';
@@ -11,10 +11,17 @@ import { assertPeerCompatibility, isRegularFile } from './source.ts';
 
 import type { PluginMetadata } from '../shared/metadata.ts';
 
+export interface ResolvedEntryConfiguration {
+  name?: string;
+  disabled: boolean;
+  live: boolean;
+  config: Record<string, unknown>;
+}
+
 export interface ResolvedPlugin extends Pick<PluginMetadata, 'external' | 'package' | 'error'> {
   id: string;
   info: PluginInfo;
-  configuration: EntryConfiguration;
+  configuration: ResolvedEntryConfiguration;
   scopeAddress?: ScopeAddress;
   location?: { url: string; exportName?: string };
   native?: Awaited<ReturnType<typeof loadPluginModule>>;
@@ -26,7 +33,7 @@ export async function describePlugin(
   id: string,
   { folder, entry, exportName, clientOnly: explicitClient }: PluginLocation,
   client: boolean,
-  configuration: EntryConfiguration,
+  configuration: ResolvedEntryConfiguration,
   previous?: ResolvedPlugin,
 ): Promise<ResolvedPlugin> {
   assertPeerCompatibility(folder);
