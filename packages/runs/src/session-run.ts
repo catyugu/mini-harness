@@ -24,7 +24,7 @@ import type { RecordPresentation } from '@mini-harness/sessions/display-record';
 import type { MessageOrigin, MessageMode } from '@mini-harness/sessions/queue';
 import type { SessionLogPort, InboxItem, SessionProjection } from '@mini-harness/sessions/log-api';
 import { Inbox } from './inbox.ts';
-import { isToolContent, toolResultState } from '@mini-harness/tools/api';
+import { isToolContent } from '@mini-harness/tools/api';
 import { applyTransforms } from './transforms.ts';
 import { toolFailure } from '@mini-harness/tools/execution';
 import {
@@ -323,12 +323,12 @@ export class SessionRun {
                 await task.waitFor(id, signal);
               },
               start(call) {
-                if (signal.aborted) return { outcome: 'skipped', reason: 'Agent run cancelled' };
+                if (signal.aborted) return { state: 'skipped', reason: 'Agent run cancelled' };
                 if (inbox.hasValid('steer', selection))
-                  return { outcome: 'skipped', reason: 'Skipped because a steering message arrived.' };
+                  return { state: 'skipped', reason: 'Skipped because a steering message arrived.' };
                 const tool = advertisedTools.get(call.name);
                 if (tool && ctx.get('harnessToolPolicy')?.(id, tool) === false)
-                  return { outcome: 'denied', reason: 'Tool denied by conversation policy: ' + call.name };
+                  return { state: 'denied', reason: 'Tool denied by conversation policy: ' + call.name };
                 emit({
                   type: 'tool',
                   id: call.id,
@@ -358,7 +358,7 @@ export class SessionRun {
               const hooks = toolTransforms();
               let executionId: string | undefined;
               let transformError: Error | undefined;
-              if (toolResultState(output) === 'finished' && hooks.length) {
+              if (output.state === 'finished' && hooks.length) {
                 executionId = log.append({ type: 'tool-execution', result: output }).id;
                 try {
                   const resultContext = { ...step, signal: toolSignal, tool: call.name, callId: call.id };

@@ -41,6 +41,7 @@ export function setup(ctx: Context) {
       execute: async (args, { signal, executionId }) => {
         const child = delegation.delegate(id, args, signal, executionId);
         return {
+          state: 'finished',
           content: [{ type: 'text', text: JSON.stringify(child) }],
           details: child,
           detailKeys: ['sessionId', 'state'],
@@ -83,7 +84,7 @@ export function setup(ctx: Context) {
               origin: { source: 'agent', senderSessionId: id, taskId: executionId },
             });
             const receipt = { messageId, taskId };
-            return { content: [{ type: 'text', text: JSON.stringify(receipt) }], details: receipt };
+            return { state: 'finished', content: [{ type: 'text', text: JSON.stringify(receipt) }], details: receipt };
           },
         }),
     }),

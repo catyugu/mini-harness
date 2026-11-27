@@ -11,6 +11,7 @@ const outputLimit = 48 * 1024;
 const pathSchema = Type.String({ minLength: 1, maxLength: 4096 });
 const limitSchema = Type.Optional(Type.Integer({ minimum: 1, maximum: 2000 }));
 const textResult = (text: string, details?: Record<string, unknown>): ToolResult => ({
+  state: 'finished',
   content: [
     {
       type: 'text',
@@ -55,7 +56,7 @@ export function fileTools(
       ),
       async execute({ path, offset = 1, limit = 2000 }, { signal }) {
         const files = explicit();
-        signal?.throwIfAborted();
+        signal.throwIfAborted();
         const bytes = await readLimited(files, path, undefined, signal).catch((error: unknown) => {
           if (error instanceof FileTypeError && error.kind === 'directory')
             throw new DomainError(
@@ -66,10 +67,10 @@ export function fileTools(
           throw error;
         });
         const mimeType = imageType(bytes.subarray(0, 12));
-        signal?.throwIfAborted();
+        signal.throwIfAborted();
         if (mimeType) {
           if (bytes.length > 6 * 1024 * 1024) throw new Error('Image exceeds the 6 MiB input limit');
-          return { content: [{ type: 'image', mimeType, data: bytes.toString('base64') }] };
+          return { state: 'finished', content: [{ type: 'image', mimeType, data: bytes.toString('base64') }] };
         }
         const lines = textFile(bytes).split('\n');
         if (offset > lines.length) throw new Error('Offset exceeds file length (' + lines.length + ' lines)');
@@ -94,9 +95,9 @@ export function fileTools(
       ),
       async execute({ path, content }, { signal }) {
         const files = access();
-        signal?.throwIfAborted();
+        signal.throwIfAborted();
         await files.mkdir(dirname(resolve(cwd, path)));
-        signal?.throwIfAborted();
+        signal.throwIfAborted();
         await files.writeFile(path, content, true, signal);
         return textResult(`Wrote ${Buffer.byteLength(content)} bytes to ${path}`, { changedPath: path });
       },
@@ -125,7 +126,7 @@ export function fileTools(
       ),
       async execute({ path, edits }, { signal }) {
         const files = access();
-        signal?.throwIfAborted();
+        signal.throwIfAborted();
         let text = textFile(await readLimited(files, path, undefined, signal));
         for (const { oldText, newText } of edits) {
           const index = text.indexOf(oldText);
@@ -134,7 +135,7 @@ export function fileTools(
             throw new Error('Text to replace is ambiguous in ' + path + '; include more context');
           text = text.slice(0, index) + newText + text.slice(index + oldText.length);
         }
-        signal?.throwIfAborted();
+        signal.throwIfAborted();
         await files.writeFile(path, text, false, signal);
         return textResult(`Applied ${edits.length} edit${edits.length === 1 ? '' : 's'} to ${path}`, {
           changedPath: path,
@@ -151,9 +152,9 @@ export function fileTools(
       ),
       async execute({ path = '.', limit = 2000 }, { signal }) {
         const files = explicit();
-        signal?.throwIfAborted();
+        signal.throwIfAborted();
         const entries = await files.entries(path, signal);
-        signal?.throwIfAborted();
+        signal.throwIfAborted();
         return textResult(
           entries
             .slice(0, limit)
@@ -178,9 +179,9 @@ export function fileTools(
       ),
       async execute({ pattern, path = '.', limit = 1000 }, { signal }) {
         const files = access();
-        signal?.throwIfAborted();
+        signal.throwIfAborted();
         const matches = await new WorkspaceSearch(cwd, files).find(pattern, path, limit, signal);
-        signal?.throwIfAborted();
+        signal.throwIfAborted();
         return textResult(matches.join('\n') || 'No matches found');
       },
     }),
@@ -204,7 +205,7 @@ export function fileTools(
       ),
       async execute(input, { signal }) {
         const files = access();
-        signal?.throwIfAborted();
+        signal.throwIfAborted();
         const { matches, limited } = await new WorkspaceSearch(cwd, files).grep(input, signal);
         return textResult(
           (matches.join('\n') || 'No matches found') + (limited ? '\n[Results limited]' : ''),

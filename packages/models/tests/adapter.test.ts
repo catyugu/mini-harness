@@ -66,7 +66,7 @@ test('model adapter streams native messages, tool calls and metadata through the
       content: [{ type: 'text', text: 'Contents' }],
       toolCallId: call.id,
       toolName: call.name,
-      isError: false,
+      state: 'finished',
       timestamp: Date.now(),
     },
   ];

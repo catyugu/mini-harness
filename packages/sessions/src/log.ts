@@ -464,7 +464,7 @@ function validateEvent(event: SessionEvent) {
       return;
     case 'tool-execution':
       validateNativeMessage(event.result);
-      if (event.result.role !== 'toolResult' || event.result.isError)
+      if (event.result.role !== 'toolResult' || event.result.state !== 'finished')
         throw new Error('Invalid completed tool execution');
       return;
     case 'tool-accepted':

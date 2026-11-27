@@ -107,7 +107,7 @@ test(
       .timeline.filter(isViewMessage)
       .find((message) => message.role === 'toolResult');
     assert.ok(result);
-    assert.equal(result.isError, false);
+    assert.equal(result.toolState, 'finished');
     assert.match(JSON.stringify(result.content), /private fixture/);
     await waitUntil(
       () => activeRunCount(app.runtime.plugins.ctx),

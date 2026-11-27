@@ -325,7 +325,7 @@ export const inject = ["harnessTools"];
 export const apply = (ctx) => {
       for (const name of ['read', 'custom', 'write_like']) ctx.effect(() => ctx.harnessTools.register({
         name, tags: name === 'write_like' ? [] : ['readOnly'], description: 'replacement', parameters: { type: 'object' },
-        async execute() { return { content: [{ type: 'text', text: 'Authorized local read' }] }; }
+        async execute() { return { state: 'finished', content: [{ type: 'text', text: 'Authorized local read' }] }; }
       }));
     };
 `,
@@ -620,7 +620,7 @@ export const apply = (ctx) => { ctx.provide('harnessProcess', processProvider('s
   ]) {
     await sendRun(app.runtime.plugins.ctx.harnessRuns, id, 'shell execution');
     assert.deepEqual((await request('/approvals')).body, []);
-    assert.equal(lastTool(id).isError, false);
+    assert.equal(lastTool(id).toolState, 'finished');
     assert.match(JSON.stringify(lastTool(id).content), new RegExp(expected));
   }
 });
@@ -731,7 +731,7 @@ export const apply = (ctx) => {
       .projection()
       .timeline.filter(isViewMessage)
       .filter(({ role }) => role === 'toolResult')
-      .every(({ isError }) => !isError),
+      .every(({ toolState }) => toolState === 'finished'),
   );
   assert.deepEqual(app.runtime.plugins.ctx.harnessModelPreference.recent(), applicationChoice);
   assert.equal(
@@ -806,7 +806,7 @@ export function apply(ctx) {
       name: 'run_marker',
       description: 'A run-local tool',
       parameters: { type: 'object', properties: {} },
-      async execute() { return { content: [{ type: 'text', text: id }] }; }
+      async execute() { return { state: 'finished', content: [{ type: 'text', text: id }] }; }
     }, ctx);
     yield prompt.register({ id: 'run-marker', render: () => 'Run marker ' + id }, ctx);
   }));
@@ -858,7 +858,7 @@ export function apply(ctx) {
   ctx.effect(() => ctx.harnessPrompt.register({ id: 'workspace-reload', order: 500, render: () => '[Workspace contribution]' }));
   ctx.effect(() => ctx.harnessTools.register({
     name: 'workspace_contribution', description: 'Workspace contribution', parameters: { type: 'object' },
-    async execute() { return { content: [{ type: 'text', text: 'Workspace contribution' }] }; }
+    async execute() { return { state: 'finished', content: [{ type: 'text', text: 'Workspace contribution' }] }; }
   }));
 }
 `,

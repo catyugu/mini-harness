@@ -280,7 +280,7 @@ test('tool execution stays auditable while accepted content is stored as a compa
       toolCallId: 'read-1',
       toolName: 'read',
       content: [{ type: 'text', text: content }],
-      isError: false,
+      state: 'finished',
       timestamp: 1,
     },
   });

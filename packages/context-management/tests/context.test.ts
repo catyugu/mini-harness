@@ -15,7 +15,7 @@ test('retention includes the complete latest exchange even when it exceeds the m
       toolCallId: 'probe',
       toolName: 'probe',
       content: [{ type: 'text', text: 'diagnostics '.repeat(1000) }],
-      isError: false,
+      state: 'finished',
       timestamp: 0,
     },
   ] satisfies import('@mini-harness/llm/api').NativeMessage[];

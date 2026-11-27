@@ -180,7 +180,7 @@ test('an alternative executor owns the model protocol and executes without the r
               toolName: call.name,
               content: [{ type: 'text', text: 'changed externally' }],
               timestamp: Date.now(),
-              isError: false,
+              state: 'finished',
             },
             execution.signal,
           );
@@ -195,7 +195,7 @@ test('an alternative executor owns the model protocol and executes without the r
       parameters: Type.Object({}),
       async execute() {
         executions++;
-        return { content: [{ type: 'text', text: 'changed' }] };
+        return { state: 'finished', content: [{ type: 'text', text: 'changed' }] };
       },
     }),
   );
@@ -234,7 +234,7 @@ test('duplicate tool call identities fail before executing any side effect', asy
       parameters: Type.Object({}),
       async execute() {
         executions++;
-        return { content: [{ type: 'text', text: 'changed' }] };
+        return { state: 'finished', content: [{ type: 'text', text: 'changed' }] };
       },
     }),
   );
@@ -267,7 +267,7 @@ test('tool execution uses the advertised registration and does not execute a hot
       parameters: Type.Object({}),
       async execute() {
         executions++;
-        return { content: [{ type: 'text', text: 'original' }] };
+        return { state: 'finished', content: [{ type: 'text', text: 'original' }] };
       },
     }),
   );
@@ -280,7 +280,7 @@ test('tool execution uses the advertised registration and does not execute a hot
         parameters: Type.Object({}),
         async execute() {
           executions++;
-          return { content: [{ type: 'text', text: 'replacement' }] };
+          return { state: 'finished', content: [{ type: 'text', text: 'replacement' }] };
         },
       }),
     );
@@ -295,8 +295,8 @@ test('tool execution uses the advertised registration and does not execute a hot
       .log(record.id)
       .projection()
       .timeline.filter(isViewMessage)
-      .find((message) => message.role === 'toolResult')?.isError,
-    true,
+      .find((message) => message.role === 'toolResult')?.toolState,
+    'error',
   );
 });
 
@@ -309,7 +309,9 @@ test('malformed tool arguments become durable error results without invoking the
         yield { type: 'done', message: toolsAnswer(call('invalid-call', 'inspect', { path: 42 })) };
       else {
         assert.equal(request.messages.at(-1)?.role, 'toolResult');
-        assert.equal((request.messages.at(-1) as { isError: boolean }).isError, true);
+        const result = request.messages.at(-1);
+        assert.ok(result?.role === 'toolResult');
+        assert.equal(result.state, 'error');
         yield { type: 'done', message: answer('Recovered') };
       }
     },
@@ -321,7 +323,7 @@ test('malformed tool arguments become durable error results without invoking the
       parameters: Type.Object({ path: Type.String() }),
       async execute() {
         executions++;
-        return { content: [] };
+        return { state: 'finished', content: [] };
       },
     }),
   );
@@ -361,7 +363,7 @@ test('cancellation closes the whole tool batch durably and never executes later 
         ranFirst++;
         controller.abort(new Error('Stopped by test'));
         signal?.throwIfAborted();
-        return { content: [] };
+        return { state: 'finished', content: [] };
       },
     }),
   );
@@ -372,7 +374,7 @@ test('cancellation closes the whole tool batch durably and never executes later 
       parameters: Type.Object({}),
       async execute() {
         ranSecond++;
-        return { content: [] };
+        return { state: 'finished', content: [] };
       },
     }),
   );
@@ -397,10 +399,10 @@ test('cancellation closes the whole tool batch durably and never executes later 
   assert.equal(ranFirst, 1);
   assert.equal(ranSecond, 0);
   assert.deepEqual(
-    results.map(({ toolCallId, isError, toolState }) => [toolCallId, isError, toolState]),
+    results.map(({ toolCallId, toolState }) => [toolCallId, toolState]),
     [
-      ['one', true, 'cancelled'],
-      ['two', true, 'skipped'],
+      ['one', 'cancelled'],
+      ['two', 'skipped'],
     ],
   );
   assert.deepEqual(
@@ -415,7 +417,7 @@ test('interrupted calls receive an error record before the next prompt and are n
     async *stream(request) {
       const results = request.messages.filter((message) => message.role === 'toolResult');
       assert.equal(results.length, 1);
-      assert.equal(results[0].isError, true);
+      assert.equal(results[0].state, 'cancelled');
       yield { type: 'done', message: answer() };
     },
   });
@@ -426,7 +428,7 @@ test('interrupted calls receive an error record before the next prompt and are n
       parameters: Type.Object({}),
       async execute() {
         executed++;
-        return { content: [] };
+        return { state: 'finished', content: [] };
       },
     }),
   );
@@ -522,7 +524,7 @@ test('steering accepts off, skips deterministic failures and resets incompatible
         } else {
           if (levels.length === 2) {
             const result = request.messages.find((message) => message.role === 'toolResult');
-            assert.equal(result?.isError, true);
+            assert.equal(result?.state, 'skipped');
             assert.match(JSON.stringify(result?.content), /steering message arrived/);
           }
           yield { type: 'done', message: answer() };
@@ -539,7 +541,7 @@ test('steering accepts off, skips deterministic failures and resets incompatible
       parameters: Type.Object({}),
       async execute() {
         events.push({ type: 'error', error: 'The skipped tool was executed' });
-        return { content: [] };
+        return { state: 'finished', content: [] };
       },
     }),
   );
@@ -657,7 +659,7 @@ test(
               ),
             ]);
           }
-          return { content: [{ type: 'text', text: id }] };
+          return { state: 'finished', content: [{ type: 'text', text: id }] };
         },
       }),
     );
@@ -668,7 +670,7 @@ test(
         parameters: Type.Object({}),
         async execute(_args, { callId: id }) {
           started.push(id);
-          return { content: [] };
+          return { state: 'finished', content: [] };
         },
       }),
     );

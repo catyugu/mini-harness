@@ -286,7 +286,7 @@ test('a third-party plugin uses tools, models and subprocesses from a Profile wi
             child.finished,
           ]);
           if (status.code !== 0) throw new Error(Buffer.concat(stderr).toString());
-          return { content: [{ type: 'text', text: Buffer.concat(stdout).toString() }] };
+          return { state: 'finished', content: [{ type: 'text', text: Buffer.concat(stdout).toString() }] };
         },
       })));
     }

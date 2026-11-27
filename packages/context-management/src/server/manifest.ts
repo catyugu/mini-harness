@@ -184,7 +184,7 @@ function setup(ctx: Context) {
           async execute({ entry, offset = 0, limit = 2400, image, raw }) {
             const message = sessions.log(id).originalMessage(entry, raw);
             if (!message)
-              return { isError: true, content: [{ type: 'text', text: 'Original message not found' }] };
+              return { state: 'error', content: [{ type: 'text', text: 'Original message not found' }] };
             const parts =
               typeof message.content === 'string'
                 ? [{ type: 'text' as const, text: message.content }]
@@ -192,8 +192,8 @@ function setup(ctx: Context) {
             if (image !== undefined) {
               const part = parts[image - 1];
               if (part?.type !== 'image')
-                return { isError: true, content: [{ type: 'text', text: 'Original image not found' }] };
-              return { content: [part] };
+                return { state: 'error', content: [{ type: 'text', text: 'Original image not found' }] };
+              return { state: 'finished', content: [part] };
             }
             const text = parts
               .flatMap((part, index) =>
@@ -206,6 +206,7 @@ function setup(ctx: Context) {
               .join('\n');
             const end = Math.min(offset + limit, text.length);
             return {
+              state: 'finished',
               content: [
                 {
                   type: 'text',

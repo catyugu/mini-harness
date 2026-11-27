@@ -58,7 +58,6 @@ function relatedTask(ctx: Context, id: string, taskId: string) {
 
 function writableToolResult(result: ToolResult) {
   return {
-    ...(result.outcome && { outcome: result.outcome }),
     content: result.content.flatMap((part) => (part.type === 'text' ? [part.text.slice(0, 4000)] : [])),
   };
 }
@@ -105,7 +104,7 @@ function start(ctx: Context, id: string, name: string, args: Record<string, unkn
       project: (result: ToolResult) =>
         ({
           ...(tool.projectResult?.(result) ?? writableToolResult(result)),
-          isError: Boolean(result.isError || result.outcome),
+          toolState: result.state,
         }) as TaskData,
     },
     (task) => {
@@ -135,7 +134,7 @@ const plugin: Plugin.Object = {
     const output = (task: TaskSnapshot, cursor?: number) =>
       tasks.readOutput(task.id, cursor) ??
       sessions.taskOutput(task.owner.slice('session:'.length), task.id, cursor);
-    const json = (data: unknown) => ({ content: [{ type: 'text' as const, text: JSON.stringify(data) }] });
+    const json = (data: unknown): ToolResult => ({ state: 'finished', content: [{ type: 'text' as const, text: JSON.stringify(data) }] });
     ctx.effect(() =>
       ctx.harnessTools.register({
         name: 'start_background',

@@ -8,12 +8,15 @@ const live = ({ state }: TaskSnapshot) => ['queued', 'running', 'waiting'].inclu
 const object = (value?: TaskData): Record<string, TaskData> =>
   value && typeof value === 'object' && !Array.isArray(value) ? value : {};
 
+const failedTool = (task: TaskSnapshot) =>
+  ['error', 'skipped', 'denied', 'cancelled'].some((state) => object(task.result).toolState === state);
+
 function status(task: TaskSnapshot) {
   if (task.cancellationRequested && live(task)) return 'Cancelling';
   if (live(task) && object(task.progress).state === 'approval') return 'Awaiting approval';
   const summary = object(task.result).summary;
   if (task.state === 'completed' && typeof summary === 'string') return summary;
-  if (task.state === 'completed' && object(task.result).isError) return 'Failed';
+  if (task.state === 'completed' && failedTool(task)) return 'Failed';
   return task.state[0].toUpperCase() + task.state.slice(1);
 }
 
@@ -254,7 +257,7 @@ function setup(ctx: Context) {
       state.textContent = status(next);
       node.dataset.state = next.state;
       node.dataset.tone =
-        next.state === 'completed' && object(next.result).isError
+        next.state === 'completed' && failedTool(next)
           ? 'failed'
           : next.cancellationRequested && live(next)
             ? 'cancelled'

@@ -93,7 +93,7 @@ test('a single user turn supports repeated token-budget compaction while tools e
         parameters: Type.Object({}),
         async execute() {
           calls++;
-          return { content: [{ type: 'text', text: 'Probe result ' + calls }], elapsedMs: 12 };
+          return { state: 'finished', content: [{ type: 'text', text: 'Probe result ' + calls }], elapsedMs: 12 };
         },
       }),
     ),
@@ -232,7 +232,7 @@ test('context overflow repairs the current request and leaves raw tool results r
         parameters: Type.Object({}),
         async execute() {
           calls++;
-          return { content: [{ type: 'text', text: payload }] };
+          return { state: 'finished', content: [{ type: 'text', text: payload }] };
         },
       }),
     ),

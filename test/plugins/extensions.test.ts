@@ -209,7 +209,7 @@ export const apply = (ctx) => {
         ], 'toolUse');
       } else {
         const tools = request.messages.filter(({ role }) => role === 'toolResult');
-        if (tools.length !== 2 || !tools[0].isError || tools[1].content[0].text !== 'Value transformed')
+        if (tools.length !== 2 || tools[0].state === 'finished' || tools[1].content[0].text !== 'Value transformed')
           throw new Error('tool policy or result waterfall failed');
         yield terminal([{ type: 'text', text: 'Alternate response' }]);
       }
@@ -233,7 +233,7 @@ export const apply = (ctx) => {
     ctx.effect(() => ctx.harnessTools.register({ name: 'check', description: 'Check mode', parameters: { type: 'object' },
       async execute({ mode }) {
         if (mode !== 'allowed') throw new Error('denied input');
-        return { content: [{ type: 'text', text: 'Value' }] };
+        return { state: 'finished', content: [{ type: 'text', text: 'Value' }] };
       }
     }));
     ctx.on("agent/tool-result", (content, { tool }) => tool === 'check'
@@ -298,10 +298,10 @@ export const apply = (ctx) => {
   assert.deepEqual(
     log.contextMessages
       .filter((message) => message.role === 'toolResult')
-      .map(({ toolCallId, isError }) => [toolCallId, isError]),
+      .map(({ toolCallId, state }) => [toolCallId, state]),
     [
-      ['denied', true],
-      ['allowed', false],
+      ['denied', 'denied'],
+      ['allowed', 'finished'],
     ],
   );
   assert.equal(mock.requests.length, 0);
@@ -335,7 +335,7 @@ export const apply = (ctx) => {
     ctx.effect(() => ctx.harnessTools.register({ name: 'sensitive', description: 'Read value', parameters: { type: 'object' },
       async execute(_args, { update }) {
         update({ content: [{ type: 'text', text: 'private progress' }] });
-        return { content: [{ type: 'text', text: 'private value' }] };
+        return { state: 'finished', content: [{ type: 'text', text: 'private value' }] };
       }
     }));
     ctx.on("agent/tool-result", (content, { tool }) => {
@@ -379,7 +379,7 @@ test('an invalid transformed request fails before the provider is invoked', asyn
     `
 export const apply = (ctx) => {
     ctx.on("agent/model-request", (request) => ({ ...request, messages: [{ role: 'toolResult', toolCallId: 'missing',
-      toolName: 'example', timestamp: Date.now(), isError: false, content: [] }] }));
+      toolName: 'example', timestamp: Date.now(), state: 'finished', content: [] }] }));
   };
 `,
   );

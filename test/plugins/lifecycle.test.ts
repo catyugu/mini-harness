@@ -135,7 +135,7 @@ export const apply = (ctx, config) => {
         name: 'example_count', label: 'Count', description: 'Count sessions',
         parameters: { type: 'object', properties: {} },
         async execute() {
-          return { content: [{ type: 'text', text: config.prefix + ': ' + sessions.list().length }] };
+          return { state: 'finished', content: [{ type: 'text', text: config.prefix + ': ' + sessions.list().length }] };
         }
       }));
     };
@@ -220,7 +220,7 @@ export const inject = ["harnessTools", "fixtureGreeting"];
 
 export const apply = (ctx) => {
     ctx.effect(() => ctx.harnessTools.register({ name: 'dependent_tool', description: 'Fixture', parameters: { type: 'object', properties: {} },
-      execute: async () => ({ content: [{ type: 'text', text: ctx.fixtureGreeting }] }) }));
+      execute: async () => ({ state: 'finished', content: [{ type: 'text', text: ctx.fixtureGreeting }] }) }));
   };
 `,
   );
@@ -344,7 +344,7 @@ export const apply = (ctx) => {
     ctx.effect(() => ctx.harnessTools.register({ name: 'schema_value', description: 'Fixture', parameters: { type: 'object', properties: {} },
       async execute(changesToSave) {
         if (Object.keys(changesToSave).length) await ctx.harnessPluginSettings.patch(changesToSave);
-        return { content: [{ type: 'text', text: ctx.harnessPluginSettings.get('count') + ':' +
+        return { state: 'finished', content: [{ type: 'text', text: ctx.harnessPluginSettings.get('count') + ':' +
           ctx.harnessPluginSettings.get('options').enabled + ':' + changes.join(',') }] };
       }
     }));
@@ -422,7 +422,7 @@ export const apply = (ctx, config) => {
         appendFileSync(${JSON.stringify(log)}, 'start ${id}\\n');
         ctx.effect(() => () => appendFileSync(${JSON.stringify(log)}, 'stop ${id}\\n'));
         ctx.effect(() => ctx.harnessTools.register({ name: '${id}_tool', description: 'Fixture', parameters: {type: 'object', properties: {}},
-          execute: async () => ({content: [{type: 'text', text: String(config.value ?? 'original')}]}) }));
+          execute: async () => ({state: 'finished', content: [{type: 'text', text: String(config.value ?? 'original')}]}) }));
         if (config.fail) throw new Error('Partial setup failed');
         if ('${id}' === 'base') ctx.provide('fixtureBase', config.value ?? 'original');
       };

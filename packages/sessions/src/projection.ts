@@ -1,7 +1,6 @@
 import { userContent } from './user-content.ts';
 import type { RecordPresentation, SessionDisplayRecord } from './shared/display-record.ts';
 import { isRunning, type RunInfo } from './shared/run-state.ts';
-import { toolResultState } from '@mini-harness/tools/api';
 import type { NativeMessage, NativeToolMessage } from '@mini-harness/llm/api';
 import type { MessageContent, ViewMessage } from './shared/message.ts';
 import type {
@@ -56,7 +55,7 @@ export function displayMessage(
           role: message.role,
           toolName: message.toolName,
           toolCallId: message.toolCallId,
-          toolState: toolResultState(message),
+          toolState: message.state,
         }
       : message.role === 'user'
         ? { ...fields, role: 'user' }
@@ -71,7 +70,6 @@ export function displayMessage(
   if (message.role === 'assistant' && !runId && message.stopReason !== 'aborted')
     view.error = message.errorMessage;
   if (message.role === 'toolResult') {
-    view.isError = message.isError;
     view.arguments = toolArguments;
     view.elapsedMs = (entry.type === 'message' ? entry.elapsedMs : undefined) ?? message.elapsedMs;
     const { details, detailKeys } = message;

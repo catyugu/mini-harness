@@ -1,7 +1,7 @@
 import type { Context } from 'mini-harness/cordis';
 import type { ScopeKey } from '@mini-harness/plugin-api/scopes';
 import type { Static, TSchema } from 'typebox';
-import type { TextPart, ImagePart, NativeToolMessage } from '@mini-harness/llm/api';
+import type { TextPart, ImagePart, NativeToolMessage, ToolResultState } from '@mini-harness/llm/api';
 
 import type { ToolSchema } from '@mini-harness/llm/vocabulary';
 
@@ -10,20 +10,13 @@ export interface ToolUpdate {
   details?: Record<string, unknown>;
   state?: 'running' | 'approval';
 }
-export interface ToolResult extends Omit<ToolUpdate, 'state'> {
+export interface ToolResult {
   content: (TextPart | ImagePart)[];
   detailKeys?: NativeToolMessage['detailKeys'];
-  isError?: boolean;
-  outcome?: NativeToolMessage['outcome'];
+  state: ToolResultState;
+  details?: Record<string, unknown>;
   elapsedMs?: number;
 }
-export type ToolResultState = 'finished' | 'error' | NonNullable<NativeToolMessage['outcome']>;
-
-export function toolResultState(result: NativeToolMessage): ToolResultState {
-  if (result.outcome) return result.outcome;
-  return result.isError ? 'error' : 'finished';
-}
-
 export interface ToolDefinition<Arguments = Record<string, any>> extends ToolSchema {
   /** Tags are interpreted by the tool consumer. */
   tags?: readonly string[];

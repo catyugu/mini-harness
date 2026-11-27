@@ -549,7 +549,7 @@ test(
         entered.release();
         await cleanup.promise;
         signal.throwIfAborted();
-        return { content: [] };
+        return { state: 'finished', content: [] };
       },
     });
     t.after(async () => {

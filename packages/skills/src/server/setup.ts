@@ -61,10 +61,11 @@ export function setup(ctx: Context) {
             { additionalProperties: false },
           ),
           async execute({ name }, { signal }) {
-            signal?.throwIfAborted();
+            signal.throwIfAborted();
             const skill = await loader.load(sessions.workspacePath(sessionId), name);
-            signal?.throwIfAborted();
+            signal.throwIfAborted();
             return {
+              state: 'finished',
               content: [{ type: 'text', text: skillInstruction(skill) }],
               details: { skill: skill.name },
             };

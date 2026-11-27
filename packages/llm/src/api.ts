@@ -84,15 +84,16 @@ export interface NativeAssistantMessage {
   /** JSON-only continuation/signature metadata interpreted exclusively by the LLM adapter. */
   providerData?: Record<string, unknown>;
 }
+export const toolResultStates = ['finished', 'error', 'skipped', 'denied', 'cancelled'] as const;
+export type ToolResultState = (typeof toolResultStates)[number];
+
 export interface NativeToolMessage {
   role: 'toolResult';
   toolCallId: string;
   toolName: string;
   content: (TextPart | ImagePart)[];
   timestamp: number;
-  isError: boolean;
-  /** Non-success disposition distinct from an execution failure. */
-  outcome?: 'skipped' | 'denied' | 'cancelled';
+  state: ToolResultState;
   details?: Record<string, unknown>;
   /** Fields of details selected by the producing tool for its consumers' presentation. */
   detailKeys?: readonly string[];
@@ -254,15 +255,10 @@ export function validateNativeMessage(message: NativeMessage) {
     message.role === 'toolResult' &&
     (typeof message.toolCallId !== 'string' ||
       typeof message.toolName !== 'string' ||
-      typeof message.isError !== 'boolean' ||
+      !toolResultStates.includes(message.state) ||
       (message.detailKeys !== undefined &&
         (!Array.isArray(message.detailKeys) ||
-          !message.detailKeys.every((key) => typeof key === 'string'))) ||
-      (message.outcome !== undefined &&
-        (!message.isError ||
-          (message.outcome !== 'skipped' &&
-            message.outcome !== 'denied' &&
-            message.outcome !== 'cancelled'))))
+          !message.detailKeys.every((key) => typeof key === 'string'))))
   )
     throw new Error('Invalid tool result');
 }
