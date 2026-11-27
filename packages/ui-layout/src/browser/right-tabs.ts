@@ -12,10 +12,7 @@ interface TabDescriptor extends TabIdentity {
   data: JsonValue;
 }
 
-type Tab = TabIdentity & { id: string } & (
-  | { kind: 'persistent'; data: JsonValue }
-  | { kind: 'temporary' }
-);
+type Tab = TabIdentity & { id: string } & ({ kind: 'persistent'; data: JsonValue } | { kind: 'temporary' });
 
 interface MountedView {
   node: HTMLElement;
@@ -308,9 +305,10 @@ export function createRightTabs(
     if (!tab) {
       const descriptor = signal ? undefined : types.get(type)!.persistence?.save(data);
       const identity = { id: nextTabId(), type, key };
-      const created: Tab = descriptor === undefined
-        ? { ...identity, kind: 'temporary' }
-        : { ...identity, kind: 'persistent', data: descriptor };
+      const created: Tab =
+        descriptor === undefined
+          ? { ...identity, kind: 'temporary' }
+          : { ...identity, kind: 'persistent', data: descriptor };
       tab = created;
       target.tabs.push(tab);
       resolved.set(tab, data);
@@ -387,8 +385,7 @@ export function createRightTabs(
   signal.addEventListener(
     'abort',
     () => {
-      for (const target of states.values())
-        for (const tab of target.tabs) release(tab);
+      for (const target of states.values()) for (const tab of target.tabs) release(tab);
       states.clear();
     },
     { once: true },
