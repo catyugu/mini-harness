@@ -23,8 +23,8 @@ const setup = async (ctx: Context) => {
     ]);
     return { models, providers, recent, canManageProviders, protocols };
   });
-  await state.refresh();
   ctx.effect(() => ctx.miniProjections.register('models', state));
+  await state.refresh();
   ctx.provide('miniModels', {
     get: state.get,
     subscribe: state.subscribe,
@@ -75,18 +75,7 @@ const setup = async (ctx: Context) => {
         id: 'providers',
         sectionId: 'model',
         render({ signal }) {
-          if (!state.get().canManageProviders) {
-            const hint = document.createElement('p');
-            hint.className = 'hint';
-            hint.textContent = 'Models are provided by plugins.';
-            return hint;
-          }
-          const manager = providerManager(
-            ctx,
-            () => state.get().providers,
-            () => state.get().protocols,
-            signal,
-          );
+          const manager = providerManager(ctx, state.get, signal);
           settings.onClose(manager.reset, signal);
           state.subscribe(manager.render, signal);
           return manager.content;

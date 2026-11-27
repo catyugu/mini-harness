@@ -85,7 +85,7 @@ export function providerEditor(
     discover.textContent = 'Fetch available models';
     const { baseUrl, api } = connection();
     discover.disabled = !baseUrl;
-    discover.hidden = !protocols.some((protocol) => protocol.api === api && protocol.discovery);
+    discover.hidden = !protocols.some((protocol) => protocol.api === api);
   }
 
   function connection() {

@@ -74,7 +74,7 @@ export const protocols = new Map<string, Protocol>([
       label: 'OpenAI Chat Completions',
       load: () => import('@earendil-works/pi-ai/api/openai-completions'),
       listing: openaiListing,
-      parse: (raw) => parseModel(raw, false),
+      parse: parseModel,
     },
   ],
   [
@@ -83,7 +83,7 @@ export const protocols = new Map<string, Protocol>([
       label: 'OpenAI Responses',
       load: () => import('@earendil-works/pi-ai/api/openai-responses'),
       listing: openaiListing,
-      parse: (raw) => parseModel(raw, false),
+      parse: parseModel,
     },
   ],
   [
@@ -92,7 +92,7 @@ export const protocols = new Map<string, Protocol>([
       label: 'Anthropic Messages',
       load: () => import('@earendil-works/pi-ai/api/anthropic-messages'),
       listing: anthropicListing,
-      parse: (raw) => parseModel(raw, false),
+      parse: parseModel,
     },
   ],
   [
@@ -107,14 +107,14 @@ export const protocols = new Map<string, Protocol>([
 ]);
 
 export function protocolOptions() {
-  return [...protocols].map(([api, { label }]) => ({ api, label, discovery: true }));
+  return [...protocols].map(([api, { label }]) => ({ api, label }));
 }
 
 function label(...values: unknown[]) {
   return values.find((value): value is string => typeof value === 'string' && !!value.trim())?.trim();
 }
 
-function parseModel(raw: unknown, gemini: boolean): ProviderModelDefinition | undefined {
+function parseModel(raw: unknown, gemini = false): ProviderModelDefinition | undefined {
   const entry = record(raw);
   if (!entry) return;
   if (

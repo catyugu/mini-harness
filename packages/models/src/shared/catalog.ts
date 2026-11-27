@@ -5,7 +5,6 @@ export const providerIdPattern = /^[a-z0-9][a-z0-9-]{0,63}$/;
 export interface ProtocolInfo {
   api: string;
   label: string;
-  discovery: boolean;
 }
 
 export const modelDefaults = { contextWindow: 128000, maxTokens: 8192 } as const;

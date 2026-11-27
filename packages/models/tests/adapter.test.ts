@@ -110,8 +110,8 @@ test('credential updates serialize across providers and survive adapter replacem
   await adapter.refresh();
   await new PiLlm(adapter).registerModels();
   await Promise.all([
-    adapter.storeCredential('openai', 'first-secret'),
-    adapter.storeCredential('anthropic', 'second-secret'),
+    adapter.saveProvider({ id: 'openai', key: 'first-secret' }),
+    adapter.saveProvider({ id: 'anthropic', key: 'second-secret' }),
   ]);
   const saved = JSON.parse(readFileSync(join(paths.home, 'auth.json'), 'utf8'));
   assert.equal(saved.openai.key, 'first-secret');
@@ -129,7 +129,7 @@ test('credential updates serialize across providers and survive adapter replacem
     ({ configured }) => configured,
   );
   assert.deepEqual(replacement.authStatus('openai'), { configured: true, source: 'stored' });
-  await replacement.removeCredential('openai');
+  await replacement.removeProvider({ id: 'openai' });
   assert.equal(JSON.parse(readFileSync(join(paths.home, 'auth.json'), 'utf8')).openai, undefined);
   assert.equal(
     JSON.parse(readFileSync(join(paths.home, 'auth.json'), 'utf8')).anthropic.key,
@@ -346,8 +346,8 @@ test(
       },
     ]);
     await started;
-    await store.storeCredential(provider.id, 'first-secret');
-    await store.storeCredential('slow-auth', 'second-secret');
+    await store.saveProvider({ id: provider.id, key: 'first-secret' });
+    await store.saveProvider({ id: 'slow-auth', key: 'second-secret' });
     await store.available();
     await waitUntil(() => errors.some((error) => String(error).includes('slow-auth')), Boolean);
     const saved = JSON.parse(readFileSync(join(paths.home, 'auth.json'), 'utf8'));

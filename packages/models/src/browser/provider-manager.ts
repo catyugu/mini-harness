@@ -15,8 +15,7 @@ const listed = ({
 
 export function providerManager(
   ctx: Context,
-  providers: () => ProviderInfo[],
-  protocols: () => ProtocolInfo[],
+  snapshot: () => { providers: ProviderInfo[]; protocols: ProtocolInfo[]; canManageProviders: boolean },
   signal: AbortSignal,
 ) {
   const content = fromMarkup(`<div class="model-settings">
@@ -45,11 +44,12 @@ export function providerManager(
     status.textContent = '';
     const controller = new AbortController();
     const lifetime = AbortSignal.any([signal, controller.signal]);
+    const { providers, protocols } = snapshot();
     const form = providerEditor(
       ctx,
-      providers().filter((item) => !listed(item)),
+      providers.filter((item) => !listed(item)),
       provider,
-      protocols(),
+      protocols,
       lifetime,
       {
         cancel() {
@@ -73,9 +73,18 @@ export function providerManager(
   }
 
   function render() {
-    if (active || signal.aborted) return;
+    if (signal.aborted) return;
+    const { providers, canManageProviders } = snapshot();
+    addArea.hidden = !canManageProviders;
+    if (!canManageProviders) {
+      closeEditor();
+      status.textContent = '';
+      list.replaceChildren(fromMarkup('<p class="hint">Models are provided by plugins.</p>'));
+      return;
+    }
+    if (active) return;
     list.replaceChildren(
-      ...providers()
+      ...providers
         .filter(listed)
         .sort((a, b) => a.name.localeCompare(b.name))
         .map((provider) => {
