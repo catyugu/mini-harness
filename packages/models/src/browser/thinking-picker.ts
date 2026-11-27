@@ -71,6 +71,7 @@ export function createThinkingPicker(
       const selected = desired && levels.includes(desired) ? desired : null;
       const label = selected ? labels[selected] : 'Default';
       const text = document.createElement('span');
+      text.className = 'ui-truncate';
       text.textContent = label;
       button.replaceChildren(text, icon('chevron'));
       button.title = 'Thinking level: ' + label;

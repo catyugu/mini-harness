@@ -1,7 +1,8 @@
 import { attachmentPlacement, type PreviewResource } from '@mini-harness/file-preview/browser/api';
 import type { ViewAttachment } from '@mini-harness/sessions/message';
 import type { Context } from 'mini-harness/cordis';
-import { fileCard, imageMime } from './attachment-card.ts';
+import { rasterImage } from '@mini-harness/ui-primitives/primitives';
+import { fileCard } from './attachment-card.ts';
 
 export function attachmentView(ctx: Context, file: ViewAttachment, resource?: PreviewResource) {
   const preview = ctx.get('miniFilePreview');
@@ -10,10 +11,8 @@ export function attachmentView(ctx: Context, file: ViewAttachment, resource?: Pr
       ? () => preview.open(resource, attachmentPlacement(file.name, file.mimeType))
       : undefined;
   let node: HTMLElement;
-  if (file.data && imageMime.test(file.mimeType)) {
-    const image = document.createElement('img');
-    image.alt = file.name;
-    image.src = 'data:' + file.mimeType + ';base64,' + file.data;
+  const image = rasterImage(file.mimeType, file.data, file.name);
+  if (image) {
     if (!open) return image;
     const trigger = document.createElement('button');
     trigger.type = 'button';

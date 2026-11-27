@@ -71,8 +71,9 @@ export function createRightTabs(
     view.bar.replaceChildren(
       ...tabs.map((tab) => {
         const item = document.createElement('div');
-        item.className = 'right-tab';
+        item.className = 'right-tab ui-row';
         const select = button(tab.title, 'quiet');
+        select.classList.add('ui-truncate');
         select.id = tab.id + '-select';
         select.title = tab.title;
         select.setAttribute('role', 'tab');
@@ -81,6 +82,7 @@ export function createRightTabs(
         select.tabIndex = tab === active || (!active && tab === tabs[0]) ? 0 : -1;
         select.onclick = () => activate(tab);
         const close = iconButton('Close tab ' + tab.title, 'close');
+        close.classList.add('ui-fixed');
         close.onclick = () => {
           remove(tab);
           render(true);

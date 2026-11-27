@@ -15,19 +15,19 @@ export function mountComposer(ctx: Context, signal: AbortSignal) {
           <div id="suggestions" class="suggestions" role="listbox" aria-label="Input suggestions" hidden></div>
           <div id="draftMode" class="draft-mode" hidden><span></span><button type="button" aria-label="Cancel editing">Cancel</button></div>
           <div id="promptEditor"></div>
-          <div class="composer-footer">
-            <div class="composer-leading">
-              <div id="composerExtensions" class="composer-tools"></div>
+          <div class="composer-footer ui-row">
+            <div class="composer-leading ui-row">
+              <div id="composerExtensions" class="composer-tools ui-row"></div>
               <button id="permissionSelect" class="permission-select" type="button" aria-haspopup="listbox" aria-expanded="false" aria-controls="permissionResults"></button>
               <div id="permissionPicker" class="ui-popover permission-picker" popover="auto">
                 <div id="permissionResults" role="listbox" aria-label="Conversation permissions"></div>
               </div>
-              <div id="composerOptions" class="composer-tools"></div>
+              <div id="composerOptions" class="composer-tools ui-row"></div>
             </div>
-            <div class="composer-secondary">
-              <div id="composerTrailing" class="composer-trailing"></div>
+            <div class="composer-secondary ui-row">
+              <div id="composerTrailing" class="composer-trailing ui-row"></div>
               <select id="messageMode" class="small-button" aria-label="Message sending mode" hidden></select>
-              <div class="composer-actions">
+              <div class="composer-actions ui-row ui-fixed">
                 <button id="stop" type="button" aria-label="Stop response" hidden data-icon="stop"></button>
                 <button id="send" type="submit" aria-label="Send" data-icon="send"></button>
               </div>

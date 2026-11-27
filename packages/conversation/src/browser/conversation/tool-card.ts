@@ -26,11 +26,11 @@ export function createToolCard(initial: ToolCardData, extensions: MessageExtensi
   name.textContent = initial.name.replaceAll('_', ' ');
   name.title = initial.name;
   const summary = document.createElement('span');
-  summary.className = 'tool-summary-slot';
+  summary.className = 'tool-summary-slot ui-row ui-fill';
   const duration = document.createElement('span');
-  duration.className = 'tool-duration';
+  duration.className = 'tool-duration ui-fixed';
   const status = document.createElement('span');
-  status.className = 'tool-state';
+  status.className = 'tool-state ui-fixed';
   const statusLabel = document.createElement('span');
   status.append(statusLabel);
   header.append(icon('chevron'), name, summary, duration, status);

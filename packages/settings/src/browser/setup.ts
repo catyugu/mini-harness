@@ -23,7 +23,7 @@ const setup = async (ctx: Context) => {
   const settings = mountSettings(ctx, registry);
   ctx.provide('miniSettings', settings);
   const launcher = fromMarkup<HTMLButtonElement>(
-    '<button type="button" aria-label="Settings"><span data-icon="settings"></span><span class="nav-label">Settings</span></button>',
+    '<button class="settings-launcher" type="button" aria-label="Settings"><span data-icon="settings"></span><span class="nav-label">Settings</span></button>',
   );
   launcher.onclick = () => {
     layout.closeDrawer();

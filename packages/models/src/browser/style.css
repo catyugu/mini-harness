@@ -94,19 +94,12 @@
 }
 
 .model-controls {
-  display: flex;
   flex-wrap: wrap;
-  align-items: center;
-  flex: 1;
-  min-width: 0;
-  gap: 6px;
+  --gap: 6px;
 }
 .model-select {
-  display: flex;
-  align-items: center;
-  gap: 6px;
+  --gap: 6px;
   max-width: 260px;
-  min-width: 0;
   border: 0;
   border-radius: 8px;
   background: transparent;
@@ -123,9 +116,6 @@
 }
 .model-select span {
   display: block;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
   font-size: inherit;
   color: inherit;
 }
@@ -238,7 +228,7 @@
   background: var(--hover);
 }
 
-@media (max-width: 560px) {
+@media (pointer: coarse) {
   .model-controls .model-select {
     min-height: 40px;
   }

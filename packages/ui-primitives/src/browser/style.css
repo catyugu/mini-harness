@@ -93,7 +93,7 @@
     transform: translateX(var(--switch-travel));
     background: var(--on-accent);
   }
-  @media (max-width: 860px) {
+  @media (pointer: coarse) {
     .toggle {
       --switch-width: 42px;
       --switch-height: 26px;
@@ -293,7 +293,7 @@
     font-size: var(--font-ui);
     line-height: var(--line-ui);
   }
-  @media (max-width: 560px) {
+  @media (pointer: coarse) {
     .ui-button {
       min-height: var(--control-touch);
     }
@@ -302,6 +302,8 @@
       min-height: var(--control-touch);
       font-size: 16px;
     }
+  }
+  @media (max-width: 560px) {
     .ui-dialog {
       width: calc(100% - 20px);
       max-height: calc(var(--app-height, 100dvh) - 20px);
@@ -330,7 +332,7 @@
       transform: translateY(0);
     }
   }
-  @media (max-width: 860px) {
+  @media (pointer: coarse) {
     .icon-button,
     .link-button,
     .small-button {
@@ -489,7 +491,7 @@
     white-space: normal;
     font-size: var(--font-meta);
   }
-  @media (max-width: 860px) {
+  @media (pointer: coarse) {
     .ui-disclosure-trigger {
       min-height: 32px;
       padding-inline: 4px;
@@ -611,7 +613,7 @@
   .ui-disclosure[open] > summary > svg:first-child {
     transform: rotate(90deg);
   }
-  @media (max-width: 860px) {
+  @media (pointer: coarse) {
     .ui-list-row {
       min-block-size: var(--row-size, var(--control-touch));
     }

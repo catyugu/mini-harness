@@ -188,6 +188,7 @@ export function createModelPicker(
               (model) => model.provider === choice.provider && (!choice.id || model.id === choice.id),
             );
       const label = document.createElement('span');
+      label.className = 'ui-truncate';
       label.textContent = selected?.name ?? (choice?.id || emptyLabel);
       button.replaceChildren(label, icon('chevron'));
       button.title = selected ? providerName(selected.provider) + ' / ' + selected.id : '';

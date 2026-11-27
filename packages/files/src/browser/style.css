@@ -94,7 +94,7 @@
     color var(--motion-button) ease-out,
     opacity var(--motion-button) ease-out;
 }
-@media (max-width: 860px) {
+@media (pointer: coarse) {
   .file-entry,
   .file-tree summary {
     min-height: 36px;
@@ -102,8 +102,6 @@
   .file-toolbar > .ui-button {
     min-height: 36px;
   }
-}
-@media (max-width: 560px) {
   .file-entry.ui-button {
     min-height: 44px;
   }

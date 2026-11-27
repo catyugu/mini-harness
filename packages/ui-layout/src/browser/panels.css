@@ -70,8 +70,7 @@
     padding: 4px 2px;
   }
   .right-tab {
-    display: flex;
-    align-items: center;
+    --gap: 0px;
     flex-shrink: 0;
     max-width: min(190px, 100%);
     border-radius: 7px;
@@ -81,10 +80,6 @@
   }
   .right-tab .ui-button {
     display: block;
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
     min-height: 34px;
     padding-inline: 6px;
     font-size: var(--font-meta);

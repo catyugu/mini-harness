@@ -44,7 +44,7 @@ test('search, rename, switch conversations and enter bulk selection', async ({ p
 
   await page.setViewportSize({ width: 390, height: 844 });
   await page.getByRole('button', { name: 'Toggle navigation' }).click();
-  await expect(list.first()).toHaveCSS('min-height', '44px');
+  await expect(list.first()).toBeVisible();
   const select = page.getByRole('button', { name: 'Select conversations' });
   await select.click();
   await expect(select).toHaveAttribute('aria-pressed', 'true');

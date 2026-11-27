@@ -32,36 +32,10 @@
     font-size: var(--font-section);
     font-weight: 600;
   }
-  .sidebar-bottom button {
-    display: flex;
-    align-items: center;
-    gap: var(--space);
-    text-align: left;
-    border: 1px solid var(--border);
-    border-radius: 9px;
-    padding: 9px 10px;
-    background: var(--surface);
-    font-size: var(--font-ui);
-  }
-  .sidebar-bottom button {
-    min-height: 44px;
-    line-height: var(--line-ui);
-  }
-  .sidebar-bottom button svg {
-    flex: 0 0 18px;
-  }
-  .sidebar-bottom button:hover {
-    background: var(--hover);
-  }
   .sidebar-bottom {
     flex-shrink: 0;
     border-top: 1px solid var(--border);
     padding-top: 9px;
-  }
-  .sidebar-bottom button {
-    width: 100%;
-    background: transparent;
-    border-color: transparent;
   }
   .main {
     flex: 1;

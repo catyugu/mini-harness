@@ -6,9 +6,9 @@ import { createThinkingPicker } from './thinking-picker.ts';
 
 export function mountModelControls(ctx: Context, signal: AbortSignal) {
   const { miniComposer: model, miniConversation: control } = ctx;
-  const root = fromMarkup(`<div class="model-controls">
-<button id="modelSelect" class="model-select" type="button">Choose model</button>
-            <button id="thinkingLevel" class="model-select" type="button" aria-haspopup="listbox" aria-expanded="false" aria-controls="thinkingResults" hidden>Default</button>
+  const root = fromMarkup(`<div class="model-controls ui-row ui-fill">
+<button id="modelSelect" class="model-select ui-row" type="button">Choose model</button>
+            <button id="thinkingLevel" class="model-select ui-row" type="button" aria-haspopup="listbox" aria-expanded="false" aria-controls="thinkingResults" hidden>Default</button>
             <div id="thinkingPicker" class="ui-popover model-picker thinking-picker" popover="auto"><div id="thinkingResults" role="listbox" aria-label="Thinking levels"></div></div>
   </div>`);
   const { element } = scopedElements(root);

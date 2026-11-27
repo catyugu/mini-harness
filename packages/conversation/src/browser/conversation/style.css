@@ -73,22 +73,17 @@
   font-weight: 500;
 }
 .tool-summary-slot {
-  display: flex;
-  align-items: center;
-  flex: 1 1 0;
-  min-width: 0;
+  --gap: 0px;
   overflow: hidden;
   white-space: nowrap;
 }
 .tool-duration {
-  flex: none;
   white-space: nowrap;
   color: var(--muted);
   font-size: var(--font-caption);
   font-variant-numeric: tabular-nums;
 }
 .tool-state {
-  flex: none;
   white-space: nowrap;
   padding: 1px 3px;
   color: var(--muted);
@@ -183,10 +178,7 @@
 .composer-leading,
 .composer-secondary,
 .composer-actions {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
+  --gap: 6px;
 }
 .composer-footer {
   flex-wrap: wrap;
@@ -202,7 +194,6 @@
   justify-content: flex-end;
 }
 .composer-actions {
-  flex: none;
   margin-left: auto;
 }
 @container (max-width: 640px) {
@@ -391,7 +382,7 @@ button.file-card:hover {
   content: ' ✓';
   color: var(--focus);
 }
-@media (max-width: 560px) {
+@media (pointer: coarse) {
   .permission-select {
     min-height: 40px;
     padding-inline: 4px;
@@ -435,6 +426,8 @@ button.file-card:hover {
   .conversation {
     --content-gutter: 12px;
   }
+}
+@media (pointer: coarse) {
   .composer .cm-content {
     font-size: 16px;
   }
@@ -445,12 +438,9 @@ button.file-card:hover {
   }
 }
 .composer-trailing {
-  display: flex;
-  align-items: center;
   flex: 1 1 160px;
   flex-wrap: wrap;
-  min-width: 0;
-  gap: 6px;
+  --gap: 6px;
 }
 .composer-trailing:empty {
   display: none;
@@ -459,11 +449,8 @@ button.file-card:hover {
   display: none;
 }
 .composer-tools {
-  display: flex;
   flex-wrap: wrap;
-  align-items: center;
-  gap: 2px;
-  min-width: 0;
+  --gap: 2px;
 }
 #send,
 #stop {
@@ -531,7 +518,7 @@ button.file-card:hover {
   order: -1;
   margin: 0 8px 0 0;
 }
-@media (max-width: 860px) {
+@media (pointer: coarse) {
   .message-actions .message-action {
     flex-basis: 36px;
     min-width: 36px;
@@ -644,13 +631,6 @@ button.file-card:hover {
   flex: none;
   margin: 0;
   max-width: 105px;
-}
-@media (max-width: 560px) {
-  .composer-tools .icon-button {
-    min-width: 32px;
-    width: 32px;
-    padding-inline: 4px;
-  }
 }
 .composer-wrap {
   flex-shrink: 0;

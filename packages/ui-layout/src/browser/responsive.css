@@ -26,8 +26,10 @@
   .mobile-layout #sidebarExtensions {
     flex-shrink: 0;
   }
-  .mobile-layout .nav-action {
-    min-height: 44px;
+  @media (pointer: coarse) {
+    .nav-action {
+      min-height: 44px;
+    }
   }
   .sidebar-collapsed .sidebar {
     display: flex;
@@ -39,8 +41,6 @@
   .sidebar-collapsed .sidebar-bottom {
     margin-top: auto;
   }
-  .sidebar-collapsed .new-session,
-  .sidebar-collapsed .sidebar-bottom button,
   .sidebar-collapsed .nav-action {
     justify-content: center;
     padding: 10px 0;
