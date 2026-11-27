@@ -3,8 +3,13 @@ import test from 'node:test';
 import { resolveLayout, type LayoutInput } from '../src/browser/layout-state.ts';
 
 const initial: LayoutInput = {
-  width: 1440, mobile: false, sidebarPreference: 380, panelPreference: 400,
-  desktopSidebar: true, drawer: false, panelOpen: true,
+  width: 1440,
+  mobile: false,
+  sidebarPreference: 380,
+  panelPreference: 400,
+  desktopSidebar: true,
+  drawer: false,
+  panelOpen: true,
 };
 
 test('docking preserves user preferences across budget and media boundaries', () => {
@@ -27,10 +32,19 @@ test('docking preserves user preferences across budget and media boundaries', ()
     assert.equal(input.sidebarPreference, 380);
     assert.equal(input.panelPreference, 400);
   }
-  const bounded = resolveLayout({ ...initial, width: 1000, desktopSidebar: false, sidebarPreference: 20, panelPreference: 9999 });
+  const bounded = resolveLayout({
+    ...initial,
+    width: 1000,
+    desktopSidebar: false,
+    sidebarPreference: 20,
+    panelPreference: 9999,
+  });
   assert.equal(bounded.sidebar.value, 280);
   assert.equal(bounded.panel.value, 424);
-  assert.equal(resolveLayout({ ...initial, width: 2000, sidebarPreference: 9999, panelPreference: 9999 }).panel.value, 960);
+  assert.equal(
+    resolveLayout({ ...initial, width: 2000, sidebarPreference: 9999, panelPreference: 9999 }).panel.value,
+    960,
+  );
   const mobile = resolveLayout({ ...initial, mobile: true, width: 860, drawer: true, panelOpen: false });
   assert.equal(mobile.modal, 'sidebar');
   assert.equal(mobile.closeTarget, 'sidebar');

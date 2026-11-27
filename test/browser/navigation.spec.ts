@@ -160,8 +160,10 @@ test('first frame already uses the correct layout at the mobile boundary', async
   for (const width of [860, 861]) {
     await page.setViewportSize({ width, height: 900 });
     await page.goto(host.url + '/#token=' + host.token);
-    await expect(page.locator('html')).toHaveAttribute('data-first-layout',
-      width === 860 ? 'fixed:true:true:300px' : 'relative:false:false:340px');
+    await expect(page.locator('html')).toHaveAttribute(
+      'data-first-layout',
+      width === 860 ? 'fixed:true:true:300px' : 'relative:false:false:340px',
+    );
   }
   await page.setViewportSize({ width: 860, height: 900 });
   await expect(page.locator('#sidebarResize')).toBeHidden();

@@ -73,7 +73,10 @@ export function createLayout(view: LayoutElements, signal: AbortSignal) {
     main.inert = next.modal !== undefined;
     overlay.hidden = next.modal === undefined;
     overlay.setAttribute('aria-label', panelModal ? 'Dismiss workspace panel' : 'Close navigation');
-    for (const [element, active] of [[sidebar, next.modal === 'sidebar'], [panel, panelModal]] as const) {
+    for (const [element, active] of [
+      [sidebar, next.modal === 'sidebar'],
+      [panel, panelModal],
+    ] as const) {
       if (active) {
         element.setAttribute('role', 'dialog');
         element.setAttribute('aria-modal', 'true');
@@ -82,7 +85,10 @@ export function createLayout(view: LayoutElements, signal: AbortSignal) {
         element.removeAttribute('aria-modal');
       }
     }
-    for (const [handle, range] of [[sidebarResize, next.sidebar], [panelResize, next.panel]] as const) {
+    for (const [handle, range] of [
+      [sidebarResize, next.sidebar],
+      [panelResize, next.panel],
+    ] as const) {
       handle.setAttribute('aria-valuenow', String(range.value));
       handle.setAttribute('aria-valuemin', String(range.min));
       handle.setAttribute('aria-valuemax', String(range.max));
@@ -110,7 +116,10 @@ export function createLayout(view: LayoutElements, signal: AbortSignal) {
     if (open === panelOpen) return;
     if (open) {
       const origin = document.activeElement;
-      panelTrigger = origin instanceof HTMLElement && !panel.contains(origin) && !sidebar.contains(origin) ? origin : panelButton;
+      panelTrigger =
+        origin instanceof HTMLElement && !panel.contains(origin) && !sidebar.contains(origin)
+          ? origin
+          : panelButton;
     }
     if (open) drawer = false;
     if (!open && panel.contains(document.activeElement)) focus = true;
@@ -256,7 +265,9 @@ export function createLayout(view: LayoutElements, signal: AbortSignal) {
     sidebarWidthKey,
     'sidebar',
     () => sidebarWidth,
-    (value) => { sidebarWidth = value; },
+    (value) => {
+      sidebarWidth = value;
+    },
   );
   bindResize(
     panelResize,
@@ -265,17 +276,23 @@ export function createLayout(view: LayoutElements, signal: AbortSignal) {
     panelWidthKey,
     'panel',
     () => panelWidth,
-    (value) => { panelWidth = value; },
+    (value) => {
+      panelWidth = value;
+    },
   );
 
   function resizeHeight() {
     root.style.setProperty('--app-height', (viewport?.height ?? innerHeight) + 'px');
   }
   viewport?.addEventListener('resize', resizeHeight, { signal });
-  window.addEventListener('resize', () => {
-    resizeHeight();
-    render();
-  }, { signal });
+  window.addEventListener(
+    'resize',
+    () => {
+      resizeHeight();
+      render();
+    },
+    { signal },
+  );
   resizeHeight();
   render();
   return {
