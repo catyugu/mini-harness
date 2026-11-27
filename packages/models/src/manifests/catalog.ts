@@ -1,4 +1,4 @@
-import { Service, type Context, type Plugin } from 'mini-harness/cordis';
+import { FiberState, Service, type Context, type Plugin } from 'mini-harness/cordis';
 import { rankScoped, sameRank, scopeOf, type ScopeKey } from '@mini-harness/plugin-api/scopes';
 import type { LlmAdapter } from '@mini-harness/llm/api';
 import type { ModelChoice } from '@mini-harness/llm/vocabulary';
@@ -65,12 +65,17 @@ const plugin: Plugin.Object = {
           const llm = caller.get('harnessLlm');
           if (!llm) throw new Error('Model transport is unavailable in this scope');
           const release = llm.register(adapter, priority);
+          const notify = () => {
+            changed();
+            // Activation/disposal is reconciled by the committed Profile subscription.
+            if (caller.fiber.state === FiberState.ACTIVE) ctx.emit('models/catalog-committed');
+          };
           sources.add(entry);
-          changed();
+          notify();
           return () => {
             if (!sources.delete(entry)) return;
             release();
-            changed();
+            notify();
           };
         },
         list() {

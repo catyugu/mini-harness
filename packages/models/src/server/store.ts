@@ -120,7 +120,6 @@ export class ModelStore implements ModelStorePort {
     return this.enqueue(async () => {
       const configuration = parseConfiguration(readJson(this.file, { providers: {} }));
       await this.resolveCatalog(configuration);
-      this.changed();
     });
   }
 

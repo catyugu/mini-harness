@@ -72,6 +72,8 @@ test('recent main model survives child overrides and a restart through the nativ
   assert.equal(runtime.plugins.ctx.harnessModelPreference.recent().id, 'second-model');
   await sendRun(runtime.plugins.ctx.harnessRuns, old.id, 'After restart');
   assert.equal(mock.requests.at(-1)?.model, 'second-model');
+  await runtime.configuration.update({ entries: { 'core:pi-adapter': { disabled: true } } });
+  assert.deepEqual(runtime.plugins.ctx.harnessModelPreference.recent(), { provider: '', id: '' });
 });
 
 test('a failed recent-model write does not delay accepted input or terminate execution', async (t) => {
@@ -110,6 +112,17 @@ test('a failed recent-model write does not delay accepted input or terminate exe
     await sendRun(runs, registry.create().id, 'Use the current preference despite the failed write');
     assert.equal(runs.info(session.id)?.state, 'completed');
     assert.equal(mock.requests.at(-1)?.model, 'second-model');
+    await context.harnessModelStore.saveProvider({
+      id: 'local-mock',
+      name: 'Local mock',
+      api: 'openai-completions',
+      baseUrl: mock.url,
+      models: [{ id: 'mock-model', sourceId: 'mock-model' }],
+    });
+    assert.equal(context.harnessModels.resolve({ provider: 'local-mock', id: 'second-model' }), undefined);
+    assert.deepEqual(context.harnessModelPreference.recent(), { provider: '', id: '' });
+    await assert.rejects(context.harnessModelPreference.remember({ provider: 'local-mock', id: 'mock-model' }));
+    assert.equal(context.harnessModelPreference.recent().id, 'mock-model');
     await runtime.stop();
     assert.ok(context.logger.buffer.some(({ args }) => args[0] === 'Could not save recent model: %s'));
   } finally {

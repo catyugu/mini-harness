@@ -5,7 +5,7 @@ import { dirname, join } from 'node:path';
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 
-import { fixture } from '../support/api-fixture.ts';
+import { fixture, waitUntil } from '../support/api-fixture.ts';
 
 test('GUI APIs configure providers, persist keys privately, discover Skills and scope files', async (t) => {
   const { app, paths, request, mock, finish } = await fixture(t);
@@ -170,6 +170,10 @@ test('GUI APIs configure providers, persist keys privately, discover Skills and 
   assert.deepEqual((await request('/sessions/search?q=unmatched-phrase')).body, []);
   assert.equal((await request('/providers', 'DELETE', { id: 'gui-test' })).status, 200);
   assert.deepEqual((await request('/models')).body.recent, { provider: '', id: '' });
+  await waitUntil(
+    () => request('/settings'),
+    ({ body }) => body.entries['core:models']?.config?.model?.provider === '',
+  );
   assert.equal(
     (await request('/providers')).body.some((provider: { id: string }) => provider.id === 'gui-test'),
     false,

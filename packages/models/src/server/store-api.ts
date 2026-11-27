@@ -41,4 +41,7 @@ declare module 'mini-harness/cordis' {
   interface Context {
     harnessModelStore: ModelStorePort;
   }
+  interface Events {
+    'models/catalog-committed'(): void;
+  }
 }
