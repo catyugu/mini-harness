@@ -133,7 +133,8 @@ const plugin: Plugin.Object = {
     const tasks = ctx.harnessTasks;
     const sessions = ctx.harnessSessions;
     const output = (task: TaskSnapshot, cursor?: number) =>
-      tasks.readOutput(task.id, cursor) ?? sessions.taskOutput(task.owner.slice('session:'.length), task.id, cursor);
+      tasks.readOutput(task.id, cursor) ??
+      sessions.taskOutput(task.owner.slice('session:'.length), task.id, cursor);
     const json = (data: unknown) => ({ content: [{ type: 'text' as const, text: JSON.stringify(data) }] });
     ctx.effect(() =>
       ctx.harnessTools.register({
@@ -184,7 +185,9 @@ const plugin: Plugin.Object = {
                 else await tasks.wait(task.id, signal);
               }
               return json(
-                tasks.get(task.id) ?? sessions.taskStatus(task.owner.slice('session:'.length), task.id) ?? task,
+                tasks.get(task.id) ??
+                  sessions.taskStatus(task.owner.slice('session:'.length), task.id) ??
+                  task,
               );
             },
           }),
