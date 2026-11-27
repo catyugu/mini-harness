@@ -1,9 +1,40 @@
 import { browserRequest } from '@mini-harness/ui-runtime/http';
 import type { Context } from 'mini-harness/cordis';
 import { workspaceRoute } from '@mini-harness/workspaces/browser/route';
-import { iconButton } from '@mini-harness/ui-primitives/primitives';
+import { iconButton, textOutput } from '@mini-harness/ui-primitives/primitives';
 
 const setup = (ctx: Context) => {
+  ctx.inject(['miniMessages'], (history) => {
+    history.effect(() =>
+      history.miniMessages.registerTool(
+        'load_skill',
+        ({ arguments: args }) => {
+          if (!args || typeof args !== 'object' || !('name' in args) || typeof args.name !== 'string') return;
+          const node = document.createElement('span');
+          node.className = 'skill-tool-summary ui-truncate';
+          node.textContent = args.name;
+          return node;
+        },
+        'summary',
+      ),
+    );
+    history.effect(() =>
+      history.miniMessages.registerTool('load_skill', ({ arguments: args, content }) => {
+        const node = document.createElement('div');
+        node.className = 'skill-tool-body';
+        if (args && typeof args === 'object' && 'name' in args && typeof args.name === 'string') {
+          const name = document.createElement('strong');
+          name.textContent = args.name;
+          node.append(name);
+        }
+        const text = typeof content === 'string'
+          ? content
+          : content?.filter((block) => block.type === 'text').map((block) => block.text).join('\n');
+        if (text) node.append(textOutput(text));
+        return node;
+      }),
+    );
+  });
   const signal = ctx.fiber.signal;
   const services = ctx.harnessBrowser;
   const button = iconButton('Choose skill', 'skills');

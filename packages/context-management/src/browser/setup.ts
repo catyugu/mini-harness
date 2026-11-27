@@ -6,7 +6,7 @@ import type {} from '@mini-harness/conversation/browser/navigation-api';
 import type {} from '@mini-harness/settings/browser/api';
 import type {} from '@mini-harness/ui-slots/browser/api';
 import type {} from '@mini-harness/ui-runtime/projection-api';
-import { bindPopover, iconButton, recordRow } from '@mini-harness/ui-primitives/primitives';
+import { bindPopover, iconButton, recordRow, rasterImage, textOutput } from '@mini-harness/ui-primitives/primitives';
 import { renderMarkdown } from '@mini-harness/ui-primitives/markdown';
 import { browserRequest, payload } from '@mini-harness/ui-runtime/http';
 import { browserPluginId, browserPluginSettings } from '@mini-harness/ui-runtime/plugin-settings';
@@ -375,6 +375,41 @@ function mountStats(ctx: Context) {
 
 function setup(ctx: Context) {
   ctx.inject(['miniMessages'], (history) => {
+    history.effect(() =>
+      history.miniMessages.registerTool(
+        'read_context',
+        ({ arguments: args }) => {
+          if (!args || typeof args !== 'object') return;
+          const input = args as Record<string, unknown>;
+          if (typeof input.entry !== 'string') return;
+          let text = input.entry;
+          if (typeof input.image === 'number') text += ' · image ' + input.image;
+          if (typeof input.offset === 'number') text += ' · offset ' + input.offset;
+          if (typeof input.limit === 'number') text += ' · limit ' + input.limit;
+          if (input.raw === true) text += ' · raw';
+          const node = document.createElement('code');
+          node.className = 'context-tool-summary ui-truncate';
+          node.textContent = text;
+          return node;
+        },
+        'summary',
+      ),
+    );
+    history.effect(() =>
+      history.miniMessages.registerTool('read_context', ({ content }) => {
+        const node = document.createElement('div');
+        node.className = 'context-tool-body';
+        if (typeof content === 'string') node.append(textOutput(content));
+        else for (const block of content ?? []) {
+          if (block.type === 'text' && block.text) node.append(textOutput(block.text));
+          if (block.type === 'image') {
+            const image = rasterImage(block.mimeType, block.data, 'Context image');
+            if (image) node.append(image);
+          }
+        }
+        return node;
+      }),
+    );
     history.effect(() =>
       history.miniMessages.registerRecord('context-management', 'checkpoint', (record) => {
         if (typeof record.content !== 'string') throw new Error('Invalid checkpoint summary');

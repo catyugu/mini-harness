@@ -1,0 +1,14 @@
+.skill-tool-summary {
+  font-family: var(--font-mono);
+  color: var(--muted);
+}
+.skill-tool-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.skill-tool-body .ui-text-output {
+  white-space: pre-wrap;
+}

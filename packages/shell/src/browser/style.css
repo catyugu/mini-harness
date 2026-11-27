@@ -1,9 +1,17 @@
-.tool-exit-code {
-  flex-shrink: 0;
-  color: var(--muted);
-  font-size: var(--font-caption);
-  font-variant-numeric: tabular-nums;
-}
 .tool-exit-code[data-failed='true'] {
   color: var(--danger);
+}
+
+.shell-tool-summary {
+  font-family: var(--font-mono);
+  color: var(--muted);
+}
+.shell-tool-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.shell-command {
+  color: var(--ink);
 }

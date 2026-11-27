@@ -1,8 +1,9 @@
 import type { Context } from 'mini-harness/cordis';
+import type { ToolView } from '../history-api.ts';
 import type { TaskData, TaskOutput, TaskSnapshot } from '@mini-harness/tasks/api';
 import { browserRequest } from '@mini-harness/ui-runtime/http';
 import { icon } from '@mini-harness/ui-primitives/icons';
-import { bindPopover, button, fromMarkup, required } from '@mini-harness/ui-primitives/primitives';
+import { bindPopover, button, fromMarkup, required, textOutput } from '@mini-harness/ui-primitives/primitives';
 
 const live = ({ state }: TaskSnapshot) => ['queued', 'running', 'waiting'].includes(state);
 const object = (value?: TaskData): Record<string, TaskData> =>
@@ -397,9 +398,24 @@ function setup(ctx: Context) {
     if (open()) for (const row of rows.values()) row.tick();
   }, 1000);
   ctx.effect(() => () => clearInterval(interval));
-  const receipt = ({ details }: { details?: Record<string, unknown> }, signal: AbortSignal) => {
+  const receipt = ({ details, content, arguments: args }: ToolView, signal: AbortSignal) => {
+    const body = document.createElement('div');
+    body.className = 'background-tool-body';
+    if (args && typeof args === 'object' && 'tool' in args && typeof args.tool === 'string') {
+      const label = document.createElement('strong');
+      label.textContent = args.tool;
+      body.append(label);
+      if ('arguments' in args && args.arguments !== undefined)
+        body.append(textOutput(JSON.stringify(args.arguments, null, 2)));
+    }
     const taskId = details?.taskId;
-    if (typeof taskId !== 'string') return;
+    if (typeof taskId !== 'string') {
+      const output = typeof content === 'string'
+        ? content
+        : content?.filter((block) => block.type === 'text').map((block) => block.text).join('\n');
+      if (output) body.append(textOutput(output));
+      return body;
+    }
     const node = document.createElement('div');
     node.className = 'task-receipt';
     const text = document.createElement('span');
@@ -415,15 +431,65 @@ function setup(ctx: Context) {
       if (expanded?.id !== taskId) showOutput(task);
     };
     node.append(view);
+    body.append(node);
+    const output = textOutput('');
+    output.hidden = true;
+    body.append(output);
     const update = () => {
       const task = tasks.find(({ id }) => id === taskId);
       text.textContent = task ? label(task) + ' · ' + status(task) : 'Accepted';
+      const result = task && (resultText(task.result) || resultText(task.progress) || task.error);
+      output.textContent = result || '';
+      output.hidden = !result;
     };
     events.addEventListener('change', update, { signal });
     update();
-    return node;
+    return body;
   };
+  ctx.effect(() =>
+    ctx.miniMessages.registerTool(
+      'start_background',
+      ({ arguments: args, details }) => {
+        if (!args || typeof args !== 'object' || !('tool' in args) || typeof args.tool !== 'string') return;
+        const node = document.createElement('span');
+        node.className = 'background-tool-summary ui-truncate';
+        const tool = document.createElement('code');
+        tool.textContent = args.tool;
+        node.append(tool, typeof details?.taskId === 'string' ? ' · ' + details.taskId : '');
+        return node;
+      },
+      'summary',
+    ),
+  );
+  ctx.effect(() =>
+    ctx.miniMessages.registerTool(
+      'task_control',
+      ({ arguments: args }) => {
+        if (!args || typeof args !== 'object') return;
+        const input = args as Record<string, unknown>;
+        if (typeof input.action !== 'string') return;
+        const node = document.createElement('span');
+        node.className = 'background-tool-summary ui-truncate';
+        const action = document.createElement('strong');
+        action.textContent = input.action;
+        node.append(action, typeof input.taskId === 'string' ? ' · ' + input.taskId : '');
+        return node;
+      },
+      'summary',
+    ),
+  );
   ctx.effect(() => ctx.miniMessages.registerTool('start_background', receipt));
+  ctx.effect(() =>
+    ctx.miniMessages.registerTool('task_control', ({ content }) => {
+      const body = document.createElement('div');
+      body.className = 'background-tool-body';
+      const output = typeof content === 'string'
+        ? content
+        : content?.filter((block) => block.type === 'text').map((block) => block.text).join('\n');
+      if (output) body.append(textOutput(output));
+      return body;
+    }),
+  );
   ctx.effect(() =>
     ctx.miniMessages.registerTool(
       'start_background',

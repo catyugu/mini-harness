@@ -7,6 +7,7 @@ export const metadata: PluginInfo = {
   title: 'Skills',
   description: 'Discover Agent Skills from home and the workspace.',
   icon: 'skills',
+  browserStyles: ['packages/skills/src/browser/style.css'],
   browser: 'packages/skills/src/browser/setup.js',
 };
 

@@ -108,3 +108,23 @@
     min-height: 44px;
   }
 }
+
+.file-tool-target {
+  color: var(--muted);
+}
+.file-tool-target code {
+  font-family: var(--font-mono);
+}
+.file-tool-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.file-edit-before {
+  border-inline-start: 2px solid var(--danger);
+}
+.file-edit-after {
+  border-inline-start: 2px solid var(--success);
+}

@@ -143,3 +143,17 @@
     display: none;
   }
 }
+
+.context-tool-summary {
+  color: var(--muted);
+  font-family: var(--font-mono);
+}
+.context-tool-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.context-tool-body .ui-text-output {
+  white-space: pre-wrap;
+}

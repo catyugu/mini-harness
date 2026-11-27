@@ -1,7 +1,7 @@
 import type { Context } from 'mini-harness/cordis';
 import { isRunning, type RunInfo } from '@mini-harness/sessions/run-state';
 import { icon } from '@mini-harness/ui-primitives/icons';
-import { bindPopover, fromMarkup, required } from '@mini-harness/ui-primitives/primitives';
+import { bindPopover, fromMarkup, required, textOutput } from '@mini-harness/ui-primitives/primitives';
 
 function runStatus(run?: RunInfo, waitingApproval = false) {
   if (waitingApproval && isRunning(run)) return 'Awaiting approval';
@@ -121,9 +121,49 @@ const setup = (ctx: Context) => {
   }, 1000);
   ctx.effect(() => () => clearInterval(timer));
   ctx.effect(() =>
-    ctx.miniMessages.registerTool('delegate', ({ details }, lifetime) => {
+    ctx.miniMessages.registerTool(
+      'delegate',
+      ({ arguments: args }) => {
+        if (!args || typeof args !== 'object' || !('task' in args) || typeof args.task !== 'string') return;
+        const node = document.createElement('span');
+        node.className = 'subagent-tool-summary ui-truncate';
+        node.textContent = args.task;
+        return node;
+      },
+      'summary',
+    ),
+  );
+  ctx.effect(() =>
+    ctx.miniMessages.registerTool(
+      'send_message',
+      ({ arguments: args }) => {
+        if (!args || typeof args !== 'object') return;
+        const input = args as Record<string, unknown>;
+        if (typeof input.sessionId !== 'string') return;
+        const node = document.createElement('span');
+        node.className = 'subagent-tool-summary ui-truncate';
+        const target = document.createElement('code');
+        target.textContent = input.sessionId;
+        node.append(target, typeof input.message === 'string' ? ': ' + input.message : '');
+        return node;
+      },
+      'summary',
+    ),
+  );
+  ctx.effect(() =>
+    ctx.miniMessages.registerTool('delegate', ({ arguments: args, details, content }, lifetime) => {
+      const body = document.createElement('div');
+      body.className = 'subagent-tool-body';
+      if (args && typeof args === 'object' && 'task' in args && typeof args.task === 'string')
+        body.append(textOutput(args.task));
       const sessionId = details?.sessionId;
-      if (typeof sessionId !== 'string') return;
+      if (typeof sessionId !== 'string') {
+        const output = typeof content === 'string'
+          ? content
+          : content?.filter((block) => block.type === 'text').map((block) => block.text).join('\n');
+        if (output) body.append(textOutput(output));
+        return body;
+      }
       const text = document.createElement('span');
       text.className = 'subagent-receipt';
       const update = () => {
@@ -134,7 +174,28 @@ const setup = (ctx: Context) => {
       };
       services.onConversationChange(update, lifetime);
       update();
-      return text;
+      body.append(text);
+      return body;
+    }),
+  );
+  ctx.effect(() =>
+    ctx.miniMessages.registerTool('send_message', ({ arguments: args, content }) => {
+      const body = document.createElement('div');
+      body.className = 'subagent-tool-body';
+      if (args && typeof args === 'object') {
+        const input = args as Record<string, unknown>;
+        if (typeof input.sessionId === 'string') {
+          const target = document.createElement('code');
+          target.textContent = input.sessionId;
+          body.append(target);
+        }
+        if (typeof input.message === 'string') body.append(textOutput(input.message));
+      }
+      const output = typeof content === 'string'
+        ? content
+        : content?.filter((block) => block.type === 'text').map((block) => block.text).join('\n');
+      if (output) body.append(textOutput(output));
+      return body;
     }),
   );
   ctx.effect(() =>

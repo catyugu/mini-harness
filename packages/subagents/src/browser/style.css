@@ -84,3 +84,21 @@
     min-height: 32px;
   }
 }
+
+.subagent-tool-summary {
+  color: var(--muted);
+}
+.subagent-tool-summary code,
+.subagent-tool-body code {
+  font-family: var(--font-mono);
+}
+.subagent-tool-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.subagent-tool-body .ui-text-output {
+  white-space: pre-wrap;
+}
