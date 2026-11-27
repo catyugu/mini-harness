@@ -84,3 +84,10 @@
     min-height: 32px;
   }
 }
+
+.subagent-config {
+  margin-block-start: 24px;
+}
+.subagent-config > .ui-button {
+  align-self: start;
+}

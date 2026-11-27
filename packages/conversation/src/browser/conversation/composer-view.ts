@@ -16,17 +16,17 @@ export function mountComposer(ctx: Context, signal: AbortSignal) {
           <div id="draftMode" class="draft-mode" hidden><span></span><button type="button" aria-label="Cancel editing">Cancel</button></div>
           <div id="promptEditor"></div>
           <div class="composer-footer ui-row">
-            <div class="composer-leading ui-row">
+            <div class="ui-row ui-fill">
               <button id="permissionSelect" class="permission-select" type="button" aria-haspopup="listbox" aria-expanded="false" aria-controls="permissionResults"></button>
               <div id="permissionPicker" class="ui-popover permission-picker" popover="auto">
                 <div id="permissionResults" role="listbox" aria-label="Conversation permissions"></div>
               </div>
-              <div id="composerTools"></div>
+              <div id="composerTools" class="ui-fill"></div>
             </div>
             <div class="composer-secondary ui-row">
               <div id="composerPrimary" class="ui-row"></div>
               <select id="messageMode" class="small-button" aria-label="Message sending mode" hidden></select>
-              <div class="composer-actions ui-row ui-fixed">
+              <div class="ui-row ui-fixed">
                 <button id="stop" type="button" aria-label="Stop response" hidden data-icon="stop"></button>
                 <button id="send" type="submit" aria-label="Send" data-icon="send"></button>
               </div>

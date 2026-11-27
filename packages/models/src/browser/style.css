@@ -172,47 +172,29 @@ fieldset:disabled .model-catalog-drag {
   background: var(--hover);
 }
 
-.model-controls {
-  display: flex;
-  align-items: center;
-  flex: 1;
-  min-width: 0;
-  max-width: 330px;
-  gap: 6px;
-}
 .model-select {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  max-width: 260px;
   min-width: 0;
-  border: 0;
-  border-radius: 8px;
-  background: transparent;
-  padding: 6px 8px;
-  font-size: var(--font-meta);
-  margin-left: auto;
+  justify-content: space-between;
 }
 .model-picker-control {
-  flex: 1 1 auto;
   min-width: 0;
-  max-width: 100%;
 }
 .model-picker-control > .model-select {
   width: 100%;
-  margin: 0;
 }
-.model-select:hover {
-  background: var(--hover);
+.model-controls .model-picker-control,
+.ui-field-compact > .model-picker-control {
+  max-width: 260px;
 }
 .model-select svg {
   flex: 0 0 12px;
   height: 12px;
   transform: rotate(90deg);
 }
-#thinkingLevel {
-  margin-left: 0;
-  flex-shrink: 0;
+.model-controls .model-select {
+  gap: 6px;
+  padding-inline: 8px;
+  font-size: var(--font-meta);
 }
 .thinking-picker {
   max-width: calc(100vw - 16px);

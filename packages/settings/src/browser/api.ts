@@ -31,18 +31,9 @@ export interface SettingsContribution {
   render(context: SettingsContext): HTMLElement;
 }
 
-export interface PluginSettingsContribution {
-  id: string;
-  render(pluginId: string, signal: AbortSignal): HTMLElement | undefined;
-}
+export type PluginSettingsRenderer = (signal: AbortSignal) => HTMLElement;
 
 declare module 'mini-harness/cordis' {
-  interface Events {
-    'settings/options'(
-      schema: Record<string, any>,
-      value: unknown,
-    ): { label: string; value: unknown; disabled?: boolean }[] | undefined;
-  }
   interface Context {
     miniSettings: {
       open(sectionId?: string): void;
@@ -60,7 +51,10 @@ declare module 'mini-harness/cordis' {
         contribution: SettingsContribution,
         configuration: PluginConfiguration,
       ): () => void;
-      registerPlugin(owner: string, contribution: PluginSettingsContribution): () => void;
+      /** Register the configuration view for the owning browser Entry. */
+      registerPlugin(owner: string, render: PluginSettingsRenderer): () => void;
+      hasPlugin(owner: string): boolean;
+      onPluginChange(listener: () => void, signal: AbortSignal): void;
       mountPlugin(pluginId: string, container: HTMLElement, signal: AbortSignal): void;
     };
   }

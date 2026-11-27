@@ -4,6 +4,7 @@ import type { ModelCatalog, ModelSummary } from '../shared/catalog.ts';
 export interface ModelPickerOptions {
   emptyLabel?: string;
   label?: string;
+  variant?: 'quiet' | 'secondary';
   selectEmpty?(): void;
 }
 

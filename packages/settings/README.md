@@ -26,7 +26,7 @@ Contributions reference `sectionId`, have their own owner-local ID, and optional
 
 The renderer receives a `SettingsContext` with its own `signal`, `configuration`, and `bind`. `bind(control, key, { read, write })` initializes the control, subscribes to accepted updates and writes changes through the configuration owner. Append its returned element to show inline failures. While a write is pending it disables the control; on completion it rereads the accepted value, so rejected edits do not become a separate local setting.
 
-`registerPlugin` supplies additional content for a selected plugin's detail view. Its renderer may decline a plugin by returning `undefined`. The `settings/options` event supplies dynamic choices for schema-driven fields; see the [public event type](src/browser/api.ts) and [Plugins' form implementation](../plugins/src/browser/fields.ts).
+Use `ctx.effect(() => miniSettingsRegistry.registerPlugin(browserPluginId(ctx), render))` to own the configuration area on the Entry's Plugins page. The renderer receives the view's abort signal and returns the whole configuration area. It owns the controls, layout and save interaction. Declare styles in the plugin's browser metadata and use `browserPluginSettings(ctx)` for validated writes. The [Subagents configuration view](../subagents/src/browser/configuration.ts) is an example.
 
 ## Lifetime and configuration ownership
 

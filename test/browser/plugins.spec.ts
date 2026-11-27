@@ -78,6 +78,7 @@ test('a failed browser plugin reports the saved state and can be retried', async
       );
       writeJson(join(folder, 'plugin.json'), {
         title: 'Retry UI',
+        configForm: {},
         browserDirectory: 'web',
       });
       mkdirSync(join(folder, 'web'));

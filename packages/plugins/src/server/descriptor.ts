@@ -135,21 +135,15 @@ export async function describePlugin(
     );
   const configSchema =
     (native?.Config as { jsonSchema?: Record<string, any> } | undefined)?.jsonSchema ?? info.configSchema;
-  const { configGroups, configHint } = info;
+  const { configForm } = info;
   if (
-    configGroups !== undefined &&
-    (!Array.isArray(configGroups) ||
-      !configGroups.every(
-        (group) =>
-          group &&
-          typeof group.title === 'string' &&
-          Array.isArray(group.fields) &&
-          group.fields.every((field) => typeof field === 'string'),
-      ))
+    configForm !== undefined &&
+    (!configForm ||
+      typeof configForm !== 'object' ||
+      Array.isArray(configForm) ||
+      (configForm.description !== undefined && typeof configForm.description !== 'string'))
   )
-    throw new Error('Invalid plugin configuration groups: ' + id);
-  if (configHint !== undefined && typeof configHint !== 'string')
-    throw new Error('Invalid plugin configuration hint: ' + id);
+    throw new Error('Invalid plugin configuration form: ' + id);
   const icon = info.icon;
   if (
     icon !== undefined &&
@@ -175,6 +169,6 @@ export async function describePlugin(
       packageInfo.name && packageInfo.version
         ? { name: packageInfo.name, version: packageInfo.version }
         : undefined,
-    info: { title, description, icon, configGroups, configHint, configSchema },
+    info: { title, description, icon, configForm, configSchema },
   };
 }

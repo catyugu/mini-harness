@@ -1,5 +1,5 @@
 import type { PluginConfiguration } from '@mini-harness/plugin-api/plugin-configuration';
-import type { PluginSettingsContribution, SettingsContribution, SettingsSection } from './api.ts';
+import type { PluginSettingsRenderer, SettingsContribution, SettingsSection } from './api.ts';
 
 interface Entry {
   sectionId: string;
@@ -8,49 +8,51 @@ interface Entry {
 }
 
 export class SettingsRegistry extends EventTarget {
-  private readonly details = new Map<string, PluginSettingsContribution['render']>();
+  private readonly details = new Map<string, PluginSettingsRenderer>();
 
-  registerPlugin(owner: string, { id, render }: PluginSettingsContribution) {
-    const key = owner + '/' + id;
-    if (this.details.has(key)) throw new Error('Duplicate plugin settings contribution: ' + key);
-    this.details.set(key, render);
+  registerPlugin(owner: string, render: PluginSettingsRenderer) {
+    if (this.details.has(owner)) throw new Error('Duplicate plugin settings renderer: ' + owner);
+    this.details.set(owner, render);
     this.dispatchEvent(new Event('plugin'));
     return () => {
-      if (this.details.delete(key)) this.dispatchEvent(new Event('plugin'));
+      if (this.details.get(owner) !== render) return;
+      this.details.delete(owner);
+      this.dispatchEvent(new Event('plugin'));
     };
   }
 
-  mountPlugin(pluginId: string, container: HTMLElement, signal: AbortSignal) {
-    const mounted = new Map<string, { lifetime: AbortController; node?: HTMLElement }>();
+  hasPlugin(owner: string) {
+    return this.details.has(owner);
+  }
+
+  onPluginChange(listener: () => void, signal: AbortSignal) {
+    this.addEventListener('plugin', listener, { signal });
+  }
+
+  mountPlugin(owner: string, container: HTMLElement, signal: AbortSignal) {
+    let current: PluginSettingsRenderer | undefined;
+    let lifetime: AbortController | undefined;
     const refresh = () => {
-      for (const [key, { node, lifetime }] of mounted)
-        if (!this.details.has(key)) {
-          lifetime.abort();
-          node?.remove();
-          mounted.delete(key);
-        }
-      for (const [key, render] of this.details) {
-        if (mounted.has(key)) continue;
-        const lifetime = new AbortController();
-        try {
-          const node = render(pluginId, lifetime.signal);
-          mounted.set(key, { lifetime, node });
-          if (node) container.append(node);
-        } catch (error) {
-          lifetime.abort();
-          console.error('Plugin settings contribution failed', error);
-        }
+      const render = this.details.get(owner);
+      if (render === current) return;
+      current = render;
+      lifetime?.abort();
+      container.replaceChildren();
+      if (!render) return;
+      lifetime = new AbortController();
+      try {
+        container.append(render(lifetime.signal));
+      } catch (error) {
+        lifetime.abort();
+        console.error('Plugin settings renderer failed', error);
       }
     };
-    this.addEventListener('plugin', refresh, { signal });
+    this.onPluginChange(refresh, signal);
     signal.addEventListener(
       'abort',
       () => {
-        for (const { lifetime, node } of mounted.values()) {
-          lifetime.abort();
-          node?.remove();
-        }
-        mounted.clear();
+        lifetime?.abort();
+        container.replaceChildren();
       },
       { once: true },
     );

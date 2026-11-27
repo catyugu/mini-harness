@@ -11,3 +11,5 @@ Subagents is an optional Cordis plugin that creates child conversations and supp
 Use [task control](../runs/README.md#independent-tools) to inspect, wait for or cancel a direct child Run. Stop and Interrupt affect the current Run in the selected conversation. Deleting a parent Session drains and deletes its descendants and their tasks.
 
 The Subagents browser contribution lists direct child conversations beside the working directory with their latest Run status and duration. Opening a row navigates to the child; Stop in that conversation cancels its active Run. It reads the existing session projection, independently of the background jobs panel.
+
+Use Plugins → Subagents to edit the run limits and select a child model from the configured catalog. Choosing **Inherit parent model** clears the override.

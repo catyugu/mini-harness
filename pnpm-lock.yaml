@@ -521,6 +521,9 @@ importers:
       '@mini-harness/ui-primitives':
         specifier: workspace:*
         version: link:../ui-primitives
+      '@mini-harness/ui-runtime':
+        specifier: workspace:*
+        version: link:../ui-runtime
 
   packages/tasks: {}
 

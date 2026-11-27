@@ -11,7 +11,8 @@
     "@mini-harness/sessions": "workspace:*",
     "@mini-harness/tasks": "workspace:*",
     "@mini-harness/tools": "workspace:*",
-    "@mini-harness/ui-primitives": "workspace:*"
+    "@mini-harness/ui-primitives": "workspace:*",
+    "@mini-harness/ui-runtime": "workspace:*"
   },
   "miniHarness": {
     "profileModules": {

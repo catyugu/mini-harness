@@ -52,6 +52,7 @@ test('plugin schema controls, recursive tree navigation, batch export and perman
         join(folder, 'plugin.json'),
         JSON.stringify({
           title: 'Example',
+          configForm: {},
         }),
       );
       writeFileSync(
@@ -94,6 +95,21 @@ test('plugin schema controls, recursive tree navigation, batch export and perman
       .filter({ hasText: /Saved|Bad prefix/ }),
   ).toContainText('Plugin example: Bad prefix');
   expect(readWebProfile(paths).configuration('example')?.prefix).toBe('Total');
+  await page.getByRole('button', { name: 'All plugins' }).click();
+  await page.getByRole('button', { name: 'Subagents settings' }).click();
+  const depth = page.getByRole('spinbutton', { name: 'Maximum child depth' });
+  await expect(depth).toHaveCSS('border-top-style', 'solid');
+  const childModel = page.getByRole('button', { name: 'Child model' });
+  await expect(childModel).toHaveText('Inherit parent model');
+  await childModel.click();
+  await page.getByRole('combobox', { name: 'Search models' }).fill('mock');
+  await page.getByRole('option', { name: /Mock Model/ }).click();
+  await expect(childModel).toHaveText('Mock Model');
+  await page.getByRole('button', { name: 'Save configuration' }).click();
+  await expect(page.getByText('Saved.', { exact: true })).toBeVisible();
+  expect(readWebProfile(paths).configuration('subagents')).toMatchObject({
+    model: { provider: 'local-mock', id: 'mock-model' },
+  });
   await page.getByRole('button', { name: 'New conversation', exact: true }).click();
   await page.getByRole('textbox', { name: 'Message' }).fill('Parent task');
   await page.getByRole('button', { name: 'Send', exact: true }).click();

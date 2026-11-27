@@ -32,8 +32,10 @@ export const metadata: PluginInfo = {
   icon: 'terminal',
   browser: 'packages/shell/src/browser/setup.js',
   browserStyles: ['packages/shell/src/browser/style.css'],
-  configHint:
-    'Enabling Shell authorizes commands to run with your user permissions without per-command confirmation. Use only trusted workspaces.',
+  configForm: {
+    description:
+      'Enabling Shell authorizes commands to run with your user permissions without per-command confirmation. Use only trusted workspaces.',
+  },
 };
 
 const plugin: Plugin.Object = {

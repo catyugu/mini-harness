@@ -194,19 +194,8 @@
   min-height: var(--control);
   padding-left: 4px;
 }
-.composer-leading,
-.composer-secondary {
-  flex: 1 1 0;
-}
 .composer-secondary {
   justify-content: flex-end;
-}
-.composer-actions {
-  margin-left: auto;
-}
-#composerTools,
-#composerPrimary {
-  flex: 1 1 0;
 }
 
 @container (max-width: 640px) {
