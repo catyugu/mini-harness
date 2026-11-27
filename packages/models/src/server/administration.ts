@@ -1,6 +1,7 @@
 import { waitFor } from '@mini-harness/platform/wait';
 import { DomainError } from '@mini-harness/platform/errors';
 import type { Context } from 'mini-harness/cordis';
+import { protocolOptions } from './protocols.ts';
 import { providerId } from './provider-settings.ts';
 
 export function setupAdministration(ctx: Context) {
@@ -56,5 +57,6 @@ export function setupAdministration(ctx: Context) {
     models: await catalog.available(),
     recent: recent(),
     canManageProviders: Boolean(providerAdministration()),
+    protocols: providerAdministration() ? protocolOptions() : [],
   }));
 }

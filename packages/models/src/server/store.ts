@@ -16,7 +16,7 @@ import {
   record,
   type ProviderConfiguration,
 } from './provider-settings.ts';
-import { discover } from './discovery.ts';
+import { discover } from './protocols.ts';
 import type { AuthStatus, CatalogModel, CatalogProvider, Credential, ModelStorePort } from './store-api.ts';
 
 /** One serialized, atomic store for all providers; SDKs never own our config files. */

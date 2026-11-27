@@ -9,7 +9,6 @@ import {
   type AssistantMessage,
   type Message,
   type Model,
-  type ProviderStreams,
 } from '@earendil-works/pi-ai';
 import { builtinModels } from '@earendil-works/pi-ai/providers/all';
 import type { ModelChoice } from '@mini-harness/llm/vocabulary';
@@ -23,12 +22,7 @@ import type {
 } from '@mini-harness/llm/api';
 import type { ModelStorePort } from './store-api.ts';
 
-const apiLoaders: Record<string, () => Promise<ProviderStreams>> = {
-  'openai-completions': () => import('@earendil-works/pi-ai/api/openai-completions'),
-  'openai-responses': () => import('@earendil-works/pi-ai/api/openai-responses'),
-  'anthropic-messages': () => import('@earendil-works/pi-ai/api/anthropic-messages'),
-  'google-generative-ai': () => import('@earendil-works/pi-ai/api/google-generative-ai'),
-};
+import { protocols } from './protocols.ts';
 
 // Providers with multiple native protocols need a default for newly registered IDs.
 const preferredProtocols: Readonly<Record<string, string>> = {
@@ -85,7 +79,7 @@ export class PiLlm implements LlmAdapter {
       selected &&
         (this.builtin.getProvider(choice.provider)
           ? selected.model.api
-          : Object.hasOwn(apiLoaders, selected.model.api)),
+          : protocols.has(selected.model.api)),
     );
   }
 
@@ -144,7 +138,7 @@ export class PiLlm implements LlmAdapter {
           native.streamSimple({ ...model, baseUrl }, context, options),
       });
     } else if (!native) {
-      const load = Object.hasOwn(apiLoaders, model.api) && apiLoaders[model.api];
+      const load = protocols.get(model.api)?.load;
       if (!load) throw new Error('Model is unavailable through the Pi adapter');
       runtime = createModels();
       runtime.setProvider(

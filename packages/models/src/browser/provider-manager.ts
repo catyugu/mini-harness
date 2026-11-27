@@ -2,13 +2,13 @@ import type { Context } from 'mini-harness/cordis';
 import { browserRequest, payload } from '@mini-harness/ui-runtime/http';
 import { button, confirmAction, fromMarkup, required } from '@mini-harness/ui-primitives/primitives';
 import { icon } from '@mini-harness/ui-primitives/icons';
-import type { ProviderInfo } from '../shared/catalog.ts';
+import type { ProviderInfo, ProtocolInfo } from '../shared/catalog.ts';
 import { providerEditor } from './provider-editor.ts';
 
 const listed = ({ configured, custom, endpointCustomized, modelsCustomized }: ProviderInfo) =>
   configured || custom || endpointCustomized || modelsCustomized;
 
-export function providerManager(ctx: Context, providers: () => ProviderInfo[], signal: AbortSignal) {
+export function providerManager(ctx: Context, providers: () => ProviderInfo[], protocols: () => ProtocolInfo[], signal: AbortSignal) {
   const content = fromMarkup(`<div class="model-settings">
     <div class="provider-list"></div>
     <div class="provider-add"></div>
@@ -39,6 +39,7 @@ export function providerManager(ctx: Context, providers: () => ProviderInfo[], s
       ctx,
       providers().filter((item) => !listed(item)),
       provider,
+      protocols(),
       lifetime,
       {
         cancel() {

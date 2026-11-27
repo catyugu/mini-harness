@@ -1,13 +1,14 @@
 import type { Context } from 'mini-harness/cordis';
 import { browserRequest, payload } from '@mini-harness/ui-runtime/http';
 import { button, field, fromMarkup, required } from '@mini-harness/ui-primitives/primitives';
-import { modelProtocols, type ProviderInfo, type ProviderModel } from '../shared/catalog.ts';
+import type { ProtocolInfo, ProviderInfo, ProviderModel } from '../shared/catalog.ts';
 import { catalogEditor, selectDiscovered } from './catalog-editor.ts';
 
 export function providerEditor(
   ctx: Context,
   available: readonly ProviderInfo[],
   provider: ProviderInfo | undefined,
+  protocols: readonly ProtocolInfo[],
   signal: AbortSignal,
   actions: { cancel(): void; saved(id: string): void },
 ) {
@@ -79,7 +80,7 @@ export function providerEditor(
     discover.textContent = 'Fetch available models';
     const { baseUrl, api } = connection();
     discover.disabled = !baseUrl;
-    discover.hidden = !Object.hasOwn(modelProtocols, api);
+    discover.hidden = !protocols.some((protocol) => protocol.api === api && protocol.discovery);
   }
 
   function connection() {
@@ -110,9 +111,9 @@ export function providerEditor(
     endpoint.value = isCustom || selected?.endpointCustomized ? (selected?.baseUrl ?? '') : '';
     endpoint.placeholder = isCustom ? 'https://api.example.com/v1' : (selected?.defaultBaseUrl ?? '');
     endpoint.required = isCustom;
-    const options: [string, string][] = Object.entries(modelProtocols);
-    const protocol = selected?.api ?? options[0][0];
-    if (!Object.hasOwn(modelProtocols, protocol)) options.push([protocol, protocol]);
+    const options: [string, string][] = protocols.map(({ api, label }) => [api, label]);
+    const protocol = selected?.api ?? options[0]?.[0] ?? '';
+    if (!protocols.some(({ api }) => api === protocol)) options.push([protocol, protocol]);
     api.replaceChildren(...options.map(([value, label]) => new Option(label, value)));
     api.value = protocol;
     api.disabled = !isCustom;
