@@ -73,7 +73,18 @@ function modelName(value: unknown, id: string) {
 
 /** HTTP edits and persisted definitions share one complete metadata contract. */
 function parseModel(entry: RecordValue): ModelConfig {
-  const { id: rawId, name, input, reasoning, contextWindow, maxTokens, thinkingLevelMap, compat, cost, ...extra } = entry;
+  const {
+    id: rawId,
+    name,
+    input,
+    reasoning,
+    contextWindow,
+    maxTokens,
+    thinkingLevelMap,
+    compat,
+    cost,
+    ...extra
+  } = entry;
   const id = modelId(rawId);
   if (Object.keys(extra).length) throw invalid('Unsupported model fields for ' + id);
   if (typeof name !== 'string' || !name.trim()) throw invalid('Missing model display name for ' + id);
@@ -91,11 +102,17 @@ function parseModel(entry: RecordValue): ModelConfig {
     throw invalid('Invalid thinking level map for ' + id);
   if (compat !== undefined && !Check({ ...ProviderCompatSchema, additionalProperties: false }, compat))
     throw invalid('Invalid compatibility settings for ' + id);
-  if (cost !== undefined && !Check(ModelCostSchema, cost))
-    throw invalid('Invalid model cost for ' + id);
+  if (cost !== undefined && !Check(ModelCostSchema, cost)) throw invalid('Invalid model cost for ' + id);
   return {
-    id, name: modelName(name, id), input, reasoning, contextWindow, maxTokens,
-    ...(thinkingLevelMap === undefined ? {} : { thinkingLevelMap: thinkingLevelMap as ModelConfig['thinkingLevelMap'] }),
+    id,
+    name: modelName(name, id),
+    input,
+    reasoning,
+    contextWindow,
+    maxTokens,
+    ...(thinkingLevelMap === undefined
+      ? {}
+      : { thinkingLevelMap: thinkingLevelMap as ModelConfig['thinkingLevelMap'] }),
     ...(compat === undefined ? {} : { compat: compat as ModelConfig['compat'] }),
     ...(cost === undefined ? {} : { cost: cost as ModelConfig['cost'] }),
   };

@@ -225,28 +225,33 @@ export class ModelStore implements ModelStorePort {
       this.setStatus(id, { configured, source: stored ?? (configured ? 'configured' : undefined) }, !replace);
       return;
     }
-    if (replace || !this.status.has(id))
-      this.setStatus(id, { configured: false, source: stored }, false);
+    if (replace || !this.status.has(id)) this.setStatus(id, { configured: false, source: stored }, false);
     const controller = new AbortController();
     const signal = AbortSignal.any([controller.signal, this.lifetime.signal]);
-    const work = Promise.resolve().then(async () => {
-      await previous?.work;
-      if (signal.aborted) return;
-      let auth: boolean | string = false;
-      try {
-        auth = await check(signal);
-      } catch (error) {
+    const work = Promise.resolve()
+      .then(async () => {
+        await previous?.work;
+        if (signal.aborted) return;
+        let auth: boolean | string = false;
+        try {
+          auth = await check(signal);
+        } catch (error) {
+          if (!signal.aborted)
+            this.report(new Error('Could not determine authentication status for ' + id, { cause: error }));
+        }
         if (!signal.aborted)
-          this.report(new Error('Could not determine authentication status for ' + id, { cause: error }));
-      }
-      if (!signal.aborted)
-        this.setStatus(id, {
-          configured: Boolean(auth),
-          source: stored ?? (auth ? (typeof auth === 'string' ? auth : 'configured') : undefined),
-        }, true);
-    }).finally(() => {
-      if (this.checks.get(id)?.controller === controller) this.checks.delete(id);
-    });
+          this.setStatus(
+            id,
+            {
+              configured: Boolean(auth),
+              source: stored ?? (auth ? (typeof auth === 'string' ? auth : 'configured') : undefined),
+            },
+            true,
+          );
+      })
+      .finally(() => {
+        if (this.checks.get(id)?.controller === controller) this.checks.delete(id);
+      });
     this.checks.set(id, { controller, work });
     return work;
   }
@@ -322,7 +327,7 @@ export class ModelStore implements ModelStorePort {
         api,
         models: structuredClone(
           builtin
-            ? override?.models ?? models.map((model) => ({ ...definition(model), templateId: model.id }))
+            ? (override?.models ?? models.map((model) => ({ ...definition(model), templateId: model.id })))
             : this.configuration.providers[id].models,
         ),
         defaultBaseUrl: builtin?.baseUrl ?? '',

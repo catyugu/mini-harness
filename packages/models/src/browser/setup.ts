@@ -11,11 +11,13 @@ import { mountModelControls } from './composer.ts';
 const setup = async (ctx: Context) => {
   const { miniSettings: settings } = ctx;
   const state = new RemoteStore(() =>
-    browserRequest<ModelCatalog & {
-      recent: ModelChoice;
-      canManageProviders: boolean;
-      protocols: ProtocolInfo[];
-    }>(ctx, '/models'),
+    browserRequest<
+      ModelCatalog & {
+        recent: ModelChoice;
+        canManageProviders: boolean;
+        protocols: ProtocolInfo[];
+      }
+    >(ctx, '/models'),
   );
   ctx.effect(() => ctx.miniProjections.register('models', state));
   await state.refresh();
