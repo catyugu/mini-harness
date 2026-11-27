@@ -165,10 +165,7 @@ function setup(ctx: Context) {
       const metadata = Object.keys(details).length ? JSON.stringify(details, null, 2) : '';
       if (resultDetails.textContent !== metadata) resultDetails.textContent = metadata;
       resultDetails.hidden = !metadata;
-      warning.textContent = [
-        truncated ? 'Earlier output was truncated' : '',
-        failure || next.error || '',
-      ]
+      warning.textContent = [truncated ? 'Earlier output was truncated' : '', failure || next.error || '']
         .filter(Boolean)
         .join(' · ');
     }
@@ -449,9 +446,7 @@ function setup(ctx: Context) {
       const caption = task ? label(task) + ' · ' + status(task) : 'Accepted';
       if (text.textContent !== caption) text.textContent = caption;
       line.hidden = !taskId;
-      const result = taskId
-        ? ((task && (taskResult(task) || task.error)) ?? '')
-        : receiptOutput;
+      const result = taskId ? ((task && (taskResult(task) || task.error)) ?? '') : receiptOutput;
       if (output.textContent !== result) output.textContent = result;
       output.hidden = !result;
     }

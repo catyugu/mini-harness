@@ -6,7 +6,6 @@ The optional `task-control` Profile entry registers `start_background` and `task
 
 Background execution holds the registered tool's provider and the Session's resource owner. It can call `report` to send a mid-task message. Progress and ordinary output update task projections. Background tool snapshots carry the accepted tool name and arguments. Child Runs keep their conversation output in Session history, not in a duplicate terminal-output stream. Terminal notifications carry the actual scheduler state and the projected business result. Stable notification IDs make acceptance idempotent across restart.
 
-
 The panel owns the current session's task snapshots and a single cursor-based output reader for its expanded task. Tool receipts reuse the same projected result text and open that reader through View task. Tool names, arguments and projected detail metadata are displayed without interpreting individual tool schemas. Closing the reader, switching sessions or removing the panel releases its lifetime. The generic Tasks scheduler does not own this UI.
 
 See [execution](../../docs/subsystems/execution.md).

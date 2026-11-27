@@ -92,11 +92,27 @@ test('the composed browser graph serves its runtime dependencies and excludes se
   assert.equal((await fetch(base + conversationStyle)).status, 200);
 
   // The two existing Profile switches remain independently selectable.
-  assert.equal((await request('/settings', 'PATCH', { entries: { 'background-tasks': { disabled: true } } })).status, 200);
+  assert.equal(
+    (await request('/settings', 'PATCH', { entries: { 'background-tasks': { disabled: true } } })).status,
+    200,
+  );
   const { body: withoutPanel }: { body: BrowserBootstrap } = await request('/bootstrap');
-  assert.equal(withoutPanel.ui.some(({ id }) => id === 'background-tasks'), false);
+  assert.equal(
+    withoutPanel.ui.some(({ id }) => id === 'background-tasks'),
+    false,
+  );
   assert.equal((await fetch(base + tasks.browser)).status, 404);
-  assert.equal((await request('/settings', 'PATCH', { entries: { 'background-tasks': { disabled: false }, 'task-control': { disabled: true } } })).status, 200);
+  assert.equal(
+    (
+      await request('/settings', 'PATCH', {
+        entries: { 'background-tasks': { disabled: false }, 'task-control': { disabled: true } },
+      })
+    ).status,
+    200,
+  );
   const { body: withoutTools }: { body: BrowserBootstrap } = await request('/bootstrap');
-  assert.equal(withoutTools.ui.some(({ id }) => id === 'background-tasks'), true);
+  assert.equal(
+    withoutTools.ui.some(({ id }) => id === 'background-tasks'),
+    true,
+  );
 });
