@@ -3,7 +3,13 @@ import type { ToolView } from '../history-api.ts';
 import type { TaskData, TaskOutput, TaskSnapshot } from '@mini-harness/tasks/api';
 import { browserRequest } from '@mini-harness/ui-runtime/http';
 import { icon } from '@mini-harness/ui-primitives/icons';
-import { bindPopover, button, fromMarkup, required, textOutput } from '@mini-harness/ui-primitives/primitives';
+import {
+  bindPopover,
+  button,
+  fromMarkup,
+  required,
+  textOutput,
+} from '@mini-harness/ui-primitives/primitives';
 
 const live = ({ state }: TaskSnapshot) => ['queued', 'running', 'waiting'].includes(state);
 const object = (value?: TaskData): Record<string, TaskData> =>
@@ -410,9 +416,13 @@ function setup(ctx: Context) {
     }
     const taskId = details?.taskId;
     if (typeof taskId !== 'string') {
-      const output = typeof content === 'string'
-        ? content
-        : content?.filter((block) => block.type === 'text').map((block) => block.text).join('\n');
+      const output =
+        typeof content === 'string'
+          ? content
+          : content
+              ?.filter((block) => block.type === 'text')
+              .map((block) => block.text)
+              .join('\n');
       if (output) body.append(textOutput(output));
       return body;
     }
@@ -483,9 +493,13 @@ function setup(ctx: Context) {
     ctx.miniMessages.registerTool('task_control', ({ content }) => {
       const body = document.createElement('div');
       body.className = 'background-tool-body';
-      const output = typeof content === 'string'
-        ? content
-        : content?.filter((block) => block.type === 'text').map((block) => block.text).join('\n');
+      const output =
+        typeof content === 'string'
+          ? content
+          : content
+              ?.filter((block) => block.type === 'text')
+              .map((block) => block.text)
+              .join('\n');
       if (output) body.append(textOutput(output));
       return body;
     }),

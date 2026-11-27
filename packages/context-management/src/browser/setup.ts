@@ -6,7 +6,13 @@ import type {} from '@mini-harness/conversation/browser/navigation-api';
 import type {} from '@mini-harness/settings/browser/api';
 import type {} from '@mini-harness/ui-slots/browser/api';
 import type {} from '@mini-harness/ui-runtime/projection-api';
-import { bindPopover, iconButton, recordRow, rasterImage, textOutput } from '@mini-harness/ui-primitives/primitives';
+import {
+  bindPopover,
+  iconButton,
+  recordRow,
+  rasterImage,
+  textOutput,
+} from '@mini-harness/ui-primitives/primitives';
 import { renderMarkdown } from '@mini-harness/ui-primitives/markdown';
 import { browserRequest, payload } from '@mini-harness/ui-runtime/http';
 import { browserPluginId, browserPluginSettings } from '@mini-harness/ui-runtime/plugin-settings';
@@ -400,13 +406,14 @@ function setup(ctx: Context) {
         const node = document.createElement('div');
         node.className = 'context-tool-body';
         if (typeof content === 'string') node.append(textOutput(content));
-        else for (const block of content ?? []) {
-          if (block.type === 'text' && block.text) node.append(textOutput(block.text));
-          if (block.type === 'image') {
-            const image = rasterImage(block.mimeType, block.data, 'Context image');
-            if (image) node.append(image);
+        else
+          for (const block of content ?? []) {
+            if (block.type === 'text' && block.text) node.append(textOutput(block.text));
+            if (block.type === 'image') {
+              const image = rasterImage(block.mimeType, block.data, 'Context image');
+              if (image) node.append(image);
+            }
           }
-        }
         return node;
       }),
     );

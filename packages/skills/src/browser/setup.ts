@@ -27,9 +27,13 @@ const setup = (ctx: Context) => {
           name.textContent = args.name;
           node.append(name);
         }
-        const text = typeof content === 'string'
-          ? content
-          : content?.filter((block) => block.type === 'text').map((block) => block.text).join('\n');
+        const text =
+          typeof content === 'string'
+            ? content
+            : content
+                ?.filter((block) => block.type === 'text')
+                .map((block) => block.text)
+                .join('\n');
         if (text) node.append(textOutput(text));
         return node;
       }),

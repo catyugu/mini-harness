@@ -67,13 +67,14 @@ function fileBody(tool: ToolView) {
     }
   }
   if (typeof tool.content === 'string') node.append(textOutput(tool.content));
-  else for (const block of tool.content ?? []) {
-    if (block.type === 'text' && block.text) node.append(textOutput(block.text));
-    if (block.type === 'image') {
-      const image = rasterImage(block.mimeType, block.data, 'File image');
-      if (image) node.append(image);
+  else
+    for (const block of tool.content ?? []) {
+      if (block.type === 'text' && block.text) node.append(textOutput(block.text));
+      if (block.type === 'image') {
+        const image = rasterImage(block.mimeType, block.data, 'File image');
+        if (image) node.append(image);
+      }
     }
-  }
   return node;
 }
 

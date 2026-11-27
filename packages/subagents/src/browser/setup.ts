@@ -158,9 +158,13 @@ const setup = (ctx: Context) => {
         body.append(textOutput(args.task));
       const sessionId = details?.sessionId;
       if (typeof sessionId !== 'string') {
-        const output = typeof content === 'string'
-          ? content
-          : content?.filter((block) => block.type === 'text').map((block) => block.text).join('\n');
+        const output =
+          typeof content === 'string'
+            ? content
+            : content
+                ?.filter((block) => block.type === 'text')
+                .map((block) => block.text)
+                .join('\n');
         if (output) body.append(textOutput(output));
         return body;
       }
@@ -191,9 +195,13 @@ const setup = (ctx: Context) => {
         }
         if (typeof input.message === 'string') body.append(textOutput(input.message));
       }
-      const output = typeof content === 'string'
-        ? content
-        : content?.filter((block) => block.type === 'text').map((block) => block.text).join('\n');
+      const output =
+        typeof content === 'string'
+          ? content
+          : content
+              ?.filter((block) => block.type === 'text')
+              .map((block) => block.text)
+              .join('\n');
       if (output) body.append(textOutput(output));
       return body;
     }),

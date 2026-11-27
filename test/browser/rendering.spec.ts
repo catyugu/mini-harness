@@ -260,7 +260,9 @@ export const apply = (ctx) => {
 
     await prompt.fill('Stop this tool');
     await page.getByRole('button', { name: 'Send', exact: true }).click();
-    await expect(page.locator('.tool-card[data-state=running] summary')).toHaveAccessibleName(/wait for stop.*Running/);
+    await expect(page.locator('.tool-card[data-state=running] summary')).toHaveAccessibleName(
+      /wait for stop.*Running/,
+    );
     await page.getByRole('button', { name: 'Stop response' }).click();
     const cancelled = page.locator('.tool-card[data-state=cancelled]');
     await expect(cancelled.locator('.tool-state')).toHaveText('Cancelled');

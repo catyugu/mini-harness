@@ -216,15 +216,25 @@ export function apply(ctx) {
     await expect(toolHeader).toHaveAccessibleName(/ls.*Custom directory.*long-path\/.*Done/);
     for (const width of [320, 1440]) {
       await page.setViewportSize({ width, height: 900 });
-      await expect.poll(() => toolHeader.evaluate((node) => {
-        const row = node.getBoundingClientRect();
-        const status = node.querySelector('.tool-state')!.getBoundingClientRect();
-        const duration = node.querySelector('.tool-duration')!.getBoundingClientRect();
-        const summary = node.querySelector<HTMLElement>('.ui-truncate:last-child') ?? node.querySelector<HTMLElement>('.tool-summary-slot > *');
-        return status.right <= row.right + 1 && duration.right <= status.left + 1 &&
-          Math.abs((duration.top + duration.height / 2) - (status.top + status.height / 2)) < 2 &&
-          !!summary && summary.scrollWidth > summary.clientWidth;
-      })).toBe(true);
+      await expect
+        .poll(() =>
+          toolHeader.evaluate((node) => {
+            const row = node.getBoundingClientRect();
+            const status = node.querySelector('.tool-state')!.getBoundingClientRect();
+            const duration = node.querySelector('.tool-duration')!.getBoundingClientRect();
+            const summary =
+              node.querySelector<HTMLElement>('.ui-truncate:last-child') ??
+              node.querySelector<HTMLElement>('.tool-summary-slot > *');
+            return (
+              status.right <= row.right + 1 &&
+              duration.right <= status.left + 1 &&
+              Math.abs(duration.top + duration.height / 2 - (status.top + status.height / 2)) < 2 &&
+              !!summary &&
+              summary.scrollWidth > summary.clientWidth
+            );
+          }),
+        )
+        .toBe(true);
     }
     await toolHeader.click();
     await expect(page.locator('.tool-card .tool-content')).toHaveText('Custom listing result');
