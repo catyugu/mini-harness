@@ -95,6 +95,7 @@
 
 .model-controls {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   flex: 1;
   min-width: 0;
@@ -114,7 +115,7 @@
   margin-left: auto;
 }
 .model-controls > .model-select:first-child {
-  flex: 1 1 auto;
+  flex: 1 1 40px;
   min-width: 40px;
 }
 .model-select:hover {

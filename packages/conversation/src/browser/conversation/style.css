@@ -458,7 +458,7 @@ button.file-card:hover {
 .composer-trailing {
   display: flex;
   align-items: center;
-  flex: 1 1 100px;
+  flex: 1 1 160px;
   flex-wrap: wrap;
   min-width: 0;
   gap: 6px;

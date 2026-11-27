@@ -239,10 +239,11 @@ test('the global recent model survives history navigation and page reload', asyn
   const { root, paths } = createFixturePaths(mock.url);
   const models = readJson<any>(join(paths.home, 'models.json'), {});
   const first = models.providers['local-mock'].models[0];
+  const longName = 'Second Model ' + 'long-name-'.repeat(12);
   models.providers['local-mock'].models.push({
     ...first,
     id: 'second-model',
-    name: 'Second Model',
+    name: longName,
     reasoning: true,
   });
   models.providers['unconfigured-fixture'] = {
@@ -263,14 +264,14 @@ test('the global recent model survives history navigation and page reload', asyn
     await expect(page.getByText('No matching models.')).toBeVisible();
     await modelSearch(page).press('Escape');
     await chooseModel(page, 'local-mock second-model');
-    await expect(modelButton(page)).toHaveText('Second Model');
+    await expect(modelButton(page)).toHaveText(longName);
     await page.reload();
     await expect(modelButton(page)).toHaveText('Mock Model');
     await chooseModel(page, 'second-model');
     await page.getByRole('button', { name: /New conversation/ }).click();
     await expect(modelButton(page)).toHaveText('Mock Model');
     await page.getByRole('button', { name: 'Old model conversation', exact: true }).click();
-    await expect(modelButton(page)).toHaveText('Second Model');
+    await expect(modelButton(page)).toHaveText(longName);
     await page.getByRole('button', { name: /New conversation/ }).click();
     await chooseModel(page, 'second-model');
     const thinking = page.locator('#thinkingLevel');
@@ -280,16 +281,43 @@ test('the global recent model survives history navigation and page reload', asyn
     await expect(levels).toBeVisible();
     await levels.getByRole('option', { name: 'High', exact: true }).click();
     await expect(thinking).toHaveAttribute('aria-label', 'Thinking level: High');
-    await page.getByRole('textbox', { name: 'Message' }).fill('New model conversation');
-    await page.getByRole('button', { name: 'Send', exact: true }).click();
+    const prompt = page.getByRole('textbox', { name: 'Message' });
+    await prompt.fill('New model conversation');
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.getByRole('button', { name: 'Open workspace panel' }).click();
+    await page.setViewportSize({ width: 1220, height: 900 });
+    const send = page.getByRole('button', { name: 'Send', exact: true });
+    for (const control of [modelButton(page), thinking, send]) {
+      await expect(control).toBeInViewport({ ratio: 0.99 });
+      await expect
+        .poll(() =>
+          control.evaluate((node) => {
+            const bounds = node.getBoundingClientRect();
+            const toolbar = node.closest('.composer-footer')!.getBoundingClientRect();
+            return bounds.left >= toolbar.left - 1 && bounds.right <= toolbar.right + 1;
+          }),
+        )
+        .toBe(true);
+    }
+    await chooseModel(page, 'second-model');
+    await expect(prompt).toHaveText('New model conversation');
+    await expect(thinking).toHaveAttribute('aria-label', 'Thinking level: High');
+    await page.getByRole('button', { name: 'Close workspace panel' }).click();
+    await page.setViewportSize({ width: 320, height: 720 });
+    await expect(prompt).toHaveText('New model conversation');
+    await expect(modelButton(page)).toHaveText(longName);
+    await expect(thinking).toHaveAttribute('aria-label', 'Thinking level: High');
+    await expect(send).toBeInViewport({ ratio: 0.99 });
+    await send.click();
+    await page.setViewportSize({ width: 1440, height: 900 });
     await expect(page.locator('.message.assistant')).toHaveText('Mock response');
     await expect(page.getByRole('button', { name: 'Send', exact: true })).toBeVisible();
     expect(mock.requests.at(-1)?.model).toBe('second-model');
     await expect(thinking).toHaveAttribute('aria-label', 'Thinking level: High');
     await page.getByRole('button', { name: 'Old model conversation', exact: true }).click();
-    await expect(modelButton(page)).toHaveText('Second Model');
+    await expect(modelButton(page)).toHaveText(longName);
     await page.reload();
-    await expect(modelButton(page)).toHaveText('Second Model');
+    await expect(modelButton(page)).toHaveText(longName);
     await page.getByRole('textbox', { name: 'Message' }).fill('Use the recent model');
     await page.getByRole('button', { name: 'Send', exact: true }).click();
     await expect(page.locator('.message.assistant')).toHaveCount(2);

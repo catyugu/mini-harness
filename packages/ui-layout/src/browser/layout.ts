@@ -78,9 +78,10 @@ export function createLayout(view: LayoutElements, signal: AbortSignal) {
     const mobile = narrow.matches;
     const floating = panelDrawer();
     const panelModal = floating && panelOpen;
-    const focusPanel = panelModal && !panel.contains(document.activeElement);
-    if (focusPanel && document.activeElement instanceof HTMLElement)
-      panelTrigger = document.activeElement === document.body ? panelButton : document.activeElement;
+    const focused = document.activeElement;
+    const focusPanel = panelModal && (!panel.contains(focused) || focused === panelResize);
+    if (focusPanel && focused instanceof HTMLElement && focused !== document.body && !panel.contains(focused))
+      panelTrigger = focused;
     sidebar.classList.toggle('open', mobile && drawer);
     sidebar.inert = panelModal || (mobile && !drawer);
     sidebarResize.hidden = mobile || !desktopSidebar;
@@ -95,7 +96,7 @@ export function createLayout(view: LayoutElements, signal: AbortSignal) {
     const active = panelOpen ? panel : sidebar;
     main.inert = modal;
     overlay.hidden = !modal;
-    overlay.setAttribute('aria-label', panelModal ? 'Close workspace panel' : 'Close navigation');
+    overlay.setAttribute('aria-label', panelModal ? 'Dismiss workspace panel' : 'Close navigation');
     for (const element of [sidebar, panel]) {
       if (modal && element === active) {
         element.setAttribute('role', 'dialog');
