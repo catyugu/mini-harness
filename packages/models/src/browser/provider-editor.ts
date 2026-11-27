@@ -11,7 +11,7 @@ export function providerEditor(
   provider: ProviderInfo | undefined,
   protocols: readonly ProtocolInfo[],
   signal: AbortSignal,
-  actions: { cancel(): void; saved(id: string): void },
+  actions: { cancel(): void; saved(id: string): Promise<void> },
 ) {
   const form = fromMarkup<HTMLFormElement>(`<form class="provider-editor ui-stack">
     <fieldset class="provider-draft ui-stack"><div class="provider-fields ui-stack"></div></fieldset>
@@ -189,7 +189,7 @@ export function providerEditor(
           }),
           signal,
         });
-        if (!signal.aborted) actions.saved(saved);
+        if (!signal.aborted) await actions.saved(saved);
       }, true);
     };
   }

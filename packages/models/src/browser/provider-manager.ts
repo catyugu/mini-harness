@@ -18,6 +18,7 @@ const listed = (provider: ProviderInfo) => provider.configured || removable(prov
 export function providerManager(
   ctx: Context,
   snapshot: () => { providers: ProviderInfo[]; protocols: ProtocolInfo[]; canManageProviders: boolean },
+  refresh: () => Promise<void>,
   signal: AbortSignal,
 ) {
   const content = fromMarkup(`<div class="model-settings">
@@ -32,7 +33,6 @@ export function providerManager(
   add.prepend(icon('plus'));
   addArea.append(add);
   let active: { form: HTMLFormElement; controller: AbortController } | undefined;
-  let focusProvider: string | undefined;
 
   function closeEditor() {
     active?.controller.abort();
@@ -41,8 +41,27 @@ export function providerManager(
     add.hidden = false;
   }
 
-  function edit(mount: Element, provider?: ProviderInfo) {
+  function finish(id?: string) {
     closeEditor();
+    render();
+    const control = id
+      ? list.querySelector<HTMLButtonElement>('[data-provider="' + CSS.escape(id) + '"]')
+      : add;
+    control?.focus();
+  }
+
+  async function refreshAfterCommit(message: string) {
+    status.textContent = message;
+    try {
+      await refresh();
+    } catch (error) {
+      if (!signal.aborted)
+        status.textContent =
+          message + ' Could not refresh models: ' + (error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  function edit(mount: Element, provider?: ProviderInfo) {
     status.textContent = '';
     const controller = new AbortController();
     const lifetime = AbortSignal.any([signal, controller.signal]);
@@ -54,22 +73,16 @@ export function providerManager(
       protocols,
       lifetime,
       {
-        cancel() {
-          closeEditor();
-          focusProvider = provider?.id;
-          render();
-          if (!provider) add.focus();
-        },
-        saved(id) {
-          closeEditor();
-          status.textContent = 'Provider saved.';
-          focusProvider = id;
-          render();
+        cancel: () => finish(provider?.id),
+        async saved(id) {
+          await refreshAfterCommit('Provider saved.');
+          if (!lifetime.aborted) finish(id);
         },
       },
     );
     active = { form, controller };
-    add.hidden = !provider;
+    add.hidden = true;
+    for (const control of list.querySelectorAll('button')) control.disabled = true;
     mount.append(form);
     form.querySelector<HTMLElement>('[data-initial-focus]:not([disabled])')?.focus();
   }
@@ -125,7 +138,7 @@ export function providerManager(
                   ...payload('DELETE', { id: provider.id }),
                   signal,
                 });
-                status.textContent = 'Provider removed.';
+                await refreshAfterCommit('Provider removed.');
                 add.focus();
               } catch (error) {
                 if (!signal.aborted)
@@ -143,15 +156,6 @@ export function providerManager(
       list.append(
         fromMarkup('<p class="hint">Add a provider to make its models available in the composer.</p>'),
       );
-    if (focusProvider) {
-      const control = list.querySelector<HTMLButtonElement>(
-        '[data-provider="' + CSS.escape(focusProvider) + '"]',
-      );
-      if (control) {
-        focusProvider = undefined;
-        control.focus();
-      }
-    }
   }
 
   add.onclick = () => edit(addArea);
@@ -161,7 +165,6 @@ export function providerManager(
     render,
     reset() {
       closeEditor();
-      focusProvider = undefined;
       status.textContent = '';
       render();
     },
