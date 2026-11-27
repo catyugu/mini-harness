@@ -47,10 +47,7 @@ export function selectModel(
     if (selected)
       return { ...selected, thinkingLevel: resolveThinking(selected.capabilities, thinkingLevel, inherited) };
   }
-  throw new DomainError(
-    'invalid_input',
-    unavailable ?? 'Configure a model before sending a message',
-  );
+  throw new DomainError('invalid_input', unavailable ?? 'Configure a model before sending a message');
 }
 
 export function assertImageInput(capabilities: Capabilities, count: number) {

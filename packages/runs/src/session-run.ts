@@ -166,10 +166,7 @@ export class SessionRun {
       validateNativeMessage({ role: 'user', content, timestamp: 0 });
       const preparedImages =
         typeof content === 'string' ? [] : content.filter((part) => part.type === 'image');
-      assertImageInput(
-        selected.capabilities,
-        preparedImages.length,
-      );
+      assertImageInput(selected.capabilities, preparedImages.length);
       signal.throwIfAborted();
       this.sessions.assertAvailable(id);
       return {

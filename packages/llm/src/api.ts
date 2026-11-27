@@ -218,7 +218,10 @@ export interface LlmBinding {
 }
 
 export class ModelTransportError extends Error {
-  constructor(error: unknown, readonly kind: ModelErrorKind | undefined) {
+  constructor(
+    error: unknown,
+    readonly kind: ModelErrorKind | undefined,
+  ) {
     super(error instanceof Error ? error.message : String(error), { cause: error });
   }
 }

@@ -133,5 +133,9 @@ export async function measure(
   };
   const budget = window - maxTokens - Math.min(4096, Math.max(16, Math.ceil(window * (exact ? 0.01 : 0.04))));
   if (budget <= 0) throw new DomainError('invalid_input', 'No input capacity after reserving model output');
-  return { ...prepared, [requestBinding]: binding, inputMeasurement: { ...counts, window, budget, estimated: !exact } };
+  return {
+    ...prepared,
+    [requestBinding]: binding,
+    inputMeasurement: { ...counts, window, budget, estimated: !exact },
+  };
 }

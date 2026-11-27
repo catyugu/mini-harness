@@ -70,7 +70,12 @@ export async function requestModel(
       if (!message) throw new Error('The model stream ended without a final message');
     } catch (error) {
       message = {
-        ...failedMessage(request, error, partial, error instanceof ModelTransportError ? error.kind : undefined),
+        ...failedMessage(
+          request,
+          error,
+          partial,
+          error instanceof ModelTransportError ? error.kind : undefined,
+        ),
         ...(thinking && {
           content: [
             { type: 'thinking' as const, thinking },
