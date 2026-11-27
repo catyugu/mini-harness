@@ -47,16 +47,44 @@ test('GUI APIs configure providers, persist keys privately, discover Skills and 
   );
   assert.equal((await request(scope + '/files/tree')).status, 404);
   assert.equal((await request(scope + '/skills')).status, 404);
+  const connection = { id: 'gui-test', baseUrl: mock.url, api: 'openai-completions' };
+  const discovery = await request('/providers/discovery', 'POST', { ...connection, key: 'gui-private-key' });
+  assert.equal(discovery.status, 200, JSON.stringify(discovery.body));
+  assert.deepEqual(
+    discovery.body.map(({ id }: { id: string }) => id),
+    ['mock-model', 'discovered-model'],
+  );
+  assert.equal(discovery.body[1].contextWindow, 65536);
+  assert.equal(
+    (
+      await request('/providers/discovery', 'POST', {
+        ...connection,
+        baseUrl: mock.url + '/missing',
+      })
+    ).status,
+    503,
+  );
+  assert.equal(
+    (await request('/providers')).body.some(({ id }: { id: string }) => id === connection.id),
+    false,
+  );
+  const created = await request('/providers', 'PUT', {
+    ...connection,
+    create: true,
+    name: 'GUI provider',
+    key: 'gui-private-key',
+    models: [],
+  });
+  assert.equal(created.status, 200, JSON.stringify(created.body));
+  const providers = await request('/providers');
+  assert.doesNotMatch(JSON.stringify(providers.body), /gui-private-key/);
+  assert.deepEqual(providers.body.find(({ id }: { id: string }) => id === connection.id).models, []);
   const save = await request('/providers', 'PUT', {
-    id: 'gui-test',
-    baseUrl: mock.url,
-    api: 'openai-completions',
+    ...connection,
+    name: 'Edited GUI provider',
     models: [{ id: 'gui-model', input: ['text', 'image'] }],
   });
   assert.equal(save.status, 200, JSON.stringify(save.body));
-  const credentials = await request('/credentials', 'POST', { provider: 'gui-test', key: 'gui-private-key' });
-  assert.equal(credentials.status, 200);
-  assert.doesNotMatch(JSON.stringify(credentials.body), /gui-private-key/);
   const model = { provider: 'gui-test', id: 'gui-model' };
   assert.equal(
     (await request('/settings', 'PATCH', { entries: { 'core:models': { config: { model } } } })).status,

@@ -1,6 +1,7 @@
 import {
   createModels,
   createProvider,
+  defaultProviderAuthContext,
   getSupportedThinkingLevels,
   isContextOverflow,
   lazyApi,
@@ -29,6 +30,17 @@ const apiLoaders: Record<string, () => Promise<ProviderStreams>> = {
   'google-generative-ai': () => import('@earendil-works/pi-ai/api/google-generative-ai'),
 };
 
+// Providers with multiple native protocols need a default for newly registered IDs.
+const preferredProtocols: Readonly<Record<string, string>> = {
+  azure: 'azure-openai-responses',
+  'cloudflare-ai-gateway': 'openai-completions',
+  fireworks: 'openai-completions',
+  'github-copilot': 'openai-completions',
+  opencode: 'openai-completions',
+  'opencode-go': 'openai-completions',
+  openrouter: 'openai-completions',
+};
+
 /** Publishes Pi defaults and translates supported requests at the adapter boundary. */
 export class PiLlm implements LlmAdapter {
   private readonly builtin;
@@ -38,39 +50,43 @@ export class PiLlm implements LlmAdapter {
 
   registerModels() {
     const runtime = this.builtin;
+    const authContext = defaultProviderAuthContext();
     return this.store.registerDefaults(
-      runtime.getProviders().map((provider) => ({
-        id: provider.id,
-        name: provider.name,
-        canSetKey: Boolean(provider.auth.apiKey?.login),
-        models: runtime.getModels(provider.id).map((model) => ({
-          id: model.id,
-          name: model.name,
-          api: model.api,
-          baseUrl: model.baseUrl,
-          input: model.input,
-          contextWindow: model.contextWindow,
-          maxTokens: model.maxTokens,
-          reasoning: model.reasoning,
-          thinkingLevels: getSupportedThinkingLevels(model),
-        })),
-        async authStatus() {
-          const auth = await runtime.checkAuth(provider.id);
-          return auth?.source || Boolean(auth);
-        },
-        async apiKey(choice) {
-          const model = runtime.getModel(choice.provider, choice.id);
-          return model && (await runtime.getAuth(model))?.auth.apiKey;
-        },
-      })),
+      runtime.getProviders().map((provider) => {
+        const models = runtime.getModels(provider.id);
+        const protocols = new Set(models.map(({ api }) => api));
+        const api =
+          (Object.hasOwn(preferredProtocols, provider.id) ? preferredProtocols[provider.id] : undefined) ??
+          (protocols.size === 1 ? [...protocols][0] : '');
+        return {
+          id: provider.id,
+          name: provider.name,
+          api,
+          baseUrl: provider.baseUrl ?? '',
+          canSetKey: Boolean(provider.auth.apiKey?.login),
+          models: models.map((model) => ({ ...model, thinkingLevels: getSupportedThinkingLevels(model) })),
+          async authStatus() {
+            const auth = await runtime.checkAuth(provider.id);
+            return auth?.source || Boolean(auth);
+          },
+          async discoveryKey(credential, signal) {
+            if (credential?.type === 'oauth') return;
+            const result = await provider.auth.apiKey?.resolve({ ctx: authContext, credential, signal });
+            return result?.auth.apiKey;
+          },
+        };
+      }),
     );
   }
 
   accepts(choice: ModelChoice) {
-    if (!this.store.configuredProvider(choice.provider))
-      return Boolean(this.builtin.getModel(choice.provider, choice.id));
-    const connection = this.store.connection(choice);
-    return connection !== undefined && Object.hasOwn(apiLoaders, connection.api);
+    const selected = this.store.requestModel(choice);
+    return Boolean(
+      selected &&
+        (this.builtin.getProvider(choice.provider)
+          ? selected.model.api
+          : Object.hasOwn(apiLoaders, selected.model.api)),
+    );
   }
 
   classifyError(error: unknown): ModelErrorKind | undefined {
@@ -106,35 +122,44 @@ export class PiLlm implements LlmAdapter {
 
   async *stream(request: LlmRequest): AsyncIterable<LlmEvent> {
     request.signal.throwIfAborted();
-    const { provider, id } = request.model;
     const store = this.store;
-    const configured = store.configuredProvider(provider);
+    const selected = store.requestModel(request.model);
+    if (!selected) throw new Error('Model is unavailable through the Pi adapter');
+    const { provider } = selected;
+    const model: Model<Api> = {
+      cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+      ...selected.model,
+      input: [...selected.model.input],
+      provider: provider.id,
+    };
+    const native = this.builtin.getProvider(provider.id);
     let runtime = this.builtin;
-    if (configured) {
-      const selected = configured.models.find((model) => model.id === id);
-      const load = selected && Object.hasOwn(apiLoaders, selected.api) && apiLoaders[selected.api];
-      if (!selected || !load) throw new Error('Model is unavailable through the Pi adapter');
+    if (native && provider.endpointOverride) {
+      const baseUrl = provider.endpointOverride;
+      runtime = createModels({ credentials: store.credentials });
+      runtime.setProvider({
+        ...native,
+        baseUrl,
+        streamSimple: (model, context, options) =>
+          native.streamSimple({ ...model, baseUrl }, context, options),
+      });
+    } else if (!native) {
+      const load = Object.hasOwn(apiLoaders, model.api) && apiLoaders[model.api];
+      if (!load) throw new Error('Model is unavailable through the Pi adapter');
       runtime = createModels();
       runtime.setProvider(
         createProvider({
-          id: provider,
-          name: configured.name,
-          baseUrl: selected.baseUrl,
-          headers: configured.headers,
-          models: [
-            {
-              cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-              ...selected,
-              input: [...selected.input],
-              provider,
-            },
-          ],
+          id: provider.id,
+          name: provider.name,
+          baseUrl: model.baseUrl,
+          headers: provider.headers,
+          models: [model],
           api: lazyApi(load),
           auth: {
             apiKey: {
-              name: provider + ' API key',
+              name: provider.id + ' API key',
               async resolve() {
-                const key = await store.apiKey(request.model);
+                const key = await store.apiKey(provider);
                 return key ? { auth: { apiKey: key } } : undefined;
               },
             },
@@ -142,8 +167,6 @@ export class PiLlm implements LlmAdapter {
         }),
       );
     }
-    const model = runtime.getModel(provider, id);
-    if (!model) throw new Error('Model is unavailable through the Pi adapter');
     if (
       request.messages.some(
         (message) => Array.isArray(message.content) && message.content.some((part) => part.type === 'image'),

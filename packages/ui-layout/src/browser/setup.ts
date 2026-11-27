@@ -93,6 +93,16 @@ function createAppFrame(
         ? Math.min(64, meta.clientWidth * 0.3) + (parseFloat(getComputedStyle(meta).gap) || 0)
         : 0),
   );
+  const tabs = createRightTabs(
+    {
+      root: element('inspector'),
+      bar: element('rightTabList'),
+      body: element('inspectorContent'),
+      toggle: element<'button'>('inspectorOpen'),
+    },
+    (focus) => layout.panelChanged(focus),
+    signal,
+  );
   const layout = createLayout(
     {
       root,
@@ -108,16 +118,7 @@ function createAppFrame(
       panelResize: element('panelResize'),
     },
     signal,
-  );
-  const tabs = createRightTabs(
-    {
-      root: element('inspector'),
-      bar: element('rightTabList'),
-      body: element('inspectorContent'),
-      toggle: element<'button'>('inspectorOpen'),
-    },
-    layout,
-    signal,
+    tabs,
   );
 
   const pageViews = new Map<string, { view: HTMLElement; trigger?: HTMLButtonElement }>();
@@ -134,7 +135,7 @@ function createAppFrame(
       else trigger?.removeAttribute('aria-current');
     }
     if (id) {
-      layout.setPanel(false);
+      tabs.setPanel(false);
       layout.closeDrawer(false);
       pageViews.get(id)?.view.focus();
     }

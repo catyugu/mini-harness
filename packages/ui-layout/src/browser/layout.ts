@@ -12,7 +12,11 @@ interface LayoutElements {
   panelResize: HTMLElement;
 }
 
-export function createLayout(view: LayoutElements, signal: AbortSignal) {
+export function createLayout(
+  view: LayoutElements,
+  signal: AbortSignal,
+  tabs: { panelOpen(): boolean; setPanel(open: boolean, focus?: boolean): void },
+) {
   const {
     root,
     sidebar,
@@ -39,7 +43,6 @@ export function createLayout(view: LayoutElements, signal: AbortSignal) {
   let panelWidth = Number(localStorage.getItem(panelWidthKey)) || 380;
   let desktopSidebar = localStorage.getItem(sidebarStateKey) !== 'collapsed';
   let drawer = false;
-  let panelOpen = false;
   let panelTrigger: HTMLElement;
   const viewport = window.visualViewport;
 
@@ -55,12 +58,14 @@ export function createLayout(view: LayoutElements, signal: AbortSignal) {
     const space = innerWidth - (desktopSidebar ? left : collapsedWidth) - mainMin;
     const rightMax = Math.round(Math.max(panelMin, Math.min(innerWidth * 0.48, space)));
     const floating = mobile || space < panelMin;
+    const panelOpen = tabs.panelOpen();
     const panelModal = floating && panelOpen;
     return {
       mobile,
       left,
       rightMax,
       floating,
+      panelOpen,
       panelModal,
       right: clamp(panelWidth, panelMin, rightMax),
       modal: panelModal ? panel : mobile && drawer ? sidebar : undefined,
@@ -69,7 +74,7 @@ export function createLayout(view: LayoutElements, signal: AbortSignal) {
   let geometry = derive();
   function render() {
     geometry = derive();
-    const { mobile, left, right, rightMax, floating, panelModal, modal } = geometry;
+    const { mobile, left, right, rightMax, floating, panelOpen, panelModal, modal } = geometry;
     const focused = document.activeElement;
     const focusPanel = panelModal && (!panel.contains(focused) || focused === panelResize);
     if (focusPanel && focused instanceof HTMLElement && focused !== document.body && !panel.contains(focused))
@@ -117,26 +122,25 @@ export function createLayout(view: LayoutElements, signal: AbortSignal) {
     render();
     if (restore) sidebarButton.focus();
   }
-  function setPanel(open: boolean, focus = false) {
-    if (open === panelOpen) return;
+  function panelChanged(focus: boolean) {
+    const open = tabs.panelOpen();
+    if (open === geometry.panelOpen) return;
     if (open) {
       const origin = document.activeElement as HTMLElement;
       panelTrigger = origin && !panel.contains(origin) && !sidebar.contains(origin) ? origin : panelButton;
     }
     if (open) drawer = false;
     if (!open && panel.contains(document.activeElement)) focus = true;
-    panelOpen = open;
     render();
     if (open && focus && !geometry.floating) panelClose.focus();
     if (!open && focus)
       (panelTrigger?.isConnected && !panelTrigger.closest('[inert]') ? panelTrigger : panelButton).focus();
-    panel.dispatchEvent(new Event('panel-visibility'));
   }
   sidebarButton.onclick = () => {
     if (narrow.matches) {
       if (drawer) closeDrawer();
       else {
-        setPanel(false);
+        tabs.setPanel(false);
         drawer = true;
         render();
         sidebarClose.focus();
@@ -148,19 +152,19 @@ export function createLayout(view: LayoutElements, signal: AbortSignal) {
     }
   };
   sidebarClose.onclick = () => closeDrawer();
-  panelClose.onclick = () => setPanel(false, true);
+  panelClose.onclick = () => tabs.setPanel(false, true);
   overlay.onclick = () => {
-    if (panelOpen) setPanel(false, true);
+    if (tabs.panelOpen()) tabs.setPanel(false, true);
     else closeDrawer();
   };
   document.addEventListener(
     'keydown',
     (event) => {
       if (event.defaultPrevented || document.querySelector('dialog[open]')) return;
-      if (event.key === 'Escape' && (panelOpen || drawer)) {
+      if (event.key === 'Escape' && (tabs.panelOpen() || drawer)) {
         if (document.querySelector(':popover-open')) return;
         event.preventDefault();
-        if (panelOpen) setPanel(false, true);
+        if (tabs.panelOpen()) tabs.setPanel(false, true);
         else closeDrawer();
       }
       const container = geometry.modal;
@@ -280,10 +284,6 @@ export function createLayout(view: LayoutElements, signal: AbortSignal) {
   });
   return {
     closeDrawer,
-    setPanel,
-    panelOpen: () => panelOpen,
-    onPanelVisibilityChange(listener: () => void) {
-      panel.addEventListener('panel-visibility', listener, { signal });
-    },
+    panelChanged,
   };
 }

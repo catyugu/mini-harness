@@ -30,7 +30,7 @@ Text previews are bounded, decoded as UTF-8 and marked when truncated. Markdown 
 
 ## View lifetime and failures
 
-A sidebar resource is keyed within its workspace. Reopening it selects the existing tab. Workspace previews refresh on the shared file invalidation projection, tab activation, window focus and explicit refresh; external processes do not provide a continuous filesystem-watch guarantee.
+A sidebar resource is keyed within its workspace. Reopening it selects the existing tab. Workspace paths and stored attachment identities restore across reloads; preview contents are fetched when displayed. Memory resources last for the caller’s browser lifetime. Workspace previews refresh on the shared file invalidation projection, tab activation, window focus and explicit refresh; external processes do not provide a continuous filesystem-watch guarantee.
 
 Only one media dialog is active per preview plugin. Opening another or changing workspaces closes it. Closing a view cancels its requests and revokes media object URLs. Aborting a `memory` resource's caller signal also closes its tab or dialog; persistent attachments remain Sessions-owned and are not deleted by closing their preview.
 

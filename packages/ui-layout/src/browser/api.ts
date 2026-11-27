@@ -9,8 +9,15 @@ export interface RightTab<T> {
   signal?: AbortSignal;
 }
 
+export type JsonValue = null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue };
+
 export interface RightTabType<T> {
   title(data: T): string;
+  /** Opt in to restoration. Return undefined for transient or invalid resources. */
+  persistence?: {
+    save(data: T): JsonValue | undefined;
+    restore(data: JsonValue, scope: TabScope): T | undefined;
+  };
   create(data: T, scope: TabScope, signal: AbortSignal): HTMLElement;
 }
 

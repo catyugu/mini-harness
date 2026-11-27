@@ -1,10 +1,11 @@
 import { DomainError } from '@mini-harness/platform/errors';
 import { containsPath } from '@mini-harness/platform/paths';
 import { randomUUID } from 'node:crypto';
-import { constants, type BigIntStats, type Stats } from 'node:fs';
+import { constants } from 'node:fs';
 import { link, lstat, mkdir, open, opendir, realpath, rename, stat, unlink } from 'node:fs/promises';
 import { basename, dirname, relative, resolve, sep } from 'node:path';
-import { FileTypeError, type RootedFileAccess } from './api.ts';
+import type { RootedFileAccess } from './api.ts';
+import { checkType, directoryEntries, fileChunks, FileTypeError } from './reader.ts';
 
 const windows = process.platform === 'win32';
 
@@ -21,14 +22,6 @@ function checkName(name: string) {
 
 const denied = () => new DomainError('forbidden', 'Path is outside the permitted root');
 const missing = (error: unknown) => (error as NodeJS.ErrnoException).code === 'ENOENT';
-
-function checkType(info: Stats | BigIntStats, allowDirectory = false) {
-  if (info.isDirectory()) {
-    if (allowDirectory) return;
-    throw new FileTypeError('directory');
-  }
-  if (!info.isFile()) throw new FileTypeError('unsupported');
-}
 
 /** A workspace view, not an operating-system security boundary. */
 export class RootedFiles implements RootedFileAccess {
@@ -80,19 +73,8 @@ export class RootedFiles implements RootedFileAccess {
     return open(target, constants.O_RDONLY);
   }
 
-  async *chunks(path: string, signal?: AbortSignal): AsyncGenerator<Uint8Array> {
-    const handle = await this.openFile(path);
-    try {
-      for (;;) {
-        signal?.throwIfAborted();
-        const chunk = Buffer.allocUnsafe(64 * 1024);
-        const { bytesRead } = await handle.read(chunk);
-        if (!bytesRead) break;
-        yield chunk.subarray(0, bytesRead);
-      }
-    } finally {
-      await handle.close();
-    }
+  chunks(path: string, signal?: AbortSignal) {
+    return fileChunks(() => this.openFile(path), signal);
   }
 
   async readFile(path: string) {
@@ -173,13 +155,6 @@ export class RootedFiles implements RootedFileAccess {
 
   async entries(path: string = this.cwd) {
     const dir = await this.location(path);
-    const result: { name: string; directory: boolean }[] = [];
-    for await (const entry of await opendir(dir)) {
-      // Do not follow links during recursive enumeration.
-      if (!(entry.isFile() || entry.isDirectory())) continue;
-      if (this.exclude?.(resolve(dir, entry.name))) continue;
-      result.push({ name: entry.name, directory: entry.isDirectory() });
-    }
-    return result.sort((a, b) => a.name.localeCompare(b.name));
+    return directoryEntries(await opendir(dir), (name) => Boolean(this.exclude?.(resolve(dir, name))));
   }
 }

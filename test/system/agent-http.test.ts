@@ -2,7 +2,7 @@ import { sendRun } from '../support/runs.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { join } from 'node:path';
 import { realpath } from 'node:fs/promises';
 import { createMiniHarnessServer } from '../support/profile.ts';
 import { createMockProvider, createFixturePaths } from '../support/mock-provider.ts';
@@ -16,16 +16,20 @@ test(
       lastInput = messages.at(-1)?.content ?? '';
       if (lastInput === 'Load verification skill')
         return { tool: 'load_skill', args: { name: 'verification' } };
+      const reference = /directory="([^"]+)"/.exec(lastInput)?.[1];
+      if (reference && lastInput.includes('references/checklist.txt'))
+        return { tool: 'read', args: { path: join(reference, 'references', 'checklist.txt') } };
       return 'Mock response';
     });
     t.after(() => mock.close());
     const { root, paths } = createFixturePaths(mock.url);
     t.after(() => rmSync(root, { recursive: true, force: true }));
     const skillDir = join(paths.home, 'skills', 'verification');
-    mkdirSync(skillDir, { recursive: true });
+    mkdirSync(join(skillDir, 'references'), { recursive: true });
+    writeFileSync(join(skillDir, 'references', 'checklist.txt'), 'Verification reference contents');
     writeFileSync(
       join(skillDir, 'SKILL.md'),
-      '---\nname: verification\ndescription: Verify the test harness on request.\n---\n\n# Verification\n\nMention the verification skill when asked.\n',
+      '---\nname: verification\ndescription: Verify the test harness on request.\n---\n\n# Verification\n\nMention the verification skill after reading references/checklist.txt.\n',
     );
 
     let app = await createMiniHarnessServer(paths);
@@ -99,13 +103,16 @@ test(
     );
     assert.equal(skillRequest.status, 200);
     assert.equal((await skillRequest.text()).includes('"type":"error"'), false);
-    const directory = dirname(await realpath(join(skillDir, 'SKILL.md')));
-    assert.ok(lastInput.includes('Mention the verification skill'));
-    assert.ok(lastInput.includes('directory="' + directory + '"'));
+    const directory = await realpath(skillDir);
+    assert.ok(
+      mock.requests.some((request) =>
+        JSON.stringify(request).includes(JSON.stringify(directory).slice(1, -1)),
+      ),
+    );
+    assert.match(lastInput, /Verification reference contents/);
 
     await sendRun(app.runtime.plugins.ctx.harnessRuns, session.id, 'Load verification skill');
-    assert.ok(lastInput.includes('Mention the verification skill'));
-    assert.ok(lastInput.includes('directory="' + directory + '"'));
+    assert.match(lastInput, /Verification reference contents/);
 
     await app.close();
     open = false;

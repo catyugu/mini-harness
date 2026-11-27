@@ -60,6 +60,23 @@ test('workspace references and uploaded files stay with their conversation draft
     .getByRole('button', { name: /^Read this \/skill:review$/, exact: true })
     .click();
   await expect(draft).toHaveText('Keep this draft');
+  await page.getByRole('button', { name: 'Preview task.txt' }).click();
+  await expect(panel.getByText('ATTACHED TASK', { exact: true })).toBeVisible();
+  const memoryPicker = page.waitForEvent('filechooser');
+  await page.getByRole('button', { name: 'Attach files' }).click();
+  await (
+    await memoryPicker
+  ).setFiles({
+    name: 'draft.txt',
+    mimeType: 'text/plain',
+    buffer: Buffer.from('DRAFT CONTENT'),
+  });
+  await page.getByRole('button', { name: 'Preview draft.txt' }).click();
+  await expect(panel.getByText('DRAFT CONTENT', { exact: true })).toBeVisible();
+  await page.reload();
+  await expect(panel.getByRole('tab', { name: 'draft.txt' })).toHaveCount(0);
+  await expect(panel.getByRole('tab', { name: 'task.txt' })).toHaveAttribute('aria-selected', 'true');
+  await expect(panel.getByText('ATTACHED TASK', { exact: true })).toBeVisible();
 });
 
 test('the model picker filters providers and restores an accepted choice after reload', async ({

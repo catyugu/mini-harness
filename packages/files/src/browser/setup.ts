@@ -5,7 +5,11 @@ import { fileTree } from './tree.ts';
 
 function setup(ctx: Context) {
   type Directory = { path: string; expanded: Set<string> };
-  const tab = ctx.miniTabs.register<Directory>('directory', {
+  const tab = ctx.miniTabs.register<Directory>('files.directory', {
+    persistence: {
+      save: ({ path }) => path,
+      restore: (data) => (typeof data === 'string' ? { path: data, expanded: new Set() } : undefined),
+    },
     title: ({ path }) => (path === '.' ? 'Files' : (path.split('/').at(-1) ?? path)),
     create: ({ path, expanded }, scope, signal) =>
       fileTree(ctx, scope, path, signal, expanded, (path) => open(path, scope)),

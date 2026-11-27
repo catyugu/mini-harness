@@ -126,7 +126,31 @@ function sidebar(ctx: Context, resource: PreviewResource, scope: WorkspaceView, 
 
 function setup(ctx: Context) {
   const lifetime = ctx.fiber.signal;
-  const tab = ctx.miniTabs.register<PreviewResource>('preview', {
+  const tab = ctx.miniTabs.register<PreviewResource>('file-preview.resource', {
+    persistence: {
+      save(resource) {
+        if (resource.kind === 'workspace')
+          return { kind: resource.kind, path: resource.path } as Record<string, string>;
+        if (resource.kind === 'attachment') {
+          const { kind, sessionId, id, name, mimeType } = resource;
+          return { kind, sessionId, id, name, mimeType } as Record<string, string>;
+        }
+      },
+      restore(resource, { workspaceId }) {
+        if (!resource || typeof resource !== 'object' || Array.isArray(resource)) return;
+        if (resource.kind === 'workspace' && typeof resource.path === 'string')
+          return { kind: 'workspace', workspaceId, path: resource.path };
+        const { kind, sessionId, id, name, mimeType } = resource;
+        if (
+          kind === 'attachment' &&
+          typeof sessionId === 'string' &&
+          typeof id === 'string' &&
+          typeof name === 'string' &&
+          typeof mimeType === 'string'
+        )
+          return { kind, workspaceId, sessionId, id, name, mimeType };
+      },
+    },
     title: nameOf,
     create: (resource, scope, signal) => sidebar(ctx, resource, scope, signal),
   });
@@ -157,7 +181,7 @@ function setup(ctx: Context) {
           owner: { workspaceId },
           key: resource.kind + ':' + key,
           data: resource,
-          signal,
+          signal: resource.kind === 'memory' ? signal : undefined,
         });
         return;
       }

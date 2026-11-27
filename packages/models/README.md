@@ -26,7 +26,13 @@ A source may resolve a dynamic model ID that it does not enumerate. Its adapter'
 
 The [base Profile](../../profiles/base.yml) separates the model catalog, model store, Pi adapter and recent model into individual entries. The catalog requires LLM selection; the Pi adapter requires the store and catalog. The Web Profile adds provider administration and the browser model selector through `core:model-admin`.
 
-The built-in [store](src/server/store.ts) reads provider definitions from `models.json` and credentials from `auth.json` under the application configuration directory. Credentials and connection details stay inside the provider boundary; catalog responses expose model metadata and authentication status. Credential writes are serialized and drained on disposal. Failed updates retain the previous working store.
+The built-in [store](src/server/store.ts) reads `models.json` under the application configuration directory. Its `providers` object holds custom definitions and their catalogs; its optional `builtins` object holds endpoint and catalog overrides by built-in Provider ID. An omitted built-in `models` field inherits the adapter's catalog. An explicit empty array hides all of that provider's models. Existing per-model protocol and adapter settings are retained when editing an entry. Built-in models continue to use their native Pi adapter and authentication.
+
+**Settings → Model** uses the same editor to add and edit a provider. Custom providers have a fixed ID, an editable display name, an endpoint, a protocol and a catalog. The editor accepts an empty catalog, manual model entries, reordering and explicit model capabilities. **Restore default models** replaces a built-in editor's draft with the adapter's current default catalog. Save applies it. The built-in store resolves only model IDs in the effective catalog.
+
+**Fetch available models** works from the draft for supported OpenAI, Anthropic and Gemini protocols. The server queries the configured endpoint; discovery makes no configuration changes. Use an API key entered in the draft when testing a different endpoint. The picker deduplicates Model IDs and keeps existing model settings. Listing metadata supplies capabilities where available, otherwise the shared defaults apply.
+
+Saved keys belong to the `auth.json` credential store and are never returned to the editor. A blank key field keeps the saved credential. Removing a built-in provider clears its saved settings and credential, returning it to its adapter defaults. Removing a custom provider deletes its definition and credential. Writes are serialized and failed updates retain the previous working store.
 
 `harnessModelStore` is an internal capability of the default provider implementation, not an installed SDK export. Third-party providers use the public source/adapter contract and their own persistence.
 

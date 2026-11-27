@@ -26,11 +26,11 @@ An open tab reconnects after restart on the same port and configuration director
 
 ## Configure a model and workspace
 
-Open **Settings → Model** to add a provider or custom endpoint. Credential status reports local configuration; the provider validates access when a request is made. Choose a configured model under the message input. Sending a main conversation message remembers the actual model across navigation and restarts; child agents keep their own selected or inherited model.
+Open **Settings → Model** to add a built-in provider or a custom API endpoint. Add models manually or use **Fetch available models** before saving. For built-in providers, **Restore default models** restores the adapter catalog when you save. Credential status reports local configuration; the provider validates access when a request is made. Choose a configured model under the message input. Sending a main conversation message remembers the actual model across navigation and restarts; child agents keep their own selected or inherited model.
 
 Use **Workspaces** in the sidebar to register local directories. You can browse or start conversations in one workspace while conversations elsewhere keep running. Removing a workspace permanently deletes its conversation trees and histories while preserving the project directory and files.
 
-The workspace panel has separate **Workspace files** and **Git changes** entries. Browse folders, preview resources, inspect changes and open paths written by the current turn. Each workspace keeps its own open tabs across conversation switches.
+The workspace panel has separate **Workspace files** and **Git changes** entries. Browse folders, preview resources, inspect changes and open paths written by the current turn. Each workspace keeps its panel visibility, tabs and selected tab across conversation switches and browser reloads. Draft attachment previews last until the current page unloads.
 
 ## Send messages and attachments
 
@@ -75,7 +75,7 @@ Place a skill in a directory containing `SKILL.md`, then use `/skill:name` to at
 3. `<workspace>/.agents/skills/`
 4. `<workspace>/.mini-harness/skills/`
 
-Skill directories and instruction files may be links to locations outside the workspace. Review their targets and instructions before loading them. Native prompts also read regular, unlinked `AGENTS.md` files in the configuration directory and workspace root. Reads and discovery are bounded; see [Skills](../../packages/skills/README.md) for the file format and limits.
+Skill directories and instruction files may be links to locations outside the workspace. The agent can use `read` and `ls` with explicit paths to reach referenced resources. Review their targets and instructions before loading them. Native prompts also read regular, unlinked `AGENTS.md` files in the configuration directory and workspace root. Reads and discovery are bounded; see [Skills](../../packages/skills/README.md) for the file format and limits.
 
 ## Customize configuration
 

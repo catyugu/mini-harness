@@ -37,6 +37,24 @@ export async function createMockProvider(
 ): Promise<MockProvider> {
   const requests: Record<string, unknown>[] = [];
   const server: Server = createServer(async (req, res) => {
+    if (req.method === 'GET' && req.url === '/v1/models') {
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(
+        JSON.stringify({
+          data: [
+            { id: 'mock-model', name: 'Published name' },
+            {
+              id: 'discovered-model',
+              display_name: 'Discovered Model',
+              context_length: 65536,
+              max_output_tokens: 2048,
+            },
+            { id: 'discovered-model' },
+          ],
+        }),
+      );
+      return;
+    }
     if (req.method !== 'POST' || req.url !== '/v1/chat/completions') {
       res.writeHead(404);
       res.end();
