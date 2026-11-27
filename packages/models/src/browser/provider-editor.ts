@@ -1,13 +1,15 @@
 import type { Context } from 'mini-harness/cordis';
 import { browserRequest, payload } from '@mini-harness/ui-runtime/http';
 import { button, field, fromMarkup, required } from '@mini-harness/ui-primitives/primitives';
-import { modelProtocols, type ProviderInfo, type ProviderModel } from '../shared/catalog.ts';
+import type { ProtocolInfo, ProviderInfo, ProviderModelDefinition } from '../shared/pi-provider.ts';
+import type { ProviderModel } from '../shared/catalog.ts';
 import { catalogEditor, selectDiscovered } from './catalog-editor.ts';
 
 export function providerEditor(
   ctx: Context,
   available: readonly ProviderInfo[],
   provider: ProviderInfo | undefined,
+  protocols: readonly ProtocolInfo[],
   signal: AbortSignal,
   actions: { cancel(): void; saved(id: string): void },
 ) {
@@ -49,6 +51,13 @@ export function providerEditor(
   const endpointField = field('API endpoint', endpoint);
   const api = document.createElement('select');
   const apiField = field('API protocol', api);
+  const resetProtocolSettings = fromMarkup<HTMLInputElement>('<input type="checkbox" checked>');
+  const resetProtocolField = field(
+    'Reset model compatibility and thinking-level settings',
+    resetProtocolSettings,
+    'compact',
+  );
+  const changingProtocol = () => provider?.custom === true && provider.api !== api.value;
   const catalog = catalogEditor();
   const restoreEndpoint = button('Use default endpoint', 'quiet');
   const restoreModels = button('Restore default models', 'quiet');
@@ -79,7 +88,7 @@ export function providerEditor(
     discover.textContent = 'Fetch available models';
     const { baseUrl, api } = connection();
     discover.disabled = !baseUrl;
-    discover.hidden = !Object.hasOwn(modelProtocols, api);
+    discover.hidden = !protocols.some((protocol) => protocol.api === api);
   }
 
   function connection() {
@@ -110,15 +119,16 @@ export function providerEditor(
     endpoint.value = isCustom || selected?.endpointCustomized ? (selected?.baseUrl ?? '') : '';
     endpoint.placeholder = isCustom ? 'https://api.example.com/v1' : (selected?.defaultBaseUrl ?? '');
     endpoint.required = isCustom;
-    const options: [string, string][] = Object.entries(modelProtocols);
-    const protocol = selected?.api ?? options[0][0];
-    if (!Object.hasOwn(modelProtocols, protocol)) options.push([protocol, protocol]);
+    const options: [string, string][] = protocols.map(({ api, label }) => [api, label]);
+    const protocol = selected?.api ?? options[0]?.[0] ?? '';
+    if (!protocols.some(({ api }) => api === protocol)) options.push([protocol, protocol]);
     api.replaceChildren(...options.map(([value, label]) => new Option(label, value)));
     api.value = protocol;
     api.disabled = !isCustom;
+    resetProtocolField.hidden = true;
     customConnection.hidden = customCatalog.hidden = !isCustom;
     if (isCustom) {
-      customConnection.append(endpointField, apiField);
+      customConnection.append(endpointField, apiField, resetProtocolField);
       customCatalog.append(catalog.root);
       catalog.actions.replaceChildren(discover);
     } else {
@@ -143,14 +153,16 @@ export function providerEditor(
     restoreModels.disabled = true;
     error.textContent = '';
     try {
-      const models = await browserRequest<ProviderModel[]>(
+      const models = await browserRequest<ProviderModelDefinition[]>(
         ctx,
         '/providers/' + encodeURIComponent(selected.id) + '/default-models',
         {
           signal: AbortSignal.any([controller.signal, signal]),
         },
       );
-      if (!controller.signal.aborted && !signal.aborted) catalog.reset(models, false);
+      if (!controller.signal.aborted && !signal.aborted) {
+        catalog.reset(models, false);
+      }
     } catch (failure) {
       if (!controller.signal.aborted) report(failure);
     } finally {
@@ -191,13 +203,19 @@ export function providerEditor(
   };
 
   mode.onchange = picker.onchange = updateFields;
-  endpoint.oninput =
-    key.oninput =
-    api.onchange =
-      () => {
-        error.textContent = '';
-        resetDiscovery();
-      };
+  const connectionChanged = () => {
+    error.textContent = '';
+    resetDiscovery();
+  };
+  endpoint.oninput = key.oninput = connectionChanged;
+  api.onchange = () => {
+    resetProtocolField.hidden =
+      !changingProtocol() ||
+      !provider?.models.some(
+        ({ compat, thinkingLevelMap }) => compat !== undefined || thinkingLevelMap !== undefined,
+      );
+    connectionChanged();
+  };
   form.onsubmit = async (event) => {
     event.preventDefault();
     if (save.disabled) return;
@@ -227,6 +245,9 @@ export function providerEditor(
     save.disabled = cancel.disabled = true;
     try {
       const isCustom = custom();
+      let models = catalog.customized() ? catalog.models() : undefined;
+      if (changingProtocol() && resetProtocolSettings.checked)
+        models = models?.map(({ compat: _compat, thinkingLevelMap: _mapping, ...model }) => model);
       const { id: saved } = await browserRequest<{ id: string }>(ctx, '/providers', {
         ...payload('PUT', {
           id: isCustom ? id.value.trim() : builtin()?.id,
@@ -235,7 +256,7 @@ export function providerEditor(
           api: isCustom ? api.value : undefined,
           baseUrl: endpoint.value.trim(),
           key: key.value.trim(),
-          models: catalog.customized() ? catalog.models() : undefined,
+          models,
         }),
         signal,
       });

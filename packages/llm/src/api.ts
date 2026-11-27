@@ -270,4 +270,7 @@ declare module 'mini-harness/cordis' {
   interface Context {
     harnessLlm: LlmPort;
   }
+  interface Events {
+    'llm/adapters-changed'(): void | Promise<void>;
+  }
 }

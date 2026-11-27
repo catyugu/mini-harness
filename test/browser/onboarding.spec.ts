@@ -1,5 +1,5 @@
 import { expect } from '@playwright/test';
-import { mkdirSync, realpathSync } from 'node:fs';
+import { mkdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { browserTest as test, chooseModel } from '../support/browser.ts';
 
@@ -14,9 +14,18 @@ test('custom provider onboarding and registering a workspace work entirely in th
   page,
   launch,
 }) => {
+  const cost = { input: 1, output: 2, cacheRead: 0, cacheWrite: 0 };
   const { host, mock, paths, root } = await launch({
-    prepare(_, root) {
+    prepare(paths, root) {
       mkdirSync(join(root, 'another-workspace'));
+      const file = join(paths.home, 'models.json');
+      const config = JSON.parse(readFileSync(file, 'utf8'));
+      Object.assign(config.providers['local-mock'].models[0], {
+        compat: { requiresToolResultName: true },
+        thinkingLevelMap: { high: 'high' },
+        cost,
+      });
+      writeFileSync(file, JSON.stringify(config));
     },
   });
   const second = join(root, 'another-workspace');
@@ -68,6 +77,28 @@ test('custom provider onboarding and registering a workspace work entirely in th
   await editor.getByLabel('Display name', { exact: true }).last().fill('GUI Model edited');
   await editor.getByRole('button', { name: 'Save changes' }).click();
   await expect(settings.getByText('Provider saved.', { exact: true })).toBeVisible();
+  await settings.getByRole('button', { name: 'Edit local-mock', exact: true }).click();
+  const native = settings.getByRole('form', { name: 'Edit local-mock' });
+  const protocol = native.getByLabel('API protocol');
+  const reset = native.getByRole('checkbox', {
+    name: 'Reset model compatibility and thinking-level settings',
+  });
+  await protocol.selectOption('google-generative-ai');
+  await expect(reset).toBeChecked();
+  await protocol.selectOption('openai-completions');
+  await expect(reset).toBeHidden();
+  await protocol.selectOption('google-generative-ai');
+  await reset.uncheck();
+  await native.getByRole('button', { name: 'Save changes' }).click();
+  await expect(native.getByRole('alert')).toContainText('Unsupported compatibility settings');
+  await reset.check();
+  await native.getByRole('button', { name: 'Save changes' }).click();
+  await expect(settings.getByText('Provider saved.', { exact: true })).toBeVisible();
+  const saved = JSON.parse(readFileSync(join(paths.home, 'models.json'), 'utf8')).providers['local-mock'];
+  expect(saved.api).toBe('google-generative-ai');
+  expect(saved.models[0].cost).toEqual(cost);
+  expect(saved.models[0]).not.toHaveProperty('compat');
+  expect(saved.models[0]).not.toHaveProperty('thinkingLevelMap');
   await page.getByRole('button', { name: 'Close settings' }).click();
   await page.setViewportSize({ width: 1440, height: 820 });
   await chooseModel(page, 'GUI Model edited');

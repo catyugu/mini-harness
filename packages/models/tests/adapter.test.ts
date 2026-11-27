@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, rmSync, statSync } from 'node:fs';
+import { readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { PiLlm } from '../src/server/pi-adapter.ts';
 import { ModelStore } from '../src/server/store.ts';
@@ -73,6 +73,50 @@ test('model adapter streams native messages, tool calls and metadata through the
   const configured = adapter.list().find(({ provider }) => provider === 'local-mock');
   assert.ok(configured);
   assert.equal(configured.configured, true);
+
+  const models = adapter.providers().find(({ id }) => id === choice.provider)!.models;
+  const edit = {
+    id: choice.provider,
+    name: 'Updated provider',
+    api: 'openai-responses',
+    baseUrl: mock.url + '/new',
+    models,
+  };
+  await assert.rejects(
+    adapter.saveProvider({ ...edit, api: 'unsupported-protocol' }),
+    /Unsupported API protocol/,
+  );
+  const advanced = {
+    ...models[0],
+    reasoning: true,
+    thinkingLevelMap: { minimal: null, xhigh: 'max' },
+    cost: { input: 1, output: 2, cacheRead: 0, cacheWrite: 0 },
+  };
+  await assert.rejects(
+    adapter.saveProvider({ ...edit, models: [{ ...advanced, thinkingLevelMap: { high: 5 } }] }),
+    /Invalid thinking level map/,
+  );
+  await assert.rejects(
+    adapter.saveProvider({
+      ...edit,
+      api: 'google-generative-ai',
+      models: [{ ...advanced, compat: { supportsDeveloperRole: false } }],
+    }),
+    /Unsupported compatibility settings/,
+  );
+  await adapter.saveProvider({
+    ...edit,
+    models: [{ ...advanced, compat: { supportsDeveloperRole: false } }],
+  });
+  await adapter.refresh();
+  const restored = adapter.providers().find(({ id }) => id === choice.provider)!.models[0];
+  assert.deepEqual(restored.thinkingLevelMap, advanced.thinkingLevelMap);
+  assert.deepEqual(restored.cost, advanced.cost);
+  assert.deepEqual(restored.compat, { supportsDeveloperRole: false });
+  assert.deepEqual(adapter.capabilities(choice)?.thinkingLevels, ['off', 'low', 'medium', 'high', 'xhigh']);
+  const selected = adapter.requestModel(choice)?.model;
+  assert.equal(selected?.api, 'openai-responses');
+  assert.equal(selected?.baseUrl, mock.url + '/new');
 });
 
 test('credential updates serialize across providers and survive adapter replacement without leaking keys', async (t) => {
@@ -87,8 +131,8 @@ test('credential updates serialize across providers and survive adapter replacem
   await adapter.refresh();
   await new PiLlm(adapter).registerModels();
   await Promise.all([
-    adapter.storeCredential('openai', 'first-secret'),
-    adapter.storeCredential('anthropic', 'second-secret'),
+    adapter.saveProvider({ id: 'openai', key: 'first-secret' }),
+    adapter.saveProvider({ id: 'anthropic', key: 'second-secret' }),
   ]);
   const saved = JSON.parse(readFileSync(join(paths.home, 'auth.json'), 'utf8'));
   assert.equal(saved.openai.key, 'first-secret');
@@ -101,8 +145,9 @@ test('credential updates serialize across providers and survive adapter replacem
   const replacement = new ModelStore(paths.home);
   await replacement.refresh();
   await new PiLlm(replacement).registerModels();
+  await replacement.available();
   assert.deepEqual(replacement.authStatus('openai'), { configured: true, source: 'stored' });
-  await replacement.removeCredential('openai');
+  await replacement.removeProvider({ id: 'openai' });
   assert.equal(JSON.parse(readFileSync(join(paths.home, 'auth.json'), 'utf8')).openai, undefined);
   assert.equal(
     JSON.parse(readFileSync(join(paths.home, 'auth.json'), 'utf8')).anthropic.key,
@@ -134,9 +179,11 @@ test('built-in edits retain native routing and credentials, including after rest
   await store.saveProvider({
     id,
     baseUrl: mock.url,
-    models: [{ id: model.id, contextWindow: 32768, maxTokens: 1024 }],
+    models: [{ ...defaults[0], id: model.id, contextWindow: 32768, maxTokens: 1024 }],
   });
+  await store.refresh();
   assert.deepEqual(store.resolve(model), model);
+  assert.equal(store.capabilities(model)?.name, defaults[0].name);
   assert.equal(adapter.accepts({ ...model, id: 'unregistered-model' }), false);
   const events: LlmEvent[] = [];
   for await (const event of adapter.stream({
@@ -148,6 +195,36 @@ test('built-in edits retain native routing and credentials, including after rest
     events.push(event);
   assert.ok(events.some((event) => event.type === 'done' && event.message.stopReason === 'stop'));
   assert.equal(mock.requests.at(-1)?.model, model.id);
+  // A native template remains explicit even if an older override used the same model ID.
+  await store.saveProvider({
+    id,
+    baseUrl: mock.url,
+    models: [{ ...defaults[0], id: defaults[1].id }],
+  });
+  const original = store.defaultModels(id).find((model) => model.id === defaults[1].id)!;
+  await store.saveProvider({
+    id,
+    baseUrl: mock.url,
+    models: [{ ...original, name: 'Restored then edited' }],
+  });
+  assert.equal(store.providers().find((provider) => provider.id === id)?.models[0].templateId, original.id);
+  const restoredChoice = { provider: id, id: original.id };
+  const expected = store.requestModel(restoredChoice)?.model;
+  assert.ok(expected);
+  assert.equal(expected.provider, id);
+  assert.equal('models' in expected || 'authStatus' in expected || 'key' in expected, false);
+  await store.refresh();
+  assert.deepEqual(store.requestModel(restoredChoice)?.model, expected);
+  assert.equal(expected?.contextWindow, original.contextWindow);
+
+  const file = join(paths.home, 'models.json');
+  const saved = readFileSync(file, 'utf8');
+  const partial = { id: original.id, templateId: original.id };
+  await assert.rejects(store.saveProvider({ id, models: [partial] }), /Missing model display name/);
+  writeJson(file, { providers: {}, builtins: { [id]: { models: [partial] } } });
+  await assert.rejects(store.refresh(), /Missing model display name/);
+  assert.deepEqual(store.requestModel(restoredChoice)?.model, expected);
+  writeFileSync(file, saved);
   await store.saveProvider({ id, baseUrl: '' });
   const restored = store.providers().find((provider) => provider.id === id);
   assert.ok(restored && restored.storedCredential && !restored.custom);
@@ -236,34 +313,153 @@ test('abort reaches the model transport and yields a native terminal message wit
   release();
 });
 
-test('credential writes and removal roll back when authentication status refresh fails', async (t) => {
-  const mock = await createMockProvider();
-  const { root, paths } = createFixturePaths(mock.url);
-  const store = new ModelStore(paths.home);
-  t.after(async () => {
-    await store.close();
-    await mock.close();
-    rmSync(root, { recursive: true, force: true });
-  });
-  await store.refresh();
-  await new PiLlm(store).registerModels();
-  await store.storeCredential('anthropic', 'first-secret');
-  const file = join(paths.home, 'auth.json');
-  const before = readFileSync(file, 'utf8');
-  const status = store.authStatus('anthropic');
-  const target = store as unknown as { readStatus: () => Promise<unknown> };
-  const original = target.readStatus;
-  target.readStatus = async () => {
-    throw new Error('Injected auth-status failure');
-  };
-  try {
-    await assert.rejects(store.storeCredential('anthropic', 'second-secret'), /Injected auth-status failure/);
-    assert.equal(readFileSync(file, 'utf8'), before);
-    assert.deepEqual(store.authStatus('anthropic'), status);
-    await assert.rejects(store.removeCredential('anthropic'), /Injected auth-status failure/);
-    assert.equal(readFileSync(file, 'utf8'), before);
-    assert.deepEqual(store.authStatus('anthropic'), status);
-  } finally {
-    target.readStatus = original;
-  }
-});
+test(
+  'authentication queries join bounded checks without blocking edits and dispose cancelled work',
+  { timeout: 15000 },
+  async (t) => {
+    const mock = await createMockProvider();
+    const { root, paths } = createFixturePaths(mock.url);
+    let release!: () => void;
+    const hold = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const changes: string[] = [];
+    const errors: unknown[] = [];
+    const store = new ModelStore(
+      paths.home,
+      (kind) => changes.push(kind),
+      (error) => errors.push(error),
+    );
+    t.after(async () => {
+      release();
+      await store.close();
+      await mock.close();
+      rmSync(root, { recursive: true, force: true });
+    });
+    await store.refresh();
+    assert.equal(store.list().find(({ provider }) => provider === 'local-mock')?.configured, true);
+    const model = {
+      ...store.requestModel({ provider: 'local-mock', id: 'mock-model' })!.model,
+      provider: 'slow-auth',
+    };
+    let entered!: () => void;
+    const started = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    let check = async (_signal: AbortSignal) => {
+      entered();
+      await hold;
+      return true;
+    };
+    let calls = 0;
+    const remove = await store.registerDefaults([
+      {
+        id: 'slow-auth',
+        name: 'Slow auth',
+        api: model.api,
+        baseUrl: mock.url,
+        canSetKey: true,
+        models: [model],
+        authStatus(signal) {
+          calls++;
+          return check(signal);
+        },
+      },
+    ]);
+    await started;
+    const firstQuery = store.available();
+    let settled = false;
+    void firstQuery.then(() => {
+      settled = true;
+    });
+    await Promise.resolve();
+    assert.equal(settled, false);
+    release();
+    assert.equal((await firstQuery).find(({ provider }) => provider === 'slow-auth')?.configured, true);
+    await Promise.all([store.available(), store.available()]);
+    assert.equal(calls, 1);
+
+    check = async (signal) => {
+      await new Promise<void>((resolve) => signal.addEventListener('abort', () => resolve(), { once: true }));
+      return true;
+    };
+    await store.saveProvider({ id: 'slow-auth', key: 'timeout-key' });
+    const timed = await store.available();
+    assert.equal(timed.find(({ provider }) => provider === 'slow-auth')?.configured, false);
+    assert.equal(timed.find(({ provider }) => provider === 'local-mock')?.configured, true);
+    assert.ok(errors.some((error) => String(error).includes('Authentication check timed out for slow-auth')));
+    await store.available();
+    assert.equal(calls, 2);
+
+    let checking!: () => void;
+    const pending = new Promise<void>((resolve) => {
+      checking = resolve;
+    });
+    let cancelled = 0;
+    check = async (signal) => {
+      checking();
+      await new Promise<void>((resolve) =>
+        signal.addEventListener(
+          'abort',
+          () => {
+            cancelled++;
+            resolve();
+          },
+          { once: true },
+        ),
+      );
+      return true;
+    };
+    await store.saveProvider({ id: 'slow-auth', key: 'pending-key' });
+    const query = store.available();
+    await pending;
+    check = async () => {
+      throw new Error('Authentication unavailable');
+    };
+    changes.length = 0;
+    errors.length = 0;
+    await store.saveProvider({ id: 'slow-auth', key: 'saved-key' });
+    const available = await query;
+    assert.equal(available.find(({ provider }) => provider === 'slow-auth')?.configured, false);
+    assert.equal(cancelled, 1);
+    assert.deepEqual(store.authStatus('slow-auth'), { configured: false, source: 'stored' });
+    assert.ok(changes.length);
+    assert.equal(
+      changes.every((kind) => kind === 'auth'),
+      true,
+    );
+    assert.ok(errors.some((error) => String(error).includes('slow-auth')));
+    const startedRemoval = new Promise<void>((resolve) => {
+      checking = resolve;
+    });
+    check = async (signal) => {
+      checking();
+      await new Promise<void>((resolve) =>
+        signal.addEventListener(
+          'abort',
+          () => {
+            cancelled++;
+            resolve();
+          },
+          { once: true },
+        ),
+      );
+      return true;
+    };
+    await store.saveProvider({ id: 'slow-auth', key: 'remove-key' });
+    const lastQuery = store.available();
+    await startedRemoval;
+    await remove();
+    assert.equal(cancelled, 2);
+    assert.equal(
+      (await lastQuery).some(({ provider }) => provider === 'slow-auth'),
+      false,
+    );
+    assert.equal(
+      store.providers().some(({ id }) => id === 'slow-auth'),
+      false,
+    );
+    assert.deepEqual(store.authStatus('slow-auth'), { configured: false });
+    assert.ok(changes.includes('catalog'));
+  },
+);

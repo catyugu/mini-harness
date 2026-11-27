@@ -4,19 +4,19 @@ File Access supplies filesystem operations to plugins. It offers both native Nod
 
 ## Public API and usage
 
-Import `mini-harness/file-access` for `FileAccessPort`, `RootedFileAccess`, `FileReader`, `explicitFileReader`, `FileTypeError` and the `harnessFileAccess` service declaration. Declare `harnessFileAccess` as an injected dependency:
+Import `mini-harness/file-access` for `FileAccessPort`, `RootedFileAccess`, `FileReader`, `rootedFileAccess`, `explicitFileReader`, `FileTypeError` and the `harnessFileAccess` service declaration. Declare `harnessFileAccess` as an injected dependency:
 
 ```ts
 import type { Context } from 'mini-harness/cordis';
-import 'mini-harness/file-access';
+import { rootedFileAccess } from 'mini-harness/file-access';
 
 export async function readProjectFile(ctx: Context, canonicalRoot: string, path: string) {
-  const files = ctx.harnessFileAccess.open(canonicalRoot);
+  const files = rootedFileAccess(ctx.harnessFileAccess, canonicalRoot);
   return files.readFile(path);
 }
 ```
 
-`open(root, { exclude })` returns a view. The optional predicate receives resolved absolute paths; the consumer decides which files to exclude. Relative paths are resolved inside the root, and absolute paths are accepted only when they remain inside it. Root validation happens when the view performs an operation.
+`rootedFileAccess(provider, root, { exclude })` returns a view. The optional predicate receives resolved absolute paths; the consumer decides which files to exclude. Relative paths are resolved inside the root, and absolute paths are accepted only when they remain inside it. Root validation happens when the view performs an operation.
 
 The [API](src/api.ts) supports file reads, binary or text writes, streaming chunks, recursive directory creation, metadata, sorted directory entries and path checks. `writeFile(path, content, create, signal)` can create a missing file when `create` is true; use false when an existing file is required. Create parent directories explicitly with `mkdir`.
 
@@ -28,11 +28,11 @@ Writes prepare and sync a temporary file, recheck the destination, then publish 
 
 `chunks` reads until EOF and closes its handle when iteration ends or aborts. The view itself imposes no workspace-preview byte limit. Callers must choose appropriate read limits and pass cancellation signals for long operations. `validatePath` checks the resolved location, permitting missing targets; use `access`, `stat` or a read when the target's existence or type matters.
 
-`harnessFileAccess.native` exposes Node promise-based filesystem operations and `createReadStream` with the host process's permissions, including normal link behavior. `explicitFileReader(native, cwd)` uses those native operations for streamed reads and directory listings. It resolves relative paths from `cwd` and accepts absolute paths. The confined view is a consumer-selected interface; it is not a sandbox for trusted plugin code. See [SECURITY.md](../../SECURITY.md).
+`harnessFileAccess` exposes the Node-compatible filesystem operations used by both views, with the host process's permissions in the default implementation. `explicitFileReader(provider, cwd)` uses those operations for streamed reads and directory listings. It resolves relative paths from `cwd` and accepts absolute paths. The confined view is a consumer-selected interface; it is not a sandbox for trusted plugin code. See [SECURITY.md](../../SECURITY.md).
 
 ## Activation and extension
 
-The base Profile activates `core:file-access` as `@mini-harness/file-access`. The shipped provider has no Config schema and owns no workspace registry. Other providers can implement `FileAccessPort` and replace `harnessFileAccess` through native [scoped composition](../../docs/scoped-providers.md). Consumers should resolve the service in the request's prepared scope.
+The base Profile activates `core:file-access` as `@mini-harness/file-access`. The shipped provider has no Config schema and owns no workspace registry. Other providers implement only the underlying operations in `FileAccessPort`, not the directory view, and replace `harnessFileAccess` through native [scoped composition](../../docs/scoped-providers.md). Consumers should resolve the service in the request's prepared scope.
 
 [Files](../files/README.md), [File Preview](../file-preview/README.md) and [Git Diff](../git-diff/README.md) apply their own content policy and presentation. The shared [workspace resolver](../workspaces/src/server/file-request.ts) selects the scoped provider and excludes private harness state.
 

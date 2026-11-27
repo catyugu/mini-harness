@@ -505,17 +505,24 @@ export function apply(ctx) {
   );
   const configured = await request('/settings', 'PATCH', {
     entries: {
-      'core:model-store': { disabled: true },
       'core:pi-adapter': { disabled: true },
       'core:models': { disabled: true },
       'core:fixture-model': { name: '../../plugins/independent-model', disabled: false },
     },
   });
   assert.equal(configured.status, 200, JSON.stringify(configured.body));
-  assert.equal(app.runtime.plugins.ctx.get('harnessModelStore'), undefined);
+  assert.ok(app.runtime.plugins.ctx.get('harnessModelStore'));
   const models = await request('/models');
   assert.equal(models.status, 200);
   assert.equal(models.body.canManageProviders, false);
+  assert.deepEqual(models.body.protocols, []);
+  assert.deepEqual((await request('/providers')).body, []);
+  assert.equal((await request('/providers', 'PUT', {})).status, 503);
+  assert.equal(
+    (await request('/settings', 'PATCH', { entries: { 'core:model-store': { disabled: true } } })).status,
+    200,
+  );
+  assert.equal(app.runtime.plugins.ctx.get('harnessModelStore'), undefined);
   assert.ok(models.body.models.some((model: { provider: string }) => model.provider === 'local-fixture'));
   const session = app.runtime.plugins.ctx.harnessSessions.create({ workspaceId: null });
   assert.equal(
@@ -530,6 +537,12 @@ test('model contributions select matching capabilities and transport, and reject
   const { app, paths, request } = await fixture(t);
   const model = { provider: 'local-mock', id: app.runtime.plugins.ctx.harnessModelPreference.recent().id };
   const ctx = app.runtime.plugins.ctx;
+  let catalogChanges = 0;
+  t.after(
+    ctx.on('models/catalog-changed', () => {
+      catalogChanges++;
+    }),
+  );
   const plugin = (name: string, priority: number, input: string[]) =>
     writePlugin(
       paths.plugins,
@@ -567,6 +580,7 @@ export function apply(ctx) {
     ctx.harnessModels.list().filter(({ provider, id }) => provider === model.provider && id === model.id);
   const session = ctx.harnessSessions.create();
   await toggle('model-low', false);
+  assert.equal(catalogChanges, 1);
   assert.equal(list()[0]?.name, 'model-low');
   assert.deepEqual(ctx.harnessModels.capabilities(model)?.input, ['text']);
   assert.equal(await sendRun(ctx.harnessRuns, session.id, 'Low priority', undefined, { model }), 'model-low');
@@ -600,4 +614,62 @@ export function apply(ctx) {
     await sendRun(ctx.harnessRuns, session.id, 'Restore Pi', undefined, { model }),
     'Mock response',
   );
+  const adapter = {
+    accepts: (choice: typeof model) => choice.provider === model.provider,
+    async *stream() {
+      assert.fail('Ambiguous adapter must not stream');
+    },
+  };
+  const first = ctx.harnessLlm.register(adapter);
+  const second = ctx.harnessLlm.register(adapter);
+  try {
+    assert.equal(ctx.harnessModels.resolve(model), undefined);
+    assert.deepEqual(ctx.harnessModelPreference.recent(), { provider: '', id: '' });
+  } finally {
+    second();
+    first();
+  }
+  assert.deepEqual(ctx.harnessModels.resolve(model), model);
+  const before = catalogChanges;
+  await ctx.harnessModelPreference.remember(model);
+  await ctx.parallel('models/source-changed', 'auth');
+  assert.equal(catalogChanges, before);
+
+  const metadata = ctx.harnessModels.capabilities(model)!;
+  const entries = list();
+  const dispose = ctx.harnessModels.register(
+    {
+      list: () => entries,
+      resolve: (choice) => (adapter.accepts(choice) ? model : undefined),
+      capabilities: () => metadata,
+    },
+    adapter,
+    10,
+  );
+  // Direct paired registration and release each publish once.
+  assert.equal(catalogChanges, before + 1);
+  dispose();
+  assert.equal(catalogChanges, before + 2);
+
+  // A source edit is committed while a candidate Profile graph is being activated.
+  // The rejected Profile change must not discard the independent source notification.
+  writePlugin(
+    paths.plugins,
+    'reject-model-update',
+    {},
+    `
+export const inject = ['harnessModelStore'];
+export async function apply(ctx) {
+  await ctx.harnessModelStore.removeProvider({ id: 'local-mock' });
+  throw new Error('Rejected graph');
+}
+`,
+  );
+  const rejected = await request('/settings', 'PATCH', {
+    entries: { 'reject-model-update': { name: '../../plugins/reject-model-update', disabled: false } },
+  });
+  assert.equal(rejected.status, 400);
+  assert.match(JSON.stringify(rejected.body), /Rejected graph/);
+  assert.equal(ctx.harnessModels.resolve(model), undefined);
+  assert.deepEqual(ctx.harnessModelPreference.recent(), { provider: '', id: '' });
 });

@@ -1,10 +1,10 @@
 import { button, dialog, field, fromMarkup, required } from '@mini-harness/ui-primitives/primitives';
-import { maxModelTokens, modelDefaults, type ProviderModel } from '../shared/catalog.ts';
+import { maxModelTokens, modelDefaults, type ProviderModelDefinition } from '../shared/pi-provider.ts';
+import type { ProviderModel } from '../shared/catalog.ts';
 
-type ModelDraft = ProviderModel & { sourceId?: string };
 type ModelRow = {
   node: HTMLDetailsElement;
-  read(): ModelDraft;
+  read(): ProviderModelDefinition;
   up: HTMLButtonElement;
   down: HTMLButtonElement;
 };
@@ -31,7 +31,7 @@ export function catalogEditor() {
     });
   }
 
-  function addRow(model?: ProviderModel, sourceId?: string) {
+  function addRow(model?: ProviderModelDefinition) {
     const node = fromMarkup<HTMLDetailsElement>(`<details class="catalog-model">
       <summary><strong></strong><small></small></summary>
       <div class="catalog-model-fields">
@@ -57,8 +57,8 @@ export function catalogEditor() {
     text.checked = model ? model.input.includes('text') : true;
     image.checked = model?.input.includes('image') ?? false;
     reasoning.checked = model?.reasoning ?? false;
-    const read = (): ModelDraft => ({
-      sourceId,
+    const read = (): ProviderModelDefinition => ({
+      ...model,
       id: id.value.trim(),
       name: name.value.trim() || id.value.trim(),
       contextWindow: context.valueAsNumber,
@@ -121,11 +121,11 @@ export function catalogEditor() {
   return {
     root,
     actions,
-    reset(models: readonly ProviderModel[], customizedCatalog: boolean) {
+    reset(models: readonly ProviderModelDefinition[], customizedCatalog: boolean) {
       rows = [];
       list.replaceChildren();
       customized = customizedCatalog;
-      for (const model of models) addRow(model, model.id);
+      for (const model of models) addRow(model);
       update();
     },
     models: () => rows.map(({ read }) => read()),

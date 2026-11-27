@@ -12,10 +12,16 @@ interface TabDescriptor extends TabIdentity {
   data: JsonValue;
 }
 
-interface Tab extends TabIdentity {
-  id: string;
-  resource: { restored: true; data: JsonValue } | { restored: false; data: unknown };
-  view?: { node: HTMLElement; controller: AbortController };
+type Tab = TabIdentity & { id: string } & ({ kind: 'persistent'; data: JsonValue } | { kind: 'temporary' });
+
+interface MountedView {
+  node: HTMLElement;
+  controller: AbortController;
+}
+
+interface TabResource {
+  data: unknown;
+  view?: MountedView;
   stop?: () => void;
 }
 
@@ -67,6 +73,7 @@ export function createRightTabs(
   signal: AbortSignal,
 ) {
   const states = new Map<string, WorkspaceTabs>();
+  const resources = new Map<Tab, TabResource>();
   const types = new Map<string, RightTabType<unknown>>();
   const entries = new Set<RightPanelEntry>();
   const workspaceChanges = new EventTarget();
@@ -85,7 +92,8 @@ export function createRightTabs(
           id: nextTabId(),
           type,
           key,
-          resource: { restored: true, data },
+          kind: 'persistent',
+          data,
         }),
       );
       workspace = {
@@ -98,16 +106,11 @@ export function createRightTabs(
     return workspace;
   }
 
-  function describe(tab: Tab): TabDescriptor | undefined {
-    if (tab.stop) return;
-    const { type, key, resource } = tab;
-    const data = resource.restored ? resource.data : types.get(type)?.persistence?.save(resource.data);
-    return data === undefined ? undefined : { type, key, data };
-  }
-
   function persist(workspaceId: string, workspace: WorkspaceTabs) {
     if (signal.aborted) return;
-    const descriptions = workspace.tabs.flatMap((tab) => describe(tab) ?? []);
+    const descriptions = workspace.tabs.flatMap((tab): TabDescriptor[] =>
+      tab.kind === 'persistent' ? [{ type: tab.type, key: tab.key, data: tab.data }] : [],
+    );
     const active = workspace.active
       ? (descriptions.find(
           (tab) => tab.type === workspace.active?.type && tab.key === workspace.active.key,
@@ -136,32 +139,33 @@ export function createRightTabs(
   view.bar.before(homeTitle);
   view.body.append(home);
 
-  function visible(workspace: WorkspaceTabs, owner: TabScope) {
-    const available: Tab[] = [];
+  function visible(workspace: WorkspaceTabs) {
+    return workspace.tabs.filter((tab) => types.has(tab.type) && resources.has(tab));
+  }
+
+  /** Only an explicit restoration transition can reject a persisted descriptor. */
+  function restoreWorkspace(workspace: WorkspaceTabs, owner: TabScope) {
     let removed = false;
     for (const tab of [...workspace.tabs]) {
+      if (tab.kind !== 'persistent' || resources.has(tab)) continue;
       const definition = types.get(tab.type);
       if (!definition) continue;
-      if (tab.resource.restored) {
-        const data = definition.persistence?.restore(tab.resource.data, owner);
-        if (data === undefined) {
-          remove(workspace, tab);
-          removed = true;
-          continue;
-        }
-        tab.resource = { restored: false, data };
+      const data = definition.persistence?.restore(tab.data, owner);
+      if (data === undefined) {
+        remove(workspace, tab);
+        removed = true;
+      } else {
+        resources.set(tab, { data });
       }
-      available.push(tab);
     }
     if (removed) persist(owner.workspaceId, workspace);
-    return available;
   }
 
   function render(focus = false) {
     if (signal.aborted) return;
     const owner = scope;
     const workspace = current();
-    const tabs = owner && workspace ? visible(workspace, owner) : [];
+    const tabs = owner && workspace ? visible(workspace) : [];
     const selected = workspace?.active;
     const active = selected && (tabs.includes(selected) ? selected : tabs.at(-1));
     const start = iconButton('Workspace panel home', 'plus');
@@ -175,7 +179,7 @@ export function createRightTabs(
     view.bar.replaceChildren(
       ...tabs.map((tab) => {
         const definition = types.get(tab.type)!;
-        const title = definition.title(tab.resource.data);
+        const title = definition.title(resources.get(tab)!.data);
         const item = document.createElement('div');
         item.className = 'right-tab';
         const select = button(title, 'quiet');
@@ -220,10 +224,11 @@ export function createRightTabs(
     );
     if (owner)
       for (const tab of tabs) {
-        if (!tab.view && tab === active && panelOpen()) mount(tab, owner);
-        if (tab.view) tab.view.node.hidden = tab !== active;
+        const resource = resources.get(tab)!;
+        if (!resource.view && tab === active && panelOpen()) mount(tab, owner);
+        if (resource.view) resource.view.node.hidden = tab !== active;
       }
-    const revealed = panelOpen() ? active?.view?.node : undefined;
+    const revealed = panelOpen() && active ? resources.get(active)?.view?.node : undefined;
     if (revealed !== shown) {
       shown = revealed;
       revealed?.dispatchEvent(new Event('tab-activate'));
@@ -264,7 +269,7 @@ export function createRightTabs(
     const open = !scope && emptyOpen;
     emptyOpen = false;
     scope = workspaceId ? { workspaceId } : undefined;
-    if (workspaceId) state(workspaceId, open);
+    if (scope) restoreWorkspace(state(scope.workspaceId, open), scope);
     workspaceChanges.dispatchEvent(new Event('change'));
     panelChanged(false);
     render();
@@ -274,7 +279,7 @@ export function createRightTabs(
     const controller = new AbortController();
     let node: HTMLElement;
     try {
-      node = types.get(tab.type)!.create(tab.resource.data, owner, controller.signal);
+      node = types.get(tab.type)!.create(resources.get(tab)!.data, owner, controller.signal);
     } catch (error) {
       controller.abort();
       node = document.createElement('p');
@@ -285,23 +290,34 @@ export function createRightTabs(
     node.setAttribute('aria-labelledby', tab.id + '-select');
     node.classList.add('right-tab-content');
     view.body.append(node);
-    tab.view = { node, controller };
+    resources.get(tab)!.view = { node, controller };
   }
 
   function unmount(tab: Tab) {
-    tab.view?.controller.abort();
-    tab.view?.node.remove();
-    tab.view = undefined;
+    const resource = resources.get(tab);
+    if (!resource?.view) return;
+    const { node, controller } = resource.view;
+    resource.view = undefined;
+    controller.abort();
+    node.remove();
   }
 
   function open<T>(type: string, { owner: { workspaceId }, key, data, signal }: RightTab<T>) {
     if (signal?.aborted) return;
     const target = state(workspaceId);
+    restoreWorkspace(target, { workspaceId });
     let tab = target.tabs.find((item) => item.type === type && item.key === key);
     if (!tab) {
-      const created: Tab = { id: nextTabId(), type, key, resource: { restored: false, data } };
+      const descriptor = signal ? undefined : types.get(type)!.persistence?.save(data);
+      const identity = { id: nextTabId(), type, key };
+      const created: Tab =
+        descriptor === undefined
+          ? { ...identity, kind: 'temporary' }
+          : { ...identity, kind: 'persistent', data: descriptor };
       tab = created;
       target.tabs.push(tab);
+      const resource: TabResource = { data };
+      resources.set(tab, resource);
       if (signal) {
         const close = () => {
           remove(target, created);
@@ -309,7 +325,7 @@ export function createRightTabs(
           if (scope?.workspaceId === workspaceId) render();
         };
         signal.addEventListener('abort', close, { once: true });
-        created.stop = () => signal.removeEventListener('abort', close);
+        resource.stop = () => signal.removeEventListener('abort', close);
       }
     }
     if (target.active !== tab || !target.open) {
@@ -326,18 +342,20 @@ export function createRightTabs(
   function remove(workspace: WorkspaceTabs, tab: Tab) {
     workspace.tabs.splice(workspace.tabs.indexOf(tab), 1);
     if (workspace.active === tab) workspace.active = workspace.tabs.at(-1);
-    tab.stop?.();
+    release(tab);
+  }
+
+  function release(tab: Tab) {
+    resources.get(tab)?.stop?.();
     unmount(tab);
+    resources.delete(tab);
   }
 
   function prune(workspaces: ReadonlySet<string>) {
     if (scope && !workspaces.has(scope.workspaceId)) selectWorkspace();
     for (const [id, target] of states) {
       if (workspaces.has(id)) continue;
-      for (const tab of target.tabs) {
-        tab.stop?.();
-        unmount(tab);
-      }
+      for (const tab of target.tabs) release(tab);
       states.delete(id);
     }
     for (const key of Object.keys(localStorage))
@@ -351,7 +369,7 @@ export function createRightTabs(
       if (!(event.target as HTMLElement).matches('[role=tab]')) return;
       const workspace = current();
       if (!scope || !workspace) return;
-      const tabs = visible(workspace, scope);
+      const tabs = visible(workspace);
       const index = [...view.bar.querySelectorAll('[role=tab]')].indexOf(event.target as Element);
       const target =
         event.key === 'Home'
@@ -372,11 +390,7 @@ export function createRightTabs(
   signal.addEventListener(
     'abort',
     () => {
-      for (const target of states.values())
-        for (const tab of target.tabs) {
-          tab.stop?.();
-          unmount(tab);
-        }
+      for (const target of states.values()) for (const tab of target.tabs) release(tab);
       states.clear();
     },
     { once: true },
@@ -396,22 +410,24 @@ export function createRightTabs(
       const owner = Service.caller(this).fiber;
       types.set(type, definition as RightTabType<unknown>);
       owner.effect(() => () => {
-        for (const target of states.values()) {
+        types.delete(type);
+        for (const [workspaceId, target] of states) {
+          let removed = false;
           for (const tab of [...target.tabs]) {
             if (tab.type !== type) continue;
-            const descriptor = describe(tab);
-            if (!descriptor) remove(target, tab);
-            else {
-              tab.stop?.();
-              tab.stop = undefined;
-              unmount(tab);
-              tab.resource = { restored: true, data: descriptor.data };
+            if (tab.kind === 'temporary') {
+              remove(target, tab);
+              removed = true;
+            } else {
+              release(tab);
             }
           }
+          if (removed) persist(workspaceId, target);
         }
-        types.delete(type);
         render();
       });
+      const workspace = current();
+      if (scope && workspace) restoreWorkspace(workspace, scope);
       render();
       return {
         open(tab: RightTab<T>) {

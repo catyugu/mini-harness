@@ -1,4 +1,4 @@
-import { explicitFileReader } from '@mini-harness/file-access/api';
+import { explicitFileReader, rootedFileAccess } from '@mini-harness/file-access/api';
 import { DomainError } from '@mini-harness/platform/errors';
 import { relative, resolve, sep } from 'node:path';
 import type { Context } from 'mini-harness/cordis';
@@ -32,8 +32,8 @@ export function setup(ctx: Context) {
           };
           const tool = fileTools(
             root,
-            () => access().open(root, { exclude: (path) => containsPath(state, path) }),
-            () => explicitFileReader(access().native, root),
+            () => rootedFileAccess(access(), root, { exclude: (path) => containsPath(state, path) }),
+            () => explicitFileReader(access(), root),
           )[index];
           return {
             ...tool,

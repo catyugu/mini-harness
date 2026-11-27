@@ -2,20 +2,29 @@ import type { Context } from 'mini-harness/cordis';
 import { browserRequest, payload } from '@mini-harness/ui-runtime/http';
 import { button, confirmAction, fromMarkup, required } from '@mini-harness/ui-primitives/primitives';
 import { icon } from '@mini-harness/ui-primitives/icons';
-import type { ProviderInfo } from '../shared/catalog.ts';
+import type { ProviderInfo, ProtocolInfo } from '../shared/pi-provider.ts';
 import { providerEditor } from './provider-editor.ts';
 
-const listed = ({ configured, custom, endpointCustomized, modelsCustomized }: ProviderInfo) =>
-  configured || custom || endpointCustomized || modelsCustomized;
+const listed = ({
+  configured,
+  storedCredential,
+  custom,
+  endpointCustomized,
+  modelsCustomized,
+}: ProviderInfo) => configured || storedCredential || custom || endpointCustomized || modelsCustomized;
 
-export function providerManager(ctx: Context, providers: () => ProviderInfo[], signal: AbortSignal) {
+export function providerManager(
+  ctx: Context,
+  snapshot: () => { providers: ProviderInfo[]; protocols: ProtocolInfo[]; canManageProviders: boolean },
+  signal: AbortSignal,
+) {
   const content = fromMarkup(`<div class="model-settings">
     <div class="provider-list"></div>
     <div class="provider-add"></div>
     <p class="hint provider-status" role="status"></p>
   </div>`);
   const list = required(content.querySelector('.provider-list'));
-  const addArea = required(content.querySelector('.provider-add'));
+  const addArea = required(content.querySelector<HTMLElement>('.provider-add'));
   const status = required(content.querySelector('[role="status"]'));
   const add = button('Add provider', 'quiet');
   add.prepend(icon('plus'));
@@ -35,10 +44,12 @@ export function providerManager(ctx: Context, providers: () => ProviderInfo[], s
     status.textContent = '';
     const controller = new AbortController();
     const lifetime = AbortSignal.any([signal, controller.signal]);
+    const { providers, protocols } = snapshot();
     const form = providerEditor(
       ctx,
-      providers().filter((item) => !listed(item)),
+      providers.filter((item) => !listed(item)),
       provider,
+      protocols,
       lifetime,
       {
         cancel() {
@@ -62,9 +73,18 @@ export function providerManager(ctx: Context, providers: () => ProviderInfo[], s
   }
 
   function render() {
-    if (active || signal.aborted) return;
+    if (signal.aborted) return;
+    const { providers, canManageProviders } = snapshot();
+    addArea.hidden = !canManageProviders;
+    if (!canManageProviders) {
+      closeEditor();
+      status.textContent = '';
+      list.replaceChildren(fromMarkup('<p class="hint">Models are provided by plugins.</p>'));
+      return;
+    }
+    if (active) return;
     list.replaceChildren(
-      ...providers()
+      ...providers
         .filter(listed)
         .sort((a, b) => a.name.localeCompare(b.name))
         .map((provider) => {

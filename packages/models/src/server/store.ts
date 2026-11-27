@@ -1,11 +1,13 @@
 import { join } from 'node:path';
+import { isDeepStrictEqual } from 'node:util';
+import { getSupportedThinkingLevels } from '@earendil-works/pi-ai';
 import { DomainError } from '@mini-harness/platform/errors';
 import { readJson, writeJson } from '@mini-harness/platform/json';
 import type { ModelChoice } from '@mini-harness/llm/vocabulary';
+import type { ProviderInfo, ProviderModelDefinition } from '../shared/pi-provider.ts';
 import {
-  configuredModel,
+  resolveModel,
   credential,
-  editModels,
   endpoint,
   invalid,
   parseConfiguration,
@@ -16,12 +18,13 @@ import {
   record,
   type ProviderConfiguration,
 } from './provider-settings.ts';
-import { discover } from './discovery.ts';
+import { discover, protocolOptions } from './protocols.ts';
 import type { AuthStatus, CatalogModel, CatalogProvider, Credential, ModelStorePort } from './store-api.ts';
 
 /** One serialized, atomic store for all providers; SDKs never own our config files. */
 class FileCredentials {
   private writes: Promise<unknown> = Promise.resolve();
+  private committed?: Record<string, Credential>;
   constructor(private readonly file: string) {}
   private values(): Record<string, Credential> {
     const values = readJson<Record<string, Credential>>(this.file, {});
@@ -29,14 +32,20 @@ class FileCredentials {
       throw new Error('Invalid credential store');
     return values;
   }
+  snapshot(): Readonly<Record<string, Credential>> {
+    return (this.committed ??= this.values());
+  }
+  invalidate() {
+    this.committed = undefined;
+  }
   async read(id: string) {
     await this.writes;
-    const values = this.values();
-    return Object.hasOwn(values, id) ? values[id] : undefined;
+    const values = this.snapshot();
+    return Object.hasOwn(values, id) ? structuredClone(values[id]) : undefined;
   }
   async list() {
     await this.writes;
-    return Object.entries(this.values()).map(([providerId, credential]) => ({
+    return Object.entries(this.snapshot()).map(([providerId, credential]) => ({
       providerId,
       type: credential.type,
     }));
@@ -60,7 +69,8 @@ class FileCredentials {
         values[id] = next;
         writeJson(this.file, values);
       }
-      return Object.hasOwn(values, id) ? values[id] : undefined;
+      this.committed = values;
+      return Object.hasOwn(values, id) ? structuredClone(values[id]) : undefined;
     });
   }
   delete(id: string, options?: { signal?: AbortSignal }) {
@@ -69,6 +79,7 @@ class FileCredentials {
       const values = this.values();
       delete values[id];
       writeJson(this.file, values);
+      this.committed = values;
     });
   }
   async settle() {
@@ -79,49 +90,63 @@ class FileCredentials {
 export class ModelStore implements ModelStorePort {
   readonly credentials: FileCredentials;
   private readonly file: string;
-  private readonly defaults = new Set<readonly CatalogProvider[]>();
+  private defaults = new Set<readonly CatalogProvider[]>();
   private configuration: ProviderConfiguration = { providers: {}, builtins: {} };
-  private status = new Map<string, AuthStatus>();
+  private readonly status = new Map<string, AuthStatus>();
+  private readonly checks = new Map<string, { controller: AbortController; work: Promise<void> }>();
+  private readonly lifetime = new AbortController();
+  private effective = new Map<string, CatalogProvider>();
   private writes: Promise<unknown> = Promise.resolve();
 
-  constructor(home: string) {
+  constructor(
+    home: string,
+    private readonly changed: (kind: 'catalog' | 'auth') => void = () => {},
+    private readonly report: (error: unknown) => void = console.warn,
+  ) {
     this.file = join(home, 'models.json');
     this.credentials = new FileCredentials(join(home, 'auth.json'));
   }
 
-  private enqueue<T>(work: () => Promise<T>) {
+  private enqueue<T>(work: () => T | Promise<T>) {
     const pending = this.writes.then(work);
     this.writes = pending.catch(() => {});
     return pending;
   }
 
   registerDefaults(providers: readonly CatalogProvider[]) {
-    return this.enqueue(async () => {
-      this.defaults.add(providers);
-      try {
-        this.status = await this.readStatus();
-      } catch (error) {
-        this.defaults.delete(providers);
-        throw error;
-      }
-      return () =>
-        this.enqueue(async () => {
-          this.defaults.delete(providers);
-          this.status = await this.readStatus();
+    return this.enqueue(() => {
+      const ids = providers.map(({ id }) => id);
+      this.replaceDefaults(new Set([...this.defaults, providers]), ids);
+      return async () => {
+        const retired = await this.enqueue(() => {
+          const checks = ids.map((id) => this.checks.get(id)?.work);
+          const next = new Set(this.defaults);
+          next.delete(providers);
+          this.replaceDefaults(next, ids);
+          return checks;
         });
+        await Promise.all(retired);
+      };
     });
   }
 
   refresh() {
-    return this.enqueue(async () => {
+    return this.enqueue(() => {
       const configuration = parseConfiguration(readJson(this.file, { providers: {} }));
-      this.status = await this.readStatus(configuration);
-      this.configuration = configuration;
+      const providers = this.buildCatalog(configuration);
+      this.credentials.invalidate();
+      this.publishCatalog(configuration, undefined, providers);
     });
   }
 
-  private defaultProviders() {
-    return new Map([...this.defaults].flat().map((provider) => [provider.id, provider] as const));
+  private replaceDefaults(next: typeof this.defaults, ids: string[]) {
+    const providers = this.buildCatalog(this.configuration, this.defaultProviders(next));
+    this.defaults = next;
+    this.publishCatalog(this.configuration, ids, providers);
+  }
+
+  private defaultProviders(sources = this.defaults) {
+    return new Map([...sources].flat().map((provider) => [provider.id, provider] as const));
   }
 
   private builtin(provider: CatalogProvider, configuration: ProviderConfiguration): CatalogProvider {
@@ -132,90 +157,178 @@ export class ModelStore implements ModelStorePort {
     const baseUrl = override.baseUrl ?? provider.baseUrl;
     const baseline = new Map(provider.models.map((model) => [model.id, model]));
     const models =
-      override.models?.map((model) =>
-        configuredModel(model, provider, baseline.get(model.templateId ?? model.id), override.baseUrl),
-      ) ?? (override.baseUrl ? provider.models.map((model) => ({ ...model, baseUrl })) : provider.models);
-    return { ...provider, baseUrl, models, endpointOverride: override.baseUrl };
-  }
-
-  private custom(id: string, configuration: ProviderConfiguration): CatalogProvider | undefined {
-    if (!Object.hasOwn(configuration.providers, id)) return;
-    const { api, baseUrl, name, headers, apiKey: key, models } = configuration.providers[id];
-    const connection = { api, baseUrl };
+      override.models?.flatMap(({ templateId, ...model }) => {
+        const template = templateId ? baseline.get(templateId) : undefined;
+        // A native template removed by an adapter update cannot be resolved as an independent model.
+        if (templateId ? !template : !provider.api) return [];
+        return resolveModel(model, provider, template);
+      }) ?? provider.models;
     return {
-      id,
-      name,
-      canSetKey: true,
-      ...connection,
-      headers,
-      key,
-      models: models.map((model) => configuredModel(model, connection)),
+      ...provider,
+      baseUrl,
+      models: override.baseUrl ? models.map((model) => ({ ...model, baseUrl })) : models,
+      endpointOverride: override.baseUrl,
     };
   }
 
-  private catalog(configuration = this.configuration) {
-    const defaults = this.defaultProviders();
+  private custom(
+    id: string,
+    { api, baseUrl, name, headers, apiKey: key, models }: ProviderConfiguration['providers'][string],
+  ): CatalogProvider {
+    const connection = { id, api, baseUrl };
+    return {
+      ...connection,
+      name,
+      canSetKey: true,
+      headers,
+      key,
+      models: models.map((model) => resolveModel(model, connection)),
+    };
+  }
+
+  private buildCatalog(configuration: ProviderConfiguration, defaults = this.defaultProviders()) {
     return [
       ...[...defaults.values()].map((provider) => this.builtin(provider, configuration)),
-      ...Object.keys(configuration.providers)
-        .filter((id) => !defaults.has(id))
-        .map((id) => this.custom(id, configuration)!),
+      ...Object.entries(configuration.providers)
+        .filter(([id]) => !defaults.has(id))
+        .map(([id, config]) => this.custom(id, config)),
     ];
   }
 
-  private provider(id: string) {
-    const builtin = this.defaultProviders().get(id);
-    return builtin ? this.builtin(builtin, this.configuration) : this.custom(id, this.configuration);
+  private publishCatalog(
+    configuration: ProviderConfiguration,
+    ids?: Iterable<string>,
+    providers = this.buildCatalog(configuration),
+  ) {
+    this.effective = new Map(providers.map((provider) => [provider.id, provider]));
+    this.configuration = configuration;
+    for (const id of this.status.keys()) {
+      if (!this.effective.has(id)) {
+        this.checks.get(id)?.controller.abort();
+        this.status.delete(id);
+      }
+    }
+    this.refreshStatuses(ids ?? this.effective.keys());
+    this.notify('catalog');
   }
 
-  private async readStatus(configuration = this.configuration) {
-    const stored = new Set((await this.credentials.list()).map(({ providerId }) => providerId));
-    return new Map(
-      await Promise.all(
-        this.catalog(configuration).map(async (provider) => {
-          const auth = provider.authStatus
-            ? await provider.authStatus()
-            : (await this.apiKey(provider)) !== undefined;
-          return [
-            provider.id,
-            {
-              configured: Boolean(auth),
-              source: auth
-                ? stored.has(provider.id)
-                  ? 'stored'
-                  : typeof auth === 'string'
-                    ? auth
-                    : 'configured'
-                : undefined,
-            },
-          ] as const;
-        }),
-      ),
-    );
+  private refreshStatuses(ids: Iterable<string>) {
+    if (this.lifetime.signal.aborted) return;
+    const providers = [...ids].flatMap((id) => {
+      const provider = this.effective.get(id);
+      return provider ? [provider] : [];
+    });
+    if (!providers.length) return;
+    let credentials: Readonly<Record<string, Credential>>;
+    try {
+      credentials = this.credentials.snapshot();
+    } catch (error) {
+      this.report(new Error('Could not read authentication configuration', { cause: error }));
+      for (const { id } of providers) {
+        this.checks.get(id)?.controller.abort();
+        this.status.set(id, { configured: false });
+      }
+      return;
+    }
+    for (const provider of providers)
+      this.refreshStatus(
+        provider,
+        Object.hasOwn(credentials, provider.id) ? credentials[provider.id] : undefined,
+      );
+  }
+
+  /** Only state changes start checks. Replacements drain their cancelled predecessor. */
+  private refreshStatus(provider: CatalogProvider, credential: Credential | undefined) {
+    const { id } = provider;
+    const previous = this.checks.get(id);
+    previous?.controller.abort();
+    const stored = credential ? 'stored' : undefined;
+    const check = provider.authStatus;
+    if (!check) {
+      const configured = Boolean(resolveKey(provider, credential));
+      this.status.set(id, { configured, source: stored ?? (configured ? 'configured' : undefined) });
+      return;
+    }
+    this.status.set(id, { configured: false, source: stored });
+    const controller = new AbortController();
+    const signal = AbortSignal.any([controller.signal, this.lifetime.signal]);
+    const work = Promise.resolve()
+      .then(async () => {
+        await previous?.work;
+        if (signal.aborted) return;
+        const deadline = AbortSignal.any([signal, AbortSignal.timeout(5000)]);
+        let auth: boolean | string = false;
+        try {
+          const result = await check.call(provider, deadline);
+          deadline.throwIfAborted();
+          auth = result;
+        } catch (error) {
+          if (!signal.aborted)
+            this.report(
+              new Error(
+                (deadline.aborted
+                  ? 'Authentication check timed out for '
+                  : 'Could not determine authentication status for ') + id,
+                { cause: error },
+              ),
+            );
+        }
+        if (!signal.aborted) {
+          const value = {
+            configured: Boolean(auth),
+            source: stored ?? (auth ? (typeof auth === 'string' ? auth : 'configured') : undefined),
+          };
+          const current = this.status.get(id);
+          this.status.set(id, value);
+          if (current?.configured !== value.configured || current?.source !== value.source)
+            this.notify('auth');
+        }
+      })
+      .finally(() => {
+        if (this.checks.get(id)?.controller === controller) this.checks.delete(id);
+      });
+    this.checks.set(id, { controller, work });
+  }
+
+  private notify(kind: 'catalog' | 'auth') {
+    try {
+      this.changed(kind);
+    } catch (error) {
+      this.report(error);
+    }
   }
 
   list() {
-    return this.catalog().flatMap(({ id: provider, models }) =>
+    return [...this.effective.values()].flatMap(({ id: provider, models }) =>
       models.map((model) => ({
         provider,
         id: model.id,
         name: model.name,
         input: model.input,
         configured: this.authStatus(provider).configured,
-        thinkingLevels: model.thinkingLevels ?? [],
+        thinkingLevels: getSupportedThinkingLevels(model),
       })),
     );
   }
 
-  available() {
-    return this.enqueue(async () => {
-      this.status = await this.readStatus();
-      return this.list();
-    });
+  async available() {
+    while (!this.lifetime.signal.aborted) {
+      const pending = [...this.effective.keys()].flatMap((id) => {
+        const check = this.checks.get(id);
+        return check && !check.controller.signal.aborted ? [check.work] : [];
+      });
+      if (!pending.length) break;
+      await Promise.all(pending);
+    }
+    return this.list();
+  }
+
+  protocols() {
+    return protocolOptions();
   }
 
   requestModel(choice: ModelChoice) {
-    const provider = this.provider(choice.provider);
+    const provider = this.effective.get(choice.provider);
     if (!provider) return;
     const model = choice.id ? provider.models.find(({ id }) => id === choice.id) : provider.models[0];
     if (model) return { provider, model };
@@ -231,57 +344,65 @@ export class ModelStore implements ModelStorePort {
     return selected && capabilities(selected.model);
   }
 
-  providers() {
+  providers(): ProviderInfo[] {
     const defaults = this.defaultProviders();
-    return this.catalog().map(({ id, name, canSetKey, models, baseUrl, api }) => {
-      const override = Object.hasOwn(this.configuration.builtins, id)
-        ? this.configuration.builtins[id]
-        : undefined;
+    return [...this.effective.values()].map(({ id, name, canSetKey, models, baseUrl, api }) => {
+      const builtin = defaults.get(id);
+      const override =
+        builtin && Object.hasOwn(this.configuration.builtins, id)
+          ? this.configuration.builtins[id]
+          : undefined;
+      const status = this.authStatus(id);
       return {
         id,
         name,
-        configured: this.authStatus(id).configured,
-        storedCredential: this.authStatus(id).source === 'stored',
+        configured: status.configured,
+        storedCredential: status.source === 'stored',
         canSetKey,
-        custom: !defaults.has(id),
+        custom: !builtin,
         baseUrl,
         api,
-        models: models.map(capabilities),
-        defaultBaseUrl: defaults.get(id)?.baseUrl ?? '',
+        models: structuredClone(
+          builtin
+            ? (override?.models ?? models.map((model) => ({ ...definition(model), templateId: model.id })))
+            : this.configuration.providers[id].models,
+        ),
+        defaultBaseUrl: builtin?.baseUrl ?? '',
         endpointCustomized: override?.baseUrl !== undefined,
         modelsCustomized: override?.models !== undefined,
       };
     });
   }
 
-  defaultModels(id: string) {
+  defaultModels(id: string): ProviderModelDefinition[] {
     const builtin = this.defaultProviders().get(id);
     if (!builtin) throw new DomainError('not_found', 'Unknown built-in provider');
-    return builtin.models.map(capabilities);
+    return builtin.models.map((model) => ({ ...definition(model), templateId: model.id }));
   }
 
   authStatus(id: string) {
     return this.status.get(id) ?? { configured: false };
   }
 
-  private async commit(id: string, configuration: ProviderConfiguration, keyChange?: { value?: Credential }) {
-    const previous = keyChange ? await this.credentials.read(id) : undefined;
-    const writeKey = (value: Credential | undefined) =>
-      value ? this.credentials.modify(id, async () => value) : this.credentials.delete(id);
-    const changed = configuration !== this.configuration;
-    if (changed) writeJson(this.file, configuration);
+  private async commit(id: string, configuration: ProviderConfiguration, key?: string | null) {
+    const structural = !isDeepStrictEqual(configuration, this.configuration);
+    const providers = structural ? this.buildCatalog(configuration) : undefined;
+    if (structural) writeJson(this.file, configuration);
     try {
-      if (keyChange) await writeKey(keyChange.value);
-      this.status = await this.readStatus(configuration);
-      this.configuration = configuration;
+      if (key === null) await this.credentials.delete(id);
+      else if (key !== undefined) await this.credentials.modify(id, async () => ({ type: 'api_key', key }));
     } catch (error) {
       try {
-        if (changed) writeJson(this.file, this.configuration);
-        if (keyChange) await writeKey(previous);
+        if (structural) writeJson(this.file, this.configuration);
       } catch (rollbackError) {
         throw new AggregateError([error, rollbackError], 'Could not restore provider configuration');
       }
       throw error;
+    }
+    if (providers) this.publishCatalog(configuration, [id], providers);
+    else if (key !== undefined) {
+      this.refreshStatuses([id]);
+      this.notify('auth');
     }
   }
 
@@ -296,36 +417,27 @@ export class ModelStore implements ModelStorePort {
       if (builtin) {
         if (values.create) throw new DomainError('conflict', 'A provider with this ID already exists');
         if (key && !builtin.canSetKey) throw invalid('This provider does not accept an API key');
-        const previous = Object.hasOwn(next.builtins, id) ? (next.builtins[id].models ?? []) : [];
-        const models = values.models === undefined ? undefined : editModels(values.models, previous, builtin);
-        const override = parseOverride({ baseUrl: values.baseUrl, models });
-        if (
-          override.models?.some(
-            (model) =>
-              !builtin.api && !builtin.models.some(({ id }) => id === (model.templateId ?? model.id)),
-          )
-        )
-          throw invalid('This built-in provider has no protocol for new models');
-        if (override.baseUrl !== undefined || override.models !== undefined)
-          next.builtins = { ...next.builtins, [id]: override };
+        const override = parseOverride(values);
+        for (const model of override.models ?? []) {
+          if (model.templateId && !builtin.models.some(({ id }) => id === model.templateId))
+            throw invalid('Unknown native model template: ' + model.templateId);
+          if (!model.templateId && !builtin.api)
+            throw invalid('This built-in provider has no protocol for new models');
+        }
+        if (override.baseUrl !== undefined || override.models !== undefined) next.builtins[id] = override;
         else delete next.builtins[id];
       } else {
         const previous = Object.hasOwn(next.providers, id) ? next.providers[id] : undefined;
         if (values.create && previous)
           throw new DomainError('conflict', 'A provider with this ID already exists');
         if (!values.create && !previous) throw new DomainError('not_found', 'Unknown provider');
-        next.providers = {
-          ...next.providers,
-          [id]: parseCustom(id, {
-            ...previous,
-            name: values.name,
-            api: values.api,
-            baseUrl: values.baseUrl,
-            models: editModels(values.models, previous?.models ?? []),
-          }),
-        };
+        next.providers[id] = parseCustom(id, {
+          ...values,
+          apiKey: previous?.apiKey,
+          headers: previous?.headers,
+        });
       }
-      await this.commit(id, next, key ? { value: { type: 'api_key', key } } : undefined);
+      await this.commit(id, next, key || undefined);
       return id;
     });
   }
@@ -333,39 +445,24 @@ export class ModelStore implements ModelStorePort {
   removeProvider(input: unknown) {
     return this.enqueue(async () => {
       const id = providerId(record(input)?.id);
-      if (!this.provider(id)) throw new DomainError('not_found', 'Unknown provider');
+      if (!this.effective.get(id)) throw new DomainError('not_found', 'Unknown provider');
       const next = structuredClone(this.configuration);
       delete next.providers[id];
       delete next.builtins[id];
-      await this.commit(id, next, {});
+      await this.commit(id, next, null);
       return id;
     });
   }
 
-  storeCredential(id: string, key: string) {
-    return this.enqueue(async () => {
-      if (!this.provider(id)) throw invalid('Unknown provider');
-      const value = credential(key);
-      if (!value) throw invalid('Invalid credential');
-      await this.commit(id, this.configuration, { value: { type: 'api_key', key: value } });
-    });
-  }
-
-  removeCredential(id: string) {
-    return this.enqueue(() => this.commit(id, this.configuration, {}));
-  }
-
   async close() {
+    this.lifetime.abort();
     await this.writes;
+    await Promise.all([...this.checks.values()].map(({ work }) => work));
     await this.credentials.settle();
   }
 
   async apiKey(provider: CatalogProvider) {
-    const stored = await this.credentials.read(provider.id);
-    const key =
-      (stored?.type === 'api_key' ? stored.key : undefined) ??
-      (provider.key ? (process.env[provider.key] ?? provider.key) : undefined);
-    return key || undefined;
+    return resolveKey(provider, await this.credentials.read(provider.id));
   }
 
   async discoverModels(input: unknown, signal: AbortSignal) {
@@ -375,7 +472,7 @@ export class ModelStore implements ModelStorePort {
     const api = protocol(values.api);
     const baseUrl = endpoint(values.baseUrl);
     let key = credential(values.key);
-    const provider = id ? this.provider(id) : undefined;
+    const provider = id ? this.effective.get(id) : undefined;
     // A draft endpoint only receives credentials typed into the draft.
     if (!key && provider?.baseUrl === baseUrl && provider.api === api)
       key =
@@ -386,14 +483,18 @@ export class ModelStore implements ModelStorePort {
   }
 }
 
-function capabilities({
-  id,
-  name,
-  input,
-  contextWindow,
-  maxTokens,
-  reasoning,
-  thinkingLevels,
-}: CatalogModel) {
-  return { id, name, input, contextWindow, maxTokens, reasoning, thinkingLevels };
+function definition({ id, name, input, contextWindow, maxTokens, reasoning }: CatalogModel) {
+  return { id, name, input, contextWindow, maxTokens, reasoning };
+}
+
+function capabilities(model: CatalogModel) {
+  return { ...definition(model), thinkingLevels: getSupportedThinkingLevels(model) };
+}
+
+function resolveKey(provider: CatalogProvider, stored: Credential | undefined) {
+  return (
+    ((stored?.type === 'api_key' ? stored.key : undefined) ??
+      (provider.key ? (process.env[provider.key] ?? provider.key) : undefined)) ||
+    undefined
+  );
 }

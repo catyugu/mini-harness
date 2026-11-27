@@ -1,7 +1,10 @@
 import { DomainError } from '@mini-harness/platform/errors';
-import { thinkingLevels } from '@mini-harness/llm/vocabulary';
-import { maxModelTokens, modelDefaults, providerApiPattern, providerIdPattern } from '../shared/catalog.ts';
-import type { CatalogModel, CatalogProvider } from './store-api.ts';
+import { Check } from 'typebox/value';
+import { ThinkingLevelMapSchema, ModelCostSchema } from '@earendil-works/pi-ai/providers/model-schema';
+import { CompatSchemasByApi, ProviderCompatSchema } from '@earendil-works/pi-ai/providers/compat-schema';
+import { modelCapacity, providerIdPattern, type ProviderModelDefinition } from '../shared/pi-provider.ts';
+import type { CatalogModel } from './store-api.ts';
+import { protocols } from './protocols.ts';
 
 export interface ProviderConnection {
   api: string;
@@ -9,11 +12,11 @@ export interface ProviderConnection {
 }
 
 type RecordValue = Record<string, unknown>;
-export type ModelConfig = RecordValue & { id: string; templateId?: string };
+type ModelConfig = Omit<ProviderModelDefinition, 'templateId'>;
 
 export interface ProviderOverride {
   baseUrl?: string;
-  models?: ModelConfig[];
+  models?: ProviderModelDefinition[];
 }
 export interface CustomConfig extends ProviderConnection {
   name: string;
@@ -46,7 +49,7 @@ export function endpoint(value: unknown) {
 }
 
 export function protocol(value: unknown) {
-  if (typeof value !== 'string' || !providerApiPattern.test(value)) throw invalid('Invalid API protocol');
+  if (typeof value !== 'string' || !protocols.has(value)) throw invalid('Unsupported API protocol');
   return value;
 }
 
@@ -54,10 +57,6 @@ export function credential(value: unknown) {
   if (value === undefined) return '';
   if (typeof value !== 'string' || value.length > 65536) throw invalid('Invalid credential');
   return value.trim();
-}
-
-export function modelCapacity(value: unknown): value is number {
-  return typeof value === 'number' && Number.isSafeInteger(value) && value > 0 && value <= maxModelTokens;
 }
 
 function modelId(value: unknown) {
@@ -72,57 +71,62 @@ function modelName(value: unknown, id: string) {
   return value.trim() || id;
 }
 
-/** Retain model attributes outside the editor by using the row's original identity. */
-export function editModels(value: unknown, previous: ModelConfig[], builtin?: CatalogProvider) {
-  if (!Array.isArray(value)) throw invalid('Invalid model catalog');
-  return value.map((raw: unknown): ModelConfig => {
-    const row = record(raw);
-    if (!row) throw invalid('Invalid model configuration');
-    const id = modelId(row.id);
-    const sourceId = row.sourceId ?? id;
-    const existing = previous.find((model) => model.id === sourceId);
-    const templateId =
-      existing?.templateId ??
-      (sourceId !== id && builtin?.models.some((model) => model.id === sourceId)
-        ? String(sourceId)
-        : undefined);
-    return {
-      ...existing,
-      id,
-      templateId,
-      name: row.name,
-      input: row.input,
-      contextWindow: row.contextWindow,
-      maxTokens: row.maxTokens,
-      reasoning: row.reasoning,
-    };
-  });
+/** HTTP edits and persisted definitions share one complete metadata contract. */
+function parseModel(entry: RecordValue): ModelConfig {
+  const {
+    id: rawId,
+    name,
+    input,
+    reasoning,
+    contextWindow,
+    maxTokens,
+    thinkingLevelMap,
+    compat,
+    cost,
+    ...extra
+  } = entry;
+  const id = modelId(rawId);
+  if (Object.keys(extra).length) throw invalid('Unsupported model fields for ' + id);
+  if (typeof name !== 'string' || !name.trim()) throw invalid('Missing model display name for ' + id);
+  if (!modelCapacity(contextWindow) || !modelCapacity(maxTokens))
+    throw invalid('Invalid model token limits for ' + id);
+  if (
+    !Array.isArray(input) ||
+    !input.length ||
+    new Set(input).size !== input.length ||
+    input.some((value: unknown) => value !== 'text' && value !== 'image')
+  )
+    throw invalid('Invalid model input modalities for ' + id);
+  if (typeof reasoning !== 'boolean') throw invalid('Invalid reasoning capability for ' + id);
+  if (thinkingLevelMap !== undefined && !Check(ThinkingLevelMapSchema, thinkingLevelMap))
+    throw invalid('Invalid thinking level map for ' + id);
+  if (compat !== undefined && !Check({ ...ProviderCompatSchema, additionalProperties: false }, compat))
+    throw invalid('Invalid compatibility settings for ' + id);
+  if (cost !== undefined && !Check(ModelCostSchema, cost)) throw invalid('Invalid model cost for ' + id);
+  return {
+    id,
+    name: modelName(name, id),
+    input,
+    reasoning,
+    contextWindow,
+    maxTokens,
+    ...(thinkingLevelMap === undefined
+      ? {}
+      : { thinkingLevelMap: thinkingLevelMap as ModelConfig['thinkingLevelMap'] }),
+    ...(compat === undefined ? {} : { compat: compat as ModelConfig['compat'] }),
+    ...(cost === undefined ? {} : { cost: cost as ModelConfig['cost'] }),
+  };
 }
 
-function parseModels(value: unknown): ModelConfig[] {
+function parseModels<T extends ModelConfig>(value: unknown, parse: (entry: RecordValue) => T): T[] {
   if (!Array.isArray(value)) throw invalid('Invalid model catalog');
-  const seen = new Set<string>();
-  return value.map((raw: unknown) => {
+  const models = value.map((raw) => {
     const entry = record(raw);
     if (!entry) throw invalid('Invalid model configuration');
-    const id = modelId(entry.id);
-    if (seen.has(id)) throw invalid('Duplicate Model ID: ' + id);
-    seen.add(id);
-    if (entry.templateId !== undefined) modelId(entry.templateId);
-    for (const value of [entry.contextWindow, entry.maxTokens])
-      if (value !== undefined && !modelCapacity(value)) throw invalid('Invalid model token limits for ' + id);
-    if (
-      entry.input !== undefined &&
-      (!Array.isArray(entry.input) ||
-        !entry.input.length ||
-        new Set(entry.input).size !== entry.input.length ||
-        entry.input.some((value: unknown) => value !== 'text' && value !== 'image'))
-    )
-      throw invalid('Invalid model input modalities for ' + id);
-    if (entry.reasoning !== undefined && typeof entry.reasoning !== 'boolean')
-      throw invalid('Invalid reasoning capability for ' + id);
-    return { ...entry, id, name: modelName(entry.name, id) } as ModelConfig;
+    return parse(entry);
   });
+  if (new Set(models.map(({ id }) => id)).size !== models.length) throw invalid('Duplicate Model ID');
+  return models;
 }
 
 export function parseCustom(id: string, value: unknown): CustomConfig {
@@ -136,11 +140,14 @@ export function parseCustom(id: string, value: unknown): CustomConfig {
     (!headers || Object.values(headers).some((value) => value !== null && typeof value !== 'string'))
   )
     throw invalid('Invalid provider headers: ' + id);
+  const api = protocol(entry.api);
+  const models = parseModels(entry.models, parseModel);
+  for (const model of models) validateCompatibility(model, api);
   return {
     name: modelName(entry.name, id),
-    api: protocol(entry.api),
+    api,
     baseUrl: endpoint(entry.baseUrl),
-    models: parseModels(entry.models),
+    models,
     apiKey: entry.apiKey,
     headers: headers as CustomConfig['headers'],
   };
@@ -151,7 +158,16 @@ export function parseOverride(value: unknown): ProviderOverride {
   if (!entry) throw invalid('Invalid built-in provider override');
   return {
     baseUrl: entry.baseUrl === undefined || entry.baseUrl === '' ? undefined : endpoint(entry.baseUrl),
-    models: entry.models === undefined ? undefined : parseModels(entry.models),
+    models:
+      entry.models === undefined
+        ? undefined
+        : parseModels(
+            entry.models,
+            ({ templateId, ...model }): ProviderModelDefinition => ({
+              ...parseModel(model),
+              ...(templateId === undefined ? {} : { templateId: modelId(templateId) }),
+            }),
+          ),
   };
 }
 
@@ -170,37 +186,29 @@ export function parseConfiguration(value: unknown): ProviderConfiguration {
   };
 }
 
-export function configuredModel(
-  entry: ModelConfig,
-  connection: ProviderConnection,
+/** Independent models use the provider connection; native derivatives retain the adapter definition. */
+export function resolveModel(
+  model: ModelConfig,
+  { id: provider, api, baseUrl }: ProviderConnection & { id: string },
   baseline?: CatalogModel,
-  overrideUrl?: string,
 ): CatalogModel {
-  const { templateId: _templateId, id, ...values } = entry;
-  const reasoning = (values.reasoning as boolean | undefined) ?? baseline?.reasoning ?? false;
-  const map = record(values.thinkingLevelMap ?? record(baseline)?.thinkingLevelMap);
+  validateCompatibility(model, baseline?.api ?? api);
   return {
+    api,
+    baseUrl,
+    cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
     ...baseline,
-    ...values,
-    id,
-    name: values.name as string,
-    api: baseline?.api ?? connection.api,
-    baseUrl: overrideUrl ?? (baseline?.baseUrl || connection.baseUrl),
-    reasoning,
-    input: (values.input as ProviderModelInput | undefined) ?? baseline?.input ?? ['text'],
-    contextWindow:
-      (values.contextWindow as number | undefined) ?? baseline?.contextWindow ?? modelDefaults.contextWindow,
-    maxTokens: (values.maxTokens as number | undefined) ?? baseline?.maxTokens ?? modelDefaults.maxTokens,
-    thinkingLevels: reasoning
-      ? ((baseline?.reasoning && values.thinkingLevelMap === undefined
-          ? baseline.thinkingLevels
-          : undefined) ??
-        thinkingLevels.filter((level) => {
-          const mapped = map?.[level];
-          return mapped !== null && (mapped !== undefined || (level !== 'xhigh' && level !== 'max'));
-        }))
-      : ['off'],
+    ...model,
+    provider,
+    input: [...model.input],
   };
 }
 
-type ProviderModelInput = CatalogModel['input'];
+function validateCompatibility(model: ModelConfig, protocol: string) {
+  if (model.compat === undefined) return;
+  const schema = Object.hasOwn(CompatSchemasByApi, protocol)
+    ? CompatSchemasByApi[protocol as keyof typeof CompatSchemasByApi]
+    : undefined;
+  if (!schema || !Check({ ...schema, additionalProperties: false }, model.compat))
+    throw invalid('Unsupported compatibility settings for ' + protocol + '/' + model.id);
+}

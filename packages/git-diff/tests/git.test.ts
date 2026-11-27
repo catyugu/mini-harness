@@ -1,3 +1,4 @@
+import { rootedFileAccess } from '@mini-harness/file-access/api';
 import { containsPath } from '@mini-harness/platform/paths';
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -25,7 +26,7 @@ test('Git inspection includes staged, unstaged and untracked files and rejects o
   const cwd = realpathSync.native(paths.cwd);
   const inspection = new GitInspection(
     cwd,
-    access.open(cwd, { exclude: (path) => containsPath(paths.home, path) }),
+    rootedFileAccess(access, cwd, { exclude: (path) => containsPath(paths.home, path) }),
   );
   const changes = await inspection.changes();
   assert.equal(
@@ -44,7 +45,7 @@ test('Git inspection includes staged, unstaged and untracked files and rejects o
     (
       await new GitInspection(
         alias,
-        access.open(cwd, { exclude: (path) => containsPath(paths.home, path) }),
+        rootedFileAccess(access, cwd, { exclude: (path) => containsPath(paths.home, path) }),
       ).changes()
     ).available,
     true,
@@ -67,9 +68,10 @@ test('Git inspection includes staged, unstaged and untracked files and rejects o
   git('commit', '-qm', 'track state for denial test');
   rmSync(join(nestedState, 'secret.txt'));
   await assert.rejects(
-    new GitInspection(cwd, access.open(cwd, { exclude: (path) => containsPath(nestedState, path) })).diff(
-      'private/secret.txt',
-    ),
+    new GitInspection(
+      cwd,
+      rootedFileAccess(access, cwd, { exclude: (path) => containsPath(nestedState, path) }),
+    ).diff('private/secret.txt'),
   );
   if (process.platform !== 'win32') {
     const outside = join(root, 'secret');

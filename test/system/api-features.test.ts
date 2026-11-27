@@ -5,7 +5,7 @@ import { dirname, join } from 'node:path';
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 
-import { fixture } from '../support/api-fixture.ts';
+import { fixture, waitUntil } from '../support/api-fixture.ts';
 
 test('GUI APIs configure providers, persist keys privately, discover Skills and scope files', async (t) => {
   const { app, paths, request, mock, finish } = await fixture(t);
@@ -82,7 +82,7 @@ test('GUI APIs configure providers, persist keys privately, discover Skills and 
   const save = await request('/providers', 'PUT', {
     ...connection,
     name: 'Edited GUI provider',
-    models: [{ id: 'gui-model', input: ['text', 'image'] }],
+    models: [{ ...discovery.body[0], id: 'gui-model', input: ['text', 'image'] }],
   });
   assert.equal(save.status, 200, JSON.stringify(save.body));
   const model = { provider: 'gui-test', id: 'gui-model' };
@@ -168,9 +168,24 @@ test('GUI APIs configure providers, persist keys privately, discover Skills and 
     'Content search must not depend on title',
   );
   assert.deepEqual((await request('/sessions/search?q=unmatched-phrase')).body, []);
-  assert.equal((await request('/providers', 'DELETE', { id: 'gui-test' })).status, 200);
-  const afterRemoval = (await request('/settings')).body;
-  assert.deepEqual(afterRemoval.entries['core:models']?.config?.model, { provider: '', id: '' });
+  const ctx = app.runtime.plugins.ctx;
+  const failObserver = ctx.on(
+    'models/catalog-changed',
+    () => {
+      throw new Error('Broken catalog observer');
+    },
+    { prepend: true },
+  );
+  try {
+    assert.equal((await request('/providers', 'DELETE', { id: 'gui-test' })).status, 200);
+  } finally {
+    failObserver();
+  }
+  assert.deepEqual((await request('/models')).body.recent, { provider: '', id: '' });
+  await waitUntil(
+    () => request('/settings'),
+    ({ body }) => body.entries['core:models']?.config?.model?.provider === '',
+  );
   assert.equal(
     (await request('/providers')).body.some((provider: { id: string }) => provider.id === 'gui-test'),
     false,

@@ -29,7 +29,7 @@ The public service types come from [Plugin API](../plugin-api/README.md). `Plugi
 
 ## Configuration transactions and scopes
 
-[manager.ts](src/server/manager.ts) serializes updates. It builds and validates the candidate descriptors, reconciles the server and configured child graphs, prepares browser publication, then asks the Profile owner to persist the accepted result. A rejected update restores the previous entries; a restoration failure is reported together with the original error. Listeners observe committed changes.
+[manager.ts](src/server/manager.ts) serializes updates. It builds and validates the candidate descriptors, reconciles the server and configured child graphs, prepares browser publication, then asks the Profile owner to persist the accepted result. A rejected update restores the previous entries; a restoration failure is reported together with the original error. Listeners observe committed changes. `harnessProfileConfig.stable` is false during initial activation, reconciliation, failed restoration and shutdown. The separate `profile/graph-settled` event follows initial activation, a successful update or a successful rollback, after committed-settings listeners have run. Derived domains can recompute against this boundary without interpreting configuration commits as graph lifecycle events.
 
 Configuration writes during plugin setup and reentrant updates during graph reconciliation are rejected. The runtime cannot replace its own active transaction owner through that transaction. Loaded entries receive `internal/update`; the default behavior restarts non-live entries and accepts live entries in place. A listener can handle an update or reject a change that requires a Profile restart.
 

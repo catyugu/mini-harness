@@ -15,6 +15,8 @@ export interface ProfileRuntime {
 
 export interface ProfileConfigurationPort {
   readonly settings: ProfileConfiguration;
+  /** True only while a settled graph is available; observe profile/graph-settled for its next stable boundary. */
+  readonly stable: boolean;
   update(patch: unknown, signal?: AbortSignal): Promise<ProfileConfiguration>;
   forgetScopes(keys: ScopeAddress[]): Promise<void>;
   subscribe(listener: () => void): () => void;
@@ -42,5 +44,7 @@ declare module 'mini-harness/cordis' {
     'harness/open'(): void | Promise<void>;
     'harness/seal'(): void;
     'harness/drain'(): void | Promise<void>;
+    /** Initial activation, successful reconciliation, or successful rollback. */
+    'profile/graph-settled'(): void | Promise<void>;
   }
 }

@@ -19,6 +19,7 @@ Keep each contract at the lowest layer that can exercise it, in the suite of its
 - Use explicit expected values or independently derived invariants, not the implementation under test as the oracle.
 - Reuse the harness and mock provider in `test/support/`. Keep setup local when it serves one scenario. Launch independent state for each test.
 - Synchronize on events, observable conditions, or awaited work. Avoid arbitrary sleeps and duplicated teardown. Test cancellation and cleanup when they are part of the contract.
+- Implement substantial provider and plugin fixtures in type-checked modules. Use inline source strings only for small activation wrappers or source-loading behavior. Diagnose installation, startup, request handling and teardown separately before changing a timeout.
 - Keep performance experiments out of regression tests. Do not preserve ad hoc benchmarks without a maintained measurement purpose.
 
 Follow [module imports](module-imports.md) in test code as well as production code. See [Development](../development.md) for verification commands.

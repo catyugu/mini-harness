@@ -26,6 +26,9 @@ export default {
         get settings() {
           return host.settings;
         },
+        get stable() {
+          return host.stable;
+        },
         update(patch, signal) {
           return host.update(patch, signal ?? Service.caller(this).fiber.signal);
         },

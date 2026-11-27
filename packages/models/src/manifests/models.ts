@@ -28,7 +28,7 @@ export const metadata: PluginInfo = {
 
 const plugin: Plugin.Object = {
   Config,
-  inject: ['harnessModels', 'harnessChanges', 'harnessPluginSettings'],
+  inject: ['harnessModels', 'harnessPluginSettings'],
   provide: ['harnessModelPreference'],
   apply(ctx) {
     ctx.on('internal/update', (next) => {
@@ -44,7 +44,11 @@ const plugin: Plugin.Object = {
     const select = (model: ModelChoice) => {
       if (same(model, current)) return;
       current = { ...model };
-      ctx.harnessChanges.invalidate('models');
+      try {
+        ctx.get('harnessChanges')?.invalidate('models');
+      } catch (error) {
+        ctx.logger.warn(String(error));
+      }
     };
     ctx.harnessPluginSettings.subscribe<ModelChoice>('model', (model) => {
       // A completed older write must not overwrite a newer accepted selection.
@@ -69,6 +73,13 @@ const plugin: Plugin.Object = {
       return write;
     };
     ctx.provide('harnessModelPreference', { recent: () => ({ ...current }), remember });
+    const revalidate = () => {
+      if ((current.provider || current.id) && !ctx.harnessModels.resolve(current))
+        void remember({ provider: '', id: '' }).catch(() => {
+          /* The preference owner reports failed writes. */
+        });
+    };
+    ctx.on('models/catalog-changed', revalidate);
     ctx.on('harness/observe', (event) => {
       if (
         event.type === 'input-accepted' &&
@@ -95,6 +106,6 @@ export const administrationMetadata: PluginInfo = {
 };
 
 export const administration: Plugin.Object = {
-  inject: ['harnessModels', 'harnessRoutes', 'harnessChanges'],
+  inject: ['harnessModels', 'harnessRoutes'],
   apply: setupAdministration,
 };

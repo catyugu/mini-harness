@@ -2,10 +2,16 @@ import { DomainError } from '@mini-harness/platform/errors';
 import { containsPath } from '@mini-harness/platform/paths';
 import { randomUUID } from 'node:crypto';
 import { constants } from 'node:fs';
-import { link, lstat, mkdir, open, opendir, realpath, rename, stat, unlink } from 'node:fs/promises';
 import { basename, dirname, relative, resolve, sep } from 'node:path';
-import type { RootedFileAccess } from './api.ts';
-import { checkType, directoryEntries, fileChunks, FileTypeError } from './reader.ts';
+import type { FileAccessPort, RootedFileAccess } from './api.ts';
+import {
+  checkType,
+  directoryEntries,
+  fileChunks,
+  FileTypeError,
+  openRegularFile,
+  statPath,
+} from './reader.ts';
 
 const windows = process.platform === 'win32';
 
@@ -24,8 +30,9 @@ const denied = () => new DomainError('forbidden', 'Path is outside the permitted
 const missing = (error: unknown) => (error as NodeJS.ErrnoException).code === 'ENOENT';
 
 /** A workspace view, not an operating-system security boundary. */
-export class RootedFiles implements RootedFileAccess {
+class RootedFiles implements RootedFileAccess {
   constructor(
+    private readonly files: FileAccessPort,
     private readonly cwd: string,
     private readonly exclude?: (absolutePath: string) => boolean,
   ) {}
@@ -39,15 +46,15 @@ export class RootedFiles implements RootedFileAccess {
     const root = resolve(this.cwd);
     const requested = this.check(root, resolve(root, path));
     relative(root, requested).split(sep).filter(Boolean).forEach(checkName);
-    const physicalRoot = await realpath(root);
+    const physicalRoot = await this.files.realpath(root);
     const locate = async (target: string): Promise<string> => {
       try {
-        return this.check(physicalRoot, await realpath(target));
+        return this.check(physicalRoot, await this.files.realpath(target));
       } catch (error) {
         if ((error as NodeJS.ErrnoException).code === 'ENOTDIR') throw new FileTypeError('not-directory');
         if (!missing(error) || target === root) throw error;
         const parent = await locate(dirname(target));
-        const info = await stat(parent).catch((error: unknown) => {
+        const info = await this.files.stat(parent).catch((error: unknown) => {
           if (!missing(error)) throw error;
           return undefined;
         });
@@ -55,7 +62,7 @@ export class RootedFiles implements RootedFileAccess {
         if (!allowMissing) throw error;
         // A dangling link is not an ordinary absent file.
         if (
-          await lstat(target).catch((error: unknown) => {
+          await this.files.lstat(target).catch((error: unknown) => {
             if (!missing(error)) throw error;
             return undefined;
           })
@@ -68,9 +75,7 @@ export class RootedFiles implements RootedFileAccess {
   }
 
   private async openFile(path: string) {
-    const target = await this.location(path);
-    checkType(await stat(target));
-    return open(target, constants.O_RDONLY);
+    return openRegularFile(this.files, await this.location(path));
   }
 
   chunks(path: string, signal?: AbortSignal) {
@@ -99,7 +104,7 @@ export class RootedFiles implements RootedFileAccess {
     signal?.throwIfAborted();
     const target = await this.location(path, create);
     const identify = async () => {
-      const info = await stat(target, { bigint: true });
+      const info = await this.files.stat(target, { bigint: true });
       checkType(info);
       return info;
     };
@@ -108,11 +113,11 @@ export class RootedFiles implements RootedFileAccess {
       throw error;
     });
     if (before) {
-      const writable = await open(target, constants.O_WRONLY);
+      const writable = await this.files.open(target, constants.O_WRONLY);
       await writable.close();
     }
     const temporary = resolve(dirname(target), '.mini-harness-' + randomUUID() + '.tmp');
-    const handle = await open(temporary, 'wx', 0o600);
+    const handle = await this.files.open(temporary, 'wx', 0o600);
     try {
       try {
         await handle.writeFile(content, { encoding: 'utf8', signal });
@@ -123,7 +128,7 @@ export class RootedFiles implements RootedFileAccess {
       }
       signal?.throwIfAborted();
       if (!before) {
-        await link(temporary, target);
+        await this.files.link(temporary, target);
       } else {
         const current = await identify();
         if (
@@ -134,27 +139,39 @@ export class RootedFiles implements RootedFileAccess {
         )
           throw new DomainError('conflict', 'File changed during write: ' + basename(path));
         signal?.throwIfAborted();
-        await rename(temporary, target);
+        await this.files.rename(temporary, target);
       }
     } finally {
-      await unlink(temporary).catch((error: unknown) => {
+      await this.files.unlink(temporary).catch((error: unknown) => {
         if (!missing(error)) throw error;
       });
     }
   }
 
   async mkdir(path: string) {
-    await mkdir(await this.location(path, true), { recursive: true });
+    await this.files.mkdir(await this.location(path, true), { recursive: true });
   }
 
   async stat(path: string) {
-    const info = await stat(await this.location(path));
+    const info = await statPath(this.files, await this.location(path));
     checkType(info, true);
     return info;
   }
 
-  async entries(path: string = this.cwd) {
+  async entries(path: string = this.cwd, signal?: AbortSignal) {
     const dir = await this.location(path);
-    return directoryEntries(await opendir(dir), (name) => Boolean(this.exclude?.(resolve(dir, name))));
+    return directoryEntries(
+      await this.files.opendir(dir),
+      (name) => Boolean(this.exclude?.(resolve(dir, name))),
+      signal,
+    );
   }
+}
+
+export function rootedFileAccess(
+  files: FileAccessPort,
+  root: string,
+  options?: { exclude?: (absolutePath: string) => boolean },
+): RootedFileAccess {
+  return new RootedFiles(files, resolve(root), options?.exclude);
 }

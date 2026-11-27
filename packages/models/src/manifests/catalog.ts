@@ -23,7 +23,28 @@ const plugin: Plugin.Object = {
   provide: ['harnessModels'],
   apply(ctx) {
     const sources = new Set<Contribution>();
-    const changed = () => ctx.get('harnessChanges')?.invalidate('models');
+    ctx.inject(['harnessChanges'], (scope) => {
+      scope.effect(() => scope.harnessChanges.register('models'));
+    });
+    const project = () => ctx.get('harnessChanges')?.invalidate('models');
+    let dirty: 'catalog' | 'auth' | undefined;
+    let pairing = 0;
+    const flush = () => {
+      if (!dirty || pairing || ctx.get('harnessProfileConfig')?.stable === false) return;
+      const kind = dirty;
+      dirty = undefined;
+      if (kind === 'catalog')
+        void ctx.parallel('models/catalog-changed').catch((error) => ctx.logger.warn(String(error)));
+      else project();
+    };
+    const changed = (kind: 'catalog' | 'auth') => {
+      if (dirty !== 'catalog') dirty = kind;
+      flush();
+    };
+    ctx.on('models/catalog-changed', project);
+    ctx.on('models/source-changed', changed);
+    ctx.on('llm/adapters-changed', () => changed('catalog'));
+    ctx.on('profile/graph-settled', flush);
     function visible(caller: Context) {
       return rankScoped(scopeOf(caller), sources).filter(({ owner }) => !owner.aborted);
     }
@@ -61,13 +82,28 @@ const plugin: Plugin.Object = {
           const entry = { source, adapter, priority, owner: caller.fiber.signal, scope: scopeOf(caller) };
           const llm = caller.get('harnessLlm');
           if (!llm) throw new Error('Model transport is unavailable in this scope');
-          const release = llm.register(adapter, priority);
+          pairing++;
           sources.add(entry);
-          changed();
+          let release: () => void;
+          try {
+            release = llm.register(adapter, priority);
+            changed('catalog');
+          } catch (error) {
+            sources.delete(entry);
+            throw error;
+          } finally {
+            pairing--;
+            flush();
+          }
           return () => {
             if (!sources.delete(entry)) return;
-            release();
-            changed();
+            pairing++;
+            try {
+              release();
+            } finally {
+              pairing--;
+              changed('catalog');
+            }
           };
         },
         list() {

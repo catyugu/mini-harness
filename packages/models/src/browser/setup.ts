@@ -3,25 +3,25 @@ import { browserRequest } from '@mini-harness/ui-runtime/http';
 import { providerManager } from './provider-manager.ts';
 import type { Context } from 'mini-harness/cordis';
 import type { ModelChoice } from '@mini-harness/llm/vocabulary';
-import type { ModelCatalog } from '../shared/catalog.ts';
+import type { ModelSummary } from '../shared/catalog.ts';
+import type { ProviderInfo, ProtocolInfo } from '../shared/pi-provider.ts';
 import { RemoteStore } from '@mini-harness/ui-runtime/remote-store';
 import { createModelPicker } from './model-picker.ts';
 import { mountModelControls } from './composer.ts';
 
 const setup = async (ctx: Context) => {
   const { miniSettings: settings } = ctx;
-  const state = new RemoteStore(async () => {
-    const [{ models, recent, canManageProviders }, providers] = await Promise.all([
-      browserRequest<Pick<ModelCatalog, 'models'> & { recent: ModelChoice; canManageProviders: boolean }>(
-        ctx,
-        '/models',
-      ),
-      browserRequest<ModelCatalog['providers']>(ctx, '/providers'),
-    ]);
-    return { models, providers, recent, canManageProviders };
-  });
-  await state.refresh();
+  const state = new RemoteStore(() =>
+    browserRequest<{
+      models: ModelSummary[];
+      providers: ProviderInfo[];
+      recent: ModelChoice;
+      canManageProviders: boolean;
+      protocols: ProtocolInfo[];
+    }>(ctx, '/models'),
+  );
   ctx.effect(() => ctx.miniProjections.register('models', state));
+  await state.refresh();
   ctx.provide('miniModels', {
     get: state.get,
     subscribe: state.subscribe,
@@ -72,13 +72,7 @@ const setup = async (ctx: Context) => {
         id: 'providers',
         sectionId: 'model',
         render({ signal }) {
-          if (!state.get().canManageProviders) {
-            const hint = document.createElement('p');
-            hint.className = 'hint';
-            hint.textContent = 'Models are provided by plugins.';
-            return hint;
-          }
-          const manager = providerManager(ctx, () => state.get().providers, signal);
+          const manager = providerManager(ctx, state.get, signal);
           settings.onClose(manager.reset, signal);
           state.subscribe(manager.render, signal);
           return manager.content;

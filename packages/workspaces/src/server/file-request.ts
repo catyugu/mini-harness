@@ -1,4 +1,4 @@
-import type { RootedFileAccess } from '@mini-harness/file-access/api';
+import { rootedFileAccess, type RootedFileAccess } from '@mini-harness/file-access/api';
 import { realpath } from 'node:fs/promises';
 import { containsPath } from '@mini-harness/platform/paths';
 import { DomainError } from '@mini-harness/platform/errors';
@@ -19,7 +19,7 @@ export async function workspaceFiles(ctx: Context, { params, url, signal }: Rout
   const state = await realpath(ctx.harnessState.paths.home);
   const access = scopes.context(key).get('harnessFileAccess');
   if (!access) throw new DomainError('unavailable', 'File access is unavailable in this scope');
-  const files: RootedFileAccess = access.open(root, {
+  const files: RootedFileAccess = rootedFileAccess(access, root, {
     exclude: (path) => containsPath(state, path),
   });
   return {

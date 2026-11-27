@@ -2,14 +2,12 @@ import {
   createModels,
   createProvider,
   defaultProviderAuthContext,
-  getSupportedThinkingLevels,
   isContextOverflow,
   lazyApi,
   type Api,
   type AssistantMessage,
   type Message,
   type Model,
-  type ProviderStreams,
 } from '@earendil-works/pi-ai';
 import { builtinModels } from '@earendil-works/pi-ai/providers/all';
 import type { ModelChoice } from '@mini-harness/llm/vocabulary';
@@ -23,12 +21,7 @@ import type {
 } from '@mini-harness/llm/api';
 import type { ModelStorePort } from './store-api.ts';
 
-const apiLoaders: Record<string, () => Promise<ProviderStreams>> = {
-  'openai-completions': () => import('@earendil-works/pi-ai/api/openai-completions'),
-  'openai-responses': () => import('@earendil-works/pi-ai/api/openai-responses'),
-  'anthropic-messages': () => import('@earendil-works/pi-ai/api/anthropic-messages'),
-  'google-generative-ai': () => import('@earendil-works/pi-ai/api/google-generative-ai'),
-};
+import { protocols } from './protocols.ts';
 
 // Providers with multiple native protocols need a default for newly registered IDs.
 const preferredProtocols: Readonly<Record<string, string>> = {
@@ -64,9 +57,9 @@ export class PiLlm implements LlmAdapter {
           api,
           baseUrl: provider.baseUrl ?? '',
           canSetKey: Boolean(provider.auth.apiKey?.login),
-          models: models.map((model) => ({ ...model, thinkingLevels: getSupportedThinkingLevels(model) })),
-          async authStatus() {
-            const auth = await runtime.checkAuth(provider.id);
+          models,
+          async authStatus(signal: AbortSignal) {
+            const auth = await runtime.checkAuth(provider.id, { signal });
             return auth?.source || Boolean(auth);
           },
           async discoveryKey(credential, signal) {
@@ -83,9 +76,7 @@ export class PiLlm implements LlmAdapter {
     const selected = this.store.requestModel(choice);
     return Boolean(
       selected &&
-        (this.builtin.getProvider(choice.provider)
-          ? selected.model.api
-          : Object.hasOwn(apiLoaders, selected.model.api)),
+        (this.builtin.getProvider(choice.provider) ? selected.model.api : protocols.has(selected.model.api)),
     );
   }
 
@@ -126,12 +117,7 @@ export class PiLlm implements LlmAdapter {
     const selected = store.requestModel(request.model);
     if (!selected) throw new Error('Model is unavailable through the Pi adapter');
     const { provider } = selected;
-    const model: Model<Api> = {
-      cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-      ...selected.model,
-      input: [...selected.model.input],
-      provider: provider.id,
-    };
+    const { model } = selected;
     const native = this.builtin.getProvider(provider.id);
     let runtime = this.builtin;
     if (native && provider.endpointOverride) {
@@ -144,7 +130,7 @@ export class PiLlm implements LlmAdapter {
           native.streamSimple({ ...model, baseUrl }, context, options),
       });
     } else if (!native) {
-      const load = Object.hasOwn(apiLoaders, model.api) && apiLoaders[model.api];
+      const load = protocols.get(model.api)?.load;
       if (!load) throw new Error('Model is unavailable through the Pi adapter');
       runtime = createModels();
       runtime.setProvider(

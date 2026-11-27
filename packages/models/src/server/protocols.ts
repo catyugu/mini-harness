@@ -1,62 +1,122 @@
+import type { ProviderStreams } from '@earendil-works/pi-ai';
 import { DomainError } from '@mini-harness/platform/errors';
-import { modelDefaults, type ProviderModel } from '../shared/catalog.ts';
-import { invalid, modelCapacity, record, type ProviderConnection } from './provider-settings.ts';
+import { modelCapacity, modelDefaults, type ProviderModelDefinition } from '../shared/pi-provider.ts';
+import type { ProviderConnection } from './provider-settings.ts';
+
+function record(value: unknown) {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined;
+}
 
 type Listing = { rows: unknown[]; next?: string };
 
-function listing(connection: ProviderConnection, key: string) {
-  const url = new URL(connection.baseUrl);
-  const path = url.pathname.replace(/\/$/, '');
-  const headers = new Headers({ accept: 'application/json' });
-  switch (connection.api) {
-    case 'openai-completions':
-    case 'openai-responses':
-      url.pathname = path + '/models';
-      if (key) headers.set('authorization', 'Bearer ' + key);
-      return {
-        url,
-        headers,
-        read: (body: ReturnType<typeof record>): Listing | undefined =>
-          Array.isArray(body?.data) ? { rows: body.data } : undefined,
-      };
-    case 'anthropic-messages':
-      url.pathname = path.replace(/\/v1$/, '') + '/v1/models';
-      url.searchParams.set('limit', '1000');
-      headers.set('anthropic-version', '2023-06-01');
-      if (key) headers.set('x-api-key', key);
-      return {
-        url,
-        headers,
-        cursor: 'after_id',
-        read: (body: ReturnType<typeof record>): Listing | undefined =>
-          Array.isArray(body?.data)
-            ? { rows: body.data, next: body.has_more ? label(body.last_id) : undefined }
-            : undefined,
-      };
-    case 'google-generative-ai':
-      url.pathname = path + '/models';
-      url.searchParams.set('pageSize', '1000');
-      if (key) headers.set('x-goog-api-key', key);
-      return {
-        url,
-        headers,
-        cursor: 'pageToken',
-        read: (body: ReturnType<typeof record>): Listing | undefined =>
-          Array.isArray(body?.models) ? { rows: body.models, next: label(body.nextPageToken) } : undefined,
-      };
-    default:
-      throw invalid('Model discovery is unavailable for this API protocol');
-  }
+type ListingRequest = {
+  url: URL;
+  headers: Headers;
+  cursor?: string;
+  read(body: ReturnType<typeof record>): Listing | undefined;
+};
+type Protocol = {
+  label: string;
+  load(): Promise<ProviderStreams>;
+  listing(baseUrl: string, key: string): ListingRequest;
+  parse(raw: unknown): ProviderModelDefinition | undefined;
+};
+
+function request(baseUrl: string) {
+  const url = new URL(baseUrl);
+  return { url, headers: new Headers({ accept: 'application/json' }) };
+}
+
+function openaiListing(baseUrl: string, key: string): ListingRequest {
+  const { url, headers } = request(baseUrl);
+  url.pathname = url.pathname.replace(/\/$/, '') + '/models';
+  if (key) headers.set('authorization', 'Bearer ' + key);
+  return { url, headers, read: (body) => (Array.isArray(body?.data) ? { rows: body.data } : undefined) };
+}
+
+function anthropicListing(baseUrl: string, key: string): ListingRequest {
+  const { url, headers } = request(baseUrl);
+  url.pathname = url.pathname.replace(/\/$/, '').replace(/\/v1$/, '') + '/v1/models';
+  url.searchParams.set('limit', '1000');
+  headers.set('anthropic-version', '2023-06-01');
+  if (key) headers.set('x-api-key', key);
+  return {
+    url,
+    headers,
+    cursor: 'after_id',
+    read: (body) =>
+      Array.isArray(body?.data)
+        ? { rows: body.data, next: body.has_more ? label(body.last_id) : undefined }
+        : undefined,
+  };
+}
+
+function geminiListing(baseUrl: string, key: string): ListingRequest {
+  const { url, headers } = request(baseUrl);
+  url.pathname = url.pathname.replace(/\/$/, '') + '/models';
+  url.searchParams.set('pageSize', '1000');
+  if (key) headers.set('x-goog-api-key', key);
+  return {
+    url,
+    headers,
+    cursor: 'pageToken',
+    read: (body) =>
+      Array.isArray(body?.models) ? { rows: body.models, next: label(body.nextPageToken) } : undefined,
+  };
+}
+
+export const protocols = new Map<string, Protocol>([
+  [
+    'openai-completions',
+    {
+      label: 'OpenAI Chat Completions',
+      load: () => import('@earendil-works/pi-ai/api/openai-completions'),
+      listing: openaiListing,
+      parse: parseModel,
+    },
+  ],
+  [
+    'openai-responses',
+    {
+      label: 'OpenAI Responses',
+      load: () => import('@earendil-works/pi-ai/api/openai-responses'),
+      listing: openaiListing,
+      parse: parseModel,
+    },
+  ],
+  [
+    'anthropic-messages',
+    {
+      label: 'Anthropic Messages',
+      load: () => import('@earendil-works/pi-ai/api/anthropic-messages'),
+      listing: anthropicListing,
+      parse: parseModel,
+    },
+  ],
+  [
+    'google-generative-ai',
+    {
+      label: 'Google Generative AI',
+      load: () => import('@earendil-works/pi-ai/api/google-generative-ai'),
+      listing: geminiListing,
+      parse: (raw) => parseModel(raw, true),
+    },
+  ],
+]);
+
+export function protocolOptions() {
+  return [...protocols].map(([api, { label }]) => ({ api, label }));
 }
 
 function label(...values: unknown[]) {
   return values.find((value): value is string => typeof value === 'string' && !!value.trim())?.trim();
 }
 
-function parseModel(raw: unknown, api: string): ProviderModel | undefined {
+function parseModel(raw: unknown, gemini = false): ProviderModelDefinition | undefined {
   const entry = record(raw);
   if (!entry) return;
-  const gemini = api === 'google-generative-ai';
   if (
     gemini &&
     Array.isArray(entry.supportedGenerationMethods) &&
@@ -122,9 +182,12 @@ async function readBody(response: Response): Promise<unknown> {
 }
 
 export async function discover(connection: ProviderConnection, key: string, caller: AbortSignal) {
-  const { url, headers, cursor, read } = listing(connection, key);
+  const protocol = protocols.get(connection.api);
+  if (!protocol)
+    throw new DomainError('invalid_input', 'Model discovery is unavailable for this API protocol');
+  const { url, headers, cursor, read } = protocol.listing(connection.baseUrl, key);
   const signal = AbortSignal.any([caller, AbortSignal.timeout(20000)]);
-  const models = new Map<string, ProviderModel>();
+  const models = new Map<string, ProviderModelDefinition>();
   const pages = new Set<string>();
   for (;;) {
     let response: Response;
@@ -153,7 +216,7 @@ export async function discover(connection: ProviderConnection, key: string, call
     }
     if (!page) throw new DomainError('unavailable', 'No model list was found in the endpoint response');
     for (const raw of page.rows) {
-      const model = parseModel(raw, connection.api);
+      const model = protocol.parse(raw);
       if (model && !models.has(model.id)) models.set(model.id, model);
     }
     if (!cursor || !page.next) return [...models.values()];
