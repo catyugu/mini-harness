@@ -247,24 +247,29 @@ test('credential writes and removal roll back when authentication status refresh
   });
   await store.refresh();
   let fail = false;
-  await store.registerDefaults([{
-    id: 'failing-auth',
-    name: 'Auth failure fixture',
-    api: 'openai-completions',
-    baseUrl: mock.url,
-    canSetKey: true,
-    models: [],
-    async authStatus() {
-      if (fail) throw new Error('Injected auth-status failure');
-      return true;
+  await store.registerDefaults([
+    {
+      id: 'failing-auth',
+      name: 'Auth failure fixture',
+      api: 'openai-completions',
+      baseUrl: mock.url,
+      canSetKey: true,
+      models: [],
+      async authStatus() {
+        if (fail) throw new Error('Injected auth-status failure');
+        return true;
+      },
     },
-  }]);
+  ]);
   await store.storeCredential('failing-auth', 'first-secret');
   const file = join(paths.home, 'auth.json');
   const before = readFileSync(file, 'utf8');
   const status = store.authStatus('failing-auth');
   fail = true;
-  await assert.rejects(store.storeCredential('failing-auth', 'second-secret'), /Injected auth-status failure/);
+  await assert.rejects(
+    store.storeCredential('failing-auth', 'second-secret'),
+    /Injected auth-status failure/,
+  );
   assert.equal(readFileSync(file, 'utf8'), before);
   assert.deepEqual(store.authStatus('failing-auth'), status);
   await assert.rejects(store.removeCredential('failing-auth'), /Injected auth-status failure/);
