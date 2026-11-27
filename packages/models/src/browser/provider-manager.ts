@@ -1,6 +1,6 @@
 import type { Context } from 'mini-harness/cordis';
 import { browserRequest, payload } from '@mini-harness/ui-runtime/http';
-import { button, confirmAction, fromMarkup, required } from '@mini-harness/ui-primitives/primitives';
+import { button, confirmAction, fromMarkup, iconButton, required } from '@mini-harness/ui-primitives/primitives';
 import { icon } from '@mini-harness/ui-primitives/icons';
 import type { ProviderInfo, ProtocolInfo } from '../shared/pi-provider.ts';
 import { providerEditor } from './provider-editor.ts';
@@ -90,7 +90,6 @@ export function providerManager(
         .map((provider) => {
           const card = fromMarkup(`<article class="ui-card provider-card">
           <div class="provider-row"><div><strong></strong><small class="provider-state"></small></div><div class="ui-actions"></div></div>
-          <div class="provider-inline"></div>
         </article>`);
           required(card.querySelector('strong')).textContent = provider.name;
           const summary = required(card.querySelector<HTMLElement>('.provider-state'));
@@ -104,7 +103,7 @@ export function providerManager(
           const editButton = button('Edit', 'quiet');
           editButton.setAttribute('aria-label', 'Edit ' + provider.name);
           editButton.dataset.provider = provider.id;
-          editButton.onclick = () => edit(required(card.querySelector('.provider-inline')), provider);
+          editButton.onclick = () => edit(card, provider);
           actions.append(editButton);
           if (
             provider.custom ||
@@ -112,9 +111,7 @@ export function providerManager(
             provider.endpointCustomized ||
             provider.modelsCustomized
           ) {
-            const remove = button('Remove', 'quiet');
-            remove.classList.add('danger');
-            remove.setAttribute('aria-label', 'Remove ' + provider.name);
+            const remove = iconButton('Remove ' + provider.name, 'trash');
             remove.onclick = async () => {
               if (
                 !(await confirmAction(
