@@ -10,6 +10,7 @@
     "./projection": "./src/projection.ts",
     "./message": "./src/shared/message.ts",
     "./user-content": "./src/user-content.ts",
+    "./tool-selection": "./src/tool-selection.ts",
     "./queue": "./src/shared/queue.ts",
     "./records": "./src/records.ts",
     "./run-state": "./src/shared/run-state.ts",

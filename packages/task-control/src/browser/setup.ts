@@ -1,5 +1,6 @@
 import type { Context } from 'mini-harness/cordis';
-import type { ToolView } from '../history-api.ts';
+import type { ToolView } from '@mini-harness/conversation/browser/history-api';
+import type {} from '@mini-harness/conversation/browser/conversation-api';
 import type { TaskData, TaskOutput, TaskSnapshot } from '@mini-harness/tasks/api';
 import { browserRequest } from '@mini-harness/ui-runtime/http';
 import { icon } from '@mini-harness/ui-primitives/icons';
@@ -40,8 +41,6 @@ function duration(task: TaskSnapshot) {
 
 function input(task: TaskSnapshot) {
   const args = task.metadata?.arguments;
-  if (task.metadata?.tool === 'shell' && typeof object(args).command === 'string')
-    return String(object(args).command);
   return args === undefined ? '' : JSON.stringify(args, null, 2);
 }
 
@@ -55,6 +54,10 @@ function resultText(value?: TaskData) {
       return block.type === 'text' && typeof block.text === 'string' ? [block.text] : [];
     })
     .join('\n');
+}
+
+function taskResult(task: TaskSnapshot) {
+  return resultText(task.result) || resultText(task.progress);
 }
 
 function reconcile(parent: HTMLElement, children: HTMLElement[]) {
@@ -109,7 +112,7 @@ function setup(ctx: Context) {
   let expanded: ReturnType<typeof createOutput> | undefined;
 
   function label(task: TaskSnapshot) {
-    return task.metadata?.tool === 'shell' ? input(task) || task.name || 'Shell' : (task.name ?? 'Task');
+    return task.name ?? 'Task';
   }
 
   function closeOutput() {
@@ -125,6 +128,7 @@ function setup(ctx: Context) {
       <div class="task-output-heading"><span>Output</span></div>
       <p class="task-notice" role="status"></p>
       <pre class="task-output" aria-label="Task output"></pre>
+      <pre class="task-result-details" aria-label="Task result details" hidden></pre>
     </div>`);
     const command = required(node.querySelector<HTMLElement>('.task-input'));
     const commandText = input(task);
@@ -137,9 +141,10 @@ function setup(ctx: Context) {
       action.onclick = () => void navigator.clipboard.writeText(text()).catch(control.report);
       return action;
     };
-    command.append(copy(() => commandText, 'Copy command'));
+    command.append(copy(() => commandText, 'Copy arguments'));
     const output = required(node.querySelector<HTMLElement>('.task-output'));
     const warning = required(node.querySelector<HTMLElement>('.task-notice'));
+    const resultDetails = required(node.querySelector<HTMLElement>('.task-result-details'));
     required(node.querySelector('.task-output-heading')).append(
       copy(() => output.textContent ?? '', 'Copy output'),
     );
@@ -150,19 +155,18 @@ function setup(ctx: Context) {
     let failure = '';
     function show(next: TaskSnapshot) {
       const following = output.scrollHeight - output.scrollTop - output.clientHeight < 16;
-      const fallback = resultText(next.result) || resultText(next.progress);
+      const fallback = taskResult(next);
       const shown = text || fallback || (live(next) ? 'Waiting for output…' : 'No output');
       if (output.textContent !== shown) {
         output.textContent = shown;
         if (following) output.scrollTop = output.scrollHeight;
       }
       const details = object(object(next.result).details);
-      const overflow = [details.stdoutOverflow, details.stderrOverflow].filter(
-        (path) => typeof path === 'string',
-      );
+      const metadata = Object.keys(details).length ? JSON.stringify(details, null, 2) : '';
+      if (resultDetails.textContent !== metadata) resultDetails.textContent = metadata;
+      resultDetails.hidden = !metadata;
       warning.textContent = [
         truncated ? 'Earlier output was truncated' : '',
-        ...overflow,
         failure || next.error || '',
       ]
         .filter(Boolean)
@@ -256,7 +260,8 @@ function setup(ctx: Context) {
       current = next;
       const title = label(next);
       name.textContent = title;
-      kind.textContent = next.name === title ? '' : (next.name ?? '');
+      const tool = next.metadata?.tool;
+      kind.textContent = typeof tool === 'string' && tool !== title ? tool : '';
       kind.hidden = !kind.textContent;
       state.textContent = status(next);
       node.dataset.state = next.state;
@@ -445,7 +450,7 @@ function setup(ctx: Context) {
       if (text.textContent !== caption) text.textContent = caption;
       line.hidden = !taskId;
       const result = taskId
-        ? ((task && (resultText(task.result) || resultText(task.progress) || task.error)) ?? '')
+        ? ((task && (taskResult(task) || task.error)) ?? '')
         : receiptOutput;
       if (output.textContent !== result) output.textContent = result;
       output.hidden = !result;

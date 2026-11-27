@@ -34,8 +34,6 @@ Foreground tool output is streamed in named channels. Runs owns the bounded acti
 
 ## Independent tools
 
-The optional `task-control` Profile entry registers `start_background` and `task_control`. An eligible tool declares `background: true`; the shared tool invocation path validates and executes it. The accepted receipt identifies its independent Task. `task_control` lists, inspects, waits for, cancels and reads cursor-based output for owned background tools and direct child Runs.
-
-Background execution holds the registered tool's provider and the Session's resource owner. It can call `report` to send a mid-task message. Progress and ordinary output update task projections. Background tool snapshots carry the accepted tool name and arguments. Child Runs keep their conversation output in Session history, not in a duplicate terminal-output stream. Terminal notifications carry the actual scheduler state and the projected business result. Stable notification IDs make acceptance idempotent across restart.
+The optional [Task Control](../task-control/README.md) plugin owns background execution and presentation; Runs supplies conversation admission and replay.
 
 See [execution](../../docs/subsystems/execution.md) and [the Session Log format](../../docs/session-log.md).

@@ -4,10 +4,8 @@ import { DomainError } from '@mini-harness/platform/errors';
 import { terminal, type TaskData, type TaskSnapshot } from '@mini-harness/tasks/api';
 import { defineTool, type ToolResult } from '@mini-harness/tools/api';
 import { invokeTool, prepareTool, withToolLease } from '@mini-harness/tools/invocation';
-import { conversationTools } from './tool-selection.ts';
+import { conversationTools } from '@mini-harness/sessions/tool-selection';
 import { backgroundTool, relatedTask, relatedTasks } from './related-tasks.ts';
-
-export const metadata = { title: 'Background tasks' };
 
 function writableToolResult(result: ToolResult) {
   return {

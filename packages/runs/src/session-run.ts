@@ -1,6 +1,6 @@
 import { toolAvailable } from '@mini-harness/tools/execution';
 import { displayMessage } from '@mini-harness/sessions/projection';
-import { conversationTools } from './tool-selection.ts';
+import { conversationTools } from '@mini-harness/sessions/tool-selection';
 import type { Context } from 'mini-harness/cordis';
 import type { TaskContext } from '@mini-harness/tasks/api';
 import { scopeTarget } from '@mini-harness/plugin-api/scopes';

@@ -17,6 +17,9 @@ test('the composed browser graph serves its runtime dependencies and excludes se
   }
   const files = mounted.get('files');
   assert.ok(files);
+  const tasks = mounted.get('background-tasks');
+  assert.ok(tasks);
+  assert.equal(mounted.has('task-control'), false);
 
   for (const asset of [
     '/packages/host/src/application.js',
@@ -25,6 +28,7 @@ test('the composed browser graph serves its runtime dependencies and excludes se
     '/packages/settings/src/server/manager.js',
     '/packages/transport/src/router.js',
     '/packages/shell/src/server/setup.js',
+    '/packages/task-control/src/server/setup.js',
     '/packages/subagents/src/server/delegation.js',
     '/packages/sessions/tests/log.test.js',
   ])
@@ -86,4 +90,13 @@ test('the composed browser graph serves its runtime dependencies and excludes se
   assert.match(sheet.headers.get('content-type') ?? '', /^text\/css/);
   assert.equal((await request('/settings', 'PATCH', { entries: { shell: { disabled: true } } })).status, 200);
   assert.equal((await fetch(base + conversationStyle)).status, 200);
+
+  // The two existing Profile switches remain independently selectable.
+  assert.equal((await request('/settings', 'PATCH', { entries: { 'background-tasks': { disabled: true } } })).status, 200);
+  const { body: withoutPanel }: { body: BrowserBootstrap } = await request('/bootstrap');
+  assert.equal(withoutPanel.ui.some(({ id }) => id === 'background-tasks'), false);
+  assert.equal((await fetch(base + tasks.browser)).status, 404);
+  assert.equal((await request('/settings', 'PATCH', { entries: { 'background-tasks': { disabled: false }, 'task-control': { disabled: true } } })).status, 200);
+  const { body: withoutTools }: { body: BrowserBootstrap } = await request('/bootstrap');
+  assert.equal(withoutTools.ui.some(({ id }) => id === 'background-tasks'), true);
 });

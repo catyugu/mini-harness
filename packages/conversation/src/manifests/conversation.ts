@@ -67,10 +67,3 @@ export const historyMetadata: PluginInfo = {
   description: 'Conversation messages and record contributions',
   browser: 'packages/conversation/src/browser/conversation/history-setup.js',
 };
-
-export const backgroundMetadata: PluginInfo = {
-  title: 'Background tasks panel',
-  description: 'Inspect independent work for this conversation',
-  browser: 'packages/conversation/src/browser/conversation/background.js',
-  browserStyles: ['packages/conversation/src/browser/conversation/background.css'],
-};
