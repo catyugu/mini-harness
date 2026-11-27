@@ -1,7 +1,11 @@
 import type { ProviderStreams } from '@earendil-works/pi-ai';
 import { DomainError } from '@mini-harness/platform/errors';
-import { modelDefaults, type ProviderModel } from '../shared/catalog.ts';
-import { invalid, modelCapacity, record, type ProviderConnection } from './provider-settings.ts';
+import { modelCapacity, modelDefaults, type ProviderModelDefinition } from '../shared/catalog.ts';
+import type { ProviderConnection } from './provider-settings.ts';
+
+function record(value: unknown) {
+  return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : undefined;
+}
 
 type Listing = { rows: unknown[]; next?: string };
 
@@ -15,7 +19,7 @@ type Protocol = {
   label: string;
   load(): Promise<ProviderStreams>;
   listing(baseUrl: string, key: string): ListingRequest;
-  parse(raw: unknown): ProviderModel | undefined;
+  parse(raw: unknown): ProviderModelDefinition | undefined;
 };
 
 function request(baseUrl: string) {
@@ -108,7 +112,7 @@ function label(...values: unknown[]) {
   return values.find((value): value is string => typeof value === 'string' && !!value.trim())?.trim();
 }
 
-function parseModel(raw: unknown, gemini: boolean): ProviderModel | undefined {
+function parseModel(raw: unknown, gemini: boolean): ProviderModelDefinition | undefined {
   const entry = record(raw);
   if (!entry) return;
   if (
@@ -177,10 +181,10 @@ async function readBody(response: Response): Promise<unknown> {
 
 export async function discover(connection: ProviderConnection, key: string, caller: AbortSignal) {
   const protocol = protocols.get(connection.api);
-  if (!protocol) throw invalid('Model discovery is unavailable for this API protocol');
+  if (!protocol) throw new DomainError('invalid_input', 'Model discovery is unavailable for this API protocol');
   const { url, headers, cursor, read } = protocol.listing(connection.baseUrl, key);
   const signal = AbortSignal.any([caller, AbortSignal.timeout(20000)]);
-  const models = new Map<string, ProviderModel>();
+  const models = new Map<string, ProviderModelDefinition>();
   const pages = new Set<string>();
   for (;;) {
     let response: Response;

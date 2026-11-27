@@ -1,12 +1,11 @@
 import { DomainError } from '@mini-harness/platform/errors';
 import type { Context } from 'mini-harness/cordis';
-import { protocolOptions } from './protocols.ts';
 import { providerId } from './provider-settings.ts';
 
 export function setupAdministration(ctx: Context) {
   const recent = () => ctx.get('harnessModelPreference')?.recent() ?? { provider: '', id: '' };
   const catalog = ctx.harnessModels;
-  const providerAdministration = () => ctx.get('harnessModelStore');
+  const providerAdministration = () => ctx.get('harnessProviderAdministration');
   const admin = () => {
     const store = providerAdministration();
     if (!store) throw new DomainError('unavailable', 'Provider administration is disabled');
@@ -30,10 +29,14 @@ export function setupAdministration(ctx: Context) {
       return { id };
     });
   }
-  add('GET', '/api/models', async () => ({
-    models: await catalog.available(),
-    recent: recent(),
-    canManageProviders: Boolean(providerAdministration()),
-    protocols: providerAdministration() ? protocolOptions() : [],
-  }));
+  add('GET', '/api/models', async () => {
+    const models = await catalog.available();
+    const providerAdmin = providerAdministration();
+    return {
+      models,
+      recent: recent(),
+      canManageProviders: Boolean(providerAdmin),
+      protocols: providerAdmin?.protocols() ?? [],
+    };
+  });
 }

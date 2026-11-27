@@ -1,7 +1,7 @@
 import type { Api, Model } from '@earendil-works/pi-ai';
 import type { ModelChoice } from '@mini-harness/llm/vocabulary';
 import type { ModelSource } from './api.ts';
-import type { ProviderInfo, ProviderModel, ProviderModelDefinition } from '../shared/catalog.ts';
+import type { ProtocolInfo, ProviderInfo, ProviderModel, ProviderModelDefinition } from '../shared/catalog.ts';
 import type { ModelStore } from './store.ts';
 import type { ProviderConnection } from './provider-settings.ts';
 
@@ -25,12 +25,17 @@ export interface CatalogProvider extends ProviderConnection {
   discoveryKey?(credential: Credential | undefined, signal: AbortSignal): Promise<string | undefined>;
 }
 
-export interface ModelStorePort extends ModelSource {
+/** Administration is available only while its adapter provides this capability. */
+export interface ProviderAdministrationPort {
+  protocols(): ProtocolInfo[];
   providers(): ProviderInfo[];
   defaultModels(id: string): ProviderModelDefinition[];
   saveProvider(input: unknown): Promise<string>;
   removeProvider(input: unknown): Promise<string>;
-  discoverModels(input: unknown, signal: AbortSignal): Promise<ProviderModel[]>;
+  discoverModels(input: unknown, signal: AbortSignal): Promise<ProviderModelDefinition[]>;
+}
+
+export interface ModelStorePort extends ModelSource, ProviderAdministrationPort {
   requestModel(choice: ModelChoice): { provider: CatalogProvider; model: CatalogModel } | undefined;
   apiKey(provider: CatalogProvider): Promise<string | undefined>;
   readonly credentials: ModelStore['credentials'];
@@ -40,5 +45,6 @@ export interface ModelStorePort extends ModelSource {
 declare module 'mini-harness/cordis' {
   interface Context {
     harnessModelStore: ModelStorePort;
+    harnessProviderAdministration: ProviderAdministrationPort;
   }
 }

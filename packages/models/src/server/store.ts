@@ -15,7 +15,7 @@ import {
   record,
   type ProviderConfiguration,
 } from './provider-settings.ts';
-import { discover } from './protocols.ts';
+import { discover, protocolOptions } from './protocols.ts';
 import type { AuthStatus, CatalogModel, CatalogProvider, Credential, ModelStorePort } from './store-api.ts';
 
 /** One serialized, atomic store for all providers; SDKs never own our config files. */
@@ -80,7 +80,7 @@ export class ModelStore implements ModelStorePort {
   private readonly file: string;
   private readonly defaults = new Set<readonly CatalogProvider[]>();
   private configuration: ProviderConfiguration = { providers: {}, builtins: {} };
-  private status = new Map<string, AuthStatus>();
+  private readonly status = new Map<string, { value: AuthStatus; checking: boolean }>();
   private effective = new Map<string, CatalogProvider>();
   private writes: Promise<unknown> = Promise.resolve();
 
@@ -103,15 +103,11 @@ export class ModelStore implements ModelStorePort {
     return this.enqueue(async () => {
       const ids = providers.map(({ id }) => id);
       this.defaults.add(providers);
-      this.publishCatalog(this.configuration);
-      await this.refreshStatus(ids);
-      this.notify();
+      this.publishCatalog(this.configuration, ids);
       return () =>
         this.enqueue(async () => {
           this.defaults.delete(providers);
-          this.publishCatalog(this.configuration);
-          await this.refreshStatus(ids);
-          this.notify();
+          this.publishCatalog(this.configuration, ids);
         });
     });
   }
@@ -119,8 +115,6 @@ export class ModelStore implements ModelStorePort {
   refresh() {
     return this.enqueue(async () => {
       this.publishCatalog(parseConfiguration(readJson(this.file, { providers: {} })));
-      await this.refreshStatus(this.effective.keys());
-      this.notify();
     });
   }
 
@@ -180,33 +174,47 @@ export class ModelStore implements ModelStorePort {
     return this.effective.get(id);
   }
 
-  private publishCatalog(configuration: ProviderConfiguration, providers = this.buildCatalog(configuration)) {
+  private publishCatalog(
+    configuration: ProviderConfiguration,
+    ids?: Iterable<string>,
+    providers = this.buildCatalog(configuration),
+  ) {
     this.effective = new Map(providers.map((provider) => [provider.id, provider]));
     this.configuration = configuration;
     for (const id of this.status.keys()) {
       if (!this.effective.has(id)) this.status.delete(id);
     }
+    for (const id of ids ?? this.effective.keys()) void this.refreshStatus(id, true);
+    this.notify();
   }
 
-  private async refreshStatus(ids: Iterable<string>) {
-    await Promise.all(
-      [...ids].map(async (id) => {
-        const provider = this.provider(id);
-        if (!provider) return;
-        let stored = false;
-        let auth: boolean | string = false;
-        try {
-          stored = Boolean(await this.credentials.read(id));
-          auth = provider.authStatus ? await provider.authStatus() : Boolean(await this.apiKey(provider));
-        } catch (error) {
-          this.report(new Error('Could not determine authentication status for ' + id, { cause: error }));
-        }
-        this.status.set(id, {
-          configured: Boolean(auth),
-          source: stored ? 'stored' : auth ? (typeof auth === 'string' ? auth : 'configured') : undefined,
-        });
-      }),
-    );
+  /** A check owns its result only until the next edit, removal or refresh of that provider. */
+  private async refreshStatus(id: string, replace = false) {
+    const provider = this.provider(id);
+    const current = this.status.get(id);
+    if (!provider || (!replace && current?.checking)) return;
+    const entry = { value: current?.value ?? { configured: false }, checking: true };
+    this.status.set(id, entry);
+    let stored = false;
+    let auth: boolean | string = false;
+    try {
+      const credential = await this.credentials.read(id);
+      stored = Boolean(credential);
+      auth = provider.authStatus ? await provider.authStatus() : Boolean(resolveKey(provider, credential));
+    } catch (error) {
+      if (this.status.get(id) === entry)
+        this.report(new Error('Could not determine authentication status for ' + id, { cause: error }));
+    }
+    if (this.status.get(id) !== entry) return;
+    entry.checking = false;
+    const value: AuthStatus = {
+      configured: Boolean(auth),
+      source: stored ? 'stored' : auth ? (typeof auth === 'string' ? auth : 'configured') : undefined,
+    };
+    if (entry.value.configured !== value.configured || entry.value.source !== value.source) {
+      entry.value = value;
+      this.notify();
+    }
   }
 
   private notify() {
@@ -230,11 +238,13 @@ export class ModelStore implements ModelStorePort {
     );
   }
 
-  available() {
-    return this.enqueue(async () => {
-      await this.refreshStatus(this.effective.keys());
-      return this.list();
-    });
+  async available() {
+    for (const id of this.effective.keys()) void this.refreshStatus(id);
+    return this.list();
+  }
+
+  protocols() {
+    return protocolOptions();
   }
 
   requestModel(choice: ModelChoice) {
@@ -269,14 +279,14 @@ export class ModelStore implements ModelStorePort {
         custom: !defaults.has(id),
         baseUrl,
         api,
-        models: models.map((model) => ({
-          ...capabilities(model),
-          templateId: defaults.has(id)
+        models: models.map((model) => {
+          const templateId = defaults.has(id)
             ? override?.models
               ? override.models.find(({ id }) => id === model.id)?.templateId
               : model.id
-            : undefined,
-        })),
+            : undefined;
+          return { ...definition(model), ...(templateId === undefined ? {} : { templateId }) };
+        }),
         defaultBaseUrl: defaults.get(id)?.baseUrl ?? '',
         endpointCustomized: override?.baseUrl !== undefined,
         modelsCustomized: override?.models !== undefined,
@@ -287,11 +297,11 @@ export class ModelStore implements ModelStorePort {
   defaultModels(id: string) {
     const builtin = this.defaultProviders().get(id);
     if (!builtin) throw new DomainError('not_found', 'Unknown built-in provider');
-    return builtin.models.map((model) => ({ ...capabilities(model), templateId: model.id }));
+    return builtin.models.map((model) => ({ ...definition(model), templateId: model.id }));
   }
 
   authStatus(id: string) {
-    return this.status.get(id) ?? { configured: false };
+    return this.status.get(id)?.value ?? { configured: false };
   }
 
   private async commit(id: string, configuration: ProviderConfiguration, keyChange?: { value?: Credential }) {
@@ -311,9 +321,9 @@ export class ModelStore implements ModelStorePort {
       }
       throw error;
     }
-    this.publishCatalog(configuration, providers);
-    await this.refreshStatus([id]);
-    this.notify();
+    if (keyChange)
+      this.status.set(id, { value: { configured: false, source: keyChange.value ? 'stored' : undefined }, checking: false });
+    this.publishCatalog(configuration, [id], providers);
   }
 
   saveProvider(input: unknown) {
@@ -327,7 +337,13 @@ export class ModelStore implements ModelStorePort {
       if (builtin) {
         if (values.create) throw new DomainError('conflict', 'A provider with this ID already exists');
         if (key && !builtin.canSetKey) throw invalid('This provider does not accept an API key');
-        const override = parseOverride(values, builtin);
+        const override = parseOverride(values);
+        for (const model of override.models ?? []) {
+          if (model.templateId && !builtin.models.some(({ id }) => id === model.templateId))
+            throw invalid('Unknown native model template: ' + model.templateId);
+          if (!model.templateId && !builtin.api)
+            throw invalid('This built-in provider has no protocol for new models');
+        }
         if (override.baseUrl !== undefined || override.models !== undefined)
           next.builtins = { ...next.builtins, [id]: override };
         else delete next.builtins[id];
@@ -377,15 +393,12 @@ export class ModelStore implements ModelStorePort {
 
   async close() {
     await this.writes;
+    this.status.clear();
     await this.credentials.settle();
   }
 
   async apiKey(provider: CatalogProvider) {
-    const stored = await this.credentials.read(provider.id);
-    const key =
-      (stored?.type === 'api_key' ? stored.key : undefined) ??
-      (provider.key ? (process.env[provider.key] ?? provider.key) : undefined);
-    return key || undefined;
+    return resolveKey(provider, await this.credentials.read(provider.id));
   }
 
   async discoverModels(input: unknown, signal: AbortSignal) {
@@ -406,14 +419,15 @@ export class ModelStore implements ModelStorePort {
   }
 }
 
-function capabilities({
-  id,
-  name,
-  input,
-  contextWindow,
-  maxTokens,
-  reasoning,
-  thinkingLevels,
-}: CatalogModel) {
-  return { id, name, input, contextWindow, maxTokens, reasoning, thinkingLevels };
+function definition({ id, name, input, contextWindow, maxTokens, reasoning }: CatalogModel) {
+  return { id, name, input, contextWindow, maxTokens, reasoning };
+}
+
+function capabilities(model: CatalogModel) {
+  return { ...definition(model), thinkingLevels: model.thinkingLevels };
+}
+
+function resolveKey(provider: CatalogProvider, stored: Credential | undefined) {
+  return ((stored?.type === 'api_key' ? stored.key : undefined) ??
+    (provider.key ? (process.env[provider.key] ?? provider.key) : undefined)) || undefined;
 }

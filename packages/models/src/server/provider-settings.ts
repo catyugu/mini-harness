@@ -1,14 +1,12 @@
 import { DomainError } from '@mini-harness/platform/errors';
 import { thinkingLevels } from '@mini-harness/llm/vocabulary';
 import {
-  maxModelTokens,
-  modelDefaults,
-  providerApiPattern,
+  modelCapacity,
   providerIdPattern,
-  type ProviderModel,
   type ProviderModelDefinition,
 } from '../shared/catalog.ts';
-import type { CatalogModel, CatalogProvider } from './store-api.ts';
+import type { CatalogModel } from './store-api.ts';
+import { protocols } from './protocols.ts';
 
 export interface ProviderConnection {
   api: string;
@@ -16,12 +14,11 @@ export interface ProviderConnection {
 }
 
 type RecordValue = Record<string, unknown>;
-type ModelConfig = Omit<ProviderModel, 'thinkingLevels'>;
-type BuiltinModelConfig = ModelConfig & Pick<ProviderModelDefinition, 'templateId'>;
+type ModelConfig = Omit<ProviderModelDefinition, 'templateId'>;
 
 export interface ProviderOverride {
   baseUrl?: string;
-  models?: BuiltinModelConfig[];
+  models?: ProviderModelDefinition[];
 }
 export interface CustomConfig extends ProviderConnection {
   name: string;
@@ -54,7 +51,7 @@ export function endpoint(value: unknown) {
 }
 
 export function protocol(value: unknown) {
-  if (typeof value !== 'string' || !providerApiPattern.test(value)) throw invalid('Invalid API protocol');
+  if (typeof value !== 'string' || !protocols.has(value)) throw invalid('Unsupported API protocol');
   return value;
 }
 
@@ -62,10 +59,6 @@ export function credential(value: unknown) {
   if (value === undefined) return '';
   if (typeof value !== 'string' || value.length > 65536) throw invalid('Invalid credential');
   return value.trim();
-}
-
-export function modelCapacity(value: unknown): value is number {
-  return typeof value === 'number' && Number.isSafeInteger(value) && value > 0 && value <= maxModelTokens;
 }
 
 function modelId(value: unknown) {
@@ -80,16 +73,12 @@ function modelName(value: unknown, id: string) {
   return value.trim() || id;
 }
 
-/** Parse independent model fields, inheriting only from an explicitly selected native template. */
-function parseModel(entry: RecordValue, baseline?: ProviderModel): ModelConfig {
-  const id = modelId(entry.id);
-  const {
-    name = baseline?.name,
-    input = baseline?.input ?? ['text'],
-    reasoning = baseline?.reasoning ?? false,
-    contextWindow = baseline?.contextWindow ?? modelDefaults.contextWindow,
-    maxTokens = baseline?.maxTokens ?? modelDefaults.maxTokens,
-  } = entry;
+/** HTTP edits and persisted definitions share one complete metadata contract. */
+function parseModel(entry: RecordValue): ModelConfig {
+  const { id: rawId, name, input, reasoning, contextWindow, maxTokens, ...extra } = entry;
+  const id = modelId(rawId);
+  if (Object.keys(extra).length) throw invalid('Unsupported model fields for ' + id);
+  if (typeof name !== 'string' || !name.trim()) throw invalid('Missing model display name for ' + id);
   if (!modelCapacity(contextWindow) || !modelCapacity(maxTokens))
     throw invalid('Invalid model token limits for ' + id);
   if (
@@ -129,29 +118,23 @@ export function parseCustom(id: string, value: unknown): CustomConfig {
     name: modelName(entry.name, id),
     api: protocol(entry.api),
     baseUrl: endpoint(entry.baseUrl),
-    models: parseModels(entry.models, (model) => parseModel(model)),
+    models: parseModels(entry.models, parseModel),
     apiKey: entry.apiKey,
     headers: headers as CustomConfig['headers'],
   };
 }
 
-export function parseOverride(value: unknown, provider?: CatalogProvider): ProviderOverride {
+export function parseOverride(value: unknown): ProviderOverride {
   const entry = record(value);
   if (!entry) throw invalid('Invalid built-in provider override');
   return {
     baseUrl: entry.baseUrl === undefined || entry.baseUrl === '' ? undefined : endpoint(entry.baseUrl),
-    models:
-      entry.models === undefined
-        ? undefined
-        : parseModels(entry.models, (model): BuiltinModelConfig => {
-            const templateId = model.templateId === undefined ? undefined : modelId(model.templateId);
-            const baseline = provider?.models.find(({ id }) => id === templateId);
-            if (provider && templateId && !baseline)
-              throw invalid('Unknown native model template: ' + templateId);
-            if (provider && !templateId && !provider.api)
-              throw invalid('This built-in provider has no protocol for new models');
-            return { ...parseModel(model, baseline), templateId };
-          }),
+    models: entry.models === undefined
+      ? undefined
+      : parseModels(entry.models, ({ templateId, ...model }): ProviderModelDefinition => ({
+          ...parseModel(model),
+          ...(templateId === undefined ? {} : { templateId: modelId(templateId) }),
+        })),
   };
 }
 
