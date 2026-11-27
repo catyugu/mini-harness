@@ -330,7 +330,8 @@ test('a long response updates only its view and restores from current state when
     yield '<img src=x onerror="alert(1)">\n\n<p class="overlay">Safe text</p>\n\n';
     for (let offset = 0; offset < report.length; offset += 83) {
       yield report.slice(offset, offset + 83);
-      if (offset % (83 * 16) === 0) await new Promise<void>((resolve) => setImmediate(resolve));
+      // Pace bursts across browser frames instead of delivering the entire report in one event-loop turn.
+      if (offset % (83 * 16) === 0) await new Promise<void>((resolve) => setTimeout(resolve, 20));
     }
     await tail;
     yield '\n\nFinal paragraph';
@@ -418,7 +419,7 @@ export const apply = (ctx) => {
     await expect(page.locator('#replacement-stream')).toContainText('Paragraph 48');
     await page.evaluate(() => window.dispatchEvent(new Event('restore-history')));
     await expect.poll(distanceFromEnd).toBeLessThan(8);
-    const previous = await page.locator('.message.user').elementHandle();
+    const previous = expectPresent(await page.locator('.message.user').elementHandle(), 'existing message');
     const preview = history.locator('.message.assistant');
     const cdp = await page.context().newCDPSession(page);
     await cdp.send('Performance.enable');
@@ -430,6 +431,10 @@ export const apply = (ctx) => {
     await expect(preview.locator('ol > li')).toHaveText(['First step', 'Second step']);
     await expect(preview.locator('pre > code').first()).toHaveText('Streaming code');
     await expect(preview.getByRole('table').first()).toContainText('One');
+    const prompt = page.getByRole('textbox', { name: 'Message' });
+    await prompt.fill('Draft during streaming');
+    await expect(prompt).toHaveText('Draft during streaming');
+    await prompt.fill('');
     await expect(preview.getByRole('heading', { name: 'Report section 90' })).toBeAttached();
     await expect(preview.locator('img, .overlay')).toHaveCount(0);
     await expect(preview.getByText('Safe text')).toBeAttached();
@@ -443,10 +448,6 @@ export const apply = (ctx) => {
     });
     console.log('50 KB native Markdown stream: ' + metrics.join(', '));
     await cdp.detach();
-    const prompt = page.getByRole('textbox', { name: 'Message' });
-    await prompt.fill('Draft during streaming');
-    await expect(prompt).toHaveText('Draft during streaming');
-    await prompt.fill('');
     await history.hover();
     await page.mouse.wheel(0, -100000);
     await expect.poll(() => history.evaluate((node) => node.scrollTop)).toBeLessThan(8);
@@ -472,6 +473,76 @@ export const apply = (ctx) => {
     releaseMarkdown();
     releaseTail();
     finish();
+    await page.close();
+    await service.stop();
+    await mock.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+
+test('built-in tool views distinguish calls and retain their content after replay', async ({ page }) => {
+  const longPath = 'missing/' + 'long-path/'.repeat(60) + 'sample.txt';
+  const calls: { tool: string; args: Record<string, unknown>; summary: RegExp; output: string }[] = [
+    { tool: 'read', args: { path: 'sample.txt', offset: 1, limit: 2 }, summary: /read.*sample\.txt.*offset 1.*limit 2.*Done/, output: 'original text' },
+    { tool: 'edit', args: { path: 'sample.txt', edits: [{ oldText: 'original text', newText: 'updated text' }] }, summary: /edit.*sample\.txt.*Done/, output: 'Applied 1 edit' },
+    { tool: 'find', args: { pattern: '*.txt' }, summary: /find.*\*\.txt.* in \..*Done/, output: 'sample.txt' },
+    { tool: 'grep', args: { pattern: 'updated', path: '.', glob: '*.txt' }, summary: /grep.*updated.* in \..*\*\.txt.*Done/, output: 'updated text' },
+    { tool: 'load_skill', args: { name: 'fixture-review' }, summary: /load skill.*fixture-review.*Done/, output: 'Review the fixture carefully.' },
+    { tool: 'read_context', args: { entry: 'abcdef1234567890', offset: 0, limit: 128 }, summary: /read context.*abcdef1234567890.*offset 0.*limit 128.*Failed/, output: 'Original message not found' },
+    { tool: 'task_control', args: { action: 'list' }, summary: /task control.*list.*Done/, output: '[]' },
+    { tool: 'send_message', args: { sessionId: 'missing-child', message: 'Follow-up for child' }, summary: /send message.*missing-child.*Follow-up for child.*Failed/, output: 'Choose a direct parent or child conversation' },
+    { tool: 'read', args: { path: longPath }, summary: /read.*missing\/long-path\/.*sample\.txt.*Failed/, output: longPath },
+  ];
+  let index = 0;
+  const mock = await createMockProvider(({ messages }) => {
+    if (messages.at(-1)?.role === 'tool') return 'Call finished';
+    const { tool, args } = expectPresent(calls[index++], 'next fixture call');
+    return { tool, args };
+  });
+  const { root, paths } = createFixturePaths(mock.url);
+  writeFileSync(join(paths.cwd, 'sample.txt'), 'original text');
+  const skill = join(paths.home, 'skills', 'fixture-review');
+  mkdirSync(skill, { recursive: true });
+  writeFileSync(join(skill, 'SKILL.md'), '---\nname: fixture-review\ndescription: Review a fixture\n---\nReview the fixture carefully.');
+  const service = await startIsolatedHost(paths);
+  try {
+    await page.goto(service.url + '/#token=' + service.token);
+    const prompt = page.getByRole('textbox', { name: 'Message' });
+    const cards = page.locator('.tool-card');
+    for (const [i, call] of calls.entries()) {
+      await prompt.fill('Tool view ' + (i + 1));
+      await page.getByRole('button', { name: 'Send', exact: true }).click();
+      await expect(cards).toHaveCount(i + 1);
+      const card = cards.nth(i);
+      const header = card.locator('summary').first();
+      await expect(header).toHaveAccessibleName(call.summary);
+      await expect(page.getByRole('button', { name: 'Send', exact: true })).toBeVisible();
+      await header.click();
+      const body = card.locator('.tool-content');
+      await expect(body).toContainText(call.output);
+      if (call.tool === 'edit') {
+        await expect(body.getByLabel('Before')).toHaveText('original text');
+        await expect(body.getByLabel('After')).toHaveText('updated text');
+      }
+      await header.click();
+    }
+    await page.reload();
+    await expect(cards).toHaveCount(calls.length);
+    for (const [i, call] of calls.entries())
+      await expect(cards.nth(i).locator('summary').first()).toHaveAccessibleName(call.summary);
+    await page.setViewportSize({ width: 320, height: 844 });
+    const header = cards.last().locator('summary').first();
+    await expect(header).toHaveAccessibleName(calls.at(-1)!.summary);
+    await expect.poll(() => header.evaluate((node) => {
+      const row = node.getBoundingClientRect();
+      const status = node.querySelector('.tool-state')!.getBoundingClientRect();
+      const duration = node.querySelector('.tool-duration')!.getBoundingClientRect();
+      const summary = node.querySelector<HTMLElement>('.file-tool-target');
+      return status.right <= row.right + 1 && duration.right <= status.left + 1 &&
+        !!summary && summary.scrollWidth > summary.clientWidth;
+    })).toBe(true);
+  } finally {
     await page.close();
     await service.stop();
     await mock.close();
