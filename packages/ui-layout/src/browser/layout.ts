@@ -33,7 +33,7 @@ export function createLayout(view: LayoutElements, signal: AbortSignal) {
   const sidebarMax = 380;
   const collapsedWidth = 56;
   const panelMin = 260;
-  const mainMin = 300;
+  const mainMin = 520;
   let sidebarWidth = Number(localStorage.getItem(sidebarWidthKey)) || 340;
   let panelWidth = Number(localStorage.getItem(panelWidthKey)) || 380;
   let desktopSidebar = localStorage.getItem('mini-harness-sidebar') !== 'collapsed';
@@ -45,17 +45,17 @@ export function createLayout(view: LayoutElements, signal: AbortSignal) {
   function clamp(value: number, min: number, max: number) {
     return Math.round(Math.max(min, Math.min(value, max)));
   }
-  function maxSidebarWidth() {
-    return panelOpen && !narrow.matches
-      ? Math.max(sidebarMin, Math.min(sidebarMax, innerWidth - panelMin - mainMin))
-      : sidebarMax;
-  }
   function sidebarSize(value = sidebarWidth) {
-    return clamp(value, sidebarMin, maxSidebarWidth());
+    return clamp(value, sidebarMin, sidebarMax);
+  }
+  function panelSpace() {
+    return innerWidth - (desktopSidebar ? sidebarSize() : collapsedWidth) - mainMin;
+  }
+  function panelDrawer() {
+    return narrow.matches || panelSpace() < panelMin;
   }
   function maxPanelWidth() {
-    const left = desktopSidebar ? sidebarSize() : collapsedWidth;
-    return Math.round(Math.max(panelMin, Math.min(innerWidth * 0.48, innerWidth - left - mainMin)));
+    return Math.round(Math.max(panelMin, Math.min(innerWidth * 0.48, panelSpace())));
   }
   function panelSize(value = panelWidth) {
     return clamp(value, panelMin, maxPanelWidth());
@@ -66,7 +66,7 @@ export function createLayout(view: LayoutElements, signal: AbortSignal) {
     root.style.setProperty('--left-width', left + 'px');
     root.style.setProperty('--right-width', right + 'px');
     for (const [handle, size, min, max] of [
-      [sidebarResize, left, sidebarMin, maxSidebarWidth()],
+      [sidebarResize, left, sidebarMin, sidebarMax],
       [panelResize, right, panelMin, maxPanelWidth()],
     ] as const) {
       handle.setAttribute('aria-valuenow', String(size));
@@ -76,18 +76,26 @@ export function createLayout(view: LayoutElements, signal: AbortSignal) {
   }
   function render() {
     const mobile = narrow.matches;
+    const floating = panelDrawer();
+    const panelModal = floating && panelOpen;
+    const focusPanel = panelModal && !panel.contains(document.activeElement);
+    if (focusPanel && document.activeElement instanceof HTMLElement)
+      panelTrigger = document.activeElement === document.body ? panelButton : document.activeElement;
     sidebar.classList.toggle('open', mobile && drawer);
-    sidebar.inert = mobile && (!drawer || panelOpen);
+    sidebar.inert = panelModal || (mobile && !drawer);
     sidebarResize.hidden = mobile || !desktopSidebar;
     root.classList.toggle('sidebar-collapsed', !mobile && !desktopSidebar);
     root.classList.toggle('right-open', panelOpen);
+    root.classList.toggle('panel-drawer', floating);
+    panelResize.hidden = !panelOpen || floating;
     sidebarButton.setAttribute('aria-expanded', String(mobile ? drawer : desktopSidebar));
     panelButton.setAttribute('aria-expanded', String(panelOpen));
     panel.inert = !panelOpen;
-    const modal = mobile && (drawer || panelOpen);
+    const modal = panelModal || (mobile && drawer);
     const active = panelOpen ? panel : sidebar;
     main.inert = modal;
     overlay.hidden = !modal;
+    overlay.setAttribute('aria-label', panelModal ? 'Close workspace panel' : 'Close navigation');
     for (const element of [sidebar, panel]) {
       if (modal && element === active) {
         element.setAttribute('role', 'dialog');
@@ -98,6 +106,7 @@ export function createLayout(view: LayoutElements, signal: AbortSignal) {
       }
     }
     measure();
+    if (focusPanel) panelClose.focus();
   }
 
   function closeDrawer(restore = true) {
@@ -108,7 +117,7 @@ export function createLayout(view: LayoutElements, signal: AbortSignal) {
   }
   function setPanel(open: boolean, focus = false) {
     if (open === panelOpen) return;
-    if (open && focus) {
+    if (open) {
       const origin = document.activeElement as HTMLElement;
       panelTrigger = origin && !panel.contains(origin) && !sidebar.contains(origin) ? origin : panelButton;
     }
@@ -116,7 +125,7 @@ export function createLayout(view: LayoutElements, signal: AbortSignal) {
     if (!open && panel.contains(document.activeElement)) focus = true;
     panelOpen = open;
     render();
-    if (open && (focus || narrow.matches)) panelClose.focus();
+    if (open && focus && !panelDrawer()) panelClose.focus();
     if (!open && focus)
       (panelTrigger?.isConnected && !panelTrigger.closest('[inert]') ? panelTrigger : panelButton).focus();
     panel.dispatchEvent(new Event('panel-visibility'));
@@ -161,7 +170,7 @@ export function createLayout(view: LayoutElements, signal: AbortSignal) {
         if (panelOpen) setPanel(false, true);
         else closeDrawer();
       }
-      if (event.key !== 'Tab' || !narrow.matches || (!drawer && !panelOpen)) return;
+      if (event.key !== 'Tab' || !((panelOpen && panelDrawer()) || (drawer && narrow.matches))) return;
       const container = panelOpen ? panel : sidebar;
       const controls = [
         ...container.querySelectorAll<HTMLElement>(
@@ -214,7 +223,7 @@ export function createLayout(view: LayoutElements, signal: AbortSignal) {
       (event) => {
         if (drag?.id !== event.pointerId) return;
         setWidth(drag.width + direction * (event.clientX - drag.start));
-        measure();
+        render();
       },
       { signal },
     );
@@ -235,7 +244,7 @@ export function createLayout(view: LayoutElements, signal: AbortSignal) {
         event.preventDefault();
         const delta = event.key === 'ArrowRight' ? 20 : -20;
         setWidth(Number(handle.getAttribute('aria-valuenow')) + direction * delta);
-        measure();
+        render();
         save();
       },
       { signal },
@@ -265,12 +274,11 @@ export function createLayout(view: LayoutElements, signal: AbortSignal) {
 
   function resize() {
     document.documentElement.style.setProperty('--app-height', (viewport?.height ?? innerHeight) + 'px');
-    measure();
+    render();
   }
   viewport?.addEventListener('resize', resize, { signal });
   window.addEventListener('resize', resize, { signal });
   resize();
-  render();
   return {
     closeDrawer,
     setPanel,

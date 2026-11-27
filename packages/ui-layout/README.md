@@ -42,7 +42,7 @@ Tab types and panel entries automatically belong to the calling Cordis fiber. A 
 
 Tabs survive conversation switches. Switching workspaces detaches their views and retains the workspace's tab selection, panel state and scroll position for a return visit. This state is in browser memory, not durable session storage. A failing tab renderer displays its error after aborting that attempted view's lifetime.
 
-On desktop, the navigation sidebar starts at 340 CSS pixels and can be resized from 280 to 380 pixels by dragging its inner edge or using the arrow keys on the focused separator. The browser remembers the selected width, including across reloads and collapse/expand. When both side panels are open, Layout limits their widths to reserve space for the main area. On mobile the navigation remains an overlay drawer without a resize handle.
+On desktop, the navigation sidebar starts at 340 CSS pixels and can be resized from 280 to 380 pixels by dragging its inner edge or using the arrow keys on the focused separator. The browser remembers the selected width, including across reloads and collapse/expand. The sidebar width and collapse state are controlled by the user. Layout reduces the workspace panel's displayed width to reserve space for the main area, then switches it to a modal drawer if the three regions no longer fit. The panel retains its selected width and mounted tabs as space returns. On mobile the navigation remains an overlay drawer without a resize handle.
 
 Layout has no plugin configuration. Its responsive behavior and resize state are implemented in [`layout.ts`](src/browser/layout.ts); typed tab ownership is implemented in [`right-tabs.ts`](src/browser/right-tabs.ts).
 
