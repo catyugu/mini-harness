@@ -113,7 +113,9 @@ export class ModelStore implements ModelStorePort {
   }
 
   refresh() {
-    return this.enqueue(() => this.publishCatalog(parseConfiguration(readJson(this.file, { providers: {} }))));
+    return this.enqueue(() =>
+      this.publishCatalog(parseConfiguration(readJson(this.file, { providers: {} }))),
+    );
   }
 
   private defaultProviders() {
@@ -266,9 +268,10 @@ export class ModelStore implements ModelStorePort {
     const defaults = this.defaultProviders();
     return [...this.effective.values()].map(({ id, name, canSetKey, models, baseUrl, api }) => {
       const builtin = defaults.get(id);
-      const override = builtin && Object.hasOwn(this.configuration.builtins, id)
-        ? this.configuration.builtins[id]
-        : undefined;
+      const override =
+        builtin && Object.hasOwn(this.configuration.builtins, id)
+          ? this.configuration.builtins[id]
+          : undefined;
       const status = this.authStatus(id);
       return {
         id,
@@ -319,7 +322,10 @@ export class ModelStore implements ModelStorePort {
       throw error;
     }
     if (key !== undefined)
-      this.status.set(id, { value: { configured: false, source: key === null ? undefined : 'stored' }, checking: false });
+      this.status.set(id, {
+        value: { configured: false, source: key === null ? undefined : 'stored' },
+        checking: false,
+      });
     this.publishCatalog(configuration, [id], providers);
   }
 
