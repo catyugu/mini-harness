@@ -24,7 +24,10 @@ test('model adapter streams native messages, tool calls and metadata through the
   const choice = { provider: 'local-mock', id: 'mock-model' };
   const connection = { api: 'openai-completions', baseUrl: mock.url, key: 'test-only-key' };
   const discovered = await adapter.discoverModels(connection, t.signal);
-  assert.deepEqual(discovered.map(({ id }) => id), ['mock-model', 'discovered-model']);
+  assert.deepEqual(
+    discovered.map(({ id }) => id),
+    ['mock-model', 'discovered-model'],
+  );
   assert.equal(discovered[1].contextWindow, 65536);
   await assert.rejects(
     adapter.discoverModels({ ...connection, baseUrl: mock.url + '/missing' }, t.signal),

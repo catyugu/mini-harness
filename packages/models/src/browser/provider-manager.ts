@@ -1,6 +1,12 @@
 import type { Context } from 'mini-harness/cordis';
 import { browserRequest, payload } from '@mini-harness/ui-runtime/http';
-import { button, confirmAction, fromMarkup, iconButton, required } from '@mini-harness/ui-primitives/primitives';
+import {
+  button,
+  confirmAction,
+  fromMarkup,
+  iconButton,
+  required,
+} from '@mini-harness/ui-primitives/primitives';
 import { icon } from '@mini-harness/ui-primitives/icons';
 import type { ProviderInfo, ProtocolInfo } from '../shared/pi-provider.ts';
 import { providerEditor } from './provider-editor.ts';

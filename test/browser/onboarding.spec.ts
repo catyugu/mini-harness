@@ -60,7 +60,10 @@ test('create and edit a provider, reconcile its discovered catalog, and use the 
   const native = settings.getByRole('form', { name: 'Edit local-mock' });
   await native.getByLabel('API protocol').selectOption('google-generative-ai');
   await native.getByRole('button', { name: 'Save changes' }).click();
-  await page.getByRole('dialog', { name: 'Change API protocol' }).getByRole('button', { name: 'Save changes' }).click();
+  await page
+    .getByRole('dialog', { name: 'Change API protocol' })
+    .getByRole('button', { name: 'Save changes' })
+    .click();
   await expect(settings.getByText('Provider saved.', { exact: true })).toBeVisible();
   const saved = JSON.parse(readFileSync(join(paths.home, 'models.json'), 'utf8')).providers['local-mock'];
   expect(saved.api).toBe('google-generative-ai');

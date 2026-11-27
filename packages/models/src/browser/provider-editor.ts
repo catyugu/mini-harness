@@ -73,14 +73,18 @@ export function providerEditor(
     const body = fromMarkup('<div class="provider-options-body"></div>');
     const options = custom
       ? undefined
-      : fromMarkup<HTMLDetailsElement>('<details class="ui-disclosure"><summary>Custom settings</summary></details>');
+      : fromMarkup<HTMLDetailsElement>(
+          '<details class="ui-disclosure"><summary>Custom settings</summary></details>',
+        );
     if (options) {
       required(options.querySelector('summary')).prepend(icon('chevron'));
       options.append(body);
     }
     fields.append(options ?? body);
 
-    const endpoint = fromMarkup<HTMLInputElement>('<input type="url" placeholder="https://api.example.com/v1">');
+    const endpoint = fromMarkup<HTMLInputElement>(
+      '<input type="url" placeholder="https://api.example.com/v1">',
+    );
     endpoint.required = custom;
     endpoint.value = custom || selected?.endpointCustomized ? (selected?.baseUrl ?? '') : '';
     if (!custom) endpoint.placeholder = selected?.defaultBaseUrl ?? '';
@@ -134,7 +138,12 @@ export function providerEditor(
           });
           if (signal.aborted) return;
           if (!found.length) throw new Error('The endpoint returned no available models.');
-          const existing = new Set(catalog.models().map(({ id }) => id).filter(Boolean));
+          const existing = new Set(
+            catalog
+              .models()
+              .map(({ id }) => id)
+              .filter(Boolean),
+          );
           const picked = await selectDiscovered(found, existing, signal);
           if (picked) catalog.applySelection(found, picked);
         } finally {
@@ -172,7 +181,9 @@ export function providerEditor(
         if (
           provider?.custom &&
           provider.api !== api.value &&
-          models?.some(({ compat, thinkingLevelMap }) => compat !== undefined || thinkingLevelMap !== undefined)
+          models?.some(
+            ({ compat, thinkingLevelMap }) => compat !== undefined || thinkingLevelMap !== undefined,
+          )
         ) {
           if (
             !(await confirmAction(
@@ -207,7 +218,9 @@ export function providerEditor(
       <label class="ui-button"><input type="radio" name="provider-type" value="builtin" checked>Built-in provider</label>
       <label class="ui-button"><input type="radio" name="provider-type" value="custom">Custom API</label>
     </fieldset>`);
-    const picker = fromMarkup<HTMLSelectElement>('<select data-initial-focus><option value="">Choose a provider</option></select>');
+    const picker = fromMarkup<HTMLSelectElement>(
+      '<select data-initial-focus><option value="">Choose a provider</option></select>',
+    );
     for (const item of [...available].sort((a, b) => a.name.localeCompare(b.name))) {
       picker.add(new Option(item.name, item.id));
     }
