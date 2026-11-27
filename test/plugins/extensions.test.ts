@@ -537,6 +537,8 @@ test('model contributions select matching capabilities and transport, and reject
   const { app, paths, request } = await fixture(t);
   const model = { provider: 'local-mock', id: app.runtime.plugins.ctx.harnessModelPreference.recent().id };
   const ctx = app.runtime.plugins.ctx;
+  let catalogChanges = 0;
+  t.after(ctx.on('models/catalog-changed', () => { catalogChanges++; }));
   const plugin = (name: string, priority: number, input: string[]) =>
     writePlugin(
       paths.plugins,
@@ -574,6 +576,7 @@ export function apply(ctx) {
     ctx.harnessModels.list().filter(({ provider, id }) => provider === model.provider && id === model.id);
   const session = ctx.harnessSessions.create();
   await toggle('model-low', false);
+  assert.equal(catalogChanges, 1);
   assert.equal(list()[0]?.name, 'model-low');
   assert.deepEqual(ctx.harnessModels.capabilities(model)?.input, ['text']);
   assert.equal(await sendRun(ctx.harnessRuns, session.id, 'Low priority', undefined, { model }), 'model-low');
@@ -623,7 +626,22 @@ export function apply(ctx) {
     first();
   }
   assert.deepEqual(ctx.harnessModels.resolve(model), model);
+  const before = catalogChanges;
   await ctx.harnessModelPreference.remember(model);
+  await ctx.parallel('models/source-changed', 'auth');
+  assert.equal(catalogChanges, before);
+
+  const metadata = ctx.harnessModels.capabilities(model)!;
+  const entries = list();
+  const dispose = ctx.harnessModels.register({
+    list: () => entries,
+    resolve: (choice) => adapter.accepts(choice) ? model : undefined,
+    capabilities: () => metadata,
+  }, adapter, 10);
+  // Direct paired registration and release each publish once.
+  assert.equal(catalogChanges, before + 1);
+  dispose();
+  assert.equal(catalogChanges, before + 2);
 
   // A source edit is committed while a candidate Profile graph is being activated.
   // The rejected Profile change must not discard the independent source notification.

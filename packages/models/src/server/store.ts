@@ -1,4 +1,5 @@
 import { join } from 'node:path';
+import { isDeepStrictEqual } from 'node:util';
 import { getSupportedThinkingLevels } from '@earendil-works/pi-ai';
 import { DomainError } from '@mini-harness/platform/errors';
 import { readJson, writeJson } from '@mini-harness/platform/json';
@@ -199,16 +200,16 @@ export class ModelStore implements ModelStorePort {
   private setStatus(id: string, value: AuthStatus, publish: boolean) {
     const previous = this.status.get(id);
     this.status.set(id, value);
-    if (publish && (previous?.configured !== value.configured || previous.source !== value.source))
+    if (publish && (previous?.configured !== value.configured || previous?.source !== value.source))
       this.notify('auth');
   }
 
   /** Join existing checks; replacements abort and drain their predecessor before starting. */
-  private refreshStatus(id: string, replace = false): Promise<void> | undefined {
+  private refreshStatus(id: string, replace = false) {
     const provider = this.effective.get(id);
     if (!provider || this.lifetime.signal.aborted) return;
     const previous = this.checks.get(id);
-    if (previous && !replace && !previous.controller.signal.aborted) return previous.work;
+    if (previous && !replace && !previous.controller.signal.aborted) return;
     previous?.controller.abort();
     let credential: Credential | undefined;
     try {
@@ -234,7 +235,7 @@ export class ModelStore implements ModelStorePort {
         if (signal.aborted) return;
         let auth: boolean | string = false;
         try {
-          auth = await check(signal);
+          auth = await check.call(provider, signal);
         } catch (error) {
           if (!signal.aborted)
             this.report(new Error('Could not determine authentication status for ' + id, { cause: error }));
@@ -253,7 +254,6 @@ export class ModelStore implements ModelStorePort {
         if (this.checks.get(id)?.controller === controller) this.checks.delete(id);
       });
     this.checks.set(id, { controller, work });
-    return work;
   }
 
   private notify(kind: 'catalog' | 'auth') {
@@ -278,11 +278,15 @@ export class ModelStore implements ModelStorePort {
   }
 
   async available() {
-    let catalog: typeof this.effective;
-    do {
-      catalog = this.effective;
-      await Promise.all([...catalog.keys()].map((id) => this.refreshStatus(id)));
-    } while (catalog !== this.effective && !this.lifetime.signal.aborted);
+    for (const id of this.effective.keys()) this.refreshStatus(id);
+    while (!this.lifetime.signal.aborted) {
+      const pending = [...this.effective.keys()].flatMap((id) => {
+        const check = this.checks.get(id);
+        return check && !check.controller.signal.aborted ? [check.work] : [];
+      });
+      if (!pending.length) break;
+      await Promise.all(pending);
+    }
     return this.list();
   }
 
@@ -348,20 +352,25 @@ export class ModelStore implements ModelStorePort {
   }
 
   private async commit(id: string, configuration: ProviderConfiguration, key?: string | null) {
-    const providers = this.buildCatalog(configuration);
-    writeJson(this.file, configuration);
+    const structural = !isDeepStrictEqual(configuration, this.configuration);
+    const providers = structural ? this.buildCatalog(configuration) : undefined;
+    if (structural) writeJson(this.file, configuration);
     try {
       if (key === null) await this.credentials.delete(id);
       else if (key !== undefined) await this.credentials.modify(id, async () => ({ type: 'api_key', key }));
     } catch (error) {
       try {
-        writeJson(this.file, this.configuration);
+        if (structural) writeJson(this.file, this.configuration);
       } catch (rollbackError) {
         throw new AggregateError([error, rollbackError], 'Could not restore provider configuration');
       }
       throw error;
     }
-    this.publishCatalog(configuration, [id], providers);
+    if (providers) this.publishCatalog(configuration, [id], providers);
+    else if (key !== undefined) {
+      this.refreshStatus(id, true);
+      this.notify('auth');
+    }
   }
 
   saveProvider(input: unknown) {

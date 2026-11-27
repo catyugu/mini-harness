@@ -87,12 +87,13 @@ const plugin: Plugin.Object = {
           let release: () => void;
           try {
             release = llm.register(adapter, priority);
+            changed('catalog');
           } catch (error) {
             sources.delete(entry);
             throw error;
           } finally {
             pairing--;
-            changed('catalog');
+            flush();
           }
           return () => {
             if (!sources.delete(entry)) return;

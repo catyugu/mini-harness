@@ -5,7 +5,6 @@ import { join } from 'node:path';
 import { PiLlm } from '../src/server/pi-adapter.ts';
 import { ModelStore } from '../src/server/store.ts';
 import { createFixturePaths, createMockProvider } from '../../../test/support/mock-provider.ts';
-import { waitUntil } from '../../../test/support/api-fixture.ts';
 import { readJson, writeJson } from '@mini-harness/platform/json';
 import type { LlmEvent, NativeMessage } from '@mini-harness/llm/api';
 
@@ -105,6 +104,7 @@ test('model adapter streams native messages, tool calls and metadata through the
   const restored = adapter.providers().find(({ id }) => id === choice.provider)!.models[0];
   assert.deepEqual(restored.thinkingLevelMap, advanced.thinkingLevelMap);
   assert.deepEqual(restored.cost, advanced.cost);
+  assert.deepEqual(restored.compat, { supportsDeveloperRole: false });
   assert.deepEqual(adapter.capabilities(choice)?.thinkingLevels, ['off', 'low', 'medium', 'high', 'xhigh']);
   const selected = adapter.requestModel(choice)?.model;
   assert.equal(selected?.api, 'openai-responses');
@@ -137,10 +137,7 @@ test('credential updates serialize across providers and survive adapter replacem
   const replacement = new ModelStore(paths.home);
   await replacement.refresh();
   await new PiLlm(replacement).registerModels();
-  await waitUntil(
-    () => replacement.authStatus('openai'),
-    ({ configured }) => configured,
-  );
+  await replacement.available();
   assert.deepEqual(replacement.authStatus('openai'), { configured: true, source: 'stored' });
   await replacement.removeProvider({ id: 'openai' });
   assert.equal(JSON.parse(readFileSync(join(paths.home, 'auth.json'), 'utf8')).openai, undefined);
@@ -333,51 +330,59 @@ test(
       provider: 'slow-auth',
     };
     let entered!: () => void;
-    const started = new Promise<void>((resolve) => {
-      entered = resolve;
-    });
-    let calls = 0;
-    let cancelled = 0;
-    const remove = await store.registerDefaults([
-      {
-        id: 'slow-auth',
-        name: 'Slow auth',
-        api: model.api,
-        baseUrl: mock.url,
-        canSetKey: true,
-        models: [model],
-        async authStatus(signal) {
-          if (++calls === 1) {
-            entered();
-            await new Promise<void>((resolve) =>
-              signal.addEventListener(
-                'abort',
-                () => {
-                  cancelled++;
-                  resolve();
-                },
-                { once: true },
-              ),
-            );
-            return true;
-          }
-          throw new Error('Authentication unavailable');
-        },
-      },
-    ]);
+    const started = new Promise<void>((resolve) => { entered = resolve; });
+    let release!: () => void;
+    const hold = new Promise<void>((resolve) => { release = resolve; });
+    t.after(release);
+    let check = async (_signal: AbortSignal) => {
+      entered();
+      await hold;
+      return true;
+    };
+    const remove = await store.registerDefaults([{
+      id: 'slow-auth', name: 'Slow auth', api: model.api, baseUrl: mock.url, canSetKey: true, models: [model],
+      authStatus: (signal) => check(signal),
+    }]);
     await started;
+    const firstQuery = store.available();
+    let settled = false;
+    void firstQuery.then(() => { settled = true; });
+    await Promise.resolve();
+    assert.equal(settled, false);
+    release();
+    assert.equal((await firstQuery).find(({ provider }) => provider === 'slow-auth')?.configured, true);
+
+    let checking!: () => void;
+    const pending = new Promise<void>((resolve) => { checking = resolve; });
+    let cancelled = 0;
+    check = async (signal) => {
+      checking();
+      await new Promise<void>((resolve) => signal.addEventListener('abort', () => { cancelled++; resolve(); }, { once: true }));
+      return true;
+    };
     const query = store.available();
+    await pending;
+    check = async () => { throw new Error('Authentication unavailable'); };
+    changes.length = 0;
     await store.saveProvider({ id: 'slow-auth', key: 'saved-key' });
     const available = await query;
     assert.equal(available.find(({ provider }) => provider === 'slow-auth')?.configured, false);
     assert.equal(cancelled, 1);
     assert.deepEqual(store.authStatus('slow-auth'), { configured: false, source: 'stored' });
+    assert.ok(changes.length && changes.every((kind) => kind === 'auth'));
     assert.ok(errors.some((error) => String(error).includes('slow-auth')));
+    const startedRemoval = new Promise<void>((resolve) => { checking = resolve; });
+    check = async (signal) => {
+      checking();
+      await new Promise<void>((resolve) => signal.addEventListener('abort', () => { cancelled++; resolve(); }, { once: true }));
+      return true;
+    };
+    const lastQuery = store.available();
+    await startedRemoval;
     await remove();
-    assert.equal(
-      store.providers().some(({ id }) => id === 'slow-auth'),
-      false,
-    );
+    assert.equal(cancelled, 2);
+    assert.equal((await lastQuery).some(({ provider }) => provider === 'slow-auth'), false);
+    assert.equal(store.providers().some(({ id }) => id === 'slow-auth'), false);
     assert.deepEqual(store.authStatus('slow-auth'), { configured: false });
     assert.ok(changes.includes('catalog'));
   },
