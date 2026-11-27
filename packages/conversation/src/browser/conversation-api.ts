@@ -1,7 +1,6 @@
 import type { Conversation, ConversationView } from '../shared/api.ts';
 import type { ConversationPermission } from '@mini-harness/sessions/identity';
 import type { MessageMode } from '@mini-harness/sessions/queue';
-import type { SendReceipt } from '@mini-harness/runs/api';
 import type { ToolProgress } from '@mini-harness/runs/stream';
 import type { ModelChoice, ThinkingLevel } from '@mini-harness/llm/vocabulary';
 import type { Attachment } from '@mini-harness/input/message';
@@ -60,7 +59,7 @@ export interface ConversationController {
   submit(
     input: ConversationSubmission,
     created?: (sessionId: string) => void,
-  ): Promise<Pick<SendReceipt, 'run' | 'messageId'> | { run: RunInfo }>;
+  ): Promise<RunInfo | undefined>;
   chooseMode(mode: MessageMode): void;
   retryInput(): Promise<RetryInput | null>;
   cancel(): Promise<void>;

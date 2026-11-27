@@ -260,23 +260,25 @@ export function createConversationController(ctx: Context): ConversationControll
         await ctx.parallel('conversation/initialize', workspace, id);
       }
       const { permission: _permission, revision, ...message } = input;
-      const receipt = revision
-        ? {
-            run: await browserRequest<RunInfo>(
-              ctx,
-              path(id, '/revise'),
-              payload('POST', { ...message, ...revision }),
-            ),
-          }
-        : await browserRequest<SendReceipt>(ctx, path(id, '/runs'), payload('POST', { ...message, mode }));
-      if (!signal.aborted) {
-        if ('queue' in receipt) {
-          queueRevision++;
-          update({ queue: receipt.queue });
-        }
-        if (!isRunning(state.run) || revision) void activate(id);
+      if (revision) {
+        const run = await browserRequest<RunInfo>(
+          ctx,
+          path(id, '/revise'),
+          payload('POST', { ...message, ...revision }),
+        );
+        if (!signal.aborted) void activate(id);
+        return run;
       }
-      return receipt;
+      const receipt = await browserRequest<SendReceipt>(
+        ctx,
+        path(id, '/runs'),
+        payload('POST', { ...message, mode }),
+      );
+      if (!signal.aborted) {
+        queueRevision++;
+        update({ queue: receipt.queue });
+        if (!isRunning(state.run)) void activate(id);
+      }
     } finally {
       if (!signal.aborted) interact({ operation: undefined });
     }
