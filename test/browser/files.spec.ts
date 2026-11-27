@@ -62,6 +62,15 @@ test('workspace source, preview and diff remain available as the panel changes m
   await expect(open).toHaveAttribute('aria-expanded', 'false');
   await open.click();
   await expect(tabs).toHaveCount(5);
+  for (const disabled of [true, false]) {
+    const response = await fetch(host.url + '/api/settings', {
+      method: 'PATCH',
+      headers: { Authorization: 'Bearer ' + host.token, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ entries: { 'file-preview': { disabled } } }),
+    });
+    expect(response.ok).toBe(true);
+    await expect(panel.getByRole('tab', { name: 'notes.md', exact: true })).toHaveCount(disabled ? 0 : 1);
+  }
   await expect(panel.getByRole('heading', { name: 'Notes' })).toBeVisible();
 });
 

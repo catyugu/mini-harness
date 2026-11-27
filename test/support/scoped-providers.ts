@@ -2,11 +2,10 @@ import * as fs from 'node:fs/promises';
 import type { Stats, BigIntStats } from 'node:fs';
 import { basename } from 'node:path';
 import { PassThrough, Readable } from 'node:stream';
-import type { FileAccessPort } from '@mini-harness/file-access/api';
-import type { ProcessExecutionPort } from '@mini-harness/process-execution/api';
+import type { Context } from 'mini-harness/cordis';
 
 /** Map one logical file to fixture bytes, retaining ordinary filesystem operations otherwise. */
-export function fileProvider(name: string, backingFile: string): FileAccessPort {
+export function fileProvider(name: string, backingFile: string): Context['harnessFileAccess'] {
   const matches = (path: string) => basename(path) === name;
   const target = (path: string) => (matches(path) ? backingFile : path);
   function stat(path: string): Promise<Stats>;
@@ -23,7 +22,7 @@ export function fileProvider(name: string, backingFile: string): FileAccessPort 
   };
 }
 
-export function processProvider(output: string): ProcessExecutionPort {
+export function processProvider(output: string): Context['harnessProcess'] {
   return {
     start(request) {
       if (!request.file) throw new Error('Missing executable');

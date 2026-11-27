@@ -40,6 +40,11 @@ function selectedCount(selectedIds: readonly string[]) {
 }
 ```
 
+- Define domain capabilities alongside their implementations. Consumers use the advertised contract rather than repeating capability tables.
+- Establish invariants at configuration and input boundaries. Keep drafts, persisted definitions and effective state distinct when their semantics differ.
+- State owners publish committed changes; HTTP handlers and renderers do not coordinate unrelated state or persistence. A query must not mutate the state it projects.
+- Derive view resources from state and release them with their actual lifetime. Build scoped views on one underlying provider rather than maintaining parallel I/O paths.
+
 ## Errors and asynchronous work
 
 | Rule                                        | Avoid                                                      | Prefer                                                            |
