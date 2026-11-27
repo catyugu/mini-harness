@@ -14,15 +14,14 @@ import 'mini-harness/agent';
 export function respond(ctx: Context, request: Omit<LlmRequest, 'signal'>, signal: AbortSignal) {
   return ctx.harnessAgent.run(ctx, {
     signal,
-    prepare(_turn, failure) {
-      if (failure) return;
+    prepare() {
       return { request, executor: ctx.harnessToolExecutor, tools: new Map() };
     },
   });
 }
 ```
 
-Await the returned Promise for the assistant message. `prepare(turn, failure?)` supplies the request, executor and tool map for each turn. For multi-turn work the caller retains assistant messages from `onEvent` and tool results from `deliver`, then prepares the next request from that context. `afterTurn` can continue or restart the conversation cycle. Use Runs when the work belongs to a persisted conversation.
+Await the returned Promise for the assistant message. `prepare(turn)` supplies the request, executor and tool map for each turn. The optional `recover(turn, failure)` callback may replace a failed turn. For multi-turn work the caller retains assistant messages from `onEvent` and tool results from `deliver`, then prepares the next request from that context. `afterTurn` can continue or restart the conversation cycle. Use Runs when the work belongs to a persisted conversation.
 
 The executor presents tool schemas, interprets the assistant response and delivers tool results. Agent rejects duplicate call IDs, unmatched results and omitted results before another model turn. Executor implementations and reusable execution helpers belong to [Tools](../tools/README.md).
 
@@ -50,7 +49,7 @@ These hooks are dispatched by conversation orchestration in Runs; a direct `harn
 
 The base Profile mounts separate `core:agent`, `core:prompt` and `core:prompt-defaults` entries. [Agent configuration](src/manifests/agent.ts) bounds a run's model steps. [Context Management](../context-management/README.md) prepares and repairs persistent conversation requests.
 
-The caller's signal owns cancellation. Agent reports phase, request, attempt metrics, assistant-start, text and thinking deltas, and assistant events through `onEvent`. The loop does not construct session or display records. The Agent plugin contributes its reasoning record through `agent/records` for conversation-bound runs. Model errors, invalid tool protocol and exhausting the turn limit reject the run. Transient retry applies before streamed output. A normalized context-limit error can invoke the caller’s preparation callback to replace the request for the same step.
+The caller's signal owns cancellation. Agent reports phase, request, attempt metrics, assistant-start, text and thinking deltas, and assistant events through `onEvent`. The loop does not construct session or display records. The Agent plugin contributes its reasoning record through `agent/records` for conversation-bound runs. Model errors, invalid tool protocol and exhausting the turn limit reject the run. Transient retry applies before streamed output. A normalized context-limit error can invoke the caller’s recovery callback to replace the request for the same step.
 
 ## Verification
 

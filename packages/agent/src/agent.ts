@@ -21,7 +21,6 @@ export class AgentLoop implements AgentPort {
     for (let turn = 1; turn <= maxTurns; turn++) {
       signal.throwIfAborted();
       let step = await input.prepare(turn);
-      if (!step) throw new Error('The step was not prepared');
       input.onEvent?.({ type: 'phase', phase: 'model', turn });
       input.onEvent?.({ type: 'assistant-start' });
       const original = await requestModel(
@@ -37,7 +36,7 @@ export class AgentLoop implements AgentPort {
           attempt: (metrics) => input.onEvent?.({ type: 'model-attempt', metrics }),
           retry: input.retry,
           async recover(failure) {
-            const next = await input.prepare(turn, failure);
+            const next = await input.recover?.(turn, failure);
             if (!next) return;
             step = next;
             input.onEvent?.({ type: 'assistant-start' });

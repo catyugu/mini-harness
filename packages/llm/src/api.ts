@@ -52,6 +52,12 @@ export interface NativeUserMessage {
 }
 export type ModelErrorKind = 'context-overflow' | 'image-limit' | 'transient' | 'permanent';
 
+export class ModelStreamError extends Error {
+  constructor(cause: unknown, readonly kind: ModelErrorKind) {
+    super(cause instanceof Error ? cause.message : String(cause), { cause });
+  }
+}
+
 export interface InputTokenCounts {
   system: number;
   tools: number;

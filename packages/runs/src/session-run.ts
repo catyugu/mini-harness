@@ -4,6 +4,7 @@ import { conversationTools } from './tool-selection.ts';
 import type { Context } from 'mini-harness/cordis';
 import type { TaskContext } from '@mini-harness/tasks/api';
 import { scopeTarget } from '@mini-harness/plugin-api/scopes';
+import type { AgentTurn, ModelFailure } from '@mini-harness/agent/api';
 import { modelRetry, type InputContext, type StepContext } from '@mini-harness/agent/events';
 import { DomainError } from '@mini-harness/platform/errors';
 import { isDeepStrictEqual } from 'node:util';
@@ -243,60 +244,7 @@ export class SessionRun {
     const publisher = recordPublisher(emit);
     const target = scopeTarget(ctx);
     const toolTransforms = () => ctx.events.listeners('agent/tool-result', target);
-    const answer = await requireService(ctx, 'harnessAgent')
-      .run(ctx, {
-        signal,
-        retry: modelRetry(ctx, id),
-        onEvent: (event) => {
-          const displays: RecordPresentation[] = [];
-          for (const { callback } of ctx.events.listeners('agent/records', target)) {
-            const contribution = callback(event, publisher);
-            if (!contribution?.length) continue;
-            if (event.type !== 'assistant')
-              throw new Error('Record presentations require a committed assistant message');
-            displays.push(...contribution);
-          }
-          if (event.type === 'thinking') return;
-          if (event.type === 'phase') {
-            if (event.phase === 'model') modelStep = event.turn;
-            task.update({ phase: event.phase, turn: event.turn });
-            return;
-          }
-          if (event.type === 'request') {
-            requestId = log.recordRequest(event.request).id;
-            return;
-          }
-          if (event.type === 'model-attempt') {
-            if (!requestId) throw new Error('Missing model request for attempt');
-            log.append({
-              type: 'model-attempt',
-              requestId,
-              runId: submissionId,
-              step: modelStep,
-              ...event.metrics,
-            });
-            return;
-          }
-          if (event.type !== 'assistant') {
-            emit(event);
-            return;
-          }
-          const { diagnostic, message: result } = event;
-          if (diagnostic) log.append({ type: 'diagnostic', code: diagnostic.code, data: diagnostic.message });
-          const assistant = log.append({
-            type: 'message',
-            message: result,
-            ...(displays.length && { displays }),
-          });
-          emit({
-            type: 'assistant-end',
-            message: displayMessage(assistant, result, submissionId),
-          });
-        },
-        afterTurn: async () => {
-          if (await deliver(['steer'])) return 'continue';
-        },
-        prepare: async (turn, failure) => {
+    const prepareTurn = async (turn: number, failure?: ModelFailure) => {
           const current = log.context();
           const model = current.model;
           if (!model) throw new Error('Configure a model before sending a message');
@@ -305,7 +253,6 @@ export class SessionRun {
           const executor = requireService(ctx, 'harnessToolExecutor');
           const { tools: advertisedTools, assemble } = await this.requestBuilder(ctx, step, log);
           const prepareHooks = ctx.events.listeners('agent/prepare-request', target);
-          if (failure && !prepareHooks.length) return;
           const initial = await assemble(log.context().contextMessages);
           const prepared = await applyTransforms(prepareHooks, initial, {
             ...step,
@@ -314,9 +261,8 @@ export class SessionRun {
             failure,
             rebuild: assemble,
           });
-          if (failure && prepared === initial) return;
-          return {
-            request: { ...prepared, signal },
+          const result: AgentTurn = {
+            request: prepared,
             executor,
             tools: advertisedTools,
             execution: {
@@ -393,6 +339,66 @@ export class SessionRun {
               if (transformError) throw transformError;
             },
           };
+          return { initial, result };
+    };
+    const answer = await requireService(ctx, 'harnessAgent')
+      .run(ctx, {
+        signal,
+        retry: modelRetry(ctx, id),
+        onEvent: (event) => {
+          const displays: RecordPresentation[] = [];
+          for (const { callback } of ctx.events.listeners('agent/records', target)) {
+            const contribution = callback(event, publisher);
+            if (!contribution?.length) continue;
+            if (event.type !== 'assistant')
+              throw new Error('Record presentations require a committed assistant message');
+            displays.push(...contribution);
+          }
+          if (event.type === 'thinking') return;
+          if (event.type === 'phase') {
+            if (event.phase === 'model') modelStep = event.turn;
+            task.update({ phase: event.phase, turn: event.turn });
+            return;
+          }
+          if (event.type === 'request') {
+            requestId = log.recordRequest(event.request).id;
+            return;
+          }
+          if (event.type === 'model-attempt') {
+            if (!requestId) throw new Error('Missing model request for attempt');
+            log.append({
+              type: 'model-attempt',
+              requestId,
+              runId: submissionId,
+              step: modelStep,
+              ...event.metrics,
+            });
+            return;
+          }
+          if (event.type !== 'assistant') {
+            emit(event);
+            return;
+          }
+          const { diagnostic, message: result } = event;
+          if (diagnostic) log.append({ type: 'diagnostic', code: diagnostic.code, data: diagnostic.message });
+          const assistant = log.append({
+            type: 'message',
+            message: result,
+            ...(displays.length && { displays }),
+          });
+          emit({
+            type: 'assistant-end',
+            message: displayMessage(assistant, result, submissionId),
+          });
+        },
+        afterTurn: async () => {
+          if (await deliver(['steer'])) return 'continue';
+        },
+        prepare: async (turn) => (await prepareTurn(turn)).result,
+        async recover(turn, failure) {
+          if (!ctx.events.listeners('agent/prepare-request', target).length) return;
+          const { initial, result } = await prepareTurn(turn, failure);
+          if (initial !== result.request) return result;
         },
       })
       .catch((error) => {

@@ -1,6 +1,6 @@
 import { Service, type Context, type Plugin } from 'mini-harness/cordis';
 import { rankScoped, sameRank, scopeOf, type ScopeKey } from '@mini-harness/plugin-api/scopes';
-import type { LlmAdapter, LlmPort } from './api.ts';
+import { ModelStreamError, type LlmAdapter, type LlmPort } from './api.ts';
 
 export const metadata = {
   title: 'Model transport',
@@ -68,7 +68,11 @@ const plugin: Plugin.Object = {
             let exhausted = false;
             try {
               while (true) {
-                const next = await iterator.next();
+                const next = await iterator.next().catch((error: unknown) => {
+                  signal.throwIfAborted();
+                  const kind = entry.adapter.classifyError?.(error);
+                  throw kind ? new ModelStreamError(error, kind) : error;
+                });
                 if (next.done) {
                   exhausted = true;
                   return;

@@ -327,8 +327,7 @@ test('a third-party plugin uses tools, models and subprocesses from a Profile wi
       }));
       const result = await app.ctx.harnessAgent.run(app.ctx, {
         signal,
-        prepare(turn, failure) {
-          if (failure) return;
+        prepare(turn) {
           return {
             request: {
               model,

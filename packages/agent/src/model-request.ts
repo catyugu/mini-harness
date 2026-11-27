@@ -1,4 +1,5 @@
 import { setTimeout as sleep } from 'node:timers/promises';
+import { ModelStreamError } from '@mini-harness/llm/api';
 import type {
   LlmPort,
   LlmRequest,
@@ -27,7 +28,7 @@ function failedMessage(
 }
 
 export async function requestModel(
-  llm: Pick<LlmPort, 'stream'> & Partial<Pick<LlmPort, 'select'>>,
+  llm: Pick<LlmPort, 'stream'>,
   request: LlmRequest,
   options: {
     request?(request: LlmRequest): void;
@@ -68,7 +69,7 @@ export async function requestModel(
       if (!message) throw new Error('The model stream ended without a final message');
     } catch (error) {
       message = {
-        ...failedMessage(request, error, partial, llm.select?.(model)?.classifyError?.(error)),
+        ...failedMessage(request, error, partial, error instanceof ModelStreamError ? error.kind : undefined),
         ...(thinking && {
           content: [
             { type: 'thinking' as const, thinking },
