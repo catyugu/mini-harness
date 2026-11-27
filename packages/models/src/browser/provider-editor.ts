@@ -73,6 +73,7 @@ export function providerEditor(
   const builtin = () => (custom() ? undefined : (provider ?? availableById.get(picker.value)));
   let discovery: AbortController | undefined;
   let restore: AbortController | undefined;
+  let fromDefaults = false;
 
   function resetDiscovery() {
     discovery?.abort();
@@ -94,6 +95,7 @@ export function providerEditor(
   function updateFields() {
     restore?.abort();
     restore = undefined;
+    fromDefaults = false;
     restoreModels.disabled = false;
     const isCustom = custom();
     const selected = isCustom ? provider : builtin();
@@ -151,7 +153,10 @@ export function providerEditor(
           signal: AbortSignal.any([controller.signal, signal]),
         },
       );
-      if (!controller.signal.aborted && !signal.aborted) catalog.reset(models, false);
+      if (!controller.signal.aborted && !signal.aborted) {
+        fromDefaults = true;
+        catalog.reset(models, false);
+      }
     } catch (failure) {
       if (!controller.signal.aborted) report(failure);
     } finally {
@@ -237,6 +242,7 @@ export function providerEditor(
           baseUrl: endpoint.value.trim(),
           key: key.value.trim(),
           models: catalog.customized() ? catalog.models() : undefined,
+          fromDefaults: fromDefaults || undefined,
         }),
         signal,
       });

@@ -146,9 +146,7 @@ export class ModelStore implements ModelStorePort {
     return { ...provider, baseUrl, models, endpointOverride: override.baseUrl };
   }
 
-  private custom(id: string, configuration: ProviderConfiguration): CatalogProvider | undefined {
-    if (!Object.hasOwn(configuration.providers, id)) return;
-    const { api, baseUrl, name, headers, apiKey: key, models } = configuration.providers[id];
+  private custom(id: string, { api, baseUrl, name, headers, apiKey: key, models }: ProviderConfiguration['providers'][string]): CatalogProvider {
     const connection = { api, baseUrl };
     return {
       id,
@@ -165,9 +163,9 @@ export class ModelStore implements ModelStorePort {
     const defaults = this.defaultProviders();
     return [
       ...[...defaults.values()].map((provider) => this.builtin(provider, configuration)),
-      ...Object.keys(configuration.providers)
-        .filter((id) => !defaults.has(id))
-        .map((id) => this.custom(id, configuration)!),
+      ...Object.entries(configuration.providers)
+        .filter(([id]) => !defaults.has(id))
+        .map(([id, config]) => this.custom(id, config)),
     ];
   }
 
@@ -311,9 +309,9 @@ export class ModelStore implements ModelStorePort {
       if (builtin) {
         if (values.create) throw new DomainError('conflict', 'A provider with this ID already exists');
         if (key && !builtin.canSetKey) throw invalid('This provider does not accept an API key');
-        const previous = Object.hasOwn(next.builtins, id) ? (next.builtins[id].models ?? []) : [];
+        const previous = values.fromDefaults !== true && Object.hasOwn(next.builtins, id) ? (next.builtins[id].models ?? []) : [];
         const models = values.models === undefined ? undefined : editModels(values.models, previous, builtin);
-        const override = parseOverride({ baseUrl: values.baseUrl, models });
+        const override = parseOverride({ baseUrl: values.baseUrl }, models);
         if (
           override.models?.some(
             (model) => !builtin.api && !builtin.models.some(({ id }) => id === model.templateId),
@@ -331,12 +329,12 @@ export class ModelStore implements ModelStorePort {
         next.providers = {
           ...next.providers,
           [id]: parseCustom(id, {
-            ...previous,
             name: values.name,
             api: values.api,
             baseUrl: values.baseUrl,
-            models: editModels(values.models, previous?.models ?? []),
-          }),
+            apiKey: previous?.apiKey,
+            headers: previous?.headers,
+          }, editModels(values.models, previous?.models ?? [])),
         };
       }
       await this.commit(id, next, key ? { value: { type: 'api_key', key } } : undefined);

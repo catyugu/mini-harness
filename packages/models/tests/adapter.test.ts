@@ -134,9 +134,11 @@ test('built-in edits retain native routing and credentials, including after rest
   await store.saveProvider({
     id,
     baseUrl: mock.url,
-    models: [{ id: model.id, contextWindow: 32768, maxTokens: 1024 }],
+    models: [{ id: model.id, sourceId: defaults[0].id, contextWindow: 32768, maxTokens: 1024 }],
   });
+  await store.refresh();
   assert.deepEqual(store.resolve(model), model);
+  assert.equal(store.capabilities(model)?.name, defaults[0].name);
   assert.equal(adapter.accepts({ ...model, id: 'unregistered-model' }), false);
   const events: LlmEvent[] = [];
   for await (const event of adapter.stream({

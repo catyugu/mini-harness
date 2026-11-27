@@ -1,12 +1,10 @@
 import { DomainError } from '@mini-harness/platform/errors';
-import type { Api, Model } from '@earendil-works/pi-ai';
 import { thinkingLevels } from '@mini-harness/llm/vocabulary';
 import {
   maxModelTokens,
   modelDefaults,
   providerApiPattern,
   providerIdPattern,
-  type ProviderModel,
 } from '../shared/catalog.ts';
 import type { CatalogModel, CatalogProvider } from './store-api.ts';
 
@@ -16,10 +14,7 @@ export interface ProviderConnection {
 }
 
 type RecordValue = Record<string, unknown>;
-type AdapterOptions = Partial<Omit<Model<Api>, keyof ProviderModel | keyof ProviderConnection | 'provider'>>;
-type ModelConfig = Partial<Omit<ProviderModel, 'id' | 'thinkingLevels'>> &
-  AdapterOptions &
-  Partial<ProviderConnection> & { id: string; templateId?: string };
+type ModelConfig = Partial<Omit<CatalogModel, 'id' | 'thinkingLevels'>> & { id: string; templateId?: string };
 
 export interface ProviderOverride {
   baseUrl?: string;
@@ -150,7 +145,7 @@ export function editModels(value: unknown, previous: readonly ModelConfig[], bui
   });
 }
 
-export function parseCustom(id: string, value: unknown): CustomConfig {
+export function parseCustom(id: string, value: unknown, models = parseModels(record(value)?.models)): CustomConfig {
   const entry = record(value);
   if (!entry) throw invalid('Invalid provider configuration: ' + id);
   if (entry.apiKey !== undefined && (typeof entry.apiKey !== 'string' || entry.apiKey.startsWith('!')))
@@ -165,18 +160,18 @@ export function parseCustom(id: string, value: unknown): CustomConfig {
     name: modelName(entry.name, id),
     api: protocol(entry.api),
     baseUrl: endpoint(entry.baseUrl),
-    models: parseModels(entry.models).map(({ templateId: _templateId, ...model }) => model),
+    models: models.map(({ templateId: _templateId, ...model }) => model),
     apiKey: entry.apiKey,
     headers: headers as CustomConfig['headers'],
   };
 }
 
-export function parseOverride(value: unknown): ProviderOverride {
+export function parseOverride(value: unknown, models?: ModelConfig[]): ProviderOverride {
   const entry = record(value);
   if (!entry) throw invalid('Invalid built-in provider override');
   return {
     baseUrl: entry.baseUrl === undefined || entry.baseUrl === '' ? undefined : endpoint(entry.baseUrl),
-    models: entry.models === undefined ? undefined : parseModels(entry.models),
+    models: models ?? (entry.models === undefined ? undefined : parseModels(entry.models)),
   };
 }
 
