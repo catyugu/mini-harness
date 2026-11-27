@@ -117,7 +117,7 @@ test('a failed recent-model write does not delay accepted input or terminate exe
       name: 'Local mock',
       api: 'openai-completions',
       baseUrl: mock.url,
-      models: [{ id: 'mock-model', name: 'Mock Model' }],
+      models: [models[0]],
     });
     assert.equal(context.harnessModels.resolve({ provider: 'local-mock', id: 'second-model' }), undefined);
     assert.deepEqual(context.harnessModelPreference.recent(), { provider: '', id: '' });

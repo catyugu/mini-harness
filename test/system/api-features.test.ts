@@ -82,7 +82,7 @@ test('GUI APIs configure providers, persist keys privately, discover Skills and 
   const save = await request('/providers', 'PUT', {
     ...connection,
     name: 'Edited GUI provider',
-    models: [{ id: 'gui-model', input: ['text', 'image'] }],
+    models: [{ ...discovery.body[0], id: 'gui-model', input: ['text', 'image'] }],
   });
   assert.equal(save.status, 200, JSON.stringify(save.body));
   const model = { provider: 'gui-test', id: 'gui-model' };

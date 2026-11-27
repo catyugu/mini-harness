@@ -1,10 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, rmSync, statSync } from 'node:fs';
+import { readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { PiLlm } from '../src/server/pi-adapter.ts';
 import { ModelStore } from '../src/server/store.ts';
 import { createFixturePaths, createMockProvider } from '../../../test/support/mock-provider.ts';
+import { waitUntil } from '../../../test/support/api-fixture.ts';
+import { setImmediate } from 'node:timers/promises';
 import { readJson, writeJson } from '@mini-harness/platform/json';
 import type { LlmEvent, NativeMessage } from '@mini-harness/llm/api';
 
@@ -74,13 +76,20 @@ test('model adapter streams native messages, tool calls and metadata through the
   assert.ok(configured);
   assert.equal(configured.configured, true);
 
-  await adapter.saveProvider({
+  const models = adapter.providers().find(({ id }) => id === choice.provider)!.models;
+  const edit = {
     id: choice.provider,
     name: 'Updated provider',
     api: 'openai-responses',
     baseUrl: mock.url + '/new',
-    models: [{ id: choice.id, api: 'openai-completions', baseUrl: mock.url }],
-  });
+    models,
+  };
+  await assert.rejects(adapter.saveProvider({ ...edit, api: 'unsupported-protocol' }), /Unsupported API protocol/);
+  await assert.rejects(
+    adapter.saveProvider({ ...edit, models: [{ ...models[0], thinkingLevelMap: { high: 'low' } }] }),
+    /Unsupported model fields/,
+  );
+  await adapter.saveProvider(edit);
   const selected = adapter.requestModel(choice)?.model;
   assert.equal(selected?.api, 'openai-responses');
   assert.equal(selected?.baseUrl, mock.url + '/new');
@@ -112,6 +121,7 @@ test('credential updates serialize across providers and survive adapter replacem
   const replacement = new ModelStore(paths.home);
   await replacement.refresh();
   await new PiLlm(replacement).registerModels();
+  await waitUntil(() => replacement.authStatus('openai'), ({ configured }) => configured);
   assert.deepEqual(replacement.authStatus('openai'), { configured: true, source: 'stored' });
   await replacement.removeCredential('openai');
   assert.equal(JSON.parse(readFileSync(join(paths.home, 'auth.json'), 'utf8')).openai, undefined);
@@ -145,7 +155,7 @@ test('built-in edits retain native routing and credentials, including after rest
   await store.saveProvider({
     id,
     baseUrl: mock.url,
-    models: [{ id: model.id, templateId: defaults[0].id, contextWindow: 32768, maxTokens: 1024 }],
+    models: [{ ...defaults[0], id: model.id, contextWindow: 32768, maxTokens: 1024 }],
   });
   await store.refresh();
   assert.deepEqual(store.resolve(model), model);
@@ -165,7 +175,7 @@ test('built-in edits retain native routing and credentials, including after rest
   await store.saveProvider({
     id,
     baseUrl: mock.url,
-    models: [{ id: defaults[1].id, templateId: defaults[0].id }],
+    models: [{ ...defaults[0], id: defaults[1].id }],
   });
   const original = store.defaultModels(id).find((model) => model.id === defaults[1].id)!;
   await store.saveProvider({
@@ -174,10 +184,20 @@ test('built-in edits retain native routing and credentials, including after rest
     models: [{ ...original, name: 'Restored then edited' }],
   });
   assert.equal(store.providers().find((provider) => provider.id === id)?.models[0].templateId, original.id);
-  assert.deepEqual(
-    store.requestModel({ provider: id, id: original.id })?.model.contextWindow,
-    original.contextWindow,
-  );
+  const restoredChoice = { provider: id, id: original.id };
+  const expected = store.requestModel(restoredChoice)?.model;
+  await store.refresh();
+  assert.deepEqual(store.requestModel(restoredChoice)?.model, expected);
+  assert.equal(expected?.contextWindow, original.contextWindow);
+
+  const file = join(paths.home, 'models.json');
+  const saved = readFileSync(file, 'utf8');
+  const partial = { id: original.id, templateId: original.id };
+  await assert.rejects(store.saveProvider({ id, models: [partial] }), /Missing model display name/);
+  writeJson(file, { providers: {}, builtins: { [id]: { models: [partial] } } });
+  await assert.rejects(store.refresh(), /Missing model display name/);
+  assert.deepEqual(store.requestModel(restoredChoice)?.model, expected);
+  writeFileSync(file, saved);
   await store.saveProvider({ id, baseUrl: '' });
   const restored = store.providers().find((provider) => provider.id === id);
   assert.ok(restored && restored.storedCredential && !restored.custom);
@@ -266,68 +286,53 @@ test('abort reaches the model transport and yields a native terminal message wit
   release();
 });
 
-test('authentication and observer failures do not undo provider commits or prevent unregistration', async (t) => {
+test('slow and failed authentication checks cannot delay edits, overwrite newer results or revive removed providers', { timeout: 10000 }, async (t) => {
   const mock = await createMockProvider();
   const { root, paths } = createFixturePaths(mock.url);
   const errors: unknown[] = [];
-  const store = new ModelStore(
-    paths.home,
-    () => {
-      throw new Error('Observer failure');
-    },
-    (error) => errors.push(error),
-  );
+  const store = new ModelStore(paths.home, () => { throw new Error('Observer failure'); }, (error) => errors.push(error));
+  let entered!: () => void;
+  let release!: () => void;
+  const started = new Promise<void>((resolve) => { entered = resolve; });
+  const hold = new Promise<void>((resolve) => { release = resolve; });
   t.after(async () => {
+    release();
     await store.close();
     await mock.close();
     rmSync(root, { recursive: true, force: true });
   });
   await store.refresh();
-  const provider = {
-    id: 'failing-auth',
-    name: 'Auth failure fixture',
-    api: 'openai-completions',
-    baseUrl: mock.url,
-    canSetKey: true,
-    models: [],
-  };
+  const provider = { id: 'ordinary', name: 'Auth fixture', api: 'openai-completions', baseUrl: mock.url, canSetKey: true, models: [] };
   const unregister = await store.registerDefaults([provider]);
-  const removeFailing = await store.registerDefaults([
-    {
-      ...provider,
-      id: 'other-provider',
-      async authStatus() {
-        throw new Error('Authentication unavailable');
-      },
+  let calls = 0;
+  const removeSlow = await store.registerDefaults([{
+    ...provider,
+    id: 'slow-auth',
+    async authStatus() {
+      if (++calls === 1) {
+        entered();
+        await hold;
+        return true;
+      }
+      throw new Error('Authentication unavailable');
     },
-  ]);
+  }]);
+  await started;
   await store.storeCredential(provider.id, 'first-secret');
+  await store.storeCredential('slow-auth', 'second-secret');
   await store.available();
-  assert.equal(store.authStatus(provider.id).configured, true);
-  assert.equal(store.authStatus('other-provider').configured, false);
-  assert.equal(
-    JSON.parse(readFileSync(join(paths.home, 'auth.json'), 'utf8'))[provider.id].key,
-    'first-secret',
-  );
-  await store.storeCredential('other-provider', 'second-secret');
-  assert.equal(
-    JSON.parse(readFileSync(join(paths.home, 'auth.json'), 'utf8'))['other-provider'].key,
-    'second-secret',
-  );
-  assert.equal(store.providers().find(({ id }) => id === 'other-provider')?.storedCredential, true);
+  await waitUntil(() => errors.some((error) => String(error).includes('slow-auth')), Boolean);
+  const saved = JSON.parse(readFileSync(join(paths.home, 'auth.json'), 'utf8'));
+  assert.equal(saved[provider.id].key, 'first-secret');
+  assert.equal(saved['slow-auth'].key, 'second-secret');
+  assert.deepEqual(store.authStatus('slow-auth'), { configured: false, source: 'stored' });
   await unregister();
-  assert.equal(
-    store.providers().some(({ id }) => id === provider.id),
-    false,
-  );
-  assert.deepEqual(store.authStatus(provider.id), { configured: false });
-  await store.removeCredential(provider.id);
-  assert.equal(JSON.parse(readFileSync(join(paths.home, 'auth.json'), 'utf8'))[provider.id], undefined);
-  await removeFailing();
-  assert.equal(
-    store.providers().some(({ id }) => id === 'other-provider'),
-    false,
-  );
+  await removeSlow();
+  release();
+  await setImmediate();
+  for (const id of [provider.id, 'slow-auth']) {
+    assert.equal(store.providers().some((item) => item.id === id), false);
+    assert.deepEqual(store.authStatus(id), { configured: false });
+  }
   assert.ok(errors.some((error) => String(error).includes('Observer failure')));
-  assert.ok(errors.some((error) => String(error).includes('other-provider')));
 });
