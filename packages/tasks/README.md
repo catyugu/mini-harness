@@ -22,4 +22,4 @@ await handle.result;
 
 A task can specify its provider Fiber independently of its resource owner. Cancellation requests abort its signal and settlement waits for actual cleanup. A cancelled waiter leaves the independent work it was waiting for running. At a whole-task wait point the executor yields pool capacity, then reacquires capacity before resuming. Exclusive lanes remain occupied during waits. The runtime rejects circular waits.
 
-Owner removal blocks admission and drains that owner's work. Application shutdown seals admission before draining tasks. A synchronous `commit` records transitions before successful acknowledgment. `registerHistory` supplies read-only observations for durable owners such as [Sessions](../sessions/README.md).
+Owner removal blocks admission and drains that owner's work. Application shutdown seals admission before draining tasks. A synchronous `commit` records transitions before successful acknowledgment. Durably committed tasks leave the runtime at settlement. [Sessions](../sessions/README.md) serves conversation task history. Tasks retains bounded observations for executions without a successful durable commit.

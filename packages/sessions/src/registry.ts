@@ -13,7 +13,7 @@ import type { Paths } from '@mini-harness/platform/runtime-paths';
 import type { WorkspacePort } from '@mini-harness/workspaces/api';
 import type { RecordOwner, SessionRecords, SessionStore } from './records.ts';
 import type { TaskOptions } from '@mini-harness/tasks/api';
-import { readTaskHistory } from './task-history.ts';
+import type { TaskHistory } from './task-history.ts';
 import {
   createScopeKey,
   scopeParentOf,
@@ -49,7 +49,9 @@ export class SessionRegistry implements SessionStore {
   private readonly logs = new Map<string, SessionLog>();
   private readonly runtimeScopes: Map<string, ScopeKey>;
   private readonly latestRuns = new Map<string, RunInfo>();
-  private readonly taskOwners = new Map<string, string>();
+  private readonly tasksBySession = new Map<string, TaskHistory>();
+  private readonly taskOwners = new Map<string, TaskHistory>();
+  private readonly deliveryIds = new Map<string, ReadonlySet<string>>();
   private readonly logErrors = new Map<string, string>();
   private closing = false;
   private pendingDeletion = Promise.resolve();
@@ -281,7 +283,11 @@ export class SessionRegistry implements SessionStore {
     const { id } = record;
     const writable = mode !== 'read';
     const onChange = (entry: SessionEntry) => {
-      if (entry.type === 'task') this.taskOwners.set(entry.task.id, id);
+      if (entry.type === 'task' || entry.type === 'message') {
+        const history = this.tasksBySession.get(id)!;
+        history.add(entry);
+        if (entry.type === 'task') this.taskOwners.set(entry.task.id, history);
+      }
       const run = runFromEntry(id, entry);
       if (run) this.latestRuns.set(id, run);
       const inbox = entry.type.startsWith('inbox-');
@@ -315,8 +321,14 @@ export class SessionRegistry implements SessionStore {
         },
       );
       if (writable) {
-        log.recover();
-        for (const entry of log.entries()) if (entry.type === 'task') this.taskOwners.set(entry.task.id, id);
+        this.deliveryIds.set(id, log.deliveryIds);
+        if (!this.tasksBySession.has(id) || this.logErrors.has(id)) {
+          this.dropTaskHistory(id);
+          const history = log.indexTasks();
+          this.tasksBySession.set(id, history);
+          for (const taskId of history.ids) this.taskOwners.set(taskId, history);
+          log.recover(history);
+        }
         const run = log.latestRun;
         if (run) this.latestRuns.set(id, run);
         else this.latestRuns.delete(id);
@@ -348,9 +360,31 @@ export class SessionRegistry implements SessionStore {
     };
   }
 
+  private dropTaskHistory(sessionId: string) {
+    const history = this.tasksBySession.get(sessionId);
+    if (!history) return;
+    for (const taskId of history.ids) this.taskOwners.delete(taskId);
+    this.tasksBySession.delete(sessionId);
+  }
+
+  taskSummary(id: string) {
+    return this.taskOwners.get(id)?.summary(id);
+  }
+
   taskHistory(id: string) {
-    const owner = this.taskOwners.get(id);
-    if (owner) return this.inspectLog(owner, (log) => readTaskHistory(log.entries(), id));
+    return this.taskOwners.get(id)?.detail(id);
+  }
+
+  taskOutput(id: string, after?: number) {
+    return this.taskOwners.get(id)?.output(id, after);
+  }
+
+  taskSummaries(sessionId: string, type?: string, limit?: number) {
+    return this.tasksBySession.get(sessionId)?.summaries(type, limit) ?? [];
+  }
+
+  hasInbox(sessionId: string, messageId: string) {
+    return this.deliveryIds.get(sessionId)?.has(messageId) ?? false;
   }
 
   log(id: string): SessionLogPort {
@@ -601,7 +635,10 @@ export class SessionRegistry implements SessionStore {
         sessions: this.state.sessions.filter((entry) => !chosen.has(entry.id)),
         pendingDelete,
       });
-      for (const [taskId, owner] of this.taskOwners) if (chosen.has(owner)) this.taskOwners.delete(taskId);
+      for (const id of chosen) {
+        this.dropTaskHistory(id);
+        this.deliveryIds.delete(id);
+      }
       await this.recoverDeletion();
       for (const { id, key } of locations) {
         this.events.dispatchEvent(new CustomEvent('membership', { detail: id }));

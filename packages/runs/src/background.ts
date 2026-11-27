@@ -17,7 +17,7 @@ function writableToolResult(result: ToolResult) {
 }
 
 function sendNotice(ctx: Context, id: string, taskId: string, name: string, message: string, key: string) {
-  if (ctx.harnessTasks.sealed || !ctx.harnessSessions.get(id)) return;
+  if (ctx.fiber.signal.aborted || ctx.harnessTasks.sealed || !ctx.harnessSessions.get(id)) return;
   ctx.harnessSessions.assertAvailable(id);
   ctx.harnessRuns.send(id, {
     message: name + ': ' + message,
@@ -88,6 +88,9 @@ const plugin: Plugin.Object = {
   inject: ['harnessTasks', 'harnessTools', 'harnessSessions', 'harnessRuns', 'harnessProfileScopes'],
   apply(ctx) {
     const tasks = ctx.harnessTasks;
+    const sessions = ctx.harnessSessions;
+    const output = (id: string, cursor?: number) =>
+      tasks.readOutput(id, cursor) ?? sessions.taskOutput(id, cursor);
     const json = (data: unknown) => ({ content: [{ type: 'text' as const, text: JSON.stringify(data) }] });
     ctx.effect(() =>
       ctx.harnessTools.register({
@@ -131,13 +134,13 @@ const plugin: Plugin.Object = {
               if (action === 'list') return json(relatedTasks(ctx, id).map(({ result: _, ...task }) => task));
               const task = taskId && relatedTask(ctx, id, taskId);
               if (!task) throw new DomainError('not_found', 'Task not found');
-              if (action === 'output') return json(tasks.readOutput(task.id, cursor));
+              if (action === 'output') return json(output(task.id, cursor));
               if (action === 'cancel') tasks.cancel(task.id);
-              if (action === 'wait' && !terminal(task.state)) {
+              if (action === 'wait' && tasks.get(task.id) && !terminal(task.state)) {
                 if (waitFor) await waitFor(task.id);
                 else await tasks.wait(task.id, signal);
               }
-              return json(tasks.get(task.id) ?? task);
+              return json(tasks.get(task.id) ?? sessions.taskHistory(task.id) ?? task);
             },
           }),
       }),
@@ -149,18 +152,9 @@ const plugin: Plugin.Object = {
       }),
     );
     ctx.on('harness/start', () => {
-      for (const { id } of ctx.harnessSessions.list()) {
-        const records = ctx.harnessSessions.inspectLog(id, (log) => log.entries());
-        const ids = new Set(
-          records?.flatMap((entry) =>
-            entry.type === 'task' && entry.task.type === backgroundTool ? [entry.task.id] : [],
-          ),
-        );
-        for (const id of ids) {
-          const task = tasks.get(id);
-          if (task && terminal(task.state)) settled(ctx, task);
-        }
-      }
+      for (const { id } of sessions.list())
+        for (const task of sessions.taskSummaries(id, backgroundTool))
+          if (!sessions.hasInbox(id, task.id + ':settled')) settled(ctx, sessions.taskHistory(task.id)!);
     });
     ctx.inject(['harnessRoutes', 'harnessChanges'], (web) => {
       const changes = web.harnessChanges;
@@ -172,7 +166,7 @@ const plugin: Plugin.Object = {
       );
       const route = '/api/sessions/:id/tasks';
       web.effect(() =>
-        web.harnessRoutes.register('GET', route, ({ params }) => relatedTasks(ctx, params.id, false)),
+        web.harnessRoutes.register('GET', route, ({ params }) => relatedTasks(ctx, params.id, false, true)),
       );
       web.effect(() =>
         web.harnessRoutes.register('GET', route + '/:task/output', ({ params, url }) => {
@@ -181,7 +175,7 @@ const plugin: Plugin.Object = {
           const cursor = Number(url.searchParams.get('after') ?? 0);
           if (!Number.isSafeInteger(cursor) || cursor < 0)
             throw new DomainError('invalid_input', 'Invalid cursor');
-          return tasks.readOutput(task.id, cursor);
+          return output(task.id, cursor);
         }),
       );
       web.effect(() =>

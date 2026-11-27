@@ -119,16 +119,9 @@ export function setup(ctx: Context) {
   ctx.on('harness/start', () => {
     for (const { id, parentId } of sessions.list()) {
       if (!parentId) continue;
-      const entries = sessions.inspectLog(id, (log) => log.entries());
-      const ids = new Set(
-        entries?.flatMap((entry) =>
-          entry.type === 'task' && entry.task.type === 'agent-run' ? [entry.task.id] : [],
-        ),
-      );
-      for (const id of ids) {
-        const task = tasks.get(id);
-        if (task && terminal(task.state)) notify(task);
-      }
+      for (const task of sessions.taskSummaries(id, 'agent-run'))
+        if (task.metadata?.reportToParent && !sessions.hasInbox(parentId, task.id + ':settled'))
+          notify(sessions.taskHistory(task.id)!);
     }
   });
 }

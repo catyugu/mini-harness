@@ -2,6 +2,7 @@ import { isThinkingLevel, type ToolSchema } from '@mini-harness/llm/vocabulary';
 import { pluginIdPattern, isScopeAddress } from '@mini-harness/plugin-api/selection';
 import { isRunning, type RunInfo } from './shared/run-state.ts';
 import { terminal } from '@mini-harness/tasks/api';
+import { TaskHistory } from './task-history.ts';
 import { runFromEntry } from './log-api.ts';
 import { isDeepStrictEqual } from 'node:util';
 import {
@@ -364,10 +365,18 @@ export class SessionLog extends RecordLog<SessionEvent> implements SessionLogPor
   }
 
   /** Opening an existing log resolves interrupted work before it becomes writable. */
-  recover() {
-    const tasks = new Map<string, Extract<SessionEntry, { type: 'task' }>>();
-    for (const entry of this.records) if (entry.type === 'task') tasks.set(entry.task.id, entry);
-    for (const { task, output, run } of tasks.values()) {
+  get deliveryIds(): ReadonlySet<string> {
+    return this.inboxIds;
+  }
+
+  indexTasks() {
+    const history = new TaskHistory();
+    for (const entry of this.records) history.add(entry);
+    return history;
+  }
+
+  recover(history = this.indexTasks()) {
+    for (const { task, output, run } of history.entries) {
       if (!terminal(task.state))
         this.append({
           type: 'task',

@@ -41,7 +41,6 @@ export function setup(ctx: Context) {
   });
   ctx.inject(['harnessTasks'], (scope) => {
     const tasks = scope.harnessTasks;
-    scope.effect(() => tasks.registerHistory((id) => registry.taskHistory(id)));
     scope.effect(() =>
       registry.beforeDelete({
         busy: (id) => tasks.list('session:' + id).some((task) => !terminal(task.state)),

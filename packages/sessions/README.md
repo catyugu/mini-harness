@@ -34,7 +34,7 @@ The [public contract](src/records.ts) groups four kinds of operation:
 
 `log(id)` returns a record-operation port. The registry retains ownership of the underlying writer and its close/recovery lifecycle; plugins must not open a second writer for the same log. `inspectLog` supports observation without exposing writer ownership. History returns defensive projections rather than mutable backing records. The same log holds Inbox delivery IDs, message origins and the automatic wake pause.
 
-`task(id)` supplies a Task `owner` and synchronous durable `commit` callback. It first opens or recovers the log so admission does not create work with an unavailable history owner. Pass that binding to `harnessTasks.start`; use the Tasks contract for retention, result projection, cancellation and waiting. Historical task lookup recovers observations by ID without recreating executable handles.
+`task(id)` supplies a Task `owner` and synchronous durable `commit` callback. It first opens or recovers the log so admission does not create work with an unavailable history owner. Pass that binding to `harnessTasks.start`; use Tasks for result projection, cancellation and waiting. Sessions indexes the latest transition by task and by owning conversation when loading or appending the log. The history API lists summaries and reads individual details or output even when the writer is closed.
 
 ## Lifecycle and dependencies
 
@@ -44,7 +44,7 @@ The shipped `core:sessions` entry requires Profile scopes, Profile configuration
 
 The separate `core:tool-policy` entry in [permission-policy.ts](src/permission-policy.ts) provides `harnessToolPolicy`. A `readOnly` conversation or ancestor restricts its descendants to tools tagged `readOnly`. Process lifetime and optional plugin confirmations belong to [Process Execution](../process-execution/README.md) and [Approvals](../approvals/README.md).
 
-Optional Tasks integration registers durable history and a deletion participant that removes and drains every affected session owner. Other providers can register `beforeDelete` participants to quiesce their work. Workspace removal uses the same recursive conversation-deletion path.
+Optional Tasks integration drains every affected session owner before deletion. Other providers can register `beforeDelete` participants to quiesce their work. Workspace removal uses the same recursive conversation-deletion path.
 
 Deletion first blocks affected conversations and descendants, then drains participants. It commits catalog removal and a cleanup journal before removing scoped Profile configuration and managed files. Startup completes a committed cleanup journal. Export refuses busy conversations and includes all branches and original uploads. Neither export nor deletion changes project directories.
 

@@ -6,7 +6,6 @@ import {
   type TaskContext,
   type TaskEvent,
   type TaskHandle,
-  type TaskHistoryReader,
   type TaskOptions,
   type TaskOutput,
   type TaskPort,
@@ -33,7 +32,6 @@ export class TaskRuntime implements TaskPort {
   private readonly entries = new Map<string, Entry>();
   private readonly recent = new RecentTasks();
   private readonly listeners = new Set<(event: TaskEvent) => void>();
-  private readonly readers = new Set<TaskHistoryReader>();
   private readonly removing = new Map<string, Promise<void>>();
   private closing = false;
 
@@ -77,7 +75,6 @@ export class TaskRuntime implements TaskPort {
         return unsubscribe;
       },
       readOutput: runtime.readOutput.bind(runtime),
-      registerHistory: runtime.registerHistory.bind(runtime),
       removeOwner: runtime.removeOwner.bind(runtime),
     });
   }
@@ -222,8 +219,10 @@ export class TaskRuntime implements TaskPort {
         throw error;
       } finally {
         this.entries.delete(snapshot.id);
-        const output = committed ? undefined : entry.output?.read();
-        for (const removed of this.recent.add({ task: snapshot, output })) this.notify('deleted', removed);
+        if (!committed) {
+          for (const removed of this.recent.add({ task: snapshot, output: entry.output?.read() }))
+            this.notify('deleted', removed);
+        }
       }
       if (failure) throw reason;
       return value!;
@@ -275,16 +274,7 @@ export class TaskRuntime implements TaskPort {
   get(id: string) {
     const entry = this.entries.get(id);
     if (entry) return clone(entry.snapshot);
-    const historical = (this.recent.get(id) ?? this.history(id))?.task;
-    if (!historical) return;
-    // A durable record without an executor cannot represent live work.
-    return terminal(historical.state)
-      ? clone(historical)
-      : {
-          ...clone(historical),
-          state: 'interrupted' as const,
-          error: 'No live executor remains for this task',
-        };
+    return clone(this.recent.get(id)?.task);
   }
 
   list(owner?: string) {
@@ -327,20 +317,6 @@ export class TaskRuntime implements TaskPort {
     };
   }
 
-  registerHistory(reader: TaskHistoryReader) {
-    this.readers.add(reader);
-    return () => {
-      this.readers.delete(reader);
-    };
-  }
-
-  private history(id: string) {
-    for (const reader of this.readers) {
-      const record = reader(id);
-      if (record) return record;
-    }
-  }
-
   private notify(type: TaskEvent['type'], snapshot: TaskSnapshot) {
     const local = this.entries.get(snapshot.id)?.onEvent;
     for (const listener of local ? [local, ...this.listeners] : [...this.listeners]) {
@@ -356,16 +332,7 @@ export class TaskRuntime implements TaskPort {
     const entry = this.entries.get(id);
     if (entry) return entry.output?.read(after) ?? { cursor: 0, truncated: false, chunks: [] };
     const recent = this.recent.get(id);
-    const history = recent?.output || recent?.task.outputCursor === 0 ? recent : (this.history(id) ?? recent);
-    if (!history) return;
-    return readTaskOutput(
-      history.output ?? {
-        cursor: history.task.outputCursor,
-        truncated: history.task.outputCursor > 0,
-        chunks: [],
-      },
-      after,
-    );
+    if (recent) return readTaskOutput(recent.output ?? { cursor: 0, truncated: false, chunks: [] }, after);
   }
 
   private owned(owner: string) {

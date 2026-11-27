@@ -158,7 +158,7 @@ test('stopping a root leaves its delegated child running', { timeout: 15000 }, a
   assert.equal(ctx.harnessTasks.get(childRun.id)?.state, 'running');
   held.release();
   await ctx.harnessRuns.current(child.id)?.result;
-  assert.equal(ctx.harnessTasks.get(childRun.id)?.state, 'completed');
+  assert.equal(ctx.harnessSessions.taskHistory(childRun.id)?.state, 'completed');
   assert.equal(activeRunCount(ctx), 0);
   assert.equal(ctx.harnessSessions.export([parent.id]).length, 2);
 });

@@ -1,4 +1,4 @@
-import type { TaskOptions } from '@mini-harness/tasks/api';
+import type { TaskOptions, TaskOutput, TaskSnapshot } from '@mini-harness/tasks/api';
 import type { ScopeKey } from '@mini-harness/plugin-api/scopes';
 import type { ModelChoice } from '@mini-harness/llm/vocabulary';
 import type { HistoryEntry } from './shared/message.ts';
@@ -47,6 +47,11 @@ export interface SessionHistory {
   };
   inspectLog<T>(id: string, read: (log: SessionLogReader) => T, strict?: boolean): T | undefined;
   runSummary(id: string): RunInfo | undefined;
+  taskSummary(id: string): Omit<TaskSnapshot, 'result'> | undefined;
+  taskHistory(id: string): TaskSnapshot | undefined;
+  taskOutput(id: string, after?: number): TaskOutput | undefined;
+  taskSummaries(sessionId: string, type?: string, limit?: number): Omit<TaskSnapshot, 'result'>[];
+  hasInbox(sessionId: string, messageId: string): boolean;
   logError(id: string): string | undefined;
   diagnostics(): { id: string; message: string }[];
 }
