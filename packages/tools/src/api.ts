@@ -71,7 +71,7 @@ export interface ToolInvocation {
 }
 
 export interface ToolPort {
-  register(tool: ToolDefinition | ToolFactory): () => Promise<void>;
+  register(tool: ToolDefinition | ToolFactory): () => void;
   list(selection?: ToolSelection): ToolDefinition[];
 }
 

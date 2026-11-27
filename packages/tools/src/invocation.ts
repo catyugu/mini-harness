@@ -5,10 +5,9 @@ import { isToolContent, type ToolDefinition, type ToolInvocation, type ToolResul
 const bindingKey = Symbol('tool binding');
 
 interface Binding {
-  provider?: Context;
+  provider: Context;
   signal: AbortSignal;
   available(): boolean;
-  track(work: Promise<unknown>): void;
 }
 
 type BoundTool = ToolDefinition & { [bindingKey]?: Binding };
@@ -29,27 +28,26 @@ export function prepareTool(tool: ToolDefinition, args: Record<string, unknown>)
   return { tool, binding, args };
 }
 
-/** Hold a registration from acceptance through settlement, including queued work. */
-export function withToolLease<T>(
-  { tool, binding }: ReturnType<typeof prepareTool>,
-  start: (signal: AbortSignal | undefined, provider: Context | undefined) => Promise<T>,
-) {
+/** Execute validated work in an already admitted provider Fiber. */
+export async function executePreparedTool(
+  { tool, binding, args }: ReturnType<typeof prepareTool>,
+  callId: string,
+  options: ToolInvocation & { signal: AbortSignal },
+): Promise<ToolResult> {
+  const { signal, executionId, report, onUpdate, write, waitFor } = options;
+  signal.throwIfAborted();
   if (binding && !binding.available()) throw new Error('Tool is no longer available: ' + tool.name);
-  if (!binding) return start(undefined, undefined);
-  let settle!: () => void;
-  binding.track(
-    new Promise<void>((resolve) => {
-      settle = resolve;
-    }),
-  );
-  try {
-    const work = start(binding.signal, binding.provider);
-    void work.then(settle, settle);
-    return work;
-  } catch (error) {
-    settle();
-    throw error;
-  }
+  const result = await tool.execute(args, {
+    callId,
+    executionId,
+    signal,
+    waitFor: waitFor && ((id) => waitFor(id, signal)),
+    report,
+    update: onUpdate ?? (() => {}),
+    write: write ?? (() => {}),
+  });
+  if (!result || !isToolContent(result.content)) throw new Error('Invalid result from tool: ' + tool.name);
+  return result;
 }
 
 export function invokeTool(
@@ -57,36 +55,24 @@ export function invokeTool(
   callId: string,
   options: ToolInvocation = {},
 ): Promise<ToolResult> {
-  const { tool, args } = prepared;
-  return withToolLease(prepared, (lifetime, provider) => {
-    const signal = AbortSignal.any([lifetime, options.signal].filter((value) => value !== undefined));
-    let completed: { result: ToolResult } | undefined;
-    const execute = async (signal: AbortSignal) => {
-      signal.throwIfAborted();
-      if (prepared.binding && !prepared.binding.available())
-        throw new Error('Tool is no longer available: ' + tool.name);
-      const result = await tool.execute(args, {
-        callId,
-        executionId: options.executionId,
-        signal,
-        waitFor: options.waitFor && ((id) => options.waitFor!(id, signal)),
-        report: options.report,
-        update: options.onUpdate ?? (() => {}),
-        write: options.write ?? (() => {}),
-      });
-      if (!result || !isToolContent(result.content))
-        throw new Error('Invalid result from tool: ' + tool.name);
-      completed = { result };
-      return result;
-    };
-    // Preserve an observed result if the provider fiber sees a concurrent abort on exit.
-    return provider
-      ? provider.fiber.run(execute, signal).catch((error) => {
-          if (completed) return completed.result;
-          throw error;
-        })
-      : execute(signal);
-  });
+  const { binding } = prepared;
+  if (!binding)
+    return executePreparedTool(prepared, callId, {
+      ...options,
+      signal: options.signal ?? AbortSignal.any([]),
+    });
+  const signal = options.signal ? AbortSignal.any([binding.signal, options.signal]) : binding.signal;
+  // Preserve a tool's observed result when cancellation races its return.
+  let completed: ToolResult | undefined;
+  return binding.provider.fiber
+    .run(async (signal) => {
+      completed = await executePreparedTool(prepared, callId, { ...options, signal });
+      return completed;
+    }, signal)
+    .catch((error) => {
+      if (completed) return completed;
+      throw error;
+    });
 }
 
 export function runTool(

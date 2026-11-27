@@ -171,13 +171,13 @@ export class TaskRuntime implements TaskPort {
       },
     };
     const cancelled = () => update({ cancellationRequested: true });
-    const run = async () => {
+    const run = async (failure?: { error: unknown }) => {
       let value: T;
-      let failure: { error: unknown } | undefined;
       try {
+        if (failure) throw failure.error;
         await enter();
         signal.throwIfAborted();
-        value = provider ? await provider.fiber.run(() => execute(context), signal) : await execute(context);
+        value = await execute(context);
         signal.throwIfAborted();
         if (project) projected = jsonData(project(value));
       } catch (error) {
@@ -228,9 +228,15 @@ export class TaskRuntime implements TaskPort {
       return value!;
     };
     let accepted = false;
-    const result = Promise.resolve().then(() => {
+    const executeTask = () => {
       if (!accepted) throw new Error('Task submission failed');
       return run();
+    };
+    const result = (
+      provider ? provider.fiber.run(executeTask, signal) : Promise.resolve().then(executeTask)
+    ).catch((error) => {
+      if (!accepted || entry.finishing) throw error;
+      return run({ error });
     });
     const handle: TaskHandle<T> = {
       id: snapshot.id,

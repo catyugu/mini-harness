@@ -11,7 +11,7 @@ const tool = ctx.harnessTools.list({ resourceId: sessionId }).find(({ name }) =>
 if (tool) await runTool(tool, callId, { path: 'README.md' }, { signal });
 ```
 
-Tool execution uses the providing Cordis Fiber. A registration owns cancellation and draining of accepted calls, including independent work awaiting execution. Removing a scoped override restores inherited selection. A definition selected before a replacement cannot invoke the replacement.
+Tool execution uses the providing Cordis Fiber. Removing a registration cancels its accepted calls, including independently scheduled calls. Provider unload drains executing work before releasing resources. Removing a scoped override restores inherited selection. A definition selected before a replacement cannot invoke the replacement.
 
 `ToolContext` provides the call ID, cancellation signal, progress updates and an output writer. An execution environment can also supply a whole-task wait function or a background report function. A tool that supports independent execution can declare `background: true` and optionally project a compact result for task history. See [Runs](../runs/README.md#independent-tools) for the built-in background entry.
 

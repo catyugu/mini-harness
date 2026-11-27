@@ -74,8 +74,9 @@ export interface RunPort {
     end?: () => void,
   ): () => void;
   cancelQueue(id: string, itemId?: string, signal?: AbortSignal): Promise<QueueEntry[]>;
-  /** Execute independent work in the conversation's exclusive lane and agent scope. */
+  /** Execute provider-owned work in the conversation's exclusive lane and agent scope. */
   runTask<T>(
+    provider: Context,
     id: string,
     type: string,
     work: (ctx: Context, signal: AbortSignal, taskId: string) => Promise<T>,

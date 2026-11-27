@@ -9,10 +9,11 @@ import { Type } from 'typebox';
 import { defineTool } from '../src/api.ts';
 import { ToolRegistry } from '../src/registry.ts';
 
-test('scoped tools inherit locally and disposal aborts and drains active execution', async () => {
+test('scoped tools inherit locally and unregistering cancels an active call', async () => {
   const workspace = createScopeKey();
   const child = createScopeKey(workspace);
   const registry = new ToolRegistry();
+  const context = new Context();
   const make = (text: string) =>
     defineTool({
       name: 'inspect',
@@ -22,9 +23,9 @@ test('scoped tools inherit locally and disposal aborts and drains active executi
         return { content: [{ type: 'text', text }] };
       },
     });
-  registry.register(make('root'));
-  registry.register(make('workspace'), { scope: workspace });
-  registry.register(make('child'), { scope: child });
+  registry.register(make('root'), { context });
+  registry.register(make('workspace'), { context, scope: workspace });
+  registry.register(make('child'), { context, scope: child });
   assert.equal(registry.list({ scope: child })[0].description, 'child');
   assert.equal(registry.list({ scope: workspace })[0].description, 'workspace');
   let entered: () => void;
@@ -44,6 +45,7 @@ test('scoped tools inherit locally and disposal aborts and drains active executi
         return { content: [] };
       },
     }),
+    { context },
   );
   const pending = runTool(
     expectPresent(
@@ -55,7 +57,7 @@ test('scoped tools inherit locally and disposal aborts and drains active executi
   );
   const rejected = assert.rejects(pending, /no longer available/);
   await ready;
-  await dispose();
+  dispose();
   await rejected;
   assert.equal(
     registry.list({ scope: child }).some(({ name }) => name === 'wait'),
@@ -63,10 +65,11 @@ test('scoped tools inherit locally and disposal aborts and drains active executi
   );
 });
 
-test('a scoped replacement invalidates existing leases and removal restores inheritance', async () => {
+test('a scoped replacement invalidates already selected definitions and removal restores inheritance', async () => {
   const parent = createScopeKey();
   const child = createScopeKey(parent);
   const registry = new ToolRegistry();
+  const context = new Context();
   const make = (text: string) =>
     defineTool({
       name: 'inspect',
@@ -76,16 +79,19 @@ test('a scoped replacement invalidates existing leases and removal restores inhe
         return { content: [{ type: 'text', text }] };
       },
     });
-  registry.register(make('application'));
+  registry.register(make('application'), { context });
   const original = registry.list({ scope: child })[0];
-  const remove = registry.register(make('scoped'), { scope: parent });
-  assert.throws(() => registry.register(make('duplicate'), { scope: parent }), /Duplicate entry in scope/);
+  const remove = registry.register(make('scoped'), { context, scope: parent });
+  assert.throws(
+    () => registry.register(make('duplicate'), { context, scope: parent }),
+    /Duplicate entry in scope/,
+  );
   assert.equal(toolAvailable(original), false);
   assert.throws(() => runTool(original, 'old', {}), /no longer available/);
   const replacement = registry.list({ scope: child })[0];
   assert.deepEqual((await runTool(replacement, 'call', {})).content, [{ type: 'text', text: 'scoped' }]);
   assert.equal(registry.list()[0].description, 'application');
-  await remove();
+  remove();
   assert.throws(() => runTool(replacement, 'disposed', {}), /no longer available/);
   assert.equal(registry.list({ scope: child })[0].description, 'application');
 });
@@ -111,9 +117,68 @@ test('Tools activates and registers a definition without Sessions or a policy pr
         { type: 'text', text: 'ready' },
       ]);
     } finally {
-      await remove();
+      remove();
     }
   } finally {
     await fiber.dispose();
+  }
+});
+
+test('disposing a tool provider drains the active call before releasing its resources', async () => {
+  const ctx = new Context();
+  const tools = ctx.plugin(toolsPlugin);
+  await tools;
+  let entered!: () => void;
+  let aborted!: () => void;
+  let finish!: () => void;
+  const started = new Promise<void>((resolve) => {
+    entered = resolve;
+  });
+  const cancelled = new Promise<void>((resolve) => {
+    aborted = resolve;
+  });
+  const hold = new Promise<void>((resolve) => {
+    finish = resolve;
+  });
+  let released = false;
+  const provider = ctx.inject(['harnessTools'], (plugin) => {
+    plugin.effect(() => () => {
+      released = true;
+    });
+    plugin.effect(() =>
+      plugin.harnessTools.register(
+        defineTool({
+          name: 'inspect',
+          description: 'Inspect',
+          parameters: Type.Object({}),
+          async execute(_args, { signal }) {
+            signal.addEventListener('abort', aborted, { once: true });
+            entered();
+            await hold;
+            signal.throwIfAborted();
+            return { content: [] };
+          },
+        }),
+      ),
+    );
+  });
+  try {
+    await provider;
+    const tool = ctx.harnessTools.list()[0];
+    const pending = assert.rejects(runTool(tool, 'test', {}), { name: 'AbortError' });
+    await started;
+    const unload = provider.dispose();
+    try {
+      await cancelled;
+      assert.equal(released, false);
+      assert.equal(toolAvailable(tool), false);
+    } finally {
+      finish();
+    }
+    await pending;
+    await unload;
+    assert.equal(released, true);
+  } finally {
+    await tools.dispose();
   }
 });

@@ -85,7 +85,12 @@ test('durable retained tasks recover by ID without reconstructing execution hand
   await assert.rejects(unfinished.result);
   app = await createMiniHarnessServer(paths);
   ctx = app.runtime.plugins.ctx;
-  const file = join(paths.sessions, session.workspaceId?.slice(0, 16) ?? 'unbound', session.id + '.jsonl');
+  const file = join(
+    paths.home,
+    'sessions',
+    session.workspaceId?.slice(0, 16) ?? 'unbound',
+    session.id + '.jsonl',
+  );
   renameSync(file, file + '.held');
   try {
     assert.equal(ctx.harnessSessions.taskHistory(done.id)?.result, 'finished');

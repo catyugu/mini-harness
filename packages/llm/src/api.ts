@@ -199,11 +199,16 @@ export interface LlmAdapter {
   classifyError?(error: unknown): ModelErrorKind | undefined;
 }
 
+/** A selected adapter whose async operations run in the registering activation. */
+export interface SelectedLlmAdapter extends LlmAdapter {
+  matches(adapter: LlmAdapter): boolean;
+}
+
 export interface LlmPort {
   /** Select the nearest matching scope, then highest priority. A tie is ambiguous. */
   register(adapter: LlmAdapter, priority?: number): () => void;
   /** Returns the selected adapter, null for an ambiguous match, or undefined for no match. */
-  select(model: ModelChoice): LlmAdapter | null | undefined;
+  select(model: ModelChoice): SelectedLlmAdapter | null | undefined;
   stream(request: LlmRequest): AsyncIterable<LlmEvent>;
 }
 

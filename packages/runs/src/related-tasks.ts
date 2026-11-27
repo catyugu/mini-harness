@@ -5,16 +5,17 @@ export const backgroundTool = 'background-tool';
 
 export function relatedTasks(ctx: Context, id: string, includeChildren = true, detailed = false) {
   const sessions = ctx.harnessSessions;
-  const scopes = [[id, backgroundTool]] as [string, string][];
+  const scopes = new Map([['session:' + id, backgroundTool]]);
   if (includeChildren)
-    for (const child of sessions.list()) if (child.parentId === id) scopes.push([child.id, 'agent-run']);
+    for (const child of sessions.list())
+      if (child.parentId === id) scopes.set('session:' + child.id, 'agent-run');
 
   const live = new Map<string, TaskSnapshot>();
-  const history = scopes.flatMap(([session, type]) => {
-    for (const task of ctx.harnessTasks.list('session:' + session))
-      if (task.type === type) live.set(task.id, task);
-    return sessions.taskSummaries(session, type, 50);
-  });
+  for (const task of ctx.harnessTasks.list())
+    if (task.type && scopes.get(task.owner) === task.type) live.set(task.id, task);
+  const history = [...scopes].flatMap(([owner, type]) =>
+    sessions.taskSummaries(owner.slice('session:'.length), type, 50),
+  );
   const results = new Map<string, TaskSnapshot>(history.map((task) => [task.id, task]));
   for (const task of live.values()) results.set(task.id, task);
   const ordered = [...results.values()].sort((a, b) => b.createdAt.localeCompare(a.createdAt));

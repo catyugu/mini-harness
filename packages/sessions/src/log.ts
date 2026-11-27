@@ -365,6 +365,10 @@ export class SessionLog extends RecordLog<SessionEvent> implements SessionLogPor
   }
 
   /** Opening an existing log resolves interrupted work before it becomes writable. */
+  get hasReadyInbox() {
+    return !this.paused && this.pendingInbox.size > 0;
+  }
+
   get deliveryIds(): ReadonlySet<string> {
     return this.inboxIds;
   }

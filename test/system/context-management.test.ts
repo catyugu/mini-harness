@@ -426,12 +426,13 @@ test('disabled automatic compaction still retries context overflow after determi
   assert.ok(totalTokens(repaired.inputMeasurement!) < totalTokens(rejected.inputMeasurement!));
 });
 
-test('cancelling a manual checkpoint keeps the active branch and releases the conversation lane', async (t) => {
+test('stopping a manual checkpoint or unloading its plugin releases the lane and preserves the branch', async (t) => {
   let started!: () => void;
   let release!: () => void;
-  const entered = new Promise<void>((resolve) => {
-    started = resolve;
-  });
+  const nextSummary = () =>
+    new Promise<void>((resolve) => {
+      started = resolve;
+    });
   const hold = new Promise<void>((resolve) => {
     release = resolve;
   });
@@ -450,6 +451,7 @@ test('cancelling a manual checkpoint keeps the active branch and releases the co
   const log = ctx.harnessSessions.log(session.id);
   const before = log.context();
   const endpoint = '/sessions/' + session.id;
+  const entered = nextSummary();
   const compact = request(endpoint + '/compact', 'POST');
   try {
     await Promise.race([
@@ -473,6 +475,23 @@ test('cancelling a manual checkpoint keeps the active branch and releases the co
     assert.deepEqual((await compact).body, { cancelled: true });
     assert.deepEqual(log.context(), before);
     assert.equal((await request(endpoint + '/context')).body.compacting, undefined);
+    const enteredAgain = nextSummary();
+    const running = request(endpoint + '/compact', 'POST');
+    await Promise.race([
+      enteredAgain,
+      running.then(() => assert.fail('Second compaction ended before unload')),
+    ]);
+    const task = ctx.harnessRuns.current(session.id)!;
+    const settled = assert.rejects(task.result, { name: 'AbortError' });
+    const disabled = await request('/settings', 'PATCH', {
+      entries: { 'context-management': { disabled: true } },
+    });
+    assert.equal(disabled.status, 200, JSON.stringify(disabled.body));
+    await settled;
+    await running;
+    assert.equal(ctx.harnessSessions.taskHistory(task.id)?.state, 'cancelled');
+    assert.equal(ctx.harnessRuns.current(session.id), undefined);
+    assert.deepEqual(log.context(), before);
     assert.equal(await sendRun(ctx.harnessRuns, session.id, 'Continue'), 'Finished');
   } finally {
     release();

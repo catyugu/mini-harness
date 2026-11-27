@@ -25,7 +25,7 @@ The LLM service publishes `llm/adapters-changed` after changing registrations; t
 
 `accepts` must be a pure predicate on the model choice. It must not re-enter aggregate model or adapter selection, which would recurse. Use provider/model identifiers or the adapter's own source.
 
-Removing a registration prevents future selection. A stream combines its request signal with the registering provider's Fiber signal, so unloading that provider cancels its active streams. Adapters must cooperate with cancellation.
+Removing a registration prevents future selection. Streams and exact token counting execute under the registering Fiber. On cancellation or early consumer exit, the Fiber waits for any in-flight pull and iterator cleanup before releasing provider resources. Adapters must cooperate with the request signal.
 
 ## Native protocol
 

@@ -27,8 +27,9 @@ export type ModelRequestTransform = Transform<ModelRequestContent, StepContext>;
 
 export interface RequestPreparation extends StepContext {
   readonly runId: string;
+  readonly context: Context;
   readonly failure?: ModelFailure;
-  rebuild(messages: NativeMessage[]): Promise<LlmRequest>;
+  rebuild(messages: NativeMessage[], signal: AbortSignal): Promise<LlmRequest>;
 }
 
 export type ModelRetryHandler = (
@@ -53,14 +54,12 @@ export interface ToolResultContext extends StepContext {
 
 export type ToolResultTransform = Transform<ToolResult['content'], ToolResultContext>;
 
-/** Run-local observer of native events; returned presentations belong to the committed assistant message. */
-export type AgentRecordObserver = (event: AgentEvent) => readonly RecordPresentation[] | void;
-
 declare module 'mini-harness/cordis' {
   interface Events {
     /** Configure capabilities owned by a single Agent run before its first step. */
     'agent/setup'(ctx: Context, sessionId: string, signal: AbortSignal): void | Promise<void>;
-    'agent/records'(sink: RecordPublisher): AgentRecordObserver;
+    /** Synchronous observer; presentations belong to the committed assistant message. */
+    'agent/records'(event: AgentEvent, sink: RecordPublisher): readonly RecordPresentation[] | void;
     'agent/tool-result': ToolResultTransform;
     'agent/prepare-input': InputPreparation;
     'agent/model-request': ModelRequestTransform;

@@ -673,3 +673,55 @@ export async function apply(ctx) {
   assert.equal(ctx.harnessModels.resolve(model), undefined);
   assert.deepEqual(ctx.harnessModelPreference.recent(), { provider: '', id: '' });
 });
+
+test(
+  'unloading a streaming adapter closes the iterator before its resources',
+  { timeout: 5000 },
+  async (t) => {
+    const { app } = await fixture(t);
+    const ctx = app.runtime.plugins.ctx;
+    let enterCleanup!: () => void;
+    let releaseCleanup!: () => void;
+    const cleaning = new Promise<void>((resolve) => {
+      enterCleanup = resolve;
+    });
+    const hold = new Promise<void>((resolve) => {
+      releaseCleanup = resolve;
+    });
+    let released = false;
+    const model = { provider: 'stream-lifetime', id: 'test' };
+    const fiber = ctx.inject(['harnessLlm'], (plugin) => {
+      plugin.effect(() => () => {
+        released = true;
+      });
+      plugin.effect(() =>
+        plugin.harnessLlm.register({
+          accepts: (choice) => choice.provider === model.provider,
+          async *stream() {
+            try {
+              yield { type: 'text-delta', text: 'partial' };
+            } finally {
+              enterCleanup();
+              await hold;
+            }
+          },
+        }),
+      );
+    });
+    await fiber;
+    const stream = ctx.harnessLlm
+      .stream({ model, messages: [], systemPrompt: '', signal: new AbortController().signal })
+      [Symbol.asyncIterator]();
+    assert.deepEqual((await stream.next()).value, { type: 'text-delta', text: 'partial' });
+    const unloading = fiber.dispose();
+    try {
+      await cleaning;
+      assert.equal(released, false);
+    } finally {
+      releaseCleanup();
+    }
+    await unloading;
+    assert.equal(released, true);
+    await assert.rejects(stream.next(), { name: 'AbortError' });
+  },
+);

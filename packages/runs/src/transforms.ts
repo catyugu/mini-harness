@@ -14,6 +14,7 @@ export async function applyTransforms<Value, Input extends { signal: AbortSignal
   const { signal, ...data } = input;
   for (const { context, callback } of hooks) {
     signal.throwIfAborted();
+    if (context.fiber.signal.aborted) continue;
     try {
       const result = await context.fiber.run(
         (signal) => callback(value, { ...data, signal } as Input),

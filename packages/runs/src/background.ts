@@ -3,7 +3,7 @@ import { Type } from 'typebox';
 import { DomainError } from '@mini-harness/platform/errors';
 import { terminal, type TaskData, type TaskSnapshot } from '@mini-harness/tasks/api';
 import { defineTool, type ToolResult } from '@mini-harness/tools/api';
-import { invokeTool, prepareTool, withToolLease } from '@mini-harness/tools/invocation';
+import { executePreparedTool, prepareTool } from '@mini-harness/tools/invocation';
 import { conversationTools } from './tool-selection.ts';
 import { backgroundTool, relatedTask, relatedTasks } from './related-tasks.ts';
 
@@ -46,42 +46,38 @@ function start(ctx: Context, id: string, name: string, args: Record<string, unkn
   );
   if (!tool?.background) throw new Error('Tool does not support background execution: ' + name);
   const prepared = prepareTool(tool, args);
-  let taskId: string | undefined;
-  withToolLease(prepared, (lifetime, owner) => {
-    const task = ctx.harnessTasks.start(
-      {
-        ...service.task(id),
-        type: backgroundTool,
-        name: tool.label ?? tool.name,
-        metadata: { tool: name, arguments: prepared.args as TaskData },
-        provider: owner ?? ctx,
-        signal: lifetime,
-        project: (result: ToolResult) =>
-          ({
-            ...(tool.projectResult?.(result) ?? writableToolResult(result)),
-            isError: Boolean(result.isError || result.outcome),
-          }) as TaskData,
-      },
-      (task) => {
-        service.assertAvailable(id);
-        if (provider.get('harnessToolPolicy')?.(id, tool) === false)
-          throw new Error('Tool denied by conversation policy: ' + name);
-        let reports = 0;
-        return invokeTool(prepared, callId, {
-          signal: task.signal,
-          onUpdate: (update) => task.update(update as TaskData),
-          write: task.write,
-          report: (message) => sendNotice(ctx, id, task.id, name, message, 'report:' + ++reports),
-          waitFor: async (id, signal) => {
-            await task.waitFor(id, signal);
-          },
-        });
-      },
-    );
-    taskId = task.id;
-    return task.result;
-  });
-  return { taskId: taskId!, state: 'accepted' };
+  if (!prepared.binding) throw new Error('Background tool has no registered provider: ' + name);
+  const task = ctx.harnessTasks.start(
+    {
+      ...service.task(id),
+      type: backgroundTool,
+      name: tool.label ?? tool.name,
+      metadata: { tool: name, arguments: prepared.args as TaskData },
+      provider: prepared.binding.provider,
+      signal: prepared.binding.signal,
+      project: (result: ToolResult) =>
+        ({
+          ...(tool.projectResult?.(result) ?? writableToolResult(result)),
+          isError: Boolean(result.isError || result.outcome),
+        }) as TaskData,
+    },
+    (task) => {
+      service.assertAvailable(id);
+      if (provider.get('harnessToolPolicy')?.(id, tool) === false)
+        throw new Error('Tool denied by conversation policy: ' + name);
+      let reports = 0;
+      return executePreparedTool(prepared, callId, {
+        signal: task.signal,
+        onUpdate: (update) => task.update(update as TaskData),
+        write: task.write,
+        report: (message) => sendNotice(ctx, id, task.id, name, message, 'report:' + ++reports),
+        waitFor: async (id, signal) => {
+          await task.waitFor(id, signal);
+        },
+      });
+    },
+  );
+  return { taskId: task.id, state: 'accepted' };
 }
 
 const plugin: Plugin.Object = {

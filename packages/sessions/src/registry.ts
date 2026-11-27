@@ -52,6 +52,7 @@ export class SessionRegistry implements SessionStore {
   private readonly tasksBySession = new Map<string, TaskHistory>();
   private readonly taskOwners = new Map<string, TaskHistory>();
   private readonly deliveryIds = new Map<string, ReadonlySet<string>>();
+  private readonly readyInbox = new Set<string>();
   private readonly logErrors = new Map<string, string>();
   private closing = false;
   private pendingDeletion = Promise.resolve();
@@ -282,6 +283,10 @@ export class SessionRegistry implements SessionStore {
   private openLog(record: SessionRecord, mode: 'read' | 'write' | 'recover') {
     const { id } = record;
     const writable = mode !== 'read';
+    const refreshInbox = () => {
+      if (log!.hasReadyInbox) this.readyInbox.add(id);
+      else this.readyInbox.delete(id);
+    };
     const onChange = (entry: SessionEntry) => {
       if (entry.type === 'task' || entry.type === 'message') {
         const history = this.tasksBySession.get(id)!;
@@ -291,7 +296,10 @@ export class SessionRegistry implements SessionStore {
       const run = runFromEntry(id, entry);
       if (run) this.latestRuns.set(id, run);
       const inbox = entry.type.startsWith('inbox-');
-      if (inbox || (entry.type === 'message' && entry.inboxId)) this.notify(id, false, true);
+      if (inbox || (entry.type === 'message' && entry.inboxId)) {
+        refreshInbox();
+        this.notify(id, false, true);
+      }
       if (!inbox && entry.type !== 'model-request' && entry.type !== 'tool-schema')
         this.notify(
           id,
@@ -322,6 +330,7 @@ export class SessionRegistry implements SessionStore {
       );
       if (writable) {
         this.deliveryIds.set(id, log.deliveryIds);
+        refreshInbox();
         if (!this.tasksBySession.has(id) || this.logErrors.has(id)) {
           this.dropTaskHistory(id);
           const history = log.indexTasks();
@@ -381,6 +390,10 @@ export class SessionRegistry implements SessionStore {
 
   taskSummaries(sessionId: string, type?: string, limit?: number) {
     return this.tasksBySession.get(sessionId)?.summaries(type, limit) ?? [];
+  }
+
+  readyInboxSessions() {
+    return [...this.readyInbox];
   }
 
   hasInbox(sessionId: string, messageId: string) {
@@ -638,6 +651,7 @@ export class SessionRegistry implements SessionStore {
       for (const id of chosen) {
         this.dropTaskHistory(id);
         this.deliveryIds.delete(id);
+        this.readyInbox.delete(id);
       }
       await this.recoverDeletion();
       for (const { id, key } of locations) {

@@ -51,6 +51,7 @@ export interface SessionHistory {
   taskHistory(id: string): TaskSnapshot | undefined;
   taskOutput(id: string, after?: number): TaskOutput | undefined;
   taskSummaries(sessionId: string, type?: string, limit?: number): Omit<TaskSnapshot, 'result'>[];
+  readyInboxSessions(): string[];
   hasInbox(sessionId: string, messageId: string): boolean;
   logError(id: string): string | undefined;
   diagnostics(): { id: string; message: string }[];
