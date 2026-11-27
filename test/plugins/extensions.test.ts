@@ -538,7 +538,11 @@ test('model contributions select matching capabilities and transport, and reject
   const model = { provider: 'local-mock', id: app.runtime.plugins.ctx.harnessModelPreference.recent().id };
   const ctx = app.runtime.plugins.ctx;
   let catalogChanges = 0;
-  t.after(ctx.on('models/catalog-changed', () => { catalogChanges++; }));
+  t.after(
+    ctx.on('models/catalog-changed', () => {
+      catalogChanges++;
+    }),
+  );
   const plugin = (name: string, priority: number, input: string[]) =>
     writePlugin(
       paths.plugins,
@@ -633,11 +637,15 @@ export function apply(ctx) {
 
   const metadata = ctx.harnessModels.capabilities(model)!;
   const entries = list();
-  const dispose = ctx.harnessModels.register({
-    list: () => entries,
-    resolve: (choice) => adapter.accepts(choice) ? model : undefined,
-    capabilities: () => metadata,
-  }, adapter, 10);
+  const dispose = ctx.harnessModels.register(
+    {
+      list: () => entries,
+      resolve: (choice) => (adapter.accepts(choice) ? model : undefined),
+      capabilities: () => metadata,
+    },
+    adapter,
+    10,
+  );
   // Direct paired registration and release each publish once.
   assert.equal(catalogChanges, before + 1);
   dispose();

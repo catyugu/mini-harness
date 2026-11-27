@@ -330,39 +330,65 @@ test(
       provider: 'slow-auth',
     };
     let entered!: () => void;
-    const started = new Promise<void>((resolve) => { entered = resolve; });
+    const started = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
     let release!: () => void;
-    const hold = new Promise<void>((resolve) => { release = resolve; });
+    const hold = new Promise<void>((resolve) => {
+      release = resolve;
+    });
     t.after(release);
     let check = async (_signal: AbortSignal) => {
       entered();
       await hold;
       return true;
     };
-    const remove = await store.registerDefaults([{
-      id: 'slow-auth', name: 'Slow auth', api: model.api, baseUrl: mock.url, canSetKey: true, models: [model],
-      authStatus: (signal) => check(signal),
-    }]);
+    const remove = await store.registerDefaults([
+      {
+        id: 'slow-auth',
+        name: 'Slow auth',
+        api: model.api,
+        baseUrl: mock.url,
+        canSetKey: true,
+        models: [model],
+        authStatus: (signal) => check(signal),
+      },
+    ]);
     await started;
     const firstQuery = store.available();
     let settled = false;
-    void firstQuery.then(() => { settled = true; });
+    void firstQuery.then(() => {
+      settled = true;
+    });
     await Promise.resolve();
     assert.equal(settled, false);
     release();
     assert.equal((await firstQuery).find(({ provider }) => provider === 'slow-auth')?.configured, true);
 
     let checking!: () => void;
-    const pending = new Promise<void>((resolve) => { checking = resolve; });
+    const pending = new Promise<void>((resolve) => {
+      checking = resolve;
+    });
     let cancelled = 0;
     check = async (signal) => {
       checking();
-      await new Promise<void>((resolve) => signal.addEventListener('abort', () => { cancelled++; resolve(); }, { once: true }));
+      await new Promise<void>((resolve) =>
+        signal.addEventListener(
+          'abort',
+          () => {
+            cancelled++;
+            resolve();
+          },
+          { once: true },
+        ),
+      );
       return true;
     };
     const query = store.available();
     await pending;
-    check = async () => { throw new Error('Authentication unavailable'); };
+    check = async () => {
+      throw new Error('Authentication unavailable');
+    };
     changes.length = 0;
     await store.saveProvider({ id: 'slow-auth', key: 'saved-key' });
     const available = await query;
@@ -371,18 +397,35 @@ test(
     assert.deepEqual(store.authStatus('slow-auth'), { configured: false, source: 'stored' });
     assert.ok(changes.length && changes.every((kind) => kind === 'auth'));
     assert.ok(errors.some((error) => String(error).includes('slow-auth')));
-    const startedRemoval = new Promise<void>((resolve) => { checking = resolve; });
+    const startedRemoval = new Promise<void>((resolve) => {
+      checking = resolve;
+    });
     check = async (signal) => {
       checking();
-      await new Promise<void>((resolve) => signal.addEventListener('abort', () => { cancelled++; resolve(); }, { once: true }));
+      await new Promise<void>((resolve) =>
+        signal.addEventListener(
+          'abort',
+          () => {
+            cancelled++;
+            resolve();
+          },
+          { once: true },
+        ),
+      );
       return true;
     };
     const lastQuery = store.available();
     await startedRemoval;
     await remove();
     assert.equal(cancelled, 2);
-    assert.equal((await lastQuery).some(({ provider }) => provider === 'slow-auth'), false);
-    assert.equal(store.providers().some(({ id }) => id === 'slow-auth'), false);
+    assert.equal(
+      (await lastQuery).some(({ provider }) => provider === 'slow-auth'),
+      false,
+    );
+    assert.equal(
+      store.providers().some(({ id }) => id === 'slow-auth'),
+      false,
+    );
     assert.deepEqual(store.authStatus('slow-auth'), { configured: false });
     assert.ok(changes.includes('catalog'));
   },
