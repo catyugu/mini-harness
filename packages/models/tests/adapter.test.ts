@@ -396,7 +396,10 @@ test(
     assert.equal(cancelled, 1);
     assert.deepEqual(store.authStatus('slow-auth'), { configured: false, source: 'stored' });
     assert.ok(changes.length);
-    assert.equal(changes.every((kind) => kind === 'auth'), true);
+    assert.equal(
+      changes.every((kind) => kind === 'auth'),
+      true,
+    );
     assert.ok(errors.some((error) => String(error).includes('slow-auth')));
     const startedRemoval = new Promise<void>((resolve) => {
       checking = resolve;
