@@ -56,13 +56,18 @@ test('create and edit a provider, reconcile its discovered catalog, and use the 
   await expect(rows.first().getByLabel('Model ID')).toHaveValue('manual-only');
   await expect(rows.last().getByLabel('Display name')).toHaveValue('GUI Model edited');
   await rows.last().getByRole('button', { name: 'Advanced model settings' }).click();
-  await rows.first().getByLabel('Drag to reorder').dragTo(rows.last(), {
-    targetPosition: { x: 20, y: 30 },
-  });
+  await rows
+    .first()
+    .getByLabel('Drag to reorder')
+    .dragTo(rows.last(), {
+      targetPosition: { x: 20, y: 30 },
+    });
   await expect(rows.last().getByLabel('Model ID')).toHaveValue('manual-only');
   await editor.getByRole('button', { name: 'Save changes' }).click();
   await settings.getByRole('button', { name: 'Edit GUI Provider', exact: true }).click();
-  await expect(editor.getByRole('group', { name: 'Model', exact: true }).last().getByLabel('Model ID')).toHaveValue('manual-only');
+  await expect(
+    editor.getByRole('group', { name: 'Model', exact: true }).last().getByLabel('Model ID'),
+  ).toHaveValue('manual-only');
   await editor.getByRole('button', { name: 'Cancel', exact: true }).click();
   await settings.getByRole('button', { name: 'Edit local-mock', exact: true }).click();
   const native = settings.getByRole('form', { name: 'Edit local-mock' });

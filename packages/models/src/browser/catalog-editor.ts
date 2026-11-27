@@ -69,7 +69,9 @@ export function catalogEditor() {
     }));
     const expand = iconButton('Advanced model settings', 'chevron');
     const remove = iconButton('Remove model', 'trash');
-    const handle = fromMarkup('<span class="catalog-drag" title="Drag to reorder" aria-label="Drag to reorder"></span>');
+    const handle = fromMarkup(
+      '<span class="catalog-drag" title="Drag to reorder" aria-label="Drag to reorder"></span>',
+    );
     handle.append(icon({ path: 'M9 5h.01M15 5h.01M9 12h.01M15 12h.01M9 19h.01M15 19h.01' }));
     let target: HTMLElement | undefined;
     function clearTarget() {
@@ -85,7 +87,9 @@ export function catalogEditor() {
     handle.onpointermove = (event) => {
       if (!handle.hasPointerCapture(event.pointerId)) return;
       clearTarget();
-      const candidate = document.elementFromPoint(event.clientX, event.clientY)?.closest<HTMLElement>('.catalog-model');
+      const candidate = document
+        .elementFromPoint(event.clientX, event.clientY)
+        ?.closest<HTMLElement>('.catalog-model');
       if (!candidate || candidate === node || candidate.parentElement !== list) return;
       target = candidate;
       const rect = candidate.getBoundingClientRect();
