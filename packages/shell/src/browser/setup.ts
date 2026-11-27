@@ -77,6 +77,7 @@ function renderExitCode() {
       const show = (state === 'finished' || state === 'error') && typeof code === 'number';
       const label = show ? 'Exit ' + code : '';
       if (node.textContent !== label) node.textContent = label;
+      node.hidden = !show;
       if (show && code !== 0) node.dataset.failed = 'true';
       else delete node.dataset.failed;
     },

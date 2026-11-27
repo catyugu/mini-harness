@@ -267,6 +267,7 @@ const setup = (ctx: Context) => {
           update({ details }) {
             const label = details?.state === 'accepted' ? 'Accepted' : '';
             if (node.textContent !== label) node.textContent = label;
+            node.hidden = !label;
           },
         };
       },

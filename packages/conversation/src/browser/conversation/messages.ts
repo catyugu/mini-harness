@@ -360,19 +360,20 @@ export function createMessageView(
   ) {
     // The preview belongs to the first assistant message committed after its durable anchor.
     // Snapshots can commit that message and already contain the next partial in the same Run.
-    const anchor = preview?.afterEntryId;
+    const priorPreview = preview;
+    const anchor = priorPreview?.afterEntryId;
     const boundary = anchor === undefined ? -1 : entries.findIndex(({ id }) => id === anchor);
     const anchorPresent = anchor === undefined || boundary >= 0;
     const completedMessage =
-      preview && anchorPresent
+      priorPreview && anchorPresent
         ? entries
             .slice(boundary + 1)
             .find(
-              (entry) =>
-                entry.type === 'message' && entry.role === 'assistant' && entry.runId === preview!.runId,
+              (entry): entry is Extract<ViewMessage, { role: 'assistant' }> =>
+                entry.type === 'message' && entry.role === 'assistant' && entry.runId === priorPreview.runId,
             )
         : undefined;
-    const completing = completedMessage ? preview : undefined;
+    const completing = completedMessage ? priorPreview : undefined;
     if (!partial || completedMessage || !anchorPresent || preview?.runId !== run?.id) {
       cancelPreview();
       preview = undefined;
@@ -386,11 +387,12 @@ export function createMessageView(
     // A grouped text part is identified by its first source block. If the committed
     // text merged into a preceding part, retain that existing part instead of moving
     // the preview over it.
-    const completedPart =
-      completedTurn?.type === 'turn' &&
-      completedTurn.parts.find(
-        (part) => part.type === 'text' && part.id.startsWith(completedMessage!.id + ':'),
-      );
+    const firstText = completedMessage && (typeof completedMessage.content === 'string'
+      ? (completedMessage.content ? 0 : -1)
+      : completedMessage.content.findIndex(block => block.type === 'text' && Boolean(block.text)));
+    const completedPart = completedTurn?.type === 'turn' && firstText !== undefined && firstText >= 0
+      ? completedTurn.parts.find(part => part.type === 'text' && part.id === completedMessage!.id + ':' + firstText)
+      : undefined;
     const pending = new Set(nodes.keys());
     function retain<T extends HTMLElement>(key: string, source: unknown, render: (prior?: T) => T) {
       pending.delete(key);

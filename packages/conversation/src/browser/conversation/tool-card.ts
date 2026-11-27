@@ -123,7 +123,7 @@ export function createToolCard(initial: ToolCardData, extensions: MessageExtensi
       }
       case 'status': {
         const contribution = updateStatus(current);
-        const label = contribution?.hasChildNodes() ? '' : (labels[current.state] ?? current.state);
+        const label = contribution && !contribution.hidden ? '' : (labels[current.state] ?? current.state);
         if (statusLabel.textContent !== label) statusLabel.textContent = label;
         statusLabel.hidden = !label;
         break;

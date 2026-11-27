@@ -46,7 +46,7 @@ function pluginCatalog(
 ) {
   const { miniPages: pages, miniSettingsRegistry: registry } = ctx;
   const entry = fromMarkup<HTMLButtonElement>(
-    '<button type="button" class="nav-action" aria-label="Browse plugins" aria-controls="pluginCatalog"><span class="nav-label">Plugins</span></button>',
+    '<button type="button" class="catalog-launcher" aria-label="Browse plugins" aria-controls="pluginCatalog"><span class="nav-label">Plugins</span></button>',
   );
   entry.prepend(icon('plugin'));
   const page =

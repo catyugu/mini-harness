@@ -115,32 +115,43 @@ export const apply = (ctx) => {
           });
         }
       }));
-      ctx.effect(() => ctx.miniMessages.registerTool('stream_fixture', () => {
+      function track(placement, node, signal) {
+        node.dataset.fixturePlacement = placement;
+        const count = (key) => {
+          const counts = JSON.parse(document.body.dataset[key] ?? '{}');
+          counts[placement] = (counts[placement] ?? 0) + 1;
+          document.body.dataset[key] = JSON.stringify(counts);
+        };
+        count('streamMounted');
+        signal.addEventListener('abort', () => count('streamReleased'), { once: true });
+      }
+      ctx.effect(() => ctx.miniMessages.registerTool('stream_fixture', signal => {
         const node = document.createElement('span');
         node.textContent = 'Stream fixture';
+        track('summary', node, signal);
         return { node, update() {} };
       }, 'summary'));
       ctx.effect(() => ctx.miniMessages.registerTool('stream_fixture', signal => {
-        const node = document.createElement('div');
-        const output = document.createElement('pre');
-        output.setAttribute('aria-label', 'Fixture stream');
-        const action = document.createElement('button');
-        action.textContent = 'Fixture action';
-        node.append(output, action);
-        const mounted = Number(document.body.dataset.streamMounted ?? 0) + 1;
-        document.body.dataset.streamMounted = String(mounted);
-        signal.addEventListener('abort', () => {
-          document.body.dataset.streamReleased = String(Number(document.body.dataset.streamReleased ?? 0) + 1);
-        }, { once: true });
+        const node = document.createElement('pre');
+        node.setAttribute('aria-label', 'Fixture stream');
+        track('body', node, signal);
         return { node, update(tool) {
           const text = tool.streams?.stdout ?? (typeof tool.content === 'string' ? tool.content : tool.content?.map(block => block.text).join('') ?? '');
-          if (output.textContent !== text) output.textContent = text;
+          if (node.textContent !== text) node.textContent = text;
         } };
-      }));
-      ctx.effect(() => ctx.miniMessages.registerTool('stream_fixture', () => {
+      }, 'body'));
+      ctx.effect(() => ctx.miniMessages.registerTool('stream_fixture', signal => {
         const node = document.createElement('span');
-        return { node, update(tool) { node.textContent = tool.details?.finished ? 'Stream complete' : ''; } };
+        node.textContent = 'Stream complete';
+        track('status', node, signal);
+        return { node, update(tool) { node.hidden = !tool.details?.finished; } };
       }, 'status'));
+      ctx.effect(() => ctx.miniMessages.registerTool('stream_fixture', signal => {
+        const node = document.createElement('button');
+        node.textContent = 'Fixture action';
+        track('action', node, signal);
+        return { node, update() {} };
+      }, 'action'));
       ctx.effect(() => ctx.miniMessages.registerTool('ls', (signal) => {
         document.body.dataset.activeFailedRenderers = String(Number(document.body.dataset.activeFailedRenderers ?? 0) + 1);
         signal.addEventListener('abort', () => {
@@ -324,7 +335,15 @@ export const apply = (ctx) => {
     await header.click();
     const output = stream.getByLabel('Fixture stream');
     await expect(output).toHaveText('First line');
-    const summary = expectPresent(await header.elementHandle(), 'stream summary');
+    const summary = expectPresent(await stream.locator('[data-fixture-placement="summary"]').elementHandle(), 'summary instance');
+    const status = expectPresent(await stream.locator('[data-fixture-placement="status"]').elementHandle(), 'status instance');
+    const expectedInstances = { summary: 1, status: 1, body: 1, action: 1 };
+    const lifetimes = (key: 'streamMounted' | 'streamReleased') => page.locator('body').evaluate((node, key) =>
+      JSON.parse(node.dataset[key] ?? '{}'), key);
+    expect(await lifetimes('streamMounted')).toEqual(expectedInstances);
+    expect(await lifetimes('streamReleased')).toEqual({});
+    await expect(stream.locator('[data-fixture-placement="status"]')).toBeHidden();
+    await expect(stream.locator('.tool-state')).toHaveText(/Running/);
     const pre = expectPresent(await output.elementHandle(), 'stream output');
     const action = expectPresent(
       await stream.getByRole('button', { name: 'Fixture action' }).elementHandle(),
@@ -337,14 +356,23 @@ export const apply = (ctx) => {
     expect(await pre.evaluate((node) => node.isConnected)).toBe(true);
     expect(await summary.evaluate((node) => node.isConnected)).toBe(true);
     expect(await action.evaluate((node) => node.isConnected)).toBe(true);
+    await header.click();
+    await header.click();
+    expect(await lifetimes('streamMounted')).toEqual(expectedInstances);
+    expect(await lifetimes('streamReleased')).toEqual({});
     writeFileSync(join(paths.cwd, 'stream-finish'), '');
     await expect(header).toHaveAccessibleName(/Stream complete/);
     await expect(output).toHaveText(/First line\s+Second line\s+Complete/);
     expect(await pre.evaluate((node) => node.isConnected)).toBe(true);
     expect(await action.evaluate((node) => node.isConnected)).toBe(true);
-    await expect(page.locator('body')).toHaveAttribute('data-stream-mounted', '1');
+    expect(await summary.evaluate(node => node.isConnected)).toBe(true);
+    expect(await status.evaluate(node => node.isConnected && node instanceof HTMLElement && !node.hidden)).toBe(true);
+    expect(await lifetimes('streamMounted')).toEqual(expectedInstances);
+    expect(await lifetimes('streamReleased')).toEqual({});
     await page.getByRole('button', { name: 'New conversation', exact: true }).click();
-    await expect(page.locator('body')).toHaveAttribute('data-stream-released', '1');
+    await expect.poll(() => lifetimes('streamReleased')).toEqual(expectedInstances);
+    expect(await lifetimes('streamMounted')).toEqual(expectedInstances);
+    for (const instance of [summary, status, pre, action]) expect(await instance.evaluate(node => node.isConnected)).toBe(false);
   } finally {
     release();
     resumeSteering();
@@ -361,6 +389,8 @@ test('a long response updates only its view and restores from current state when
   let releaseMore = () => {},
     releaseMarkdown = () => {},
     releaseReport = () => {},
+    releaseSecond = () => {},
+    releaseThird = () => {},
     releaseTail = () => {},
     finish = () => {};
   const more = new Promise<void>((resolve) => {
@@ -372,6 +402,8 @@ test('a long response updates only its view and restores from current state when
   const reportStart = new Promise<void>((resolve) => {
     releaseReport = resolve;
   });
+  const second = new Promise<void>((resolve) => { releaseSecond = resolve; });
+  const third = new Promise<void>((resolve) => { releaseThird = resolve; });
   const tail = new Promise<void>((resolve) => {
     releaseTail = resolve;
   });
@@ -398,6 +430,7 @@ test('a long response updates only its view and restores from current state when
       '',
     ].join('\n');
   const report = Array.from({ length: 90 }, (_, index) => section(index + 1)).join('\n');
+  const sections = [0, report.indexOf('## Report section 31\n'), report.indexOf('## Report section 61\n'), report.length];
   expect(Buffer.byteLength(report)).toBeGreaterThan(50 * 1024);
   const mock = await createMockProvider(async function* () {
     yield 'Beginning ';
@@ -411,10 +444,14 @@ test('a long response updates only its view and restores from current state when
     yield '<img src=x onerror="alert(1)">\n\n<p class="overlay">Safe text</p>\n\n';
     yield 'A [late reference][link].\n\n';
     await reportStart;
-    for (let offset = 0; offset < report.length; offset += 83) {
-      yield report.slice(offset, offset + 83);
-      // Pace bursts across browser frames instead of delivering the entire report in one event-loop turn.
-      if (offset % (83 * 16) === 0) await new Promise<void>((resolve) => setTimeout(resolve, 20));
+    for (let part = 0; part < 3; part++) {
+      for (let offset = sections[part]; offset < sections[part + 1]; offset += 83) {
+        yield report.slice(offset, Math.min(offset + 83, sections[part + 1]));
+        if ((offset - sections[part]) % (83 * 16) === 0)
+          await new Promise<void>((resolve) => setTimeout(resolve, 20));
+      }
+      if (part === 0) await second;
+      if (part === 1) await third;
     }
     await tail;
     yield '\n\nFinal paragraph\n\n[link]: https://example.test/reference';
@@ -527,15 +564,8 @@ export const apply = (ctx) => {
       await preview.locator('.markdown-table').first().elementHandle(),
       'stable table',
     );
-    await heading.evaluate((node) => {
-      const range = document.createRange();
-      range.selectNodeContents(node);
-      const selection = window.getSelection()!;
-      selection.removeAllRanges();
-      selection.addRange(range);
-    });
     const stats = await preview.evaluateHandle((node) => {
-      const stats = { added: 0, removed: 0, maxGap: 0, longTasks: 0, stopped: false };
+      const stats = { added: 0, removed: 0, maxGap: 0, longTasks: 0, maxLongTask: 0, stopped: false };
       const observer = new MutationObserver((records) => {
         for (const record of records) {
           stats.added += record.addedNodes.length;
@@ -543,9 +573,11 @@ export const apply = (ctx) => {
         }
       });
       observer.observe(node, { childList: true });
-      const tasks = new PerformanceObserver((list) => {
-        stats.longTasks += list.getEntries().length;
-      });
+      function recordTasks(entries: PerformanceEntry[]) {
+        stats.longTasks += entries.length;
+        for (const entry of entries) stats.maxLongTask = Math.max(stats.maxLongTask, entry.duration);
+      }
+      const tasks = new PerformanceObserver(list => recordTasks(list.getEntries()));
       tasks.observe({ type: 'longtask' });
       let previous = performance.now();
       function frame(now: number) {
@@ -559,23 +591,55 @@ export const apply = (ctx) => {
         stop() {
           stats.stopped = true;
           observer.disconnect();
+          recordTasks(tasks.takeRecords());
           tasks.disconnect();
           return stats;
         },
       };
     });
     releaseReport();
-    await expect(preview.getByRole('heading', { name: 'Report section 90' })).toBeAttached();
-    expect(await page.evaluate(() => window.getSelection()?.toString())).toBe('Streamed heading');
-    for (const node of [heading, code, table])
-      expect(await node.evaluate((element) => element.isConnected)).toBe(true);
-    const mutations = await stats.evaluate((value) => value.stop());
-    console.log('Markdown DOM: ' + JSON.stringify(mutations));
+    await expect(preview.getByRole('heading', { name: 'Report section 30', exact: true })).toBeAttached();
+    const lastHeading = preview.getByRole('heading', { name: 'Report section 90', exact: true });
+    await expect(lastHeading).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Stop response' })).toBeEnabled();
     const prompt = page.getByRole('textbox', { name: 'Message' });
     await prompt.fill('Draft during streaming');
     await expect(prompt).toHaveText('Draft during streaming');
     await prompt.fill('');
-    await expect(preview.getByRole('heading', { name: 'Report section 90' })).toBeAttached();
+    await expect.poll(distanceFromEnd).toBeLessThan(8);
+    const middle = preview.getByRole('heading', { name: 'Report section 15', exact: true });
+    await middle.evaluate(node => node.scrollIntoView({ block: 'center' }));
+    await expect(middle).toBeInViewport();
+    await expect.poll(distanceFromEnd).toBeGreaterThan(200);
+    const readingTop = await history.evaluate(node => node.scrollTop);
+    expect(readingTop).toBeGreaterThan(200);
+    const middleNode = expectPresent(await middle.elementHandle(), 'middle reading selection');
+    await middleNode.evaluate(node => {
+      const range = document.createRange();
+      range.selectNodeContents(node);
+      const selection = window.getSelection()!;
+      selection.removeAllRanges();
+      selection.addRange(range);
+    });
+    releaseSecond();
+    await expect(preview.getByRole('heading', { name: 'Report section 60', exact: true })).toBeAttached();
+    await expect(lastHeading).toHaveCount(0);
+    await expect(middle).toBeInViewport();
+    expect(Math.abs(await history.evaluate(node => node.scrollTop) - readingTop)).toBeLessThan(8);
+    expect(await page.evaluate(() => window.getSelection()?.toString())).toBe('Report section 15');
+    releaseThird();
+    await expect(lastHeading).toBeAttached();
+    await expect(middle).toBeInViewport();
+    expect(Math.abs(await history.evaluate(node => node.scrollTop) - readingTop)).toBeLessThan(8);
+    expect(await page.evaluate(() => window.getSelection()?.toString())).toBe('Report section 15');
+    for (const node of [heading, code, table, middleNode])
+      expect(await node.evaluate(element => element.isConnected)).toBe(true);
+    const mutations = await stats.evaluate(value => value.stop());
+    console.log('Markdown DOM: ' + JSON.stringify(mutations));
+    expect(mutations.maxGap).toBeLessThan(400);
+    expect(mutations.maxLongTask).toBeLessThan(500);
+    // Returning to the end re-enables follow mode.
+    await history.evaluate(node => { node.scrollTop = node.scrollHeight; });
     await expect(preview.locator('img, .overlay')).toHaveCount(0);
     await expect(preview.getByText('Safe text')).toBeAttached();
     await expect(page.getByRole('button', { name: 'Stop response' })).toBeEnabled();
@@ -618,8 +682,147 @@ export const apply = (ctx) => {
     releaseMore();
     releaseMarkdown();
     releaseReport();
+    releaseSecond();
+    releaseThird();
     releaseTail();
     finish();
+    await page.close();
+    await service.stop();
+    await mock.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+
+test('Markdown handoff follows committed message identity across adjacent blocks and snapshots', async ({ page }) => {
+  let release = () => {};
+  const held = new Promise<void>(resolve => { release = resolve; });
+  let entered = () => {};
+  const started = new Promise<void>(resolve => { entered = resolve; });
+  const mock = await createMockProvider(async () => {
+    entered();
+    await held;
+    return 'Underlying fixture completed';
+  });
+  const { root, paths } = createFixturePaths(mock.url);
+  const service = await startIsolatedHost(paths);
+  try {
+    // Exercise the native History and controller with deterministic wire events, including a
+    // snapshot that commits one assistant segment and resumes another before the next delta.
+    await page.addInitScript(() => {
+      const original = window.fetch.bind(window);
+      window.fetch = (input, init) => {
+        const url = new URL(input instanceof Request ? input.url : String(input), location.href);
+        const match = /^\/api\/sessions\/([^/]+)\/events$/.exec(url.pathname);
+        if (!match || !url.searchParams.has('run')) return original(input, init);
+        const lifetime = new AbortController();
+        const stream = new ReadableStream<Uint8Array>({
+          start(controller) {
+            const encoder = new TextEncoder();
+            window.addEventListener('fixture-run-event', event => {
+              controller.enqueue(encoder.encode(JSON.stringify((event as CustomEvent).detail) + '\n'));
+            }, { signal: lifetime.signal });
+            init?.signal?.addEventListener('abort', () => {
+              lifetime.abort();
+              controller.close();
+            }, { once: true, signal: lifetime.signal });
+            document.documentElement.dataset.fixtureSession = match[1];
+            document.documentElement.dataset.fixtureCursor = url.searchParams.get('after') ?? '0';
+          },
+          cancel() { lifetime.abort(); },
+        });
+        return Promise.resolve(new Response(stream));
+      };
+    });
+    await page.goto(service.url + '/#token=' + service.token);
+    const prompt = page.getByRole('textbox', { name: 'Message' });
+    await prompt.fill('Projection fixture');
+    await page.getByRole('button', { name: 'Send', exact: true }).click();
+    await started;
+    await expect(page.locator('html')).toHaveAttribute('data-fixture-session', /.+/);
+    const id = expectPresent(await page.locator('html').getAttribute('data-fixture-session'), 'fixture session');
+    const response = await page.request.get(service.url + '/api/sessions/' + id, {
+      headers: { Authorization: 'Bearer ' + service.token },
+    });
+    expect(response.ok()).toBe(true);
+    const item = await response.json();
+    const entries = [...item.timeline];
+    let sequence = Math.max(item.run.sequence, Number(await page.locator('html').getAttribute('data-fixture-cursor')));
+    const emit = (event: Record<string, unknown>) => page.evaluate(event => {
+      window.dispatchEvent(new CustomEvent('fixture-run-event', { detail: event }));
+    }, { ...event, runId: item.run.id, runSessionId: id, sequence: ++sequence });
+    const snapshot = (partial: string) => emit({
+      type: 'snapshot', timeline: entries, partial, tools: [], records: [],
+      leafId: entries.at(-1)?.id ?? null, model: item.model, thinkingLevel: item.thinkingLevel, run: item.run,
+    });
+    const assistant = (id: string, ...texts: string[]) => ({
+      type: 'message', role: 'assistant', id, runId: item.run.id, timestamp: Date.now(),
+      content: texts.map(text => ({ type: 'text', text })),
+    });
+    const tool = (id: string, name: string, args: unknown, content: string, details?: Record<string, unknown>) => ({
+      type: 'message', role: 'toolResult', id, runId: item.run.id, timestamp: Date.now(),
+      toolCallId: id + '-call', toolName: name, toolState: 'finished', arguments: args, content, details,
+    });
+    const messages = page.locator('.message.assistant');
+    await snapshot('# First\n\nAlpha');
+    await expect(messages.getByRole('heading', { name: 'First', exact: true })).toBeVisible();
+    const first = expectPresent(await messages.first().elementHandle(), 'first live Markdown');
+    const firstMessage = assistant('fixture-first', '# First\n\n', 'Alpha');
+    entries.push(firstMessage);
+    await emit({ type: 'assistant-end', message: firstMessage });
+    await expect(messages).toHaveCount(1);
+    await expect(messages.first()).toHaveText('First Alpha');
+    expect(await first.evaluate(node => node.isConnected)).toBe(true);
+
+    await emit({ type: 'delta', text: '# Second\n\nBeta' });
+    await expect(messages).toHaveCount(2);
+    await expect(messages.last().getByRole('heading', { name: 'Second' })).toBeVisible();
+    const second = expectPresent(await messages.last().elementHandle(), 'adjacent preview');
+    entries.push(assistant('fixture-second', '# Second\n\n', 'Beta'));
+    entries.push(tool('fixture-edit', 'edit', {
+      path: 'sample.txt', edits: [{ oldText: 'before', newText: 'after' }],
+    }, 'Applied edit'));
+    await snapshot('# Third\n\nGamma');
+    await expect(messages).toHaveCount(2);
+    await expect(messages.first().getByRole('heading')).toHaveText(['First', 'Second']);
+    await expect(messages.last().getByRole('heading', { name: 'Third' })).toBeVisible();
+    expect(await first.evaluate(node => node.isConnected)).toBe(true);
+    expect(await second.evaluate(node => node.isConnected)).toBe(false);
+    const third = expectPresent(await messages.last().elementHandle(), 'third preview');
+    const edit = page.locator('.tool-card').first();
+    await edit.locator('summary').click();
+    const before = expectPresent(await edit.getByLabel('Before').elementHandle(), 'edit input before snapshot');
+    const after = expectPresent(await edit.getByLabel('After').elementHandle(), 'edit input after snapshot');
+
+    entries.push(assistant('fixture-third', '# Third\n\nGamma'));
+    entries.push(tool('fixture-receipt', 'start_background', { tool: 'fixture', arguments: {} },
+      '{"taskId":"missing-task","state":"accepted"}', { taskId: 'missing-task', state: 'accepted' }));
+    await snapshot('# Fourth\n\nDelta');
+    await expect(messages).toHaveCount(3);
+    await expect(messages.nth(1).getByRole('heading', { name: 'Third' })).toBeVisible();
+    await expect(messages.last().getByRole('heading', { name: 'Fourth' })).toBeVisible();
+    expect(await third.evaluate(node => node.isConnected)).toBe(true);
+    expect(await before.evaluate(node => node.isConnected)).toBe(true);
+    expect(await after.evaluate(node => node.isConnected)).toBe(true);
+    const receipt = page.locator('.tool-card').last();
+    await receipt.locator('summary').click();
+    await expect(receipt.locator('.tool-content')).toContainText('Task details unavailable');
+    await expect(receipt.locator('.tool-content')).toContainText('missing-task');
+    await expect(receipt.getByRole('button', { name: 'View task', includeHidden: true })).toBeHidden();
+
+    const fourth = expectPresent(await messages.last().elementHandle(), 'fourth preview');
+    entries.push(assistant('fixture-fourth', '# Fourth\n\n', 'Delta'));
+    await snapshot('');
+    await expect(messages).toHaveCount(3);
+    await expect(messages.getByRole('heading')).toHaveText(['First', 'Second', 'Third', 'Fourth']);
+    expect(await fourth.evaluate(node => node.isConnected)).toBe(true);
+    const completed = await messages.allTextContents();
+    await snapshot('');
+    await expect(messages).toHaveText(completed);
+    for (const node of [first, third, fourth, before, after])
+      expect(await node.evaluate(node => node.isConnected)).toBe(true);
+  } finally {
+    release();
     await page.close();
     await service.stop();
     await mock.close();

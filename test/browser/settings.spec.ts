@@ -67,11 +67,13 @@ test('settings stay reachable across viewport sizes and theme changes persist', 
 
 test('touch sizing follows the pointer rather than the application layout', async ({ browser, launch }) => {
   const { host } = await launch();
-  const context = await browser.newContext({ hasTouch: true, viewport: { width: 1200, height: 900 } });
+  for (const hasTouch of [true, false]) {
+  const context = await browser.newContext({ hasTouch, viewport: { width: 1200, height: 900 } });
   try {
     const page = await context.newPage();
     await page.goto(host.url + '/#token=' + host.token);
-    expect(await page.evaluate(() => matchMedia('(pointer: coarse)').matches)).toBe(true);
+    expect(await page.evaluate(() => matchMedia('(pointer: coarse)').matches)).toBe(hasTouch);
+    await page.getByRole('button', { name: 'New conversation', exact: true }).click();
     await page.getByRole('textbox', { name: 'Message', exact: true }).fill('Touch conversation');
     await page.getByRole('button', { name: 'Send', exact: true }).click();
     await expect(page.locator('.message.assistant')).toHaveText('Mock response');
@@ -81,18 +83,19 @@ test('touch sizing follows the pointer rather than the application layout', asyn
         await expect(page.locator('#app')).toHaveClass(/mobile-layout/);
         await page.getByRole('button', { name: 'Toggle navigation' }).click();
       } else await expect(page.locator('#app')).not.toHaveClass(/mobile-layout/);
-      const session = page.locator('.session-name');
-      await expect(session).toHaveCSS('min-height', '44px');
-      await expect(page.locator('.session-actions')).toHaveCSS('opacity', '1');
+      const session = page.getByRole('button', { name: 'Touch conversation', exact: true }).first();
+      await expect(session).toHaveCSS('min-height', hasTouch ? '44px' : '30px');
+      if (hasTouch) await expect(session.locator('..').locator('.session-actions')).toHaveCSS('opacity', '1');
       await page.getByRole('button', { name: 'Settings', exact: true }).click();
       await settingsSection(page, 'General').click();
       const theme = page.getByRole('combobox', { name: 'Theme', exact: true });
-      await expect(theme).toHaveCSS('font-size', '16px');
-      await expect(theme).toHaveCSS('min-height', '44px');
+      await expect(theme).toHaveCSS('font-size', hasTouch ? '16px' : '13px');
+      if (hasTouch) await expect(theme).toHaveCSS('min-height', '44px');
       await page.keyboard.press('Escape');
       await expect(page.getByRole('dialog', { name: 'Settings' })).toBeHidden();
     }
   } finally {
     await context.close();
+  }
   }
 });

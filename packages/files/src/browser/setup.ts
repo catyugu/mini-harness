@@ -63,32 +63,38 @@ function fileBody() {
   node.append(target.node, input, result);
   let previousArgs: unknown = Symbol();
   let previousContent: ToolView['content'];
+  let previousInput: string | undefined;
   function updateInput(tool: ToolView) {
     const args = tool.arguments;
     if (previousArgs === args) return;
     previousArgs = args;
     target.update(tool);
+    const fields = args && typeof args === 'object' ? args as Record<string, unknown> : {};
+    const content = tool.name === 'write' && typeof fields.content === 'string' ? fields.content : undefined;
+    const edits: { oldText: string; newText: string }[] = tool.name === 'edit' && Array.isArray(fields.edits)
+      ? fields.edits.flatMap(edit => edit && typeof edit.oldText === 'string' && typeof edit.newText === 'string'
+        ? [{ oldText: edit.oldText, newText: edit.newText }] : []) : [];
+    const key = JSON.stringify([content, edits]);
+    if (previousInput === key) return;
+    previousInput = key;
     input.replaceChildren();
-    if (args && typeof args === 'object') {
-      if (tool.name === 'write' && 'content' in args && typeof args.content === 'string') {
-        const label = document.createElement('span');
-        label.textContent = 'Requested content';
-        input.append(label, textOutput(args.content));
-      }
-      if (tool.name === 'edit' && 'edits' in args && Array.isArray(args.edits)) {
-        const label = document.createElement('span');
-        label.textContent = 'Requested edits';
-        input.append(label);
-        for (const edit of args.edits) {
-          if (!edit || typeof edit.oldText !== 'string' || typeof edit.newText !== 'string') continue;
-          const before = textOutput(edit.oldText);
-          before.classList.add('file-edit-before');
-          before.setAttribute('aria-label', 'Before');
-          const after = textOutput(edit.newText);
-          after.classList.add('file-edit-after');
-          after.setAttribute('aria-label', 'After');
-          input.append(before, after);
-        }
+    if (content !== undefined) {
+      const label = document.createElement('span');
+      label.textContent = 'Requested content';
+      input.append(label, textOutput(content));
+    }
+    if (edits.length) {
+      const label = document.createElement('span');
+      label.textContent = 'Requested edits';
+      input.append(label);
+      for (const edit of edits) {
+        const before = textOutput(edit.oldText);
+        before.classList.add('file-edit-before');
+        before.setAttribute('aria-label', 'Before');
+        const after = textOutput(edit.newText);
+        after.classList.add('file-edit-after');
+        after.setAttribute('aria-label', 'After');
+        input.append(before, after);
       }
     }
     input.hidden = !input.childElementCount;

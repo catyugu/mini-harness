@@ -217,3 +217,7 @@
   justify-content: center;
   padding: 10px 0;
 }
+
+.sidebar-collapsed .settings-launcher .nav-label {
+  display: none;
+}

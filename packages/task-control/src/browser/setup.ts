@@ -549,6 +549,7 @@ function setup(ctx: Context) {
           update({ details }) {
             const text = details?.state === 'accepted' ? 'Accepted' : '';
             if (node.textContent !== text) node.textContent = text;
+            node.hidden = !text;
           },
         };
       },

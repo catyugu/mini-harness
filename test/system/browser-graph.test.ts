@@ -10,6 +10,8 @@ test('the composed browser graph serves its runtime dependencies and excludes se
   const session = app.runtime.plugins.ctx.harnessSessions.create();
   const taskPath = '/sessions/' + session.id + '/tasks';
   assert.deepEqual(await request(taskPath), { status: 200, body: [] });
+  const registeredTools = () => app.runtime.plugins.ctx.harnessTools.list({ resourceId: session.id }).map(({ name }) => name);
+  assert.ok(registeredTools().includes('start_background'));
   const { body: snapshot }: { body: BrowserBootstrap } = await request('/bootstrap');
   const mounted = new Map(snapshot.ui.map((entry) => [entry.id, entry]));
   assert.equal(mounted.size, snapshot.ui.length);
@@ -106,6 +108,8 @@ test('the composed browser graph serves its runtime dependencies and excludes se
   );
   assert.equal((await fetch(base + tasks.browser)).status, 404);
   assert.equal((await request(taskPath)).status, 404);
+  assert.ok(registeredTools().includes('start_background'));
+  assert.ok(registeredTools().includes('task_control'));
   assert.equal(
     (
       await request('/settings', 'PATCH', {
@@ -120,4 +124,6 @@ test('the composed browser graph serves its runtime dependencies and excludes se
     true,
   );
   assert.deepEqual(await request(taskPath), { status: 200, body: [] });
+  assert.equal(registeredTools().includes('start_background'), false);
+  assert.equal(registeredTools().includes('task_control'), false);
 });

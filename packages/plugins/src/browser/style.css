@@ -324,3 +324,39 @@
 .builtin-row > input {
   flex-shrink: 0;
 }
+
+.catalog-launcher {
+  width: 100%;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 0;
+  padding: 7px 9px;
+  border-radius: 8px;
+  background: transparent;
+  text-align: left;
+  font-size: var(--font-ui);
+  line-height: var(--line-ui);
+}
+.catalog-launcher:hover,
+.catalog-launcher[aria-current='page'] {
+  background: var(--selected);
+}
+.catalog-launcher svg {
+  flex: 0 0 16px;
+  height: 16px;
+  color: var(--muted);
+}
+.sidebar-collapsed .catalog-launcher {
+  justify-content: center;
+  padding: 10px 0;
+}
+.sidebar-collapsed .catalog-launcher .nav-label {
+  display: none;
+}
+@media (pointer: coarse) {
+  .catalog-launcher {
+    min-height: 44px;
+  }
+}

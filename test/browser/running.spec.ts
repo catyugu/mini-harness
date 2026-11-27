@@ -24,11 +24,18 @@ test('refresh and navigation preserve a run while another conversation completes
     const held = new Promise<void>((done) => {
       release = done;
     });
-    const mock = await createMockProvider(async ({ messages }) => {
+    let advance = () => {};
+    const whileAway = new Promise<void>(resolve => { advance = resolve; });
+    const mock = await createMockProvider(({ messages }) => {
       if (messages.at(-1)?.content === 'Keep working') {
-        entered();
-        await held;
-        return 'Continued after refresh';
+        return (async function* () {
+          yield 'Continued';
+          entered();
+          await whileAway;
+          yield ' after';
+          await held;
+          yield ' refresh';
+        })();
       }
       return 'Independent reply';
     });
@@ -43,7 +50,9 @@ test('refresh and navigation preserve a run while another conversation completes
       await page.getByRole('textbox', { name: 'Message' }).fill('Keep working');
       await page.getByRole('button', { name: 'Send', exact: true }).click();
       await waiting;
+      await expect(page.locator('.message.assistant')).toHaveText('Continued');
       await page.reload({ waitUntil: 'domcontentloaded' });
+      await expect(page.locator('.message.assistant')).toHaveText('Continued');
       await expect(page.getByRole('button', { name: 'Stop response' })).toBeVisible();
       await openSidebar();
       await page.getByRole('button', { name: 'Settings', exact: true }).click();
@@ -65,6 +74,14 @@ test('refresh and navigation preserve a run while another conversation completes
       await openSidebar();
       const first = page.getByRole('button', { name: 'Keep working', exact: true });
       const id = expectPresent(await first.getAttribute('id'), 'conversation id').slice('session-'.length);
+      advance();
+      await expect.poll(async () => {
+        const response = await page.request.get(service.url + '/api/sessions/' + id, {
+          headers: { Authorization: 'Bearer ' + service.token },
+        });
+        return (await response.json()).partial;
+      }).toBe('Continued after');
+      await expect(page.locator('.message.assistant')).toHaveText('Independent reply');
       let resume: () => void = () => {
         throw new Error('Not started');
       };
@@ -109,6 +126,7 @@ test('refresh and navigation preserve a run while another conversation completes
       await first.click();
       await expect.poll(() => disconnected).toBe(true);
       await expect(page.getByRole('button', { name: 'Stop response' })).toBeVisible();
+      await expect(page.locator('.message.assistant')).toHaveText('Continued after');
       release();
       await expect(page.locator('.message.assistant')).toHaveText('Continued after refresh');
       await expect(page.locator('.message.user')).toHaveCount(1);
@@ -116,6 +134,7 @@ test('refresh and navigation preserve a run while another conversation completes
       await expect(page.getByRole('button', { name: 'Send', exact: true })).toBeVisible();
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     } finally {
+      advance();
       release();
       await page.close();
       await service.stop();
@@ -493,17 +512,20 @@ export const apply = (ctx) => {
       });
       expect(response.status(), await response.text()).toBe(200);
     };
+    await configure({ 'task-control': { disabled: false } });
+    await expect(tasks).toHaveCount(0);
+    const initialTitle = await title.boundingBox();
+    await prompt.fill('Start independent job');
+    await page.getByRole('button', { name: 'Send', exact: true }).click();
+    await expect(page.locator('.tool-card .tool-state')).toHaveText('Done');
+    await expect(page.getByRole('button', { name: 'Send', exact: true })).toBeVisible();
     await configure({
-      'task-control': { disabled: false },
       'background-tasks': { disabled: false },
       subagents: { disabled: false },
     });
     await expect(tasks).toHaveCount(1);
     await expect(agents).toHaveCount(1);
     await expect(trail).toHaveCount(1);
-    const initialTitle = await title.boundingBox();
-    await prompt.fill('Start independent job');
-    await page.getByRole('button', { name: 'Send', exact: true }).click();
     await expect(page.locator('.tool-card .tool-state')).toHaveText('Accepted');
     await expect(page.locator('.tool-card summary')).toHaveAccessibleName(
       /start background.*fixture_background.*Accepted/,
@@ -542,6 +564,14 @@ export const apply = (ctx) => {
     await panel.getByRole('button', { name: 'Cancel Fixture job', exact: true }).click();
     await expect(panel.getByRole('button', { name: 'Fixture job · Cancelled', exact: true })).toBeVisible();
     await expect(panel.getByRole('button', { name: 'Finished 1', exact: true })).toBeVisible();
+    await toggle.click();
+    await configure({ 'task-control': { disabled: true } });
+    const query = page.waitForResponse(response =>
+      /\/api\/sessions\/[^/]+\/tasks$/.test(new URL(response.url()).pathname) &&
+      response.request().method() === 'GET');
+    await toggle.click();
+    expect((await query).status()).toBe(200);
+    await expect(panel.getByRole('button', { name: 'Fixture job · Cancelled', exact: true })).toBeVisible();
     await toggle.click();
     const notification = page
       .locator('details.async-message')
