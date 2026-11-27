@@ -1,6 +1,6 @@
 # Task Control
 
-The private workspace module owns the two existing, independently selectable Profile entries: `task-control` (background tool execution and routes) and `background-tasks` (the Web panel and its receipt renderers). Both use the existing Runs, Tasks, Sessions and Conversation contracts. There is no new npm entry point.
+The private workspace module owns the two existing, independently selectable Profile entries: `task-control` (background tool execution) and `background-tasks` (HTTP task inspection, the Web panel and its receipt renderers). Both use the existing Runs, Tasks, Sessions and Conversation contracts. There is no new npm entry point. With only the panel enabled, its routes and task projection remain available for existing background tasks; the model cannot start or control tasks through those tools. With only the tool entry enabled, model tools work normally and the panel and its HTTP routes are absent. With both enabled, the panel observes and controls the same tasks. Historical receipts retain their original result and identify unavailable task details without offering a dead View task action.
 
 The optional `task-control` Profile entry registers `start_background` and `task_control`. An eligible tool declares `background: true`; the shared tool invocation path validates and executes it. The accepted receipt identifies its independent Task. `task_control` lists, inspects, waits for, cancels and reads cursor-based output for owned background tools and direct child Runs.
 

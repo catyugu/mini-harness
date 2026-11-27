@@ -6,7 +6,10 @@ import { moduleReferences } from '../../scripts/module-references.ts';
 import { fixture } from '../support/api-fixture.ts';
 
 test('the composed browser graph serves its runtime dependencies and excludes server code', async (t) => {
-  const { base, request } = await fixture(t);
+  const { base, request, app } = await fixture(t);
+  const session = app.runtime.plugins.ctx.harnessSessions.create();
+  const taskPath = '/sessions/' + session.id + '/tasks';
+  assert.deepEqual(await request(taskPath), { status: 200, body: [] });
   const { body: snapshot }: { body: BrowserBootstrap } = await request('/bootstrap');
   const mounted = new Map(snapshot.ui.map((entry) => [entry.id, entry]));
   assert.equal(mounted.size, snapshot.ui.length);
@@ -102,6 +105,7 @@ test('the composed browser graph serves its runtime dependencies and excludes se
     false,
   );
   assert.equal((await fetch(base + tasks.browser)).status, 404);
+  assert.equal((await request(taskPath)).status, 404);
   assert.equal(
     (
       await request('/settings', 'PATCH', {
@@ -115,4 +119,5 @@ test('the composed browser graph serves its runtime dependencies and excludes se
     withoutTools.ui.some(({ id }) => id === 'background-tasks'),
     true,
   );
+  assert.deepEqual(await request(taskPath), { status: 200, body: [] });
 });

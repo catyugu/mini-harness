@@ -160,36 +160,43 @@ const plugin: Plugin.Object = {
         }
       }
     });
-    ctx.inject(['harnessRoutes', 'harnessChanges'], (web) => {
-      const changes = web.harnessChanges;
-      web.effect(() => changes.register('tasks'));
-      web.effect(() =>
-        tasks.subscribe(({ task }) => {
-          if (task.type === backgroundTool) changes.invalidate('tasks', task.owner.slice('session:'.length));
-        }),
-      );
-      const route = '/api/sessions/:id/tasks';
-      web.effect(() =>
-        web.harnessRoutes.register('GET', route, ({ params }) => relatedTasks(ctx, params.id, false)),
-      );
-      web.effect(() =>
-        web.harnessRoutes.register('GET', route + '/:task/output', ({ params, url }) => {
-          const task = relatedTask(ctx, params.id, params.task);
-          if (!task) throw new DomainError('not_found', 'Task not found');
-          const cursor = Number(url.searchParams.get('after') ?? 0);
-          if (!Number.isSafeInteger(cursor) || cursor < 0)
-            throw new DomainError('invalid_input', 'Invalid cursor');
-          return tasks.readOutput(task.id, cursor);
-        }),
-      );
-      web.effect(() =>
-        web.harnessRoutes.register('DELETE', route + '/:task', ({ params }) => {
-          const task = relatedTask(ctx, params.id, params.task);
-          if (!task) throw new DomainError('not_found', 'Task not found');
-          return { cancelled: tasks.cancel(task.id) };
-        }),
-      );
-    });
+
   },
 };
 export default plugin;
+
+/** HTTP inspection belongs to the independently selectable panel, not tool registration. */
+export const panel: Plugin.Object = {
+  inject: ['harnessTasks', 'harnessSessions', 'harnessRoutes', 'harnessChanges'],
+  apply(ctx) {
+    const tasks = ctx.harnessTasks;
+    const changes = ctx.harnessChanges;
+    ctx.effect(() => changes.register('tasks'));
+    ctx.effect(() =>
+      tasks.subscribe(({ task }) => {
+        if (task.type === backgroundTool) changes.invalidate('tasks', task.owner.slice('session:'.length));
+      }),
+    );
+    const route = '/api/sessions/:id/tasks';
+    ctx.effect(() =>
+      ctx.harnessRoutes.register('GET', route, ({ params }) => relatedTasks(ctx, params.id, false)),
+    );
+    ctx.effect(() =>
+      ctx.harnessRoutes.register('GET', route + '/:task/output', ({ params, url }) => {
+        const task = relatedTask(ctx, params.id, params.task);
+        if (!task) throw new DomainError('not_found', 'Task not found');
+        const cursor = Number(url.searchParams.get('after') ?? 0);
+        if (!Number.isSafeInteger(cursor) || cursor < 0)
+          throw new DomainError('invalid_input', 'Invalid cursor');
+        return tasks.readOutput(task.id, cursor);
+      }),
+    );
+    ctx.effect(() =>
+      ctx.harnessRoutes.register('DELETE', route + '/:task', ({ params }) => {
+        const task = relatedTask(ctx, params.id, params.task);
+        if (!task) throw new DomainError('not_found', 'Task not found');
+        return { cancelled: tasks.cancel(task.id) };
+      }),
+    );
+  },
+};

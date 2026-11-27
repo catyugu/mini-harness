@@ -369,8 +369,10 @@ function setup(ctx: Context) {
       events.dispatchEvent(new Event('change'));
     } catch (error) {
       if (signal.aborted || request !== revision) return;
+      tasks = [];
       notice.textContent = String(error);
       render();
+      events.dispatchEvent(new Event('change'));
     }
   }
 
@@ -443,10 +445,11 @@ function setup(ctx: Context) {
     };
     function refreshReceipt() {
       const task = tasks.find(({ id }) => id === taskId);
-      const caption = task ? label(task) + ' · ' + status(task) : 'Accepted';
+      const caption = task ? label(task) + ' · ' + status(task) : 'Accepted · Task details unavailable';
       if (text.textContent !== caption) text.textContent = caption;
       line.hidden = !taskId;
-      const result = taskId ? ((task && (taskResult(task) || task.error)) ?? '') : receiptOutput;
+      view.hidden = !task;
+      const result = (task && (taskResult(task) || task.error)) || receiptOutput;
       if (output.textContent !== result) output.textContent = result;
       output.hidden = !result;
     }

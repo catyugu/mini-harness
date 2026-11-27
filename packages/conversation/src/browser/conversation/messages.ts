@@ -43,7 +43,7 @@ export function createMessageView(
   const actionOwners = new WeakMap<HTMLButtonElement, MessageAction>();
   const nodes = new Map<string, { node: HTMLElement; source: unknown }>();
   const recordUpdates = new WeakMap<HTMLElement, (record: LiveRecord) => void>();
-  let preview: { node: HTMLElement; runId: string | undefined } | undefined;
+  let preview: { node: HTMLElement; runId: string | undefined; afterEntryId: string | undefined } | undefined;
   let frame: number | undefined;
 
   function cancelPreview() {
@@ -358,19 +358,28 @@ export function createMessageView(
     tools: Parameters<typeof groupHistory>[3],
     records: readonly LiveRecord[],
   ) {
-    const completing = !partial && preview?.runId === run?.id ? preview : undefined;
-    if (!partial || preview?.runId !== run?.id) {
+    // The preview belongs to the first assistant message committed after its durable anchor.
+    // Snapshots can commit that message and already contain the next partial in the same Run.
+    const anchor = preview?.afterEntryId;
+    const boundary = anchor === undefined ? -1 : entries.findIndex(({ id }) => id === anchor);
+    const anchorPresent = anchor === undefined || boundary >= 0;
+    const completedMessage = preview && anchorPresent
+      ? entries.slice(boundary + 1).find(entry =>
+          entry.type === 'message' && entry.role === 'assistant' && entry.runId === preview!.runId)
+      : undefined;
+    const completing = completedMessage ? preview : undefined;
+    if (!partial || completedMessage || !anchorPresent || preview?.runId !== run?.id) {
       cancelPreview();
       preview = undefined;
     }
     const rows = groupHistory(entries, run?.id, partial, tools, records);
-    const completedTurn =
-      completing && rows.filter((row) => row.type === 'turn' && row.runId === completing.runId).at(-1);
-    const completedPart =
-      completedTurn?.type === 'turn' &&
-      completedTurn.parts.find(
-        (part) => part.type === 'text' && nodes.get('text:' + part.id)?.source !== part.text,
-      );
+    const completedTurn = completedMessage && rows.find(row =>
+      row.type === 'turn' && row.target?.messages.some(({ id }) => id === completedMessage.id));
+    // A grouped text part is identified by its first source block. If the committed
+    // text merged into a preceding part, retain that existing part instead of moving
+    // the preview over it.
+    const completedPart = completedTurn?.type === 'turn' && completedTurn.parts.find(part =>
+      part.type === 'text' && part.id.startsWith(completedMessage!.id + ':'));
     const pending = new Set(nodes.keys());
     function retain<T extends HTMLElement>(key: string, source: unknown, render: (prior?: T) => T) {
       pending.delete(key);
@@ -443,7 +452,7 @@ export function createMessageView(
           if (!preview) {
             const node = document.createElement('div');
             node.className = 'message assistant markdown';
-            preview = { node, runId: run?.id };
+            preview = { node, runId: run?.id, afterEntryId: entries.at(-1)?.id };
           }
           return preview.node;
         }
