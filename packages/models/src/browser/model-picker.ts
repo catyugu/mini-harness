@@ -42,7 +42,7 @@ export function createModelPicker(
   const empty = required(popup.querySelector<HTMLElement>('.model-empty'));
   let models: ModelSummary[] = [];
   let providers = new Map<string, string>();
-  let selected: ModelSummary | null | undefined;
+  let selected: ModelSummary | undefined;
   let options: HTMLButtonElement[] = [];
   let cursor = -1;
 
@@ -105,7 +105,7 @@ export function createModelPicker(
     results.replaceChildren();
     options = [];
     if (selectEmpty && terms.every((term) => matches(emptyLabel.toLowerCase(), term)))
-      addOption(results, selected === null, selectEmpty).textContent = emptyLabel;
+      addOption(results, current === null, selectEmpty).textContent = emptyLabel;
     for (const model of models) {
       const provider = providerName(model.provider);
       const labels = [model.name, model.id, provider, model.provider].map((label) => label.toLowerCase());
@@ -200,9 +200,9 @@ export function createModelPicker(
     const choice = current;
     selected =
       choice === null
-        ? null
+        ? undefined
         : models.find(
-            (model) => model.provider === choice.provider && (!choice.id || model.id === choice.id),
+            (model) => model.provider === choice.provider && model.id === choice.id,
           );
     caption.textContent = selected?.name ?? (choice?.id || emptyLabel);
     button.title = selected ? providerName(selected.provider) + ' / ' + selected.id : '';
@@ -215,7 +215,7 @@ export function createModelPicker(
   return {
     node,
     open,
-    selected: () => selected ?? undefined,
+    selected: () => selected,
     update(next) {
       if (next?.provider !== current?.provider || next?.id !== current?.id) {
         current = next;

@@ -248,7 +248,7 @@ test('a third-party plugin uses tools, models and subprocesses from a Profile wi
       });
       for (const id of ['adapter-one', 'adapter-two']) {
         const resolve = (choice) => choice.provider === id
-          ? { provider: id, id: choice.id || 'fixture' }
+          ? { provider: id, id: choice.id }
           : undefined;
         const capabilities = (choice) => ({
           id: choice.id, name: choice.id, input: ['text'],
@@ -256,7 +256,10 @@ test('a third-party plugin uses tools, models and subprocesses from a Profile wi
         });
         ctx.effect(() => ctx.harnessModels.register({
           list: () => [{ provider: id, id: 'fixture', name: 'fixture', configured: true, thinkingLevels: [], input: ['text'] }],
-          resolve, capabilities,
+          resolve: (choice) => {
+            const model = resolve(choice);
+            return model && { model, capabilities: capabilities(model) };
+          },
         }, {
           accepts: (model) => model.provider === id,
           async *stream(request) {
@@ -304,13 +307,13 @@ test('a third-party plugin uses tools, models and subprocesses from a Profile wi
       false,
     );
     assert.equal(app.ctx.get('harnessModelStore'), undefined);
-    assert.deepEqual(app.ctx.harnessModels.resolve({ provider: 'adapter-one', id: 'dynamic' }), {
+    assert.deepEqual(app.ctx.harnessModels.resolve({ provider: 'adapter-one', id: 'dynamic' })?.model, {
       provider: 'adapter-one',
       id: 'dynamic',
     });
     for (const provider of ['adapter-one', 'adapter-two']) {
       const model = { provider, id: 'fixture' };
-      assert.deepEqual(app.ctx.harnessModels.resolve(model), model);
+      assert.deepEqual(app.ctx.harnessModels.resolve(model)?.model, model);
       const signal = AbortSignal.timeout(10000);
       const messages: NativeMessage[] = [
         { role: 'user', content: [{ type: 'text', text: 'Use the tool' }], timestamp: Date.now() },

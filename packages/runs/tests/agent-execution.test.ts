@@ -68,8 +68,9 @@ async function fixture(
     list: () => [],
     register: () => () => {},
     available: async () => [],
-    resolve: (choice) => choice,
-    capabilities: (choice) => ({
+    resolve: (choice) => ({
+      model: choice,
+      capabilities: {
       id: model.id,
       name: 'Fixture',
       input: choice.id === 'text-only' ? ['text'] : ['text', 'image'],
@@ -77,6 +78,7 @@ async function fixture(
       maxTokens: 1024,
       reasoning: true,
       thinkingLevels: thinkingLevels(choice.id),
+      },
     }),
   });
   ctx.provide('harnessLlm', {

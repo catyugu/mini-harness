@@ -488,12 +488,14 @@ test('Web runs with an independent model contribution and no Pi model store', as
 export const inject = ['harnessModels', 'harnessLlm'];
 export function apply(ctx) {
   const resolve = (choice) => choice.provider === 'local-fixture'
-    ? { provider: 'local-fixture', id: choice.id || 'one' }
+    ? { provider: 'local-fixture', id: choice.id }
     : undefined;
   ctx.effect(() => ctx.harnessModels.register({
     list: () => [{ provider: 'local-fixture', id: 'one', name: 'One', configured: true, thinkingLevels: [], input: ['text'] }],
-    resolve,
-    capabilities: (choice) => ({ ...choice, name: choice.id, input: ['text'], contextWindow: 32000, maxTokens: 1024, reasoning: false }),
+    resolve: (choice) => {
+      const model = resolve(choice);
+      return model && { model, capabilities: { ...model, name: model.id, input: ['text'], contextWindow: 32000, maxTokens: 1024, reasoning: false } };
+    },
   }, {
     accepts: (choice) => choice.provider === 'local-fixture',
     async *stream() {
@@ -535,7 +537,8 @@ export function apply(ctx) {
 
 test('model contributions select matching capabilities and transport, and reject equal-ranked conflicts', async (t) => {
   const { app, paths, request } = await fixture(t);
-  const model = { provider: 'local-mock', id: app.runtime.plugins.ctx.harnessModelPreference.recent().id };
+  const model = app.runtime.plugins.ctx.harnessModelPreference.recent();
+  assert.ok(model);
   const ctx = app.runtime.plugins.ctx;
   let catalogChanges = 0;
   t.after(
@@ -553,11 +556,10 @@ export const inject = ['harnessModels'];
 export function apply(ctx) {
   const model = ${JSON.stringify(model)};
   const input = ${JSON.stringify(input)};
-  const resolve = (choice) => choice.provider === model.provider && (!choice.id || choice.id === model.id) ? model : undefined;
+  const resolve = (choice) => choice.provider === model.provider && choice.id === model.id ? model : undefined;
   ctx.effect(() => ctx.harnessModels.register({
     list: () => [{ ...model, name: ${JSON.stringify(name)}, configured: true, input, thinkingLevels: [] }],
-    resolve,
-    capabilities: () => ({ id: model.id, name: ${JSON.stringify(name)}, input, contextWindow: 64000, maxTokens: 4096, reasoning: false }),
+    resolve: (choice) => resolve(choice) && { model, capabilities: { id: model.id, name: ${JSON.stringify(name)}, input, contextWindow: 64000, maxTokens: 4096, reasoning: false } },
   }, {
     accepts: (choice) => Boolean(resolve(choice)),
     async *stream() {
@@ -582,11 +584,11 @@ export function apply(ctx) {
   await toggle('model-low', false);
   assert.equal(catalogChanges, 1);
   assert.equal(list()[0]?.name, 'model-low');
-  assert.deepEqual(ctx.harnessModels.capabilities(model)?.input, ['text']);
+  assert.deepEqual(ctx.harnessModels.resolve(model)?.capabilities.input, ['text']);
   assert.equal(await sendRun(ctx.harnessRuns, session.id, 'Low priority', undefined, { model }), 'model-low');
   await toggle('model-high', false);
   assert.equal(list()[0]?.name, 'model-high');
-  assert.deepEqual(ctx.harnessModels.capabilities(model)?.input, ['text', 'image']);
+  assert.deepEqual(ctx.harnessModels.resolve(model)?.capabilities.input, ['text', 'image']);
   assert.equal(
     await sendRun(ctx.harnessRuns, session.id, 'High priority', undefined, { model }),
     'model-high',
@@ -594,7 +596,6 @@ export function apply(ctx) {
   await toggle('model-tie', false);
   assert.deepEqual(list(), []);
   assert.equal(ctx.harnessModels.resolve(model), undefined);
-  assert.equal(ctx.harnessModels.capabilities(model), undefined);
   assert.equal(ctx.harnessLlm.select(model), null);
   await assert.rejects(
     ctx.harnessLlm.stream(
@@ -627,24 +628,23 @@ export function apply(ctx) {
   const second = ctx.harnessLlm.register(adapter);
   try {
     assert.equal(ctx.harnessModels.resolve(model), undefined);
-    assert.deepEqual(ctx.harnessModelPreference.recent(), { provider: '', id: '' });
+    assert.deepEqual(ctx.harnessModelPreference.recent(), null);
   } finally {
     second();
     first();
   }
-  assert.deepEqual(ctx.harnessModels.resolve(model), model);
+  assert.deepEqual(ctx.harnessModels.resolve(model)?.model, model);
   const before = catalogChanges;
   await ctx.harnessModelPreference.remember(model);
   await ctx.parallel('models/source-changed', 'auth');
   assert.equal(catalogChanges, before);
 
-  const metadata = ctx.harnessModels.capabilities(model)!;
+  const metadata = ctx.harnessModels.resolve(model)!.capabilities;
   const entries = list();
   const dispose = ctx.harnessModels.register(
     {
       list: () => entries,
-      resolve: (choice) => (adapter.accepts(choice) ? model : undefined),
-      capabilities: () => metadata,
+      resolve: (choice) => (adapter.accepts(choice) ? { model, capabilities: metadata } : undefined),
     },
     adapter,
     10,
@@ -674,7 +674,7 @@ export async function apply(ctx) {
   assert.equal(rejected.status, 400);
   assert.match(JSON.stringify(rejected.body), /Rejected graph/);
   assert.equal(ctx.harnessModels.resolve(model), undefined);
-  assert.deepEqual(ctx.harnessModelPreference.recent(), { provider: '', id: '' });
+  assert.deepEqual(ctx.harnessModelPreference.recent(), null);
 });
 
 test(

@@ -4,7 +4,7 @@ A provider pairs model discovery with a streaming adapter. The complete [local e
 
 ## 1. Define discovery and capabilities
 
-Implement `ModelSource` from `mini-harness/models`. The example advertises `example/echo` through `list`, resolves only that exact provider/model pair, and supplies text-only capabilities through `capabilities`. `available` is optional when discovery does not need asynchronous work.
+Implement `ModelSource` from `mini-harness/models`. The example advertises `example/echo` through `list`, returns the exact provider/model pair with its text-only capabilities through `resolve`. `available` is optional when discovery does not need asynchronous work.
 
 Use the catalog to publish choices and capabilities. Keep connection details and credentials in the provider implementation. [Models](../../packages/models/README.md) owns catalog selection and the relationship between model sources and adapters.
 

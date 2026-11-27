@@ -181,10 +181,10 @@ test('GUI APIs configure providers, persist keys privately, discover Skills and 
   } finally {
     failObserver();
   }
-  assert.deepEqual((await request('/models')).body.recent, { provider: '', id: '' });
+  assert.deepEqual((await request('/models')).body.recent, null);
   await waitUntil(
     () => request('/settings'),
-    ({ body }) => body.entries['core:models']?.config?.model?.provider === '',
+    ({ body }) => body.entries['core:models']?.config?.model === null,
   );
   assert.equal(
     (await request('/providers')).body.some((provider: { id: string }) => provider.id === 'gui-test'),

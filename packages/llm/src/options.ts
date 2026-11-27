@@ -12,6 +12,8 @@ export function validateModelOptions(model: unknown, thinkingLevel: unknown) {
     !('id' in model) ||
     typeof model.provider !== 'string' ||
     typeof model.id !== 'string' ||
+    !model.provider ||
+    !model.id ||
     model.provider.length > 160 ||
     model.id.length > 160
   )

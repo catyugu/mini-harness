@@ -4,7 +4,7 @@ Models owns model discovery, the default provider and credential store, and the 
 
 ## Model contributions
 
-[`mini-harness/models`](src/server/api.ts) exposes `ModelSource`, `ModelCatalogPort` and `ModelPreference`. A source lists discoverable models, resolves choices and supplies capabilities; optional `available()` can wait for asynchronous availability information. [`mini-harness/models/catalog`](src/shared/catalog.ts) defines catalog and capability records.
+[`mini-harness/models`](src/server/api.ts) exposes `ModelSource`, `ModelCatalogPort` and `ModelPreference`. A source lists discoverable models and resolves a choice together with its capabilities; optional `available()` can wait for asynchronous availability information. [`mini-harness/models/catalog`](src/shared/catalog.ts) defines catalog and capability records.
 
 Inject `harnessModels` and register a source with its matching [LLM adapter](../llm/README.md):
 

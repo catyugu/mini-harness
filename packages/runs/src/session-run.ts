@@ -62,14 +62,20 @@ export function selectInputModel(
   fallback: ModelChoice | undefined,
   parentId: string | null,
 ) {
-  return selectModel(models, {
-    explicit: item.model,
-    stored: previous.model,
-    fallback,
-    preferStored: Boolean(parentId || item.mode === 'steer' || item.origin?.source !== 'user'),
-    thinkingLevel: item.thinkingLevel,
-    inherited: previous.thinkingLevel,
-  });
+  const choices = item.model
+    ? [item.model]
+    : parentId || item.mode === 'steer' || item.origin?.source !== 'user'
+      ? [previous.model, fallback]
+      : [fallback, previous.model];
+  const selected = selectModel(
+    models,
+    choices,
+    item.model ? 'Unknown model: ' + item.model.provider + '/' + item.model.id : undefined,
+  );
+  return {
+    ...selected,
+    thinkingLevel: resolveThinking(selected.capabilities, item.thinkingLevel, previous.thinkingLevel),
+  };
 }
 
 export class SessionRun {
@@ -132,7 +138,7 @@ export class SessionRun {
     const selection = (item: Input, previous = log.context()) => {
       const models = requireService(ctx, 'harnessModels');
       const selected = selectInputModel(models, item, previous, fallback, record.parentId);
-      assertImageInput(models.capabilities(selected.model), item.images.length);
+      assertImageInput(selected.capabilities, item.images.length);
       validateNativeMessage({
         role: 'user',
         content: [{ type: 'text', text: item.text }, ...item.images],
@@ -164,13 +170,13 @@ export class SessionRun {
       validateNativeMessage({ role: 'user', content, timestamp: 0 });
       const preparedImages = content.filter((part) => part.type === 'image');
       assertImageInput(
-        requireService(ctx, 'harnessModels').capabilities(selected.model),
+        selected.capabilities,
         preparedImages.length,
       );
       signal.throwIfAborted();
       this.sessions.assertAvailable(id);
       return {
-        selection: selected,
+        selection: { model: selected.model, thinkingLevel: selected.thinkingLevel },
         presentation: isDeepStrictEqual(item.images, preparedImages)
           ? presentation
           : { ...presentation, images: item.images },
@@ -414,7 +420,7 @@ export class SessionRun {
       context,
     );
     const prepared = present ? present(transformed) : transformed;
-    const capabilities = requireService(ctx, 'harnessModels').capabilities(context.model);
+    const capabilities = selectModel(requireService(ctx, 'harnessModels'), [context.model]).capabilities;
     resolveThinking(capabilities, prepared.thinkingLevel);
     return {
       ...prepared,

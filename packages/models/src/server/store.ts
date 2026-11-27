@@ -314,18 +314,16 @@ export class ModelStore implements ModelStorePort {
   requestModel(choice: ModelChoice) {
     const provider = this.effective.get(choice.provider);
     if (!provider) return;
-    const model = choice.id ? provider.models.find(({ id }) => id === choice.id) : provider.models[0];
+    const model = provider.models.find(({ id }) => id === choice.id);
     if (model) return { provider, model };
   }
 
   resolve(choice: ModelChoice) {
     const selected = this.requestModel(choice);
-    return selected && { provider: choice.provider, id: selected.model.id };
-  }
-
-  capabilities(choice: ModelChoice) {
-    const selected = this.requestModel(choice);
-    return selected && capabilities(selected.model);
+    return selected && {
+      model: { provider: choice.provider, id: selected.model.id },
+      capabilities: capabilities(selected.model),
+    };
   }
 
   providers(): ProviderInfo[] {

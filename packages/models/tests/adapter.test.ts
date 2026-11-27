@@ -82,7 +82,7 @@ test('model adapter streams native messages, tool calls and metadata through the
   assert.ok(latest);
   const lastMessage = latest.messages as { role?: string }[];
   assert.equal(lastMessage.at(-1)?.role, 'tool');
-  const capabilities = adapter.capabilities(choice);
+  const capabilities = adapter.resolve(choice)?.capabilities;
   assert.ok(capabilities);
   assert.equal(capabilities.contextWindow, 32768);
   const configured = adapter.list().find(({ provider }) => provider === 'local-mock');
@@ -128,7 +128,7 @@ test('model adapter streams native messages, tool calls and metadata through the
   assert.deepEqual(restored.thinkingLevelMap, advanced.thinkingLevelMap);
   assert.deepEqual(restored.cost, advanced.cost);
   assert.deepEqual(restored.compat, { supportsDeveloperRole: false });
-  assert.deepEqual(adapter.capabilities(choice)?.thinkingLevels, ['off', 'low', 'medium', 'high', 'xhigh']);
+  assert.deepEqual(adapter.resolve(choice)?.capabilities?.thinkingLevels, ['off', 'low', 'medium', 'high', 'xhigh']);
   const selected = adapter.requestModel(choice)?.model;
   assert.equal(selected?.api, 'openai-responses');
   assert.equal(selected?.baseUrl, mock.url + '/new');
@@ -197,8 +197,8 @@ test('built-in edits retain native routing and credentials, including after rest
     models: [{ ...defaults[0], id: model.id, contextWindow: 32768, maxTokens: 1024 }],
   });
   await store.refresh();
-  assert.deepEqual(store.resolve(model), model);
-  assert.equal(store.capabilities(model)?.name, defaults[0].name);
+  assert.deepEqual(store.resolve(model)?.model, model);
+  assert.equal(store.resolve(model)?.capabilities.name, defaults[0].name);
   assert.equal(adapter.accepts({ ...model, id: 'unregistered-model' }), false);
   const events: LlmEvent[] = [];
   for await (const event of adapter.stream({
@@ -270,7 +270,7 @@ test('invalid provider refresh leaves the working catalog intact and unsupported
   config.providers['local-mock'].apiKey = '!run-a-command';
   writeJson(join(paths.home, 'models.json'), config);
   await assert.rejects(adapter.refresh(), /literal values/);
-  assert.deepEqual(adapter.resolve(model), model);
+  assert.deepEqual(adapter.resolve(model)?.model, model);
   await assert.rejects(async () => {
     for await (const _ of new PiLlm(adapter).stream({
       model,

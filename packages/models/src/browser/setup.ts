@@ -15,7 +15,7 @@ const setup = async (ctx: Context) => {
     browserRequest<{
       models: ModelSummary[];
       providers: ProviderInfo[];
-      recent: ModelChoice;
+      recent: ModelChoice | null;
       canManageProviders: boolean;
       protocols: ProtocolInfo[];
     }>(ctx, '/models'),

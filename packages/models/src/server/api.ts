@@ -2,13 +2,17 @@ import type { ModelSummary, ProviderModel } from '../shared/catalog.ts';
 import type { ModelChoice } from '@mini-harness/llm/vocabulary';
 import type { LlmAdapter } from '@mini-harness/llm/api';
 
+export interface ResolvedModel {
+  model: ModelChoice;
+  capabilities: ProviderModel;
+}
+
 /** A provider or adapter contributes its models without exposing connection or credential details. */
 export interface ModelSource {
   list(): ModelSummary[];
   available?(): Promise<ModelSummary[]>;
   /** Returns undefined when the choice is absent from this catalog. */
-  resolve(choice: ModelChoice): ModelChoice | undefined;
-  capabilities(choice: ModelChoice): ProviderModel | undefined;
+  resolve(choice: ModelChoice): ResolvedModel | undefined;
 }
 
 export interface ModelCatalogPort extends ModelSource {
@@ -18,8 +22,8 @@ export interface ModelCatalogPort extends ModelSource {
 }
 
 export interface ModelPreference {
-  recent(): ModelChoice;
-  remember(model: ModelChoice): Promise<void>;
+  recent(): ModelChoice | null;
+  remember(model: ModelChoice | null): Promise<void>;
 }
 
 declare module 'mini-harness/cordis' {

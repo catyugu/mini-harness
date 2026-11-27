@@ -85,14 +85,14 @@ function setup(ctx: Context) {
                   thinkingLevel,
                   maxTokens,
                 } = log.requestDefinition(latest.id);
-                const { model } = selectModel(models, { explicit: choice });
+                const { model, capabilities } = selectModel(models, [choice]);
                 const rebuild = async (messages: LlmRequest['messages']): Promise<LlmRequest> => ({
                   model,
                   systemPrompt,
                   tools,
                   thinkingLevel,
                   maxTokens,
-                  messages: prepareModelMessages(models.capabilities(model), messages),
+                  messages: prepareModelMessages(capabilities, messages),
                   signal,
                 });
                 const manager = createManager(scoped, params.id);

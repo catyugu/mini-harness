@@ -265,14 +265,14 @@ export class Runs implements RunPort {
       }
       const models = context?.get('harnessModels');
       if (models) {
-        const { model } = selectInputModel(
+        const { capabilities } = selectInputModel(
           models,
           selection,
           log.projection(),
           this.recent(),
           this.registry.get(id)?.parentId ?? null,
         );
-        assertImageInput(models.capabilities(model), imageCount);
+        assertImageInput(capabilities, imageCount);
       }
     }
     log.append({

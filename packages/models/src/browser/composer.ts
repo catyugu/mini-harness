@@ -32,7 +32,7 @@ export function mountModelControls(ctx: Context, signal: AbortSignal) {
   });
   signal.addEventListener('abort', removeValidation, { once: true });
   let previousCatalog: ReturnType<typeof ctx.miniModels.get> | undefined;
-  let previousModel: ReturnType<typeof model.draft>['model'],
+  let previousModel: ReturnType<typeof ctx.miniModels.get>['recent'] | undefined,
     previousThinking: ThinkingLevel | null | undefined;
   function render() {
     const current = model.draft(),
@@ -40,7 +40,7 @@ export function mountModelControls(ctx: Context, signal: AbortSignal) {
     const sending = running() || state.interaction.operation === 'submit';
     const catalog = ctx.miniModels.get();
     const choice = current.model ?? (sending ? state.session?.model : undefined) ?? catalog.recent;
-    const same = choice.provider === state.session?.model?.provider && choice.id === state.session.model.id;
+    const same = choice && choice.provider === state.session?.model?.provider && choice.id === state.session.model.id;
     const thinking =
       current.thinkingLevel === undefined
         ? same
@@ -49,8 +49,8 @@ export function mountModelControls(ctx: Context, signal: AbortSignal) {
         : current.thinkingLevel;
     if (
       previousCatalog !== catalog ||
-      previousModel?.provider !== choice.provider ||
-      previousModel.id !== choice.id ||
+      previousModel?.provider !== choice?.provider ||
+      previousModel?.id !== choice?.id ||
       previousThinking !== thinking
     ) {
       previousCatalog = catalog;

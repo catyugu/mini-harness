@@ -637,16 +637,16 @@ export const apply = (ctx) => {
       const provider = 'scoped-only';
       const ids = ['parent-model', 'child-model'];
       const resolve = (choice) => {
-        const id = choice?.id || ids[0];
+        const id = choice.id;
         if (choice?.provider !== provider || !ids.includes(id)) return undefined;
         return { provider, id };
       };
       const list = () => ids.map(id => ({ provider, id, name: id, configured: true, thinkingLevels: ['off'] }));
       ctx.provide('harnessModels', {
-        list, available: async () => list(), resolve,
-        capabilities(choice) {
+        list, available: async () => list(),
+        resolve(choice) {
           const model = resolve(choice);
-          return { id: model.id, name: model.id, input: ['text'], contextWindow: 32000, maxTokens: 1024, reasoning: false };
+          return model && { model, capabilities: { id: model.id, name: model.id, input: ['text'], contextWindow: 32000, maxTokens: 1024, reasoning: false } };
         }
       });
       const adapter = {
@@ -677,7 +677,7 @@ export const apply = (ctx) => {
   const parent = app.runtime.plugins.ctx.harnessSessions.create();
   const sibling = app.runtime.plugins.ctx.harnessSessions.create();
   const scopedChoice = { provider: 'scoped-only', id: 'parent-model' };
-  const applicationChoice = { ...app.runtime.plugins.ctx.harnessModelPreference.recent() };
+  const applicationChoice = app.runtime.plugins.ctx.harnessModelPreference.recent();
   assert.equal(app.runtime.plugins.ctx.harnessModels.resolve(scopedChoice), undefined);
   const configured = await request('/settings', 'PATCH', {
     scopes: {
