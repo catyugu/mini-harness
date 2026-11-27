@@ -165,15 +165,21 @@ const plugin: Plugin.Object = {
               'List, inspect, read output from, await, or cancel background work or a direct child run.',
             parameters: Type.Union([
               Type.Object({ action: Type.Literal('list') }, { additionalProperties: false }),
-              Type.Object({
-                action: Type.Union([Type.Literal('status'), Type.Literal('wait'), Type.Literal('cancel')]),
-                taskId: Type.String({ minLength: 1, maxLength: 128 }),
-              }, { additionalProperties: false }),
-              Type.Object({
-                action: Type.Literal('output'),
-                taskId: Type.String({ minLength: 1, maxLength: 128 }),
-                cursor: Type.Optional(Type.Integer({ minimum: 0 })),
-              }, { additionalProperties: false }),
+              Type.Object(
+                {
+                  action: Type.Union([Type.Literal('status'), Type.Literal('wait'), Type.Literal('cancel')]),
+                  taskId: Type.String({ minLength: 1, maxLength: 128 }),
+                },
+                { additionalProperties: false },
+              ),
+              Type.Object(
+                {
+                  action: Type.Literal('output'),
+                  taskId: Type.String({ minLength: 1, maxLength: 128 }),
+                  cursor: Type.Optional(Type.Integer({ minimum: 0 })),
+                },
+                { additionalProperties: false },
+              ),
             ]),
             isConcurrencySafe: ({ action }) => action !== 'wait',
             async execute(args, { waitFor, signal }) {

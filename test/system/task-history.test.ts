@@ -86,7 +86,10 @@ test('durable retained tasks recover by ID without reconstructing execution hand
     messageId: 'already-delivered:settled',
   });
   assert.equal(ctx.harnessSessions.taskSummary(session.id, lost)?.state, 'running');
-  assert.equal(ctx.harnessSessions.tasks(session.id).find(({ id }) => id === done.id)?.resultSummary, undefined);
+  assert.equal(
+    ctx.harnessSessions.tasks(session.id).find(({ id }) => id === done.id)?.resultSummary,
+    undefined,
+  );
   await app.close();
   await assert.rejects(unfinished.result);
   app = await createMiniHarnessServer(paths);

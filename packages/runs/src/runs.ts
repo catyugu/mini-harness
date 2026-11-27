@@ -219,12 +219,7 @@ export class Runs implements RunPort {
       );
       void task.result.then(
         () => this.wake(id),
-        () =>
-          this.wake(
-            id,
-            pending,
-            task.signal.reason instanceof RunInterrupted,
-          ),
+        () => this.wake(id, pending, task.signal.reason instanceof RunInterrupted),
       );
       this.changed(id);
       return { info: this.runEvents(id, task.id).info, task };

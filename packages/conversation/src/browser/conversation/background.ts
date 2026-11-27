@@ -172,9 +172,13 @@ function setup(ctx: Context) {
       const requestedCursor = cursor;
       try {
         if (needsDetail)
-          detail = await browserRequest<TaskSnapshot>(ctx, path(sessionId) + '/' + encodeURIComponent(task.id), {
-            signal: lifetime.signal,
-          });
+          detail = await browserRequest<TaskSnapshot>(
+            ctx,
+            path(sessionId) + '/' + encodeURIComponent(task.id),
+            {
+              signal: lifetime.signal,
+            },
+          );
         if (next.outputCursor <= cursor || lifetime.signal.aborted) return;
         const data = await browserRequest<TaskOutput>(
           ctx,
@@ -200,8 +204,12 @@ function setup(ctx: Context) {
         const latest = tasks.find(({ id }) => id === task.id);
         if (!lifetime.signal.aborted && latest) {
           show(latest);
-          if (!failure && ((cursor > requestedCursor && cursor < latest.outputCursor) ||
-            (!live(latest) && detail?.finishedAt !== latest.finishedAt))) void update(latest);
+          if (
+            !failure &&
+            ((cursor > requestedCursor && cursor < latest.outputCursor) ||
+              (!live(latest) && detail?.finishedAt !== latest.finishedAt))
+          )
+            void update(latest);
         }
       }
     }
