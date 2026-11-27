@@ -237,7 +237,6 @@ export class SessionRun {
       }
     }
     let requestId: string | undefined;
-    let attemptsRecorded = false;
     let modelStep = 0;
     const publisher = recordPublisher(emit);
     const target = scopeTarget(ctx);
@@ -263,7 +262,6 @@ export class SessionRun {
           }
           if (event.type === 'request') {
             requestId = log.recordRequest(event.request).id;
-            attemptsRecorded = false;
             return;
           }
           if (event.type === 'model-attempt') {
@@ -275,7 +273,6 @@ export class SessionRun {
               step: modelStep,
               ...event.metrics,
             });
-            attemptsRecorded = true;
             return;
           }
           if (event.type !== 'assistant') {
@@ -287,7 +284,6 @@ export class SessionRun {
           const assistant = log.append({
             type: 'message',
             message: result,
-            attemptsRecorded: attemptsRecorded || undefined,
             ...(displays.length && { displays }),
           });
           emit({
