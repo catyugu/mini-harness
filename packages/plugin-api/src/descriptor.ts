@@ -11,9 +11,7 @@ export interface PluginInfo {
   /** Explicit stylesheet order; otherwise styles in the public build directory are used. */
   browserStyles?: string[];
   icon?: PluginIcon;
-  /** Opt in to a configuration form generated from the Entry schema. */
-  configForm?: { description?: string };
-  /** Optional static form schema for an entry that has not been imported. */
+  /** Optional static configuration schema for an entry that has not been imported. */
   configSchema?: Record<string, any>;
 }
 

@@ -8,7 +8,9 @@
     "@mini-harness/platform": "workspace:*",
     "@mini-harness/plugin-api": "workspace:*",
     "@mini-harness/tools": "workspace:*",
-    "@mini-harness/process-execution": "workspace:*"
+    "@mini-harness/process-execution": "workspace:*",
+    "@mini-harness/ui-primitives": "workspace:*",
+    "@mini-harness/ui-runtime": "workspace:*"
   },
   "miniHarness": {
     "profileModules": {

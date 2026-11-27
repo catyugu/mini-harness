@@ -117,6 +117,12 @@ importers:
       '@mini-harness/tools':
         specifier: workspace:*
         version: link:../tools
+      '@mini-harness/ui-primitives':
+        specifier: workspace:*
+        version: link:../ui-primitives
+      '@mini-harness/ui-runtime':
+        specifier: workspace:*
+        version: link:../ui-runtime
 
   packages/approvals:
     dependencies:
@@ -473,6 +479,12 @@ importers:
       '@mini-harness/tools':
         specifier: workspace:*
         version: link:../tools
+      '@mini-harness/ui-primitives':
+        specifier: workspace:*
+        version: link:../ui-primitives
+      '@mini-harness/ui-runtime':
+        specifier: workspace:*
+        version: link:../ui-runtime
 
   packages/skills:
     dependencies:

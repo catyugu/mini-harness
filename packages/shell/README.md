@@ -4,7 +4,7 @@ Shell contributes the `shell` tool and its command-result renderer. It owns work
 
 ## Activation and configuration
 
-Shell is disabled in the base Profile. Enable the `shell` entry in Plugins to authorize native command execution with your user permissions. Commands use the host environment, working directory and network. Standard and Full access conversations execute enabled Shell calls without per-command confirmation; read-only conversations and descendants cannot use Shell. See [SECURITY.md](../../SECURITY.md).
+Shell is disabled in the base Profile. Enable the `shell` entry in Settings → Built-in plugins to authorize native command execution with your user permissions. Its configuration view is available in Plugins while enabled. Commands use the host environment, working directory and network. Standard and Full access conversations execute enabled Shell calls without per-command confirmation; read-only conversations and descendants cannot use Shell. See [SECURITY.md](../../SECURITY.md).
 
 The [configuration schema](src/manifest.ts) defines:
 

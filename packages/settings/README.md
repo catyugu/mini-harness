@@ -14,7 +14,7 @@ Browser plugins import [`mini-harness/ui-settings`](src/browser/api.ts):
 | `miniSettingsRegistry` | Define sections and register controls or plugin-detail renderers.                      |
 | `miniSettingsData`     | Read and subscribe to the browser's projection of the committed Profile configuration. |
 
-`GET /api/settings` reads the committed configuration; `PATCH /api/settings` delegates an update to `harnessProfileConfig`. Per-plugin configuration routes and generated plugin forms belong to [Plugins](../plugins/README.md). Settings itself has no configuration schema.
+`GET /api/settings` reads the committed configuration; `PATCH /api/settings` delegates an update to `harnessProfileConfig`. Per-plugin configuration routes and the plugin catalog belong to [Plugins](../plugins/README.md). Settings itself has no configuration schema.
 
 ## Contributing controls
 

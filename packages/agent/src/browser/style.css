@@ -3,3 +3,11 @@
   line-height: var(--line-ui);
   white-space: pre-wrap;
 }
+
+.agent-config {
+  margin-block-start: 24px;
+}
+.agent-config > .ui-button {
+  align-self: start;
+  margin-block-start: 12px;
+}

@@ -1,11 +1,11 @@
 import { expectPresent } from '../support/required.ts';
 import { expect } from '@playwright/test';
-import { readFileSync, mkdirSync, writeFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { readJson, writeJson } from '@mini-harness/platform/json';
 import { browserTest as test, readWebProfile } from '../support/browser.ts';
 
-test('plugin schema controls, recursive tree navigation, batch export and permanent deletion', async ({
+test('subagent configuration, recursive tree navigation, batch export and permanent deletion', async ({
   page,
   launch,
 }) => {
@@ -21,81 +21,12 @@ test('plugin schema controls, recursive tree navigation, batch export and perman
     },
     prepare(paths) {
       writeJson(join(paths.home, 'profiles', 'web', 'cordis.patch.yml'), {
-        plugins: [
-          { id: 'subagents', config: { maxDepth: 2, maxParallel: 1, model: null } },
-          { id: 'example', name: '../../plugins/example', disabled: true },
-        ],
+        plugins: [{ id: 'subagents', config: { maxDepth: 2, maxParallel: 1, model: null } }],
       });
-      const folder = join(paths.plugins, 'example');
-      mkdirSync(folder);
-      writeFileSync(
-        join(folder, 'schema.json'),
-        JSON.stringify({
-          type: 'object',
-          required: ['prefix', 'count', 'mode'],
-          additionalProperties: false,
-          properties: {
-            prefix: { type: 'string', title: 'Prefix', default: 'Count' },
-            count: { type: 'integer', title: 'Count', minimum: 1, maximum: 9, default: 3 },
-            mode: { type: 'string', title: 'Mode', enum: ['brief', 'full'], default: 'brief' },
-            enabled: { type: 'boolean', title: 'Enabled', default: true },
-            limits: {
-              type: 'object',
-              title: 'Limits',
-              properties: { threshold: { type: 'number', title: 'Threshold', default: 0.5 } },
-            },
-            tags: { type: 'array', title: 'Tags', items: { type: 'string' }, default: ['base'] },
-          },
-        }),
-      );
-      writeFileSync(
-        join(folder, 'plugin.json'),
-        JSON.stringify({
-          title: 'Example',
-          configForm: {},
-        }),
-      );
-      writeFileSync(
-        join(folder, 'plugin.js'),
-        "import { defineConfig } from 'mini-harness/configuration';\nimport { readFileSync } from 'node:fs';\nexport const Config = defineConfig(JSON.parse(readFileSync(new URL('./schema.json', import.meta.url), 'utf8')));\nexport const apply = (ctx, config) => { if (config.prefix === \"bad\") throw new Error(\"Bad prefix\"); };",
-      );
     },
   });
   await page.goto(host.url + '/#token=' + host.token);
   await page.getByRole('button', { name: 'Browse plugins' }).click();
-  await page.getByRole('switch', { name: 'Example', exact: true }).check();
-  await page.getByRole('button', { name: 'Example settings', exact: true }).click();
-  await page.getByLabel('Prefix · example', { exact: true }).fill('Total');
-  await page.getByLabel('Count · example', { exact: true }).fill('5');
-  await page.getByLabel('Mode · example', { exact: true }).selectOption('"full"');
-  await page.getByLabel('Enabled · example', { exact: true }).uncheck();
-  await page.getByLabel('Threshold · example', { exact: true }).fill('0.75');
-  await page.getByLabel('Tags · example', { exact: true }).fill('["custom"]');
-  await page.getByRole('button', { name: 'Save configuration' }).click();
-  await expect(
-    page
-      .getByRole('region', { name: 'Plugin catalog' })
-      .getByRole('status')
-      .filter({ hasText: /Saved|Bad prefix/ }),
-  ).toHaveText('Saved.');
-  expect(readWebProfile(paths).configuration('example')).toEqual({
-    prefix: 'Total',
-    count: 5,
-    mode: 'full',
-    enabled: false,
-    limits: { threshold: 0.75 },
-    tags: ['custom'],
-  });
-  await page.getByLabel('Prefix · example', { exact: true }).fill('bad');
-  await page.getByRole('button', { name: 'Save configuration' }).click();
-  await expect(
-    page
-      .getByRole('region', { name: 'Plugin catalog' })
-      .getByRole('status')
-      .filter({ hasText: /Saved|Bad prefix/ }),
-  ).toContainText('Plugin example: Bad prefix');
-  expect(readWebProfile(paths).configuration('example')?.prefix).toBe('Total');
-  await page.getByRole('button', { name: 'All plugins' }).click();
   await page.getByRole('button', { name: 'Subagents settings' }).click();
   const depth = page.getByRole('spinbutton', { name: 'Maximum child depth' });
   await expect(depth).toHaveCSS('border-top-style', 'solid');
