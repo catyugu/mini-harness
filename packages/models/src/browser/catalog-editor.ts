@@ -1,9 +1,5 @@
 import { button, dialog, field, fromMarkup, required } from '@mini-harness/ui-primitives/primitives';
-import {
-  maxModelTokens,
-  modelDefaults,
-  type ProviderModelDefinition,
-} from '../shared/pi-provider.ts';
+import { maxModelTokens, modelDefaults, type ProviderModelDefinition } from '../shared/pi-provider.ts';
 import type { ProviderModel } from '../shared/catalog.ts';
 
 type ModelRow = {

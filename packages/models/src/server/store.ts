@@ -33,7 +33,7 @@ class FileCredentials {
     return values;
   }
   snapshot(): Readonly<Record<string, Credential>> {
-    return this.committed ??= this.values();
+    return (this.committed ??= this.values());
   }
   invalidate() {
     this.committed = undefined;
@@ -231,7 +231,10 @@ export class ModelStore implements ModelStorePort {
       return;
     }
     for (const provider of providers)
-      this.refreshStatus(provider, Object.hasOwn(credentials, provider.id) ? credentials[provider.id] : undefined);
+      this.refreshStatus(
+        provider,
+        Object.hasOwn(credentials, provider.id) ? credentials[provider.id] : undefined,
+      );
   }
 
   /** Only state changes start checks. Replacements drain their cancelled predecessor. */

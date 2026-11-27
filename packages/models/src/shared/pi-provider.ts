@@ -33,4 +33,3 @@ export interface ProviderInfo {
   endpointCustomized: boolean;
   modelsCustomized: boolean;
 }
-
