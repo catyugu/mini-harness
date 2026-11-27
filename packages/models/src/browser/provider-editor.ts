@@ -1,7 +1,12 @@
 import type { Context } from 'mini-harness/cordis';
 import { browserRequest, payload } from '@mini-harness/ui-runtime/http';
 import { button, field, fromMarkup, required } from '@mini-harness/ui-primitives/primitives';
-import type { ProtocolInfo, ProviderInfo, ProviderModel, ProviderModelDefinition } from '../shared/catalog.ts';
+import type {
+  ProtocolInfo,
+  ProviderInfo,
+  ProviderModel,
+  ProviderModelDefinition,
+} from '../shared/catalog.ts';
 import { catalogEditor, selectDiscovered } from './catalog-editor.ts';
 
 export function providerEditor(

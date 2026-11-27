@@ -1,5 +1,10 @@
 import { button, dialog, field, fromMarkup, required } from '@mini-harness/ui-primitives/primitives';
-import { maxModelTokens, modelDefaults, type ProviderModel, type ProviderModelDefinition } from '../shared/catalog.ts';
+import {
+  maxModelTokens,
+  modelDefaults,
+  type ProviderModel,
+  type ProviderModelDefinition,
+} from '../shared/catalog.ts';
 
 type ModelRow = {
   node: HTMLDetailsElement;

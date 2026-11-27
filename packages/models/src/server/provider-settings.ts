@@ -91,7 +91,9 @@ function parseModel(entry: RecordValue, baseline?: ProviderModel): ModelConfig {
   if (!modelCapacity(contextWindow) || !modelCapacity(maxTokens))
     throw invalid('Invalid model token limits for ' + id);
   if (
-    !Array.isArray(input) || !input.length || new Set(input).size !== input.length ||
+    !Array.isArray(input) ||
+    !input.length ||
+    new Set(input).size !== input.length ||
     input.some((value: unknown) => value !== 'text' && value !== 'image')
   )
     throw invalid('Invalid model input modalities for ' + id);
@@ -136,14 +138,18 @@ export function parseOverride(value: unknown, provider?: CatalogProvider): Provi
   if (!entry) throw invalid('Invalid built-in provider override');
   return {
     baseUrl: entry.baseUrl === undefined || entry.baseUrl === '' ? undefined : endpoint(entry.baseUrl),
-    models: entry.models === undefined ? undefined : parseModels(entry.models, (model): BuiltinModelConfig => {
-      const templateId = model.templateId === undefined ? undefined : modelId(model.templateId);
-      const baseline = provider?.models.find(({ id }) => id === templateId);
-      if (provider && templateId && !baseline) throw invalid('Unknown native model template: ' + templateId);
-      if (provider && !templateId && !provider.api)
-        throw invalid('This built-in provider has no protocol for new models');
-      return { ...parseModel(model, baseline), templateId };
-    }),
+    models:
+      entry.models === undefined
+        ? undefined
+        : parseModels(entry.models, (model): BuiltinModelConfig => {
+            const templateId = model.templateId === undefined ? undefined : modelId(model.templateId);
+            const baseline = provider?.models.find(({ id }) => id === templateId);
+            if (provider && templateId && !baseline)
+              throw invalid('Unknown native model template: ' + templateId);
+            if (provider && !templateId && !provider.api)
+              throw invalid('This built-in provider has no protocol for new models');
+            return { ...parseModel(model, baseline), templateId };
+          }),
   };
 }
 
@@ -173,8 +179,8 @@ export function resolveModel(
     ...baseline,
     ...model,
     thinkingLevels: model.reasoning
-      ? (baseline?.reasoning ? baseline.thinkingLevels : undefined) ??
-        thinkingLevels.filter((level) => level !== 'xhigh' && level !== 'max')
+      ? ((baseline?.reasoning ? baseline.thinkingLevels : undefined) ??
+        thinkingLevels.filter((level) => level !== 'xhigh' && level !== 'max'))
       : ['off'],
   };
 }

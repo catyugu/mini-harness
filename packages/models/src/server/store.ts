@@ -133,12 +133,13 @@ export class ModelStore implements ModelStorePort {
     if (!override) return provider;
     const baseUrl = override.baseUrl ?? provider.baseUrl;
     const baseline = new Map(provider.models.map((model) => [model.id, model]));
-    const models = override.models?.flatMap(({ templateId, ...model }) => {
-      const template = templateId ? baseline.get(templateId) : undefined;
-      // A native template removed by an adapter update cannot be resolved as an independent model.
-      if (templateId ? !template : !provider.api) return [];
-      return resolveModel(model, provider, template);
-    }) ?? provider.models;
+    const models =
+      override.models?.flatMap(({ templateId, ...model }) => {
+        const template = templateId ? baseline.get(templateId) : undefined;
+        // A native template removed by an adapter update cannot be resolved as an independent model.
+        if (templateId ? !template : !provider.api) return [];
+        return resolveModel(model, provider, template);
+      }) ?? provider.models;
     return {
       ...provider,
       baseUrl,
@@ -266,7 +267,9 @@ export class ModelStore implements ModelStorePort {
         models: models.map((model) => ({
           ...capabilities(model),
           templateId: defaults.has(id)
-            ? (override?.models ? override.models.find(({ id }) => id === model.id)?.templateId : model.id)
+            ? override?.models
+              ? override.models.find(({ id }) => id === model.id)?.templateId
+              : model.id
             : undefined,
         })),
         defaultBaseUrl: defaults.get(id)?.baseUrl ?? '',
