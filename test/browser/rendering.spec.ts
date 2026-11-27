@@ -360,6 +360,7 @@ test('a long response updates only its view and restores from current state when
 }) => {
   let releaseMore = () => {},
     releaseMarkdown = () => {},
+    releaseReport = () => {},
     releaseTail = () => {},
     finish = () => {};
   const more = new Promise<void>((resolve) => {
@@ -367,6 +368,9 @@ test('a long response updates only its view and restores from current state when
   });
   const markdown = new Promise<void>((resolve) => {
     releaseMarkdown = resolve;
+  });
+  const reportStart = new Promise<void>((resolve) => {
+    releaseReport = resolve;
   });
   const tail = new Promise<void>((resolve) => {
     releaseTail = resolve;
@@ -405,13 +409,15 @@ test('a long response updates only its view and restores from current state when
     yield 'ld** and `inline`\n\n1. First step\n2. Second step\n\n';
     yield '```text\nStreaming code\n```\n\n| Key | Value |\n| --- | --- |\n| One | Two |\n\n';
     yield '<img src=x onerror="alert(1)">\n\n<p class="overlay">Safe text</p>\n\n';
+    yield 'A [late reference][link].\n\n';
+    await reportStart;
     for (let offset = 0; offset < report.length; offset += 83) {
       yield report.slice(offset, offset + 83);
       // Pace bursts across browser frames instead of delivering the entire report in one event-loop turn.
       if (offset % (83 * 16) === 0) await new Promise<void>((resolve) => setTimeout(resolve, 20));
     }
     await tail;
-    yield '\n\nFinal paragraph';
+    yield '\n\nFinal paragraph\n\n[link]: https://example.test/reference';
     await end;
   });
   const { root, paths } = createFixturePaths(mock.url);
@@ -508,6 +514,43 @@ export const apply = (ctx) => {
     await expect(preview.locator('ol > li')).toHaveText(['First step', 'Second step']);
     await expect(preview.locator('pre > code').first()).toHaveText('Streaming code');
     await expect(preview.getByRole('table').first()).toContainText('One');
+    await expect(preview.getByText('A [late reference][link].', { exact: true })).toBeAttached();
+    const heading = expectPresent(await preview.getByRole('heading', { name: 'Streamed heading' }).elementHandle(), 'stable heading');
+    const code = expectPresent(await preview.locator('.code-block').first().elementHandle(), 'stable code block');
+    const table = expectPresent(await preview.locator('.markdown-table').first().elementHandle(), 'stable table');
+    await heading.evaluate(node => {
+      const range = document.createRange();
+      range.selectNodeContents(node);
+      const selection = window.getSelection()!;
+      selection.removeAllRanges();
+      selection.addRange(range);
+    });
+    const stats = await preview.evaluateHandle(node => {
+      const stats = { added: 0, removed: 0, maxGap: 0, longTasks: 0, stopped: false };
+      const observer = new MutationObserver(records => {
+        for (const record of records) {
+          stats.added += record.addedNodes.length;
+          stats.removed += record.removedNodes.length;
+        }
+      });
+      observer.observe(node, { childList: true });
+      const tasks = new PerformanceObserver(list => { stats.longTasks += list.getEntries().length; });
+      tasks.observe({ type: 'longtask' });
+      let previous = performance.now();
+      function frame(now: number) {
+        stats.maxGap = Math.max(stats.maxGap, now - previous);
+        previous = now;
+        if (!stats.stopped) requestAnimationFrame(frame);
+      }
+      requestAnimationFrame(frame);
+      return { stats, stop() { stats.stopped = true; observer.disconnect(); tasks.disconnect(); return stats; } };
+    });
+    releaseReport();
+    await expect(preview.getByRole('heading', { name: 'Report section 90' })).toBeAttached();
+    expect(await page.evaluate(() => window.getSelection()?.toString())).toBe('Streamed heading');
+    for (const node of [heading, code, table]) expect(await node.evaluate(element => element.isConnected)).toBe(true);
+    const mutations = await stats.evaluate(value => value.stop());
+    console.log('Markdown DOM: ' + JSON.stringify(mutations));
     const prompt = page.getByRole('textbox', { name: 'Message' });
     await prompt.fill('Draft during streaming');
     await expect(prompt).toHaveText('Draft during streaming');
@@ -530,12 +573,14 @@ export const apply = (ctx) => {
     await expect.poll(() => history.evaluate((node) => node.scrollTop)).toBeLessThan(8);
     releaseTail();
     await expect(preview.getByText('Final paragraph', { exact: true })).toBeAttached();
+    await expect(preview.getByRole('link', { name: 'late reference' })).toHaveAttribute('href', 'https://example.test/reference');
     await expect(page.getByRole('button', { name: 'Stop response' })).toBeEnabled();
     expect(await history.evaluate((node) => node.scrollTop)).toBeLessThan(8);
     const liveHtml = await preview.innerHTML();
     finish();
     await expect(page.getByLabel('Latest run')).toHaveAttribute('data-state', 'completed');
     await expect(preview).toHaveJSProperty('innerHTML', liveHtml);
+    for (const node of [heading, code, table]) expect(await node.evaluate(element => element.isConnected)).toBe(true);
     await expect(page.locator('.message.assistant')).toHaveCount(1);
     await expect(page.locator('.message.user')).toHaveCount(1);
     await expect(history.getByText('Final paragraph', { exact: true })).toBeAttached();
@@ -548,6 +593,7 @@ export const apply = (ctx) => {
   } finally {
     releaseMore();
     releaseMarkdown();
+    releaseReport();
     releaseTail();
     finish();
     await page.close();

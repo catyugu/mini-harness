@@ -43,8 +43,7 @@ export function createMessageView(
   const actionOwners = new WeakMap<HTMLButtonElement, MessageAction>();
   const nodes = new Map<string, { node: HTMLElement; source: unknown }>();
   const recordUpdates = new WeakMap<HTMLElement, (record: LiveRecord) => void>();
-  const preview = document.createElement('div');
-  preview.className = 'message assistant markdown';
+  let preview: { node: HTMLElement; runId: string | undefined } | undefined;
   let frame: number | undefined;
 
   function cancelPreview() {
@@ -59,8 +58,8 @@ export function createMessageView(
     frame = requestAnimationFrame(() => {
       frame = undefined;
       const { partial } = ctx.miniConversation.get();
-      if (!partial || !messages.contains(preview) || markdownSource.get(preview) === partial) return;
-      renderMarkdown(preview, partial);
+      if (!partial || !preview || !messages.contains(preview.node) || markdownSource.get(preview.node) === partial) return;
+      renderMarkdown(preview.node, partial);
       scrollToEnd();
     });
   }
@@ -317,8 +316,7 @@ export function createMessageView(
 
   function reset() {
     cancelPreview();
-    preview.replaceChildren();
-    markdownSource.delete(preview);
+    preview = undefined;
     for (const node of resources.keys()) remove(node);
     messages.replaceChildren();
     nodes.clear();
@@ -354,11 +352,15 @@ export function createMessageView(
     tools: Parameters<typeof groupHistory>[3],
     records: readonly LiveRecord[],
   ) {
-    if (!partial) {
+    const completing = !partial && preview?.runId === run?.id ? preview : undefined;
+    if (!partial || preview?.runId !== run?.id) {
       cancelPreview();
-      preview.replaceChildren();
-      markdownSource.delete(preview);
+      preview = undefined;
     }
+    const rows = groupHistory(entries, run?.id, partial, tools, records);
+    const completedTurn = completing && rows.filter(row => row.type === 'turn' && row.runId === completing.runId).at(-1);
+    const completedPart = completedTurn?.type === 'turn' && completedTurn.parts.find(part =>
+      part.type === 'text' && nodes.get('text:' + part.id)?.source !== part.text);
     const pending = new Set(nodes.keys());
     function retain<T extends HTMLElement>(key: string, source: unknown, render: (prior?: T) => T) {
       pending.delete(key);
@@ -427,11 +429,17 @@ export function createMessageView(
           return retain(progressKey(run?.id, part.id), part, (node?: HTMLDetailsElement) =>
             toolCard(part, node),
           );
-        case 'partial':
-          return preview;
+        case 'partial': {
+          if (!preview) {
+            const node = document.createElement('div');
+            node.className = 'message assistant markdown';
+            preview = { node, runId: run?.id };
+          }
+          return preview.node;
+        }
         default:
           return retain(part.type + ':' + part.id, part.text, (previous) => {
-            const node = previous ?? document.createElement('div');
+            const node = previous ?? (part === completedPart ? completing!.node : document.createElement('div'));
             node.className = part.type === 'error' ? 'message error' : 'message assistant';
             if (part.type === 'error') node.textContent = part.text;
             else renderMarkdown(node, part.text);
@@ -440,7 +448,7 @@ export function createMessageView(
       }
     }
 
-    const desired = groupHistory(entries, run?.id, partial, tools, records).map((row) => {
+    const desired = rows.map((row) => {
       switch (row.type) {
         case 'record':
           return record(row);
@@ -452,7 +460,7 @@ export function createMessageView(
           return retain('user:' + row.id, undefined, () => renderUser(row));
         case 'turn': {
           const wrapper = retain('turn:' + row.id, undefined, () => {
-            const node = document.createElement('div');
+            const node = row === completedTurn && completedPart ? completing!.node.parentElement! : document.createElement('div');
             node.className = 'message-row assistant assistant-turn';
             return node;
           });
@@ -505,8 +513,8 @@ export function createMessageView(
     updateTools,
     refreshActions,
     partial(text: string) {
-      if (!text || !messages.contains(preview)) return false;
-      if (markdownSource.get(preview) !== text) schedulePreview();
+      if (!text || !preview || !messages.contains(preview.node)) return false;
+      if (markdownSource.get(preview.node) !== text) schedulePreview();
       return true;
     },
   };
