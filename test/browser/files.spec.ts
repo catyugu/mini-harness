@@ -10,10 +10,11 @@ test('workspace source, preview and diff remain available as the panel changes m
 }) => {
   const { host } = await launch({
     prepare({ cwd }) {
+      writeFileSync(join(cwd, 'other.txt'), 'Other file');
       const note = join(cwd, 'notes.md');
       writeFileSync(note, '# Notes\nBefore edits');
       execFileSync('git', ['init', '--quiet'], { cwd });
-      execFileSync('git', ['add', 'notes.md'], { cwd });
+      execFileSync('git', ['add', 'notes.md', 'other.txt'], { cwd });
       writeFileSync(note, '# Notes\nReadable code');
     },
   });
@@ -26,6 +27,9 @@ test('workspace source, preview and diff remain available as the panel changes m
   await panel.getByRole('button', { name: 'Source', exact: true }).click();
   await expect(panel.locator('.file-preview')).toContainText('Readable code');
   await panel.getByRole('button', { name: 'Source', exact: true }).click();
+  await panel.getByRole('tab', { name: 'Files', exact: true }).click();
+  await panel.getByRole('button', { name: 'other.txt', exact: true }).click();
+  await expect(panel.getByText('Other file', { exact: true })).toBeVisible();
   await panel.getByRole('button', { name: 'Workspace panel home' }).click();
   await panel.getByRole('button', { name: /Git changes/ }).click();
   await panel.getByRole('button', { name: /^notes.md/ }).click();
@@ -42,6 +46,22 @@ test('workspace source, preview and diff remain available as the panel changes m
   await expect(drawer.getByRole('heading', { name: 'Notes' })).toBeVisible();
   await page.setViewportSize({ width: 1440, height: 760 });
   await expect(resize).toHaveAttribute('aria-valuenow', '400');
+  await expect(panel.getByRole('heading', { name: 'Notes' })).toBeVisible();
+  const tabs = panel.getByRole('tab');
+  await page.reload();
+  await expect(tabs).toHaveText(['Files', 'notes.md', 'other.txt', 'Git changes', 'Diff: notes.md']);
+  await expect(panel.getByRole('tab', { name: 'notes.md', exact: true })).toHaveAttribute(
+    'aria-selected',
+    'true',
+  );
+  await expect(panel.getByRole('heading', { name: 'Notes' })).toBeVisible();
+  await expect(resize).toHaveAttribute('aria-valuenow', '400');
+  await panel.getByRole('button', { name: 'Close workspace panel' }).click();
+  await page.reload();
+  const open = page.getByRole('button', { name: 'Open workspace panel' });
+  await expect(open).toHaveAttribute('aria-expanded', 'false');
+  await open.click();
+  await expect(tabs).toHaveCount(5);
   await expect(panel.getByRole('heading', { name: 'Notes' })).toBeVisible();
 });
 

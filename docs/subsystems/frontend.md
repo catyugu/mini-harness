@@ -15,7 +15,7 @@ A feature contributes a page, renderer or command rather than replacing the appl
 
 ## Ownership in the browser
 
-Layout owns desktop width preferences and open panels. It derives the docking and drawer modes from available space, projects them to CSS and ARIA, and keeps the active tab mounted across transitions. Header and Composer place their mounted slot contributions through the shared action primitive. Each feature retains its own controls, state and styling. Settings navigation uses stable section IDs and metadata owned by the defining Entry.
+Right Tabs owns workspace panel visibility, ordered resource descriptors and selection. It persists them locally per workspace and lets each feature define restoration data. The frame owns desktop width preferences. It derives the docking and drawer modes from available space, projects them to CSS and ARIA, and keeps the active tab mounted across transitions. Header and Composer place their mounted slot contributions through the shared action primitive. Each feature retains its own controls, state and styling. Settings navigation uses stable section IDs and metadata owned by the defining Entry.
 
 ## Workspace resources
 

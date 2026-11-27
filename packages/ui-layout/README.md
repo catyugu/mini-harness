@@ -17,7 +17,11 @@ Browser plugins import [`mini-harness/ui-layout`](src/browser/api.ts) and inject
 The [browser panel example](../../docs/examples/browser-panel/web.ts) is a build-checked example of a page and dialog. For a workspace tab, register the type once in the plugin's lifetime and retain the returned handle:
 
 ```ts
-const notes = ctx.miniTabs.register<{ text: string }>('example-notes', {
+const notes = ctx.miniTabs.register<{ text: string }>('example.notes', {
+  persistence: {
+    save: ({ text }) => text,
+    restore: (data) => (typeof data === 'string' ? { text: data } : undefined),
+  },
   title: () => 'Notes',
   create(data) {
     const node = document.createElement('p');
@@ -38,9 +42,11 @@ The fragment assumes a browser plugin injecting `miniTabs` and a valid workspace
 
 Page IDs are unique. `miniPages.register` and `contribute` return disposers; register them with `ctx.effect`. Removing the selected page returns to the conversation. A dialog is mounted at creation, opened with its element's `showModal()`, and released with its returned disposer.
 
-Tab types and panel entries automatically belong to the calling Cordis fiber. A tab is identified by its registered type, workspace owner and stable key. Opening that identity again selects the existing tab rather than replacing its payload. Optional `signal` gives a tab a shorter lifetime. Closing a tab, unloading its provider or pruning its workspace aborts the view's signal and removes the view.
+Tab types and panel entries belong to the registering Cordis fiber. Choose a stable, namespaced string for each type. A tab is identified by workspace, type and key. Opening the same identity selects the existing tab. An optional `signal` bounds the lifetime of a temporary tab.
 
-Tabs survive conversation switches. Switching workspaces detaches their views and retains the workspace's tab selection, panel state and scroll position for a return visit. This state is in browser memory, not durable session storage. A failing tab renderer displays its error after aborting that attempted view's lifetime.
+The workspace panel owns open state, tab order and selection. It stores those values per workspace in browser local storage. Tab types opt in with a `persistence` codec. `save` returns a JSON resource descriptor or `undefined` for a temporary tab. `restore` validates the stored data and reconstructs the renderer's input using the workspace scope. Keep resource contents and view objects in the feature that owns them. When a temporary tab is active, reload selects the last restorable tab or Start.
+
+Closing the panel keeps its tabs. Closing a tab removes its descriptor and aborts its view. Switching workspaces releases the previous workspace's views and reads the target workspace state. A view is created when its tab first becomes visible. Unavailable types are skipped until they register. Disposing a plugin releases its views, and pruning a deleted workspace clears its state. Refresh releases the running views while preserving the stored descriptors.
 
 On desktop, the navigation sidebar starts at 340 CSS pixels and can be resized from 280 to 380 pixels by dragging its inner edge or using the arrow keys on the focused separator. The browser remembers the selected width, including across reloads and collapse/expand. The sidebar width and collapse state are controlled by the user. Layout reduces the workspace panel's displayed width to reserve space for the main area, then switches it to a modal drawer if the three regions no longer fit. The panel retains its selected width and mounted tabs as space returns. On mobile the navigation remains an overlay drawer without a resize handle.
 

@@ -57,7 +57,11 @@ function inspect<T>(
 
 function setup(ctx: Context) {
   const tabs = ctx.miniTabs;
-  const diff = tabs.register<string>('diff', {
+  const diff = tabs.register<string>('git-diff.diff', {
+    persistence: {
+      save: (path) => path,
+      restore: (data) => (typeof data === 'string' ? data : undefined),
+    },
     title: (path) => 'Diff: ' + (path.split('/').at(-1) ?? path),
     create(path, scope, signal) {
       const { root, load } = inspect<Diff>(
@@ -90,7 +94,11 @@ function setup(ctx: Context) {
       return root;
     },
   });
-  const changes = tabs.register('changes', {
+  const changes = tabs.register<null>('git-diff.changes', {
+    persistence: {
+      save: () => null,
+      restore: (data) => (data === null ? null : undefined),
+    },
     title: () => 'Git changes',
     create(_data, scope, signal) {
       const { root, load } = inspect<Changes>(
@@ -126,7 +134,7 @@ function setup(ctx: Context) {
     icon: 'list-checks',
     description: 'Inspect changes in this repository.',
     order: 10,
-    open: ({ workspaceId }) => changes.open({ owner: { workspaceId }, key: 'changes', data: undefined }),
+    open: ({ workspaceId }) => changes.open({ owner: { workspaceId }, key: 'changes', data: null }),
   });
 }
 
