@@ -433,7 +433,7 @@ test('an already open tab reconnects to the same instance after restart', async 
   }
 });
 
-test('mobile background tasks and subagents use independent popovers', async ({ page }) => {
+test('header task and subagent contributions mount, overflow and dispose independently', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   const mock = await createMockProvider(({ messages }) => {
     if (messages.at(-1)?.content === 'Start independent job')
@@ -465,15 +465,44 @@ export const apply = (ctx) => {
 `,
   );
   writeJson(join(paths.home, 'profiles', 'web', 'cordis.patch.yml'), {
-    plugins: [{ id: 'background-fixture', name: '../../plugins/background-fixture' }],
+    plugins: [
+      { id: 'background-fixture', name: '../../plugins/background-fixture' },
+      { id: 'task-control', disabled: true },
+      { id: 'background-tasks', disabled: true },
+      { id: 'subagents', disabled: true },
+    ],
   });
   const service = await startIsolatedHost(paths);
   try {
     await page.goto(service.url + '/#token=' + service.token);
     const title = page.locator('#conversationTitle');
     await expect(title).toHaveText('New conversation');
+    const prompt = page.getByRole('textbox', { name: 'Message', exact: true });
+    const tasks = page.locator('.background-tasks');
+    const agents = page.locator('.subagent-tasks');
+    const trail = page.getByRole('navigation', { name: 'Parent conversations', includeHidden: true });
+    await expect(prompt).toBeVisible();
+    await expect(tasks).toHaveCount(0);
+    await expect(agents).toHaveCount(0);
+    await expect(trail).toHaveCount(0);
+    await expect(page.locator('#headerMore')).toBeHidden();
+    const configure = async (entries: Record<string, { disabled: boolean }>) => {
+      const response = await page.request.patch(service.url + '/api/settings', {
+        headers: { Authorization: 'Bearer ' + service.token },
+        data: { entries },
+      });
+      expect(response.status(), await response.text()).toBe(200);
+    };
+    await configure({
+      'task-control': { disabled: false },
+      'background-tasks': { disabled: false },
+      subagents: { disabled: false },
+    });
+    await expect(tasks).toHaveCount(1);
+    await expect(agents).toHaveCount(1);
+    await expect(trail).toHaveCount(1);
     const initialTitle = await title.boundingBox();
-    await page.getByRole('textbox', { name: 'Message', exact: true }).fill('Start independent job');
+    await prompt.fill('Start independent job');
     await page.getByRole('button', { name: 'Send', exact: true }).click();
     await expect(page.locator('.tool-card .tool-state')).toHaveText('Accepted');
     await expect(page.locator('.tool-card summary')).toHaveAccessibleName(
@@ -481,9 +510,7 @@ export const apply = (ctx) => {
     );
     await expect(page.getByRole('button', { name: 'Send', exact: true })).toBeVisible();
     await expect(page.getByRole('combobox', { name: 'Message sending mode' })).toBeHidden();
-    const tasks = page.locator('.background-tasks');
     const toggle = tasks.getByRole('button', { name: 'Tasks', exact: true });
-    const agents = page.locator('.subagent-tasks');
     const agentToggle = agents.getByRole('button', { name: 'Subagents', exact: true });
     await expect(agents).toBeHidden();
     await expect(toggle).toBeInViewport();
@@ -571,6 +598,49 @@ export const apply = (ctx) => {
     await panel.getByRole('button', { name: 'Clear', exact: true }).click();
     await expect(toggle).toBeHidden();
     await expect(agentToggle).toHaveText('1 subagent');
+
+    // Switching away and back clears the panel's local dismissal, not the durable task.
+    await agentToggle.click();
+    await agentPanel.getByRole('button', { name: 'Open conversation: Child fixture', exact: true }).click();
+    await expect(trail).toBeVisible();
+    await trail.getByRole('button').click();
+    await expect(toggle).toHaveText('1 task');
+    await expect(toggle).toBeVisible();
+    const oldTask = expectPresent(await tasks.elementHandle(), 'task contribution');
+    const oldAgent = expectPresent(await agents.elementHandle(), 'subagent contribution');
+    const oldTrail = expectPresent(await trail.elementHandle(), 'parent navigation contribution');
+    await toggle.click();
+    await expect(panel).toBeVisible();
+    await configure({ 'background-tasks': { disabled: true } });
+    await expect(tasks).toHaveCount(0);
+    await expect(agentToggle).toBeVisible();
+    const taskMarkup = await oldTask.evaluate(node => node.innerHTML);
+    const taskRequests: string[] = [];
+    page.on('request', request => {
+      if (/\/api\/sessions\/[^/]+\/tasks(?:\/|\?|$)/.test(new URL(request.url()).pathname)) taskRequests.push(request.url());
+    });
+
+    await agentToggle.click();
+    await agentPanel.getByRole('button', { name: 'Open conversation: Child fixture', exact: true }).click();
+    await expect(trail).toBeVisible();
+    expect(await oldTask.evaluate(node => node.innerHTML)).toBe(taskMarkup);
+    await configure({ subagents: { disabled: true }, 'task-control': { disabled: true } });
+    await expect(agents).toHaveCount(0);
+    await expect(trail).toHaveCount(0);
+    await expect(more).toBeHidden();
+    const agentMarkup = await oldAgent.evaluate(node => node.innerHTML);
+    const trailMarkup = await oldTrail.evaluate(node => node.innerHTML);
+    await page.getByRole('button', { name: 'New conversation', exact: true }).click();
+    await prompt.fill('Without header plugins');
+    await page.getByRole('button', { name: 'Send', exact: true }).click();
+    await expect(page.locator('.message.assistant')).toHaveText('Acknowledged');
+    await expect(tasks).toHaveCount(0);
+    await expect(agents).toHaveCount(0);
+    await expect(trail).toHaveCount(0);
+    expect(await oldTask.evaluate(node => node.innerHTML)).toBe(taskMarkup);
+    expect(await oldAgent.evaluate(node => node.innerHTML)).toBe(agentMarkup);
+    expect(await oldTrail.evaluate(node => node.innerHTML)).toBe(trailMarkup);
+    expect(taskRequests).toEqual([]);
   } finally {
     await service.stop();
     await mock.close();
