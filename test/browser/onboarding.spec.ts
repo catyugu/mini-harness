@@ -56,9 +56,12 @@ test('create and edit a provider, reconcile its discovered catalog, and use the 
   await expect(rows.first().getByLabel('Model ID')).toHaveValue('manual-only');
   await expect(rows.last().getByLabel('Display name')).toHaveValue('GUI Model edited');
   await rows.last().getByRole('button', { name: 'Advanced model settings' }).click();
-  await rows.last().getByLabel('Drag to reorder').dragTo(rows.first(), {
-    targetPosition: { x: 20, y: 8 },
-  });
+  await rows
+    .last()
+    .getByLabel('Drag to reorder')
+    .dragTo(rows.first(), {
+      targetPosition: { x: 20, y: 8 },
+    });
   await expect(rows.last().getByLabel('Model ID')).toHaveValue('manual-only');
   await editor.getByRole('button', { name: 'Save changes' }).click();
   await settings.getByRole('button', { name: 'Edit GUI Provider', exact: true }).click();
