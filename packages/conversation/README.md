@@ -40,6 +40,8 @@ The native composer occupies key `composer` in `conversation.composer-view`; his
 
 The [composer replacement example](../../docs/examples/browser-panel/web/composer.ts) uses the public contracts for this pattern. Renderers must use their supplied signal for view-specific subscriptions and work, rather than the longer-lived controller signal.
 
+The composer renderer owns space allocation and wrapping of slot contributions and keeps the Send and Stop actions reachable. Plugins own the internal sizing and content truncation of their controls; contributions must fit the available space and remain operable. Plugin controls must not depend on the host's DOM hierarchy, viewport breakpoints, or the structure of other plugins' controls.
+
 The latest Run summary, elapsed time and changed files are displayed between the scrollable history and composer. They remain visible when the history scrolls.
 
 Navigation cancels obsolete reads and observation, not the server run. The controller reconnects run replay and reconciles authoritative history after terminal events. Display failures are reported through interaction state; a failed subscriber does not prevent other subscribers from receiving updates. Requests that admit work use the server's execution ownership, which is separate from the displayed conversation visit.

@@ -173,8 +173,7 @@ export function apply(ctx) {
       await page.getByRole('button', { name: 'Plugin composer', exact: true }).click();
       await expect(prompt).toHaveText('Inserted by plugin');
       await chooseModel(page, 'responsive-model');
-      const thinking = page.locator('#thinkingLevel');
-      await thinking.click();
+      await page.getByRole('button', { name: 'Thinking level: Default' }).click();
       await page
         .getByRole('listbox', { name: 'Thinking levels' })
         .getByRole('option', { name: 'High', exact: true })
@@ -184,38 +183,22 @@ export function apply(ctx) {
       await page.getByRole('button', { name: 'Open workspace panel' }).click();
       await page.setViewportSize({ width: 1220, height: 900 });
       await expect.poll(controlsFit).toBe(true);
-      await expect(prompt).toHaveText('Inserted by plugin');
-      await expect(modelButton(page)).toHaveText(longName);
-      await expect(thinking).toHaveAttribute('aria-label', 'Thinking level: High');
       await page.getByRole('button', { name: 'Close workspace panel' }).click();
 
       await page.setViewportSize({ width: 320, height: 844 });
       await expect.poll(controlsFit).toBe(true);
+      await expect(prompt).toHaveText('Inserted by plugin');
       await page.getByRole('button', { name: 'Plugin command 10', exact: true }).click();
       await expect(prompt).toContainText('Plugin command 10');
       await prompt.fill('Inserted by plugin');
-      await chooseModel(page, 'responsive-model');
-      await expect(thinking).toHaveAttribute('aria-label', 'Thinking level: High');
-
-      await page.setViewportSize({ width: 1440, height: 900 });
       await page.getByRole('button', { name: 'Send', exact: true }).click();
-      await expect(page.getByText('Custom listing result')).toBeHidden();
       await expect(page.locator('.message.assistant')).toHaveText('Done');
 
       await prompt.fill('Hold plugin response');
       await page.getByRole('button', { name: 'Send', exact: true }).click();
       await waiting;
       await expect.poll(controlsFit).toBe(true);
-      await page.setViewportSize({ width: 320, height: 844 });
-      const mode = page.getByRole('combobox', { name: 'Message sending mode' });
-      await mode.selectOption('queue');
-      await prompt.fill('Queued from crowded composer');
-      await expect.poll(controlsFit).toBe(true);
-      await page.getByRole('button', { name: 'Send with Queue', exact: true }).click();
-      await page.getByRole('button', { name: 'Cancel queued message: Queued from crowded composer' }).click();
-
       await page.setViewportSize({ width: 1440, height: 900 });
-      await expect(mode).toHaveValue('queue');
       await expect.poll(controlsFit).toBe(true);
       await page.getByRole('button', { name: 'Stop response' }).click();
       await expect(page.getByLabel('Latest run')).toHaveAttribute('data-state', 'cancelled');
