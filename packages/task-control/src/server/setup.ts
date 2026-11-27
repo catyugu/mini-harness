@@ -160,7 +160,6 @@ const plugin: Plugin.Object = {
         }
       }
     });
-
   },
 };
 export default plugin;
