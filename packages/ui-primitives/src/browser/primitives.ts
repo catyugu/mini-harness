@@ -9,14 +9,26 @@ export function fromMarkup<T extends HTMLElement = HTMLElement>(markup: string):
 
 /** Position an already visible floating surface relative to its anchor. */
 export function positionFloating(anchor: HTMLElement, panel: HTMLElement, options: FloatingOptions = {}) {
-  const { width, maxHeight = 520, align = 'start', prefer = 'below' } = options;
+  placeFloating(anchor.getBoundingClientRect(), viewportBounds(), panel, options);
+}
+
+function viewportBounds() {
   const viewport = window.visualViewport;
-  const left = viewport?.offsetLeft ?? 0;
-  const top = viewport?.offsetTop ?? 0;
-  const right = left + (viewport?.width ?? innerWidth);
-  const bottom = top + (viewport?.height ?? innerHeight);
+  return new DOMRectReadOnly(
+    viewport?.offsetLeft ?? 0,
+    viewport?.offsetTop ?? 0,
+    viewport?.width ?? innerWidth,
+    viewport?.height ?? innerHeight,
+  );
+}
+
+function placeFloating(
+  bounds: DOMRectReadOnly,
+  { left, top, right, bottom }: DOMRectReadOnly,
+  panel: HTMLElement,
+  { width, maxHeight = 520, align = 'start', prefer = 'below' }: FloatingOptions,
+) {
   const availableWidth = Math.max(0, right - left - 16);
-  const bounds = anchor.getBoundingClientRect();
   panel.style.maxWidth = availableWidth + 'px';
   if (width !== undefined) panel.style.width = Math.min(width, availableWidth) + 'px';
   panel.style.maxHeight = Math.max(0, Math.min(maxHeight, bottom - top - 16)) + 'px';
@@ -40,39 +52,37 @@ export function bindPopover(
   options: FloatingOptions = {},
 ) {
   let frame = 0;
-  let geometry = '';
-  const position = () => {
-    if (!panel.matches(':popover-open')) return;
+  let previousAnchor: DOMRectReadOnly | undefined;
+  let previousViewport: DOMRectReadOnly | undefined;
+  function sameBounds(previous: DOMRectReadOnly | undefined, current: DOMRectReadOnly) {
+    return (
+      previous?.x === current.x &&
+      previous.y === current.y &&
+      previous.width === current.width &&
+      previous.height === current.height
+    );
+  }
+  function position() {
+    const anchor = trigger.getBoundingClientRect();
     if (
-      !trigger.getClientRects().length ||
+      (!anchor.width && !anchor.height) ||
       trigger.closest('[inert]') ||
-      getComputedStyle(trigger).visibility === 'hidden'
+      getComputedStyle(trigger).visibility !== 'visible'
     ) {
       panel.hidePopover();
-      return;
+      return false;
     }
-    positionFloating(trigger, panel, options);
-  };
-  // ResizeObserver alone misses translations caused by scroll, siblings or a reflow.
+    const viewport = viewportBounds();
+    if (!sameBounds(previousAnchor, anchor) || !sameBounds(previousViewport, viewport)) {
+      placeFloating(anchor, viewport, panel, options);
+      previousAnchor = anchor;
+      previousViewport = viewport;
+    }
+    return true;
+  }
+  // Scrolling and sibling layout can move an anchor without resizing it.
   function follow() {
-    if (!panel.matches(':popover-open')) return;
-    const { x, y, width, height } = trigger.getBoundingClientRect();
-    const viewport = window.visualViewport;
-    const next = [
-      x,
-      y,
-      width,
-      height,
-      viewport?.width,
-      viewport?.height,
-      viewport?.offsetLeft,
-      viewport?.offsetTop,
-    ].join();
-    if (geometry !== next) {
-      geometry = next;
-      position();
-    }
-    frame = requestAnimationFrame(follow);
+    if (panel.matches(':popover-open') && position()) frame = requestAnimationFrame(follow);
   }
   panel.addEventListener(
     'keydown',
@@ -91,7 +101,7 @@ export function bindPopover(
       const open = panel.matches(':popover-open');
       trigger.setAttribute('aria-expanded', String(open));
       if (open) {
-        geometry = '';
+        previousAnchor = undefined;
         follow();
       }
     },
@@ -110,7 +120,10 @@ export function bindPopover(
     // TS 5.9 predates the source option used for native popover nesting and focus.
     const surface = panel as HTMLElement & { showPopover(options: { source: HTMLElement }): void };
     surface.showPopover({ source: trigger });
-    position();
+    if (panel.matches(':popover-open')) {
+      previousAnchor = undefined;
+      position();
+    }
   };
 }
 

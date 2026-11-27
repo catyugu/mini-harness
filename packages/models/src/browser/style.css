@@ -95,6 +95,7 @@
   align-items: center;
   flex: 1;
   min-width: 0;
+  max-width: 330px;
   gap: 6px;
 }
 .model-select {
@@ -118,9 +119,6 @@
 .model-picker-control > .model-select {
   width: 100%;
   margin: 0;
-}
-.model-controls {
-  max-width: min(330px, 100cqi);
 }
 .model-select:hover {
   background: var(--hover);

@@ -43,7 +43,7 @@ export function apply(ctx: Context, config: { replaceComposer: boolean }) {
       signal,
     ),
   );
-  ctx.miniSettingsRegistry.registerSection({ id: 'browser-panel', title: 'Extensions' }, ctx.fiber.signal);
+  ctx.miniSettingsRegistry.registerSection({ id: 'browser-panel', title: 'Browser panel' }, ctx.fiber.signal);
   ctx.effect(() =>
     ctx.miniSettingsRegistry.register(
       id,

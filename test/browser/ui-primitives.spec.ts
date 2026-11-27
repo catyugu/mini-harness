@@ -24,7 +24,8 @@ export function apply(ctx) {
   area.setAttribute('aria-label', 'Action fixture');
   area.style.cssText = 'position:fixed;top:50px;left:16px;width:560px;z-index:5';
   const draft = document.createElement('input');
-  draft.style.width = '160px';
+  draft.style.width = '100%';
+  draft.size = 16;
   draft.setAttribute('aria-label', 'Draft');
   const nested = ui.button('Open details');
   const panel = document.createElement('div');
@@ -40,7 +41,7 @@ export function apply(ctx) {
     document.body.append(area);
     return () => area.remove();
   });
-  ui.overflowActions(area, 'More actions', signal)([ui.button('First action'), draft, details]);
+  ui.overflowActions(area, 'More actions', signal)([ui.button('A'), draft, details]);
 }
 `,
       );
@@ -57,7 +58,15 @@ export function apply(ctx) {
   await area.evaluate((node) => (node.style.width = '145px'));
   await expect(more).toBeFocused();
   await more.click();
-  await expect(draft).toHaveValue('Unsaved input');
+  const overflow = page.getByRole('region', { name: 'More actions' });
+  const draftWidth = (await draft.boundingBox())!.width;
+  await overflow.evaluate(async (node) => {
+    node.style.width = '74px';
+    for (let frame = 0; frame < 4; frame++) await new Promise(requestAnimationFrame);
+  });
+  await expect(overflow.getByRole('textbox', { name: 'Draft' })).toHaveValue('Unsaved input');
+  expect((await draft.boundingBox())?.width).toBe(draftWidth);
+  await overflow.evaluate((node) => node.style.removeProperty('width'));
   const details = page.getByRole('button', { name: 'Open details' });
   await details.click();
   const action = page.getByRole('button', { name: 'Detail action' });
@@ -67,6 +76,21 @@ export function apply(ctx) {
   await expect.poll(async () => (await action.boundingBox())?.y ?? 0).toBeGreaterThan(initial + 30);
   await page.keyboard.press('Escape');
   await expect(details).toBeFocused();
+  const anchor = overflow.locator('button', { hasText: 'Open details' });
+  for (const blockedBy of ['inert', 'visibility']) {
+    await details.click();
+    await expect(action).toBeFocused();
+    await anchor.evaluate((node, reason) => {
+      if (reason === 'inert') node.setAttribute('inert', '');
+      else node.style.visibility = 'hidden';
+    }, blockedBy);
+    await expect(action).toBeHidden();
+    await anchor.evaluate((node) => {
+      node.removeAttribute('inert');
+      node.style.removeProperty('visibility');
+    });
+  }
+  await details.focus();
   await area.evaluate((node) => (node.style.width = '560px'));
   await expect(more).toBeHidden();
   await expect(details).toBeFocused();

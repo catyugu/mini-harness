@@ -179,8 +179,7 @@ export function createModelPicker(
     }
   };
   let current: ModelChoice | null = null;
-  function refresh() {
-    const choice = current;
+  function refreshCatalog() {
     const { models: available, providers: names } = catalog.get();
     providers = new Map(names.map(({ id, name }) => [id, name]));
     models = available
@@ -191,6 +190,10 @@ export function createModelPicker(
           a.provider.localeCompare(b.provider) ||
           a.name.localeCompare(b.name),
       );
+    refreshSelection();
+  }
+  function refreshSelection() {
+    const choice = current;
     selected =
       choice === null
         ? null
@@ -203,15 +206,17 @@ export function createModelPicker(
     if (popup.matches(':popover-open')) render();
   }
 
-  catalog.subscribe(refresh, signal);
-  refresh();
+  catalog.subscribe(refreshCatalog, signal);
+  refreshCatalog();
   return {
     node,
     open,
     selected: () => selected ?? undefined,
     update(next) {
-      current = next;
-      refresh();
+      if (next?.provider !== current?.provider || next?.id !== current?.id) {
+        current = next;
+        refreshSelection();
+      }
       return selected ?? undefined;
     },
   };

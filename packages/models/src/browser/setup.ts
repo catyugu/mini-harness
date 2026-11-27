@@ -31,8 +31,10 @@ const setup = async (ctx: Context) => {
   });
   ctx.inject(['miniComposer', 'miniConversation', 'miniSlots'], (composer) => {
     composer.effect(() =>
-      composer.miniSlots.register('conversation.composer-trailing', (signal) =>
-        mountModelControls(composer, signal),
+      composer.miniSlots.register(
+        'conversation.composer-primary',
+        (signal) => mountModelControls(composer, signal),
+        { key: 'primary' },
       ),
     );
   });

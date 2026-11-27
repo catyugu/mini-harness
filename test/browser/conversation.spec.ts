@@ -1,11 +1,9 @@
 import { expect } from '@playwright/test';
-import { rmSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { createFixturePaths, createMockProvider } from '../support/mock-provider.ts';
 import { readJson, writeJson } from '@mini-harness/platform/json';
 import {
   browserTest as test,
-  startIsolatedHost,
   modelSearch,
   suggestions,
   modelButton,
@@ -64,91 +62,83 @@ test('workspace references and uploaded files stay with their conversation draft
   await expect(draft).toHaveText('Keep this draft');
 });
 
-test('the model picker filters providers and restores an accepted choice after reload', async ({ page }) => {
-  const mock = await createMockProvider();
-  const { root, paths } = createFixturePaths(mock.url);
-  const models = readJson<any>(join(paths.home, 'models.json'), {});
-  const first = models.providers['local-mock'].models[0];
-  models.providers['local-mock'].models.push({
-    ...first,
-    id: 'second-model',
-    name: 'Second Model',
-    reasoning: true,
+test('the model picker filters providers and restores an accepted choice after reload', async ({
+  page,
+  launch,
+}) => {
+  const { host, mock } = await launch({
+    prepare(paths) {
+      const models = readJson<any>(join(paths.home, 'models.json'), {});
+      const first = models.providers['local-mock'].models[0];
+      models.providers['local-mock'].models.push({
+        ...first,
+        id: 'second-model',
+        name: 'Second Model',
+        reasoning: true,
+      });
+      models.providers['unconfigured-fixture'] = {
+        baseUrl: models.providers['local-mock'].baseUrl,
+        api: 'openai-completions',
+        models: [{ ...first, id: 'private-only', name: 'Private Only' }],
+      };
+      writeJson(join(paths.home, 'models.json'), models);
+    },
   });
-  models.providers['unconfigured-fixture'] = {
-    baseUrl: mock.url,
-    api: 'openai-completions',
-    models: [{ ...first, id: 'private-only', name: 'Private Only' }],
-  };
-  writeJson(join(paths.home, 'models.json'), models);
-  const service = await startIsolatedHost(paths);
-  try {
-    await page.goto(service.url + '/#token=' + service.token);
-    await modelButton(page).click();
-    await modelSearch(page).fill('private-only');
-    await expect(page.getByText('No matching models.')).toBeVisible();
-    await modelSearch(page).press('Escape');
-    await chooseModel(page, 'local-mock second-model');
-    await expect(modelButton(page)).toHaveText('Second Model');
-    const thinking = page.locator('#thinkingLevel');
-    await expect(thinking).toHaveAttribute('aria-label', 'Thinking level: Default');
-    await thinking.click();
-    const levels = page.getByRole('listbox', { name: 'Thinking levels' });
-    await expect(levels).toBeVisible();
-    await levels.getByRole('option', { name: 'High', exact: true }).click();
-    await expect(thinking).toHaveAttribute('aria-label', 'Thinking level: High');
-    await page.getByRole('textbox', { name: 'Message' }).fill('New model conversation');
-    await page.getByRole('button', { name: 'Send', exact: true }).click();
-    await expect(page.locator('.message.assistant')).toHaveText('Mock response');
-    await expect(page.getByRole('button', { name: 'Send', exact: true })).toBeVisible();
-    expect(mock.requests.at(-1)?.model).toBe('second-model');
-    await expect(thinking).toHaveAttribute('aria-label', 'Thinking level: High');
-    await page.reload();
-    await expect(modelButton(page)).toHaveText('Second Model');
-  } finally {
-    await page.close();
-    await service.stop();
-    await mock.close();
-    rmSync(root, { recursive: true, force: true });
-  }
+  await page.goto(host.url + '/#token=' + host.token);
+  await modelButton(page).click();
+  await modelSearch(page).fill('private-only');
+  await expect(page.getByText('No matching models.')).toBeVisible();
+  await modelSearch(page).press('Escape');
+  await chooseModel(page, 'local-mock second-model');
+  await expect(modelButton(page)).toHaveText('Second Model');
+  const thinking = page.locator('#thinkingLevel');
+  await expect(thinking).toHaveAttribute('aria-label', 'Thinking level: Default');
+  await thinking.click();
+  const levels = page.getByRole('listbox', { name: 'Thinking levels' });
+  await expect(levels).toBeVisible();
+  await levels.getByRole('option', { name: 'High', exact: true }).click();
+  await expect(thinking).toHaveAttribute('aria-label', 'Thinking level: High');
+  await page.getByRole('textbox', { name: 'Message' }).fill('New model conversation');
+  await page.getByRole('button', { name: 'Send', exact: true }).click();
+  await expect(page.locator('.message.assistant')).toHaveText('Mock response');
+  await expect(page.getByRole('button', { name: 'Send', exact: true })).toBeVisible();
+  expect(mock.requests.at(-1)?.model).toBe('second-model');
+  await expect(thinking).toHaveAttribute('aria-label', 'Thinking level: High');
+  await page.reload();
+  await expect(modelButton(page)).toHaveText('Second Model');
 });
 
-test('video attachments play in a dialog and workspace references play in the panel', async ({ page }) => {
-  const mock = await createMockProvider();
-  const { root, paths } = createFixturePaths(mock.url);
+test('video attachments play in a dialog and workspace references play in the panel', async ({
+  page,
+  launch,
+}) => {
   const video = readFileSync(new URL('../fixtures/preview.webm', import.meta.url));
-  writeFileSync(join(paths.cwd, 'clip.webm'), video);
-  const service = await startIsolatedHost(paths);
-  try {
-    await page.setViewportSize({ width: 390, height: 700 });
-    await page.goto(service.url + '/#token=' + service.token);
-    await page.locator('#composer input[type=file]').setInputFiles({
-      name: 'upload.webm',
-      mimeType: 'video/webm',
-      buffer: video,
-    });
-    const card = page.getByRole('button', { name: 'Preview upload.webm' });
-    await card.click();
-    const media = page.getByRole('dialog', { name: 'upload.webm' });
-    const playback = media.locator('video[controls]');
-    await expect(playback).toBeVisible();
-    await expect
-      .poll(() => playback.evaluate((node: HTMLVideoElement) => node.readyState))
-      .toBeGreaterThan(1);
-    await media.getByRole('button', { name: 'Close preview' }).click();
-    await expect(card).toBeFocused();
-    await page.getByRole('textbox', { name: 'Message', exact: true }).fill('Watch @"clip.webm"');
-    const reference = page.locator('#prompt').getByRole('button', { name: 'clip.webm', exact: true });
-    await reference.click();
-    const panel = page.getByRole('dialog', { name: 'Workspace panel' });
-    await expect(panel.locator('video[controls]')).toBeVisible();
-    await expect(page.locator('.file-media-dialog')).toHaveCount(0);
-  } finally {
-    await page.close();
-    await service.stop();
-    await mock.close();
-    rmSync(root, { recursive: true, force: true });
-  }
+  const { host } = await launch({
+    prepare({ cwd }) {
+      writeFileSync(join(cwd, 'clip.webm'), video);
+    },
+  });
+  await page.setViewportSize({ width: 390, height: 700 });
+  await page.goto(host.url + '/#token=' + host.token);
+  await page.locator('#composer input[type=file]').setInputFiles({
+    name: 'upload.webm',
+    mimeType: 'video/webm',
+    buffer: video,
+  });
+  const card = page.getByRole('button', { name: 'Preview upload.webm' });
+  await card.click();
+  const media = page.getByRole('dialog', { name: 'upload.webm' });
+  const playback = media.locator('video[controls]');
+  await expect(playback).toBeVisible();
+  await expect.poll(() => playback.evaluate((node: HTMLVideoElement) => node.readyState)).toBeGreaterThan(1);
+  await media.getByRole('button', { name: 'Close preview' }).click();
+  await expect(card).toBeFocused();
+  await page.getByRole('textbox', { name: 'Message', exact: true }).fill('Watch @"clip.webm"');
+  const reference = page.locator('#prompt').getByRole('button', { name: 'clip.webm', exact: true });
+  await reference.click();
+  const panel = page.getByRole('dialog', { name: 'Workspace panel' });
+  await expect(panel.locator('video[controls]')).toBeVisible();
+  await expect(page.locator('.file-media-dialog')).toHaveCount(0);
 });
 
 test('crowded composer controls remain reachable in a short mobile viewport', async ({ page, launch }) => {
@@ -170,6 +160,9 @@ test('crowded composer controls remain reachable in a short mobile viewport', as
         `
 export const inject = ['miniSlots', 'miniPrimitives', 'miniComposer'];
 export function apply(ctx) {
+  const leading = ctx.miniPrimitives.button('A wide trailing action');
+  leading.style.width = '320px';
+  ctx.effect(() => ctx.miniSlots.register('conversation.composer-trailing', leading, { order: -100 }));
   for (let number = 1; number <= 12; ++number) {
     const action = ctx.miniPrimitives.button('Extra action ' + number);
     action.onclick = () => ctx.miniComposer.insert('Inserted text');
@@ -189,7 +182,17 @@ export function apply(ctx) {
     await page.getByRole('button', { name: 'More composer controls' }).click();
     await page.getByRole('button', { name: 'Extra action 12', exact: true }).click();
     await page.keyboard.press('Escape');
-    await expect(page.getByRole('textbox', { name: 'Message' })).toHaveText('Inserted text');
+    const draft = page.getByRole('textbox', { name: 'Message' });
+    await expect(draft).toHaveText('Inserted text');
+    await draft.fill('Keep this /mo');
+    await expect(suggestions(page).getByRole('option', { name: /Choose a configured model/ })).toBeVisible();
+    await draft.press('Tab');
+    await expect(draft).toHaveText('Keep this /model');
+    await draft.press('Enter');
+    await expect(modelSearch(page)).toBeFocused();
+    await modelSearch(page).press('Escape');
+    await expect(draft).toHaveText('Keep this');
+    await expect(modelButton(page)).toBeFocused();
     await page.getByRole('button', { name: 'Send', exact: true }).click();
     const stop = page.getByRole('button', { name: 'Stop response' });
     await expect(stop).toBeInViewport();

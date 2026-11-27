@@ -27,7 +27,7 @@ export function overflowActions(
   host.append(row, more, menu);
   bindPopover(more, menu, signal, { align: 'end' });
 
-  let nodes: readonly HTMLElement[] = [];
+  let items = new Map<HTMLElement, HTMLElement>();
   let frame = 0;
   function place(parent: HTMLElement, items: HTMLElement[]) {
     const container = parent as HTMLElement & { moveBefore?(node: HTMLElement, next: Element | null): void };
@@ -40,7 +40,7 @@ export function overflowActions(
   }
 
   function render() {
-    const visible = nodes.filter((node) => !node.hidden);
+    const visible = [...items].filter(([node]) => !node.hidden).map(([, box]) => box);
     if (host.hidden !== !visible.length) host.hidden = !visible.length;
     const width = available();
     const gap = parseFloat(getComputedStyle(row).columnGap) || 0;
@@ -63,7 +63,7 @@ export function overflowActions(
     const overflow = new Set(visible.slice(count));
     place(
       row,
-      nodes.filter((node) => !overflow.has(node)),
+      [...items.values()].filter((box) => !overflow.has(box)),
     );
     place(menu, [...overflow]);
     if (!overflow.size && menu.matches(':popover-open')) menu.hidePopover();
@@ -96,24 +96,30 @@ export function overflowActions(
     },
     { once: true },
   );
-  return (items: readonly HTMLElement[]) => {
+  resize.observe(space);
+  const visibilityOptions = { childList: true, subtree: true, attributeFilter: ['hidden'] };
+  visibility.observe(space, visibilityOptions);
+  if (!space.contains(host)) visibility.observe(host, visibilityOptions);
+  return (nodes: readonly HTMLElement[]) => {
     if (signal.aborted) return;
-    for (const node of nodes) if (!items.includes(node)) node.remove();
-    nodes = items;
-    resize.disconnect();
-    resize.observe(space);
-    visibility.disconnect();
-    visibility.observe(space, {
-      childList: true,
-      subtree: true,
-      attributes: true,
-      attributeFilter: ['hidden'],
-    });
+    const next = new Map<HTMLElement, HTMLElement>();
     for (const node of nodes) {
-      if (node.parentElement !== row && node.parentElement !== menu) row.append(node);
-      resize.observe(node);
-      visibility.observe(node, { attributes: true, attributeFilter: ['hidden', 'class', 'style'] });
+      let box = items.get(node);
+      if (!box) {
+        box = document.createElement('div');
+        box.className = 'ui-action-item';
+        box.append(node);
+        row.append(box);
+        resize.observe(box);
+      }
+      next.set(node, box);
     }
+    for (const [node, box] of items) {
+      if (next.has(node)) continue;
+      resize.unobserve(box);
+      box.remove();
+    }
+    items = next;
     schedule();
   };
 }

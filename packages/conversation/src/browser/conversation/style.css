@@ -205,13 +205,10 @@
   margin-left: auto;
 }
 #composerTools,
-#composerTrailing {
+#composerPrimary {
   flex: 1 1 0;
 }
-#composerTrailing {
-  container-type: inline-size;
-  justify-content: flex-end;
-}
+
 @container (max-width: 640px) {
   .composer-footer {
     flex-direction: column;

@@ -15,7 +15,7 @@ export function mountComposer(ctx: Context, signal: AbortSignal) {
           <div id="suggestions" class="suggestions" role="listbox" aria-label="Input suggestions" hidden></div>
           <div id="draftMode" class="draft-mode" hidden><span></span><button type="button" aria-label="Cancel editing">Cancel</button></div>
           <div id="promptEditor"></div>
-          <div class="composer-footer ui-row ui-wrap">
+          <div class="composer-footer ui-row">
             <div class="composer-leading ui-row">
               <button id="permissionSelect" class="permission-select" type="button" aria-haspopup="listbox" aria-expanded="false" aria-controls="permissionResults"></button>
               <div id="permissionPicker" class="ui-popover permission-picker" popover="auto">
@@ -24,7 +24,7 @@ export function mountComposer(ctx: Context, signal: AbortSignal) {
               <div id="composerTools"></div>
             </div>
             <div class="composer-secondary ui-row">
-              <div id="composerTrailing" class="composer-trailing"></div>
+              <div id="composerPrimary" class="ui-row"></div>
               <select id="messageMode" class="small-button" aria-label="Message sending mode" hidden></select>
               <div class="composer-actions ui-row ui-fixed">
                 <button id="stop" type="button" aria-label="Stop response" hidden data-icon="stop"></button>
@@ -52,24 +52,25 @@ export function mountComposer(ctx: Context, signal: AbortSignal) {
     'More composer controls',
     signal,
   );
-  const trailing = ctx.miniPrimitives.overflowActions(
-    element('composerTrailing'),
-    'More composer options',
-    signal,
-  );
-  let toolbar: readonly HTMLElement[] = [];
-  let options: readonly HTMLElement[] = [];
-  const removeToolbar = ctx.miniSlots.define('conversation.composer', (nodes) => {
-    toolbar = nodes;
-    tools([...toolbar, ...options]);
-  });
-  const removeOptions = ctx.miniSlots.define('conversation.composer-options', (nodes) => {
-    options = nodes;
-    tools([...toolbar, ...options]);
-  });
-  const removeTrailing = ctx.miniSlots.define('conversation.composer-trailing', trailing);
-  for (const dispose of [removeToolbar, removeOptions, removeTrailing])
+  const actionSlots = [
+    'conversation.composer',
+    'conversation.composer-options',
+    'conversation.composer-trailing',
+  ] as const;
+  const actions = new Map<(typeof actionSlots)[number], readonly HTMLElement[]>();
+  for (const slot of actionSlots) {
+    const dispose = ctx.miniSlots.define(slot, (nodes) => {
+      actions.set(slot, nodes);
+      tools(actionSlots.flatMap((key) => actions.get(key) ?? []));
+    });
     signal.addEventListener('abort', dispose, { once: true });
+  }
+  const removePrimary = ctx.miniSlots.define(
+    'conversation.composer-primary',
+    element('composerPrimary'),
+    'single',
+  );
+  signal.addEventListener('abort', removePrimary, { once: true });
   const permissionButton = element<'button'>('permissionSelect');
   const permissionPopup = element('permissionPicker');
   const permissionResults = element('permissionResults');

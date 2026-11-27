@@ -584,14 +584,19 @@
     flex: none;
     gap: inherit;
   }
-  .ui-action-items:not(:has(> :not([hidden]))) {
+  .ui-action-items:not(:has(> .ui-action-item > :not([hidden]))) {
     display: none;
   }
-  .ui-action-items > *,
-  .ui-action-more {
+  .ui-action-item {
     flex: none;
+    inline-size: max-content;
+    max-inline-size: calc(100vw - 32px);
+  }
+  .ui-action-item:has(> [hidden]) {
+    display: none;
   }
   .ui-action-more {
+    flex: none;
     width: 32px;
     min-height: 32px;
     padding: 4px;
@@ -600,6 +605,8 @@
     background: var(--hover);
   }
   .ui-action-overflow {
+    font: inherit;
+    white-space: inherit;
     display: flex;
     align-items: flex-start;
     flex-direction: column;

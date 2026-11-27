@@ -138,6 +138,17 @@ export const apply = (ctx) => {
   await edit.click();
   await expect(prompt).toBeFocused();
   await expect(prompt).toHaveText('Original prompt');
+  const navigation = page.getByRole('button', { name: 'Toggle navigation' });
+  const editMode = page.getByRole('button', { name: 'Cancel editing' });
+  await prompt.fill('Unsaved revision');
+  await navigation.click();
+  await page.getByRole('button', { name: 'New conversation', exact: true }).click();
+  await expect(editMode).toBeHidden();
+  await prompt.fill('Independent draft');
+  await navigation.click();
+  await page.getByRole('button', { name: 'Original prompt', exact: true }).click();
+  await expect(prompt).toHaveText('Unsaved revision');
+  await expect(editMode).toBeVisible();
   const remove = page.getByRole('button', { name: 'Remove reference.png' });
   await expect(remove).toBeVisible();
   await prompt.fill('Revised prompt');
@@ -152,6 +163,16 @@ export const apply = (ctx) => {
   await expect(assistant.locator('.message')).toHaveText('Response: Removed picture');
   await expect(user.getByRole('img', { name: 'reference.png' })).toHaveCount(0);
   expect(JSON.stringify(mock.requests.at(-1))).not.toContain('image_url');
+  await edit.click();
+  await prompt.fill('Discarded revision');
+  await navigation.click();
+  await page.getByRole('button', { name: 'Delete Original prompt', exact: true }).click();
+  await page
+    .getByRole('dialog', { name: 'Delete conversation' })
+    .getByRole('button', { name: 'Delete', exact: true })
+    .click();
+  await expect(editMode).toBeHidden();
+  await expect(prompt).toHaveText('Independent draft');
 });
 
 test('image validation keeps the draft available for an image-capable model', async ({ page, launch }) => {

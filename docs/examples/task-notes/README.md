@@ -22,7 +22,7 @@ plugins:
     live: true
 ```
 
-Keep the Entry ID `task-notes` for this example because its server records use that explicit owner. Start with `npx mini-harness --profile docs-task-notes`. Configure a tool-capable model, send a parent conversation message, and ask it to save a task note. Change **Task note label** under Settings → Extensions; new notes use the accepted label. A blank label is rejected.
+Keep the Entry ID `task-notes` for this example because its server records use that explicit owner. Start with `npx mini-harness --profile docs-task-notes`. Configure a tool-capable model, send a parent conversation message, and ask it to save a task note. Change **Task note label** under Settings → Task notes; new notes use the accepted label. A blank label is rejected.
 
 ## Try the server capabilities
 
