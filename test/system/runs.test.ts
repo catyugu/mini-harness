@@ -586,7 +586,7 @@ test(
     const timeline = sessions.log(id).projection().timeline.filter(isViewMessage);
     assert.equal(timeline.find((entry) => entry.role === 'toolResult')?.toolState, 'cancelled');
     assert.deepEqual(
-      timeline.filter((entry) => entry.role === 'user').map(({ content }) => content),
+      timeline.filter((entry) => entry.role === 'user').map(({ content }) => content[0]?.text),
       ['Hold tool', 'Interrupt one', 'Interrupt two'],
     );
   },

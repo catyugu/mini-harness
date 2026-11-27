@@ -11,11 +11,17 @@ export interface SubagentPolicy {
 export function selectChildModel(
   request: { provider?: string; model?: string },
   defaults: ModelChoice | null,
-  parent?: ModelChoice,
+  parent: ModelChoice | undefined,
+  models: () => readonly ModelChoice[],
 ): ModelChoice {
   const provider = request.provider?.trim();
   const model = request.model?.trim();
-  if (provider) return { provider, id: model ?? '' };
+  if (provider) {
+    if (model) return { provider, id: model };
+    const choice = models().find((candidate) => candidate.provider === provider);
+    if (!choice) throw new Error('No model configured for provider: ' + provider);
+    return { provider, id: choice.id };
+  }
   const inherited = defaults ?? parent;
   if (!inherited) throw new Error('Configure a model before delegating');
   return { provider: inherited.provider, id: model || inherited.id };
@@ -40,6 +46,7 @@ export class Delegation {
     private readonly sessions: SessionStore,
     private readonly runs: RunPort,
     private readonly settings: () => SubagentPolicy,
+    private readonly models: () => readonly ModelChoice[],
   ) {}
 
   visible(id: string) {
@@ -56,7 +63,7 @@ export class Delegation {
     const parent = this.sessions.get(parentId);
     if (!parent) throw new Error('Parent conversation not found');
     requireChildDepth(this.sessions.depth(parentId), this.settings().maxDepth);
-    const model = selectChildModel(request, this.settings().model, this.sessions.history(parentId).model);
+    const model = selectChildModel(request, this.settings().model, this.sessions.history(parentId).model, this.models);
     const record = this.sessions.create({
       parentId,
       workspaceId: parent.workspaceId,

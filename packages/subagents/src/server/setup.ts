@@ -15,7 +15,7 @@ export function setup(ctx: Context) {
   };
   validate(policy());
   const pool = new TaskPool(policy().maxParallel);
-  const delegation = new Delegation(ctx.harnessSessions, ctx.harnessRuns, policy);
+  const delegation = new Delegation(ctx.harnessSessions, ctx.harnessRuns, policy, () => ctx.harnessModels.list());
   ctx.on('runs/policy', (id) =>
     ctx.harnessSessions.get(id)?.parentId
       ? { pool, provider: ctx, metadata: { reportToParent: true } }
@@ -31,7 +31,7 @@ export function setup(ctx: Context) {
       name: 'delegate',
       label: 'Delegate',
       description:
-        'Start a child agent asynchronously. Returns its session ID and task ID immediately; the child continues independently. Use task_control to inspect, await or cancel it. Set provider/model to override the default.',
+        'Start a child agent asynchronously. Returns its session ID and task ID immediately; the child continues independently. Use task_control to inspect, await or cancel it. Set provider/model to override the default; specifying only a provider selects its first model.',
       parameters: Type.Object({
         task: Type.String({ minLength: 1, maxLength: 12000 }),
         provider: Type.Optional(Type.String({ maxLength: 160 })),
