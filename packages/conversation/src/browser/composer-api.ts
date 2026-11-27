@@ -75,6 +75,7 @@ declare module 'mini-harness/cordis' {
     miniComposer: ComposerModel;
   }
   interface Events {
-    'composer/before-send'(): false | undefined;
+    /** Return true to prevent submission. */
+    'composer/before-send'(): true | undefined;
   }
 }

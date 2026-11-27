@@ -131,7 +131,9 @@ export function apply(ctx) {
   await control.check();
   await expect(page.getByText('Saved on the server. Browser plugins failed: retry-ui')).toBeVisible();
   await expect(control).toBeChecked();
-  await expect(page.getByRole('button', { name: 'Recovered UI', includeHidden: true })).toHaveCount(0);
+  await expect(
+    page.getByRole('button', { name: 'Recovered UI', exact: true, includeHidden: true }),
+  ).toHaveCount(0);
   await expect(page.getByText(/Browser setup failed.*Not ready/)).toBeVisible();
   await expect(page.locator('body')).toHaveAttribute('data-retry-effect', 'released');
   await page.getByRole('button', { name: 'Retry UI settings' }).click();
@@ -139,7 +141,7 @@ export function apply(ctx) {
   await page.getByRole('button', { name: 'Save configuration' }).click();
   await expect(page.getByText('Saved.', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'New conversation' }).click();
-  await expect(page.getByRole('button', { name: 'Recovered UI' })).toHaveCount(1);
+  await expect(page.getByRole('button', { name: 'Recovered UI', exact: true })).toHaveCount(1);
   await expect(page.locator('body')).toHaveAttribute('data-retry-effect', 'mounted');
   const dependent = page.getByRole('button', { name: 'Depends on Recovered UI' });
   await expect(dependent).toBeVisible();

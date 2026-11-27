@@ -178,7 +178,7 @@ export function mountComposer(ctx: Context, signal: AbortSignal) {
     if (control.get().interaction.operation || model.draft().awaitingAcceptance) return;
     if (!model.draft().text.trim() && !model.draft().attachments.length) return;
     if (ui.submitCommand()) return;
-    if (ctx.bail('composer/before-send') === false) return;
+    if (ctx.bail('composer/before-send')) return;
     try {
       await model.send();
     } catch (error) {

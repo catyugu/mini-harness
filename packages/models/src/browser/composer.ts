@@ -27,7 +27,7 @@ export function mountModelControls(ctx: Context, signal: AbortSignal) {
     if (!running() && !modelPicker.selected()) {
       control.report(new Error('Choose a configured model before sending.'));
       modelPicker.open();
-      return false;
+      return true;
     }
   });
   signal.addEventListener('abort', removeValidation, { once: true });
