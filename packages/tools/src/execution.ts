@@ -1,5 +1,5 @@
 import type { Context } from 'mini-harness/cordis';
-import { type ToolDefinition, type ToolInvocation, type ToolUpdate } from './api.ts';
+import { toolResultState, type ToolDefinition, type ToolInvocation, type ToolUpdate } from './api.ts';
 import { runBatch } from './batch.ts';
 import { invokeTool, prepareTool } from './invocation.ts';
 export { runTool, toolAvailable } from './invocation.ts';
@@ -50,31 +50,16 @@ export const executeTools: ToolExecutorPort['execute'] = async (calls, tools, ex
   const { signal } = execution;
   function* jobs() {
     for (const call of calls) {
-      const tool = tools.get(call.name);
-      let invalid = call.argumentsError && 'Invalid arguments for ' + call.name + ': ' + call.argumentsError;
-      let prepared: ReturnType<typeof prepareTool> | undefined;
-      if (!invalid && tool) {
-        try {
-          prepared = prepareTool(tool, call.arguments);
-        } catch (error) {
-          invalid = error instanceof Error ? error.message : String(error);
-        }
-      }
-      let parallel = false;
-      if (!invalid && tool?.isConcurrencySafe) {
-        try {
-          parallel = tool.isConcurrencySafe(call.arguments);
-        } catch {
-          // A scheduling hint that fails leaves the call serial.
-        }
-      }
+      const prepared = prepareCall(call, tools.get(call.name), execution);
       yield {
-        parallel,
+        parallel: prepared.parallel,
         async run(batchSignal: AbortSignal) {
           const rejection = execution.start?.(call);
           const result = rejection
             ? toolFailure(call, rejection.reason, rejection.outcome)
-            : await executeTool(call, tool, prepared, execution, batchSignal, invalid);
+            : batchSignal.aborted
+              ? toolFailure(call, batchSignal.reason instanceof Error ? batchSignal.reason.message : String(batchSignal.reason), 'skipped')
+              : await prepared.invoke(batchSignal);
           await execution.deliver(result, batchSignal);
         },
       };
@@ -97,25 +82,39 @@ export const toolFailure = (
   timestamp: Date.now(),
 });
 
-async function executeTool(
+function prepareCall(
   call: ToolCallPart,
   tool: ToolDefinition | undefined,
-  prepared: ReturnType<typeof prepareTool> | undefined,
-  execution: Parameters<ToolExecutorPort['execute']>[2],
+  execution: ToolExecution,
+) {
+  try {
+    if (call.argumentsError) throw new Error('Invalid arguments for ' + call.name + ': ' + call.argumentsError);
+    if (!tool) throw new Error('Tool is no longer available: ' + call.name);
+    const prepared = prepareTool(tool, call.arguments);
+    let parallel = false;
+    try {
+      parallel = tool.isConcurrencySafe?.(prepared.args) ?? false;
+    } catch {
+      // A scheduling hint that fails leaves the call serial.
+    }
+    return { parallel, invoke: (signal: AbortSignal) => executeTool(call, prepared, execution, signal) };
+  } catch (error) {
+    return {
+      parallel: false,
+      invoke: () => toolFailure(call, error instanceof Error ? error.message : String(error)),
+    };
+  }
+}
+
+async function executeTool(
+  call: ToolCallPart,
+  prepared: ReturnType<typeof prepareTool>,
+  execution: ToolExecution,
   signal: AbortSignal,
-  invalid?: string,
 ): Promise<NativeToolMessage> {
-  if (signal.aborted)
-    return toolFailure(
-      call,
-      signal.reason instanceof Error ? signal.reason.message : String(signal.reason),
-      'skipped',
-    );
   const start = performance.now();
   try {
-    if (!tool) throw new Error('Tool is no longer available: ' + call.name);
-    if (invalid) throw new Error(invalid);
-    const result = await invokeTool(prepared!, call.id, {
+    const result = await invokeTool(prepared, call.id, {
       signal,
       executionId: execution.executionId,
       waitFor: execution.waitFor,
@@ -127,7 +126,7 @@ async function executeTool(
       role: 'toolResult',
       toolCallId: call.id,
       toolName: call.name,
-      isError: result.outcome ? true : (result.isError ?? false),
+      isError: toolResultState(result) !== 'finished',
       timestamp: Date.now(),
       elapsedMs: result.elapsedMs ?? performance.now() - start,
     };

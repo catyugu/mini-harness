@@ -68,24 +68,26 @@ async function fixture(
     list: () => [],
     register: () => () => {},
     available: async () => [],
-    resolve: (choice) => choice,
-    capabilities: (choice) => ({
-      id: model.id,
-      name: 'Fixture',
-      input: choice.id === 'text-only' ? ['text'] : ['text', 'image'],
-      contextWindow: 32000,
-      maxTokens: 1024,
-      reasoning: true,
-      thinkingLevels: thinkingLevels(choice.id),
+    resolve: (choice) => ({
+      model: choice,
+      capabilities: {
+        id: model.id,
+        name: 'Fixture',
+        input: choice.id === 'text-only' ? ['text'] : ['text', 'image'],
+        contextWindow: 32000,
+        maxTokens: 1024,
+        reasoning: true,
+        thinkingLevels: thinkingLevels(choice.id),
+      },
     }),
   });
   ctx.provide('harnessLlm', {
-    async stream(
-      request: Parameters<LlmAdapter['stream']>[0],
-      emit: (event: import('@mini-harness/llm/api').LlmEvent) => void,
-    ) {
-      for await (const event of llm.stream(request)) emit(event);
-    },
+    bind: () => ({
+      async countInputTokens() { return undefined; },
+      async stream(request, emit) {
+        for await (const event of llm.stream(request)) emit(event);
+      },
+    }),
     register: () => () => {},
     select: () => undefined,
   });

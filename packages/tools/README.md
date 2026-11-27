@@ -18,3 +18,5 @@ Tool execution uses the providing Cordis Fiber. Registration uses the caller’s
 The default executor runs concurrency-safe calls in bounded groups, with serial calls acting as barriers. It drains started calls before returning. Tool failures and skipped calls close the model protocol through tool results.
 
 Tool results may select presentation metadata using `detailKeys` from their `details`. The execution layer transports `ToolContext.write(text, channel)` for both foreground and background work; consumers own the output buffers. A tool may report an explicit progress state with `update({ state: 'approval' })` or `update({ state: 'running' })`.
+
+`list()` returns resolved tools carrying the selected registration and provider lifetime. Direct unregistered definitions remain valid for `runTool`; independent background work requires a resolved tool.

@@ -1,42 +1,37 @@
 import { Check } from 'typebox/value';
-import type { Context } from 'mini-harness/cordis';
-import { isToolContent, type ToolDefinition, type ToolInvocation, type ToolResult } from './api.ts';
+import {
+  isToolContent,
+  toolBinding,
+  type ResolvedTool,
+  type ToolDefinition,
+  type ToolInvocation,
+  type ToolResult,
+} from './api.ts';
 
-const bindingKey = Symbol('tool binding');
-
-interface Binding {
-  provider: Context;
-  signal: AbortSignal;
-  available(): boolean;
-}
-
-type BoundTool = ToolDefinition & { [bindingKey]?: Binding };
-
-export function bindTool(tool: ToolDefinition, binding: Binding): ToolDefinition {
-  return { ...tool, [bindingKey]: binding } as BoundTool;
+function isResolved(tool: ToolDefinition): tool is ResolvedTool {
+  return toolBinding in tool;
 }
 
 export function toolAvailable(tool: ToolDefinition) {
-  return (tool as BoundTool)[bindingKey]?.available() ?? true;
+  return !isResolved(tool) || tool[toolBinding].available();
 }
 
-export function prepareTool(tool: ToolDefinition, args: Record<string, unknown>) {
-  const binding = (tool as BoundTool)[bindingKey];
+export function prepareTool<T extends ToolDefinition>(tool: T, args: Record<string, unknown>) {
   if (!toolAvailable(tool)) throw new Error('Tool is no longer available: ' + tool.name);
   if (!Check(tool.parameters, args))
     throw new Error('Invalid arguments for ' + tool.name + ': Schema mismatch');
-  return { tool, binding, args };
+  return { tool, args };
 }
 
 /** Execute validated work in an already admitted provider Fiber. */
 export async function executePreparedTool(
-  { tool, binding, args }: ReturnType<typeof prepareTool>,
+  { tool, args }: ReturnType<typeof prepareTool>,
   callId: string,
   options: ToolInvocation & { signal: AbortSignal },
 ): Promise<ToolResult> {
   const { signal, executionId, report, onUpdate, write, waitFor } = options;
   signal.throwIfAborted();
-  if (binding && !binding.available()) throw new Error('Tool is no longer available: ' + tool.name);
+  if (!toolAvailable(tool)) throw new Error('Tool is no longer available: ' + tool.name);
   const result = await tool.execute(args, {
     callId,
     executionId,
@@ -55,12 +50,13 @@ export function invokeTool(
   callId: string,
   options: ToolInvocation = {},
 ): Promise<ToolResult> {
-  const { binding } = prepared;
-  if (!binding)
+  const { tool } = prepared;
+  if (!isResolved(tool))
     return executePreparedTool(prepared, callId, {
       ...options,
       signal: options.signal ?? AbortSignal.any([]),
     });
+  const binding = tool[toolBinding];
   const signal = options.signal ? AbortSignal.any([binding.signal, options.signal]) : binding.signal;
   // Preserve a tool's observed result when cancellation races its return.
   let completed: ToolResult | undefined;

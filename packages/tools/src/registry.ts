@@ -1,11 +1,17 @@
 import { ScopedLayers, scopeOf, type ScopeKey } from '@mini-harness/plugin-api/scopes';
 import { toolNamePattern } from '@mini-harness/llm/vocabulary';
 import { Service, type Context } from 'mini-harness/cordis';
-import { bindTool } from './invocation.ts';
-import { type ToolDefinition, type ToolPort, type ToolFactory, type ToolSelection } from './api.ts';
+import {
+  toolBinding,
+  type ResolvedTool,
+  type ToolDefinition,
+  type ToolPort,
+  type ToolFactory,
+  type ToolSelection,
+} from './api.ts';
 interface ToolRegistration {
   name: string;
-  resolve(selection: ToolSelection, caller?: Context): ToolDefinition;
+  resolve(selection: ToolSelection, caller?: Context): ResolvedTool;
   visible(resourceId?: string): boolean;
 }
 
@@ -31,7 +37,6 @@ export class ToolRegistry {
     { context: owner, scope }: { context: Context; scope?: ScopeKey },
   ) {
     const { name } = definition;
-    const factory = 'resolve' in definition ? definition : undefined;
     if (!toolNamePattern.test(name)) throw new Error('Invalid tool name: ' + name);
     const lifetime = new AbortController();
     const activation = owner.fiber.signal;
@@ -40,17 +45,22 @@ export class ToolRegistry {
     const entry: ToolRegistration = {
       name,
       visible: (resourceId) =>
-        !expired() && (!factory || (resourceId !== undefined && (factory.visible?.(resourceId) ?? true))),
+        !expired() && (!('resolve' in definition) || (resourceId !== undefined && (definition.visible?.(resourceId) ?? true))),
       resolve(selection, caller) {
-        const tool = factory
-          ? factory.resolve(selection.resourceId!, caller)
-          : (definition as ToolDefinition);
+        let tool: ToolDefinition;
+        if ('resolve' in definition) {
+          if (selection.resourceId === undefined) throw new Error('Tool factory requires a resource');
+          tool = definition.resolve(selection.resourceId, caller);
+        } else tool = definition;
         if (tool.name !== name) throw new Error('Tool binding changed its registered name: ' + name);
-        return bindTool(tool, {
-          provider: owner,
-          signal: lifetime.signal,
-          available: () => registry.selected(name, selection) === entry,
-        });
+        return {
+          ...tool,
+          [toolBinding]: {
+            provider: owner,
+            signal: lifetime.signal,
+            available: () => registry.selected(name, selection) === entry,
+          },
+        };
       },
     };
     const remove = this.tools.add(scope, name, entry);
@@ -75,7 +85,7 @@ export class ToolRegistry {
         .reverse()
         .flatMap((layer) => [...layer.keys()]),
     );
-    const available: ToolDefinition[] = [];
+    const available: ResolvedTool[] = [];
     for (const name of names) {
       const selected = this.selected(name, selection);
       if (selected) available.push(selected.resolve(selection, caller));

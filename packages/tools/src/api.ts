@@ -19,7 +19,7 @@ export interface ToolResult extends Omit<ToolUpdate, 'state'> {
 }
 export type ToolResultState = 'finished' | 'error' | NonNullable<NativeToolMessage['outcome']>;
 
-export function toolResultState(result: NativeToolMessage): ToolResultState {
+export function toolResultState(result: Pick<ToolResult, 'isError' | 'outcome'>): ToolResultState {
   if (result.outcome) return result.outcome;
   return result.isError ? 'error' : 'finished';
 }
@@ -37,6 +37,19 @@ export interface ToolDefinition<Arguments = Record<string, any>> extends ToolSch
   /** Compact observation for independent execution. */
   projectResult?(result: ToolResult): Record<string, unknown>;
   execute(args: Arguments, context: ToolContext): Promise<ToolResult>;
+}
+
+export const toolBinding = Symbol('tool binding');
+
+export interface ToolBinding {
+  provider: Context;
+  signal: AbortSignal;
+  available(): boolean;
+}
+
+/** A definition selected from a particular scope and registration lifetime. */
+export interface ResolvedTool extends ToolDefinition {
+  readonly [toolBinding]: ToolBinding;
 }
 
 export interface ToolFactory {
@@ -77,7 +90,7 @@ export interface ToolPort {
    * Dispose the provider Fiber before releasing resources used by active calls.
    */
   register(tool: ToolDefinition | ToolFactory, provider?: Context): () => void;
-  list(selection?: ToolSelection): ToolDefinition[];
+  list(selection?: ToolSelection): ResolvedTool[];
 }
 
 export function isToolContent(value: unknown): value is ToolResult['content'] {

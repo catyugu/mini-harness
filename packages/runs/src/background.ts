@@ -2,7 +2,7 @@ import type { Context, Plugin } from 'mini-harness/cordis';
 import { Type } from 'typebox';
 import { DomainError } from '@mini-harness/platform/errors';
 import { terminal, type TaskData, type TaskSnapshot } from '@mini-harness/tasks/api';
-import { defineTool, type ToolResult } from '@mini-harness/tools/api';
+import { defineTool, toolBinding, toolResultState, type ToolResult } from '@mini-harness/tools/api';
 import { summarizeTask } from '@mini-harness/sessions/records';
 import { executePreparedTool, prepareTool } from '@mini-harness/tools/invocation';
 import { conversationTools } from './tool-selection.ts';
@@ -90,19 +90,19 @@ function start(ctx: Context, id: string, name: string, args: Record<string, unkn
   );
   if (!tool?.background) throw new Error('Tool does not support background execution: ' + name);
   const prepared = prepareTool(tool, args);
-  if (!prepared.binding) throw new Error('Background tool has no registered provider: ' + name);
+  const binding = prepared.tool[toolBinding];
   const task = ctx.harnessTasks.start(
     {
       ...service.task(id),
       type: backgroundTool,
       name: tool.label ?? tool.name,
       metadata: { tool: name, arguments: prepared.args as TaskData },
-      provider: prepared.binding.provider,
-      signal: prepared.binding.signal,
+      provider: binding.provider,
+      signal: binding.signal,
       project: (result: ToolResult) =>
         ({
           ...(tool.projectResult?.(result) ?? writableToolResult(result)),
-          isError: Boolean(result.isError || result.outcome),
+          isError: toolResultState(result) !== 'finished',
         }) as TaskData,
     },
     (task) => {
