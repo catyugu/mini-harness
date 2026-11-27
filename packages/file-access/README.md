@@ -4,7 +4,7 @@ File Access supplies filesystem operations to plugins. It offers both native Nod
 
 ## Public API and usage
 
-Import `mini-harness/file-access` for `FileAccessPort`, `RootedFileAccess`, `FileTypeError` and the `harnessFileAccess` service declaration. Declare `harnessFileAccess` as an injected dependency:
+Import `mini-harness/file-access` for `FileAccessPort`, `RootedFileAccess`, `FileReader`, `explicitFileReader`, `FileTypeError` and the `harnessFileAccess` service declaration. Declare `harnessFileAccess` as an injected dependency:
 
 ```ts
 import type { Context } from 'mini-harness/cordis';
@@ -28,7 +28,7 @@ Writes prepare and sync a temporary file, recheck the destination, then publish 
 
 `chunks` reads until EOF and closes its handle when iteration ends or aborts. The view itself imposes no workspace-preview byte limit. Callers must choose appropriate read limits and pass cancellation signals for long operations. `validatePath` checks the resolved location, permitting missing targets; use `access`, `stat` or a read when the target's existence or type matters.
 
-`harnessFileAccess.native` exposes Node promise-based filesystem operations and `createReadStream` with the host process's permissions, including normal link behavior. The confined view is a consumer-selected interface; it is not a sandbox for trusted plugin code. See [SECURITY.md](../../SECURITY.md).
+`harnessFileAccess.native` exposes Node promise-based filesystem operations and `createReadStream` with the host process's permissions, including normal link behavior. `explicitFileReader(native, cwd)` uses those native operations for streamed reads and directory listings. It resolves relative paths from `cwd` and accepts absolute paths. The confined view is a consumer-selected interface; it is not a sandbox for trusted plugin code. See [SECURITY.md](../../SECURITY.md).
 
 ## Activation and extension
 
@@ -38,4 +38,4 @@ The base Profile activates `core:file-access` as `@mini-harness/file-access`. Th
 
 ## Testing
 
-[Rooted file tests](tests/root.test.ts) exercise failed atomic writes, binary data and streaming beyond preview limits. [File-policy tests](../files/tests/policy.test.ts) exercise shared confinement through the tools. [Workspace API tests](../../test/system/workspace-api.test.ts) exercise root identity and scope selection. Implementation details live in [root.ts](src/root.ts).
+[Rooted file tests](tests/root.test.ts) exercise failed atomic writes, binary data and streaming beyond preview limits. [File-policy tests](../files/tests/policy.test.ts) exercise the native read path and workspace confinement through the tools. [Workspace API tests](../../test/system/workspace-api.test.ts) exercise root identity and scope selection. Implementation details live in [root.ts](src/root.ts).

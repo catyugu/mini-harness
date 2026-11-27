@@ -2,7 +2,7 @@ import { dirname, resolve } from 'node:path';
 import { TextDecoder } from 'node:util';
 import { Type } from 'typebox';
 import { defineTool, type ToolDefinition, type ToolResult } from '@mini-harness/tools/api';
-import { FileTypeError, type RootedFileAccess } from '@mini-harness/file-access/api';
+import { FileTypeError, type FileReader, type RootedFileAccess } from '@mini-harness/file-access/api';
 import { DomainError } from '@mini-harness/platform/errors';
 import { WorkspaceSearch, readLimited } from './search.ts';
 
@@ -37,20 +37,24 @@ function imageType(prefix: Buffer) {
   return null;
 }
 
-export function fileTools(cwd: string, access: () => RootedFileAccess): ToolDefinition[] {
+export function fileTools(
+  cwd: string,
+  access: () => RootedFileAccess,
+  explicit: () => FileReader,
+): ToolDefinition[] {
   return [
     defineTool({
       name: 'read',
       label: 'Read',
       description:
         'Read the contents of a UTF-8 file or image. Use ls to list a directory. Text offsets are 1-based line numbers.',
-      metadata: { guidance: ['Read workspace files'] },
+      metadata: { guidance: ['Read files by absolute or workspace-relative path'] },
       parameters: Type.Object(
         { path: pathSchema, offset: Type.Optional(Type.Integer({ minimum: 1 })), limit: limitSchema },
         { additionalProperties: false },
       ),
       async execute({ path, offset = 1, limit = 2000 }, { signal }) {
-        const files = access();
+        const files = explicit();
         signal?.throwIfAborted();
         const bytes = await readLimited(files, path, undefined, signal).catch((error: unknown) => {
           if (error instanceof FileTypeError && error.kind === 'directory')
@@ -140,15 +144,15 @@ export function fileTools(cwd: string, access: () => RootedFileAccess): ToolDefi
     defineTool({
       name: 'ls',
       label: 'List',
-      description: 'List workspace directory entries. Links and private harness state are excluded.',
+      description: 'List directory entries by absolute or workspace-relative path.',
       parameters: Type.Object(
         { path: Type.Optional(pathSchema), limit: limitSchema },
         { additionalProperties: false },
       ),
       async execute({ path = '.', limit = 2000 }, { signal }) {
-        const files = access();
+        const files = explicit();
         signal?.throwIfAborted();
-        const entries = await files.entries(resolve(cwd, path));
+        const entries = await files.entries(path, signal);
         signal?.throwIfAborted();
         return textResult(
           entries

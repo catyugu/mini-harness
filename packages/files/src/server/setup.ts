@@ -1,3 +1,4 @@
+import { explicitFileReader } from '@mini-harness/file-access/api';
 import { DomainError } from '@mini-harness/platform/errors';
 import { relative, resolve, sep } from 'node:path';
 import type { Context } from 'mini-harness/cordis';
@@ -24,11 +25,16 @@ export function setup(ctx: Context) {
           const session = sessions.get(id);
           if (!session || !root || !session.workspaceId)
             throw new DomainError('not_found', 'Conversation workspace not found');
-          const tool = fileTools(root, () => {
+          const access = () => {
             const files = caller.get('harnessFileAccess');
             if (!files) throw new DomainError('unavailable', 'File access is unavailable');
-            return files.open(root, { exclude: (path) => containsPath(state, path) });
-          })[index];
+            return files;
+          };
+          const tool = fileTools(
+            root,
+            () => access().open(root, { exclude: (path) => containsPath(state, path) }),
+            () => explicitFileReader(access().native, root),
+          )[index];
           return {
             ...tool,
             tags: writes ? undefined : ['readOnly'],

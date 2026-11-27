@@ -7,7 +7,7 @@ import ignore from 'ignore';
 const readLimit = 16 * 1024 * 1024;
 
 export async function readLimited(
-  files: RootedFileAccess,
+  files: Pick<RootedFileAccess, 'chunks'>,
   path: string,
   limit = readLimit,
   signal?: AbortSignal,

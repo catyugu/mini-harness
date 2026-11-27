@@ -1,3 +1,4 @@
+import { explicitFileReader } from '@mini-harness/file-access/api';
 import { runTool } from '@mini-harness/tools/execution';
 import { containsPath } from '@mini-harness/platform/paths';
 import { expectPresent } from '../../../test/support/required.ts';
@@ -10,7 +11,7 @@ import { join } from 'node:path';
 
 import { fixture } from '../../../test/support/api-fixture.ts';
 
-test('workspace tools share one policy for reads, searches and writes', async (t) => {
+test('explicit reads use native paths while searches and writes use the workspace view', async (t) => {
   const { app, root: directory } = await fixture(t);
   const root = realpathSync.native(directory);
   const cwd = join(root, 'project');
@@ -22,13 +23,18 @@ test('workspace tools share one policy for reads, searches and writes', async (t
   symlinkSync(privateDir, join(cwd, 'linked'), 'junction');
   writeFileSync(join(cwd, '.gitignore'), 'hidden.txt\n');
   writeFileSync(join(cwd, 'hidden.txt'), 'marked text');
-  const workspace = app.runtime.plugins.ctx.harnessFileAccess.open(cwd, {
+  const access = app.runtime.plugins.ctx.harnessFileAccess;
+  const workspace = access.open(cwd, {
     exclude: (path) => containsPath(state, path),
   });
   const execute = async (name: string, value: object) =>
     runTool(
       expectPresent(
-        fileTools(cwd, () => workspace).find((tool) => tool.name === name),
+        fileTools(
+          cwd,
+          () => workspace,
+          () => explicitFileReader(access.native, cwd),
+        ).find((tool) => tool.name === name),
         'file tool ' + name,
       ),
       'test',
@@ -52,7 +58,7 @@ test('workspace tools share one policy for reads, searches and writes', async (t
   }
   await assert.rejects(execute('read', { path: 'missing.txt' }), { code: 'ENOENT' });
   await assert.rejects(execute('read', { path: 'src/note.txt/child' }), { code: 'invalid_input' });
-  await assert.rejects(execute('read', { path: 'linked/secret.txt' }), { code: 'forbidden' });
+  assert.match(JSON.stringify(await execute('read', { path: 'linked/secret.txt' })), /secret text/);
   symlinkSync(join(cwd, 'src'), join(cwd, 'alias'), 'junction');
   assert.match(JSON.stringify(await execute('read', { path: 'alias/note.txt' })), /marked text/);
   assert.deepEqual((await execute('find', { path: '.', pattern: 'src/**/*.txt' })).content, found.content);
@@ -60,9 +66,13 @@ test('workspace tools share one policy for reads, searches and writes', async (t
     JSON.stringify(await execute('grep', { path: '.', pattern: 'marked text' })),
     /hidden\.txt/,
   );
-  assert.doesNotMatch(JSON.stringify(await execute('ls', { path: '.' })), /linked|state/);
-  await assert.rejects(execute('read', { path: '../private/secret.txt' }), /permitted root/);
-  await assert.rejects(execute('read', { path: 'state/secret.txt' }), /permitted root/);
+  assert.deepEqual((await execute('ls', { path: privateDir })).content, [
+    { type: 'text', text: 'secret.txt' },
+  ]);
+  for (const path of ['../private/secret.txt', 'state/secret.txt']) {
+    assert.match(JSON.stringify(await execute('read', { path })), /secret text/);
+    await assert.rejects(execute('write', { path, content: 'changed' }), /permitted root/);
+  }
   await assert.rejects(execute('write', { path: 'linked/secret.txt', content: 'changed' }));
   await assert.rejects(execute('grep', { path: 'linked/secret.txt', pattern: 'secret' }));
   await assert.rejects(execute('find', { path: privateDir, pattern: '*.txt' }));
