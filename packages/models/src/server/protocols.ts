@@ -4,7 +4,9 @@ import { modelCapacity, modelDefaults, type ProviderModelDefinition } from '../s
 import type { ProviderConnection } from './provider-settings.ts';
 
 function record(value: unknown) {
-  return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : undefined;
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined;
 }
 
 type Listing = { rows: unknown[]; next?: string };
@@ -181,7 +183,8 @@ async function readBody(response: Response): Promise<unknown> {
 
 export async function discover(connection: ProviderConnection, key: string, caller: AbortSignal) {
   const protocol = protocols.get(connection.api);
-  if (!protocol) throw new DomainError('invalid_input', 'Model discovery is unavailable for this API protocol');
+  if (!protocol)
+    throw new DomainError('invalid_input', 'Model discovery is unavailable for this API protocol');
   const { url, headers, cursor, read } = protocol.listing(connection.baseUrl, key);
   const signal = AbortSignal.any([caller, AbortSignal.timeout(20000)]);
   const models = new Map<string, ProviderModelDefinition>();

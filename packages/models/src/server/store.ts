@@ -322,7 +322,10 @@ export class ModelStore implements ModelStorePort {
       throw error;
     }
     if (keyChange)
-      this.status.set(id, { value: { configured: false, source: keyChange.value ? 'stored' : undefined }, checking: false });
+      this.status.set(id, {
+        value: { configured: false, source: keyChange.value ? 'stored' : undefined },
+        checking: false,
+      });
     this.publishCatalog(configuration, [id], providers);
   }
 
@@ -428,6 +431,9 @@ function capabilities(model: CatalogModel) {
 }
 
 function resolveKey(provider: CatalogProvider, stored: Credential | undefined) {
-  return ((stored?.type === 'api_key' ? stored.key : undefined) ??
-    (provider.key ? (process.env[provider.key] ?? provider.key) : undefined)) || undefined;
+  return (
+    ((stored?.type === 'api_key' ? stored.key : undefined) ??
+      (provider.key ? (process.env[provider.key] ?? provider.key) : undefined)) ||
+    undefined
+  );
 }

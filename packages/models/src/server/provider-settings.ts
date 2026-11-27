@@ -1,10 +1,6 @@
 import { DomainError } from '@mini-harness/platform/errors';
 import { thinkingLevels } from '@mini-harness/llm/vocabulary';
-import {
-  modelCapacity,
-  providerIdPattern,
-  type ProviderModelDefinition,
-} from '../shared/catalog.ts';
+import { modelCapacity, providerIdPattern, type ProviderModelDefinition } from '../shared/catalog.ts';
 import type { CatalogModel } from './store-api.ts';
 import { protocols } from './protocols.ts';
 
@@ -129,12 +125,16 @@ export function parseOverride(value: unknown): ProviderOverride {
   if (!entry) throw invalid('Invalid built-in provider override');
   return {
     baseUrl: entry.baseUrl === undefined || entry.baseUrl === '' ? undefined : endpoint(entry.baseUrl),
-    models: entry.models === undefined
-      ? undefined
-      : parseModels(entry.models, ({ templateId, ...model }): ProviderModelDefinition => ({
-          ...parseModel(model),
-          ...(templateId === undefined ? {} : { templateId: modelId(templateId) }),
-        })),
+    models:
+      entry.models === undefined
+        ? undefined
+        : parseModels(
+            entry.models,
+            ({ templateId, ...model }): ProviderModelDefinition => ({
+              ...parseModel(model),
+              ...(templateId === undefined ? {} : { templateId: modelId(templateId) }),
+            }),
+          ),
   };
 }
 
