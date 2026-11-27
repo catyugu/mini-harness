@@ -96,15 +96,15 @@ test('independent shell calls use one task, retain output channels and do not du
   });
   const id = String(receipt.details?.taskId);
   await ctx.harnessTasks.wait(id);
-  const task = expectPresent(ctx.harnessSessions.taskHistory(id), 'settled background task');
+  const task = expectPresent(ctx.harnessSessions.taskStatus(session.id, id), 'settled background task');
   assert.equal(task.state, 'completed');
   assert.deepEqual(task.metadata, { tool: 'shell', arguments: { command, timeoutMs: 30000 } });
   assert.equal((task.result as { details: { exitCode: number } }).details.exitCode, 0);
   assert.equal((task.result as { details: { timeoutMs: number } }).details.timeoutMs, 30000);
-  assert.equal(ctx.harnessSessions.taskSummaries(session.id).length, 1);
+  assert.equal(ctx.harnessSessions.tasks(session.id).length, 1);
   assert.match(
     ctx.harnessSessions
-      .taskOutput(id)
+      .taskOutput(session.id, id)
       ?.chunks.filter(({ channel }) => channel === 'stdout')
       .map(({ text }) => text)
       .join('') ?? '',
@@ -112,7 +112,7 @@ test('independent shell calls use one task, retain output channels and do not du
   );
   assert.doesNotMatch(JSON.stringify(task.result), /task-output/);
   await ctx.harnessSessions.delete([session.id]);
-  assert.equal(ctx.harnessSessions.taskHistory(id), undefined);
+  assert.equal(ctx.harnessSessions.taskStatus(session.id, id), undefined);
 });
 
 test('foreground Shell streams live output and commits one final result', async (t) => {

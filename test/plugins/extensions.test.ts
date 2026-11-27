@@ -596,15 +596,18 @@ export function apply(ctx) {
   assert.equal(ctx.harnessModels.resolve(model), undefined);
   assert.equal(ctx.harnessModels.capabilities(model), undefined);
   assert.equal(ctx.harnessLlm.select(model), null);
-  await assert.rejects(async () => {
-    for await (const _ of ctx.harnessLlm.stream({
-      model,
-      messages: [],
-      systemPrompt: '',
-      signal: new AbortController().signal,
-    }))
-      assert.fail('An ambiguous model must not stream');
-  }, /Multiple model adapters/);
+  await assert.rejects(
+    ctx.harnessLlm.stream(
+      {
+        model,
+        messages: [],
+        systemPrompt: '',
+        signal: new AbortController().signal,
+      },
+      () => assert.fail('An ambiguous model must not stream'),
+    ),
+    /Multiple model adapters/,
+  );
   await toggle('model-tie', true);
   assert.equal(list()[0]?.name, 'model-high');
   await toggle('model-high', true);
@@ -713,10 +716,18 @@ test(
       );
     });
     await fiber;
-    const stream = ctx.harnessLlm
-      .stream({ model, messages: [], systemPrompt: '', signal: new AbortController().signal })
-      [Symbol.asyncIterator]();
-    assert.deepEqual((await stream.next()).value, { type: 'text-delta', text: 'partial' });
+    let received!: (event: unknown) => void;
+    const firstEvent = new Promise<unknown>((resolve) => {
+      received = resolve;
+    });
+    const settled = assert.rejects(
+      ctx.harnessLlm.stream(
+        { model, messages: [], systemPrompt: '', signal: new AbortController().signal },
+        received,
+      ),
+      { name: 'AbortError' },
+    );
+    assert.deepEqual(await firstEvent, { type: 'text-delta', text: 'partial' });
     const unloading = fiber.dispose();
     try {
       await cleaning;
@@ -726,6 +737,6 @@ test(
     }
     await unloading;
     assert.equal(released, true);
-    await assert.rejects(stream.next(), { name: 'AbortError' });
+    await settled;
   },
 );

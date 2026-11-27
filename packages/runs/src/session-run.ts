@@ -248,8 +248,7 @@ export class SessionRun {
         retry: modelRetry(ctx, id),
         onEvent: (event) => {
           const displays: RecordPresentation[] = [];
-          for (const { context, callback } of ctx.events.listeners('agent/records', target)) {
-            if (context.fiber.signal.aborted) continue;
+          for (const { callback } of ctx.events.listeners('agent/records', target)) {
             const contribution = callback(event, publisher);
             if (!contribution?.length) continue;
             if (event.type !== 'assistant')

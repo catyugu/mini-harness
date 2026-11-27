@@ -1,9 +1,7 @@
 import { displayRecords } from './projection.ts';
 import type { RecordAppend } from './shared/display-record.ts';
 import { userContent } from './user-content.ts';
-import type { RunInfo } from './shared/run-state.ts';
-import { runFromEntry } from './log-api.ts';
-import type { SessionEntry, SessionLogPort, SessionLogReader } from './log-api.ts';
+import type { SessionEntry, SessionEvent, SessionLogPort, SessionLogReader } from './log-api.ts';
 import { DomainError } from '@mini-harness/platform/errors';
 import { randomUUID } from 'node:crypto';
 import { lstatSync, unlinkSync } from 'node:fs';
@@ -12,8 +10,8 @@ import { writeJson } from '@mini-harness/platform/json';
 import type { Paths } from '@mini-harness/platform/runtime-paths';
 import type { WorkspacePort } from '@mini-harness/workspaces/api';
 import type { RecordOwner, SessionRecords, SessionStore } from './records.ts';
-import type { TaskOptions } from '@mini-harness/tasks/api';
-import type { TaskHistory } from './task-history.ts';
+import { terminal, type TaskOptions, type TaskSnapshot } from '@mini-harness/tasks/api';
+import { readTaskOutput } from '@mini-harness/tasks/output';
 import {
   createScopeKey,
   scopeParentOf,
@@ -23,8 +21,8 @@ import {
 import type { ScopeAddress } from '@mini-harness/plugin-api/configuration';
 import type { CapabilityObservation } from '@mini-harness/plugin-api/observations';
 import type { ConversationPermission, SessionRecord } from './shared/identity.ts';
-import { advancesBranch, SessionLog } from './log.ts';
-import { syncDirectory } from './record-log.ts';
+import { advancesBranch, SessionLog, type LogIndex } from './log.ts';
+import { readRecordAt, syncDirectory, type RecordAddress } from './record-log.ts';
 import { loadCatalog, type CatalogState } from './catalog.ts';
 import {
   attachmentDirectory,
@@ -48,11 +46,7 @@ export class SessionRegistry implements SessionStore {
   private readonly participants = new Set<Participant>();
   private readonly logs = new Map<string, SessionLog>();
   private readonly runtimeScopes: Map<string, ScopeKey>;
-  private readonly latestRuns = new Map<string, RunInfo>();
-  private readonly tasksBySession = new Map<string, TaskHistory>();
-  private readonly taskOwners = new Map<string, TaskHistory>();
-  private readonly deliveryIds = new Map<string, ReadonlySet<string>>();
-  private readonly readyInbox = new Set<string>();
+  private readonly indexes = new Map<string, { projection: LogIndex; record: SessionRecord }>();
   private readonly logErrors = new Map<string, string>();
   private closing = false;
   private pendingDeletion = Promise.resolve();
@@ -260,7 +254,7 @@ export class SessionRegistry implements SessionStore {
   }
 
   runSummary(id: string) {
-    const run = this.latestRuns.get(id);
+    const run = this.indexes.get(id)?.projection.run;
     return run && structuredClone(run);
   }
 
@@ -283,23 +277,9 @@ export class SessionRegistry implements SessionStore {
   private openLog(record: SessionRecord, mode: 'read' | 'write' | 'recover') {
     const { id } = record;
     const writable = mode !== 'read';
-    const refreshInbox = () => {
-      if (log!.hasReadyInbox) this.readyInbox.add(id);
-      else this.readyInbox.delete(id);
-    };
     const onChange = (entry: SessionEntry) => {
-      if (entry.type === 'task' || entry.type === 'message') {
-        const history = this.tasksBySession.get(id)!;
-        history.add(entry);
-        if (entry.type === 'task') this.taskOwners.set(entry.task.id, history);
-      }
-      const run = runFromEntry(id, entry);
-      if (run) this.latestRuns.set(id, run);
       const inbox = entry.type.startsWith('inbox-');
-      if (inbox || (entry.type === 'message' && entry.inboxId)) {
-        refreshInbox();
-        this.notify(id, false, true);
-      }
+      if (inbox || (entry.type === 'message' && entry.inboxId)) this.notify(id, false, true);
       if (!inbox && entry.type !== 'model-request' && entry.type !== 'tool-schema')
         this.notify(
           id,
@@ -324,23 +304,13 @@ export class SessionRegistry implements SessionStore {
         !writable,
         (error) => {
           if (this.logs.get(id) === log) this.logs.delete(id);
-          this.latestRuns.delete(id);
+          this.indexes.delete(id);
           this.fault(id, error);
         },
       );
       if (writable) {
-        this.deliveryIds.set(id, log.deliveryIds);
-        refreshInbox();
-        if (!this.tasksBySession.has(id) || this.logErrors.has(id)) {
-          this.dropTaskHistory(id);
-          const history = log.indexTasks();
-          this.tasksBySession.set(id, history);
-          for (const taskId of history.ids) this.taskOwners.set(taskId, history);
-          log.recover(history);
-        }
-        const run = log.latestRun;
-        if (run) this.latestRuns.set(id, run);
-        else this.latestRuns.delete(id);
+        this.indexes.set(id, { projection: log.index, record });
+        log.recover();
         if (this.logErrors.delete(id)) this.notify(id);
       }
       return log;
@@ -369,35 +339,72 @@ export class SessionRegistry implements SessionStore {
     };
   }
 
-  private dropTaskHistory(sessionId: string) {
-    const history = this.tasksBySession.get(sessionId);
-    if (!history) return;
-    for (const taskId of history.ids) this.taskOwners.delete(taskId);
-    this.tasksBySession.delete(sessionId);
+  tasks(sessionId: string, type?: string, limit = Infinity, exclude?: ReadonlySet<string>) {
+    const index = this.indexes.get(sessionId);
+    if (!index) return [];
+    const tasks = [];
+    for (const { task } of index.projection.tasks.values())
+      if ((type === undefined || task.type === type) && !exclude?.has(task.id)) tasks.push(task);
+    if (limit !== Infinity) tasks.sort((a, b) => b.createdAt.localeCompare(a.createdAt)).splice(limit);
+    return tasks.map((task) => this.settledTask(task));
   }
 
-  taskSummary(id: string) {
-    return this.taskOwners.get(id)?.summary(id);
+  private settledTask(task: TaskSnapshot) {
+    return structuredClone(
+      terminal(task.state)
+        ? task
+        : {
+            ...task,
+            state: 'interrupted' as const,
+            error: 'No live executor remains for this task',
+          },
+    );
   }
 
-  taskHistory(id: string) {
-    return this.taskOwners.get(id)?.detail(id);
+  private readTaskEntry(record: SessionRecord, address: RecordAddress) {
+    const existing = this.logs.get(record.id);
+    if (existing) return existing.indexedEntry(address.id);
+    return readRecordAt<SessionEvent>(nativeFile(this.paths, record, false), address);
   }
 
-  taskOutput(id: string, after?: number) {
-    return this.taskOwners.get(id)?.output(id, after);
+  taskStatus(sessionId: string, taskId: string, includeAnswer = false) {
+    const index = this.indexes.get(sessionId);
+    if (!index) return;
+    const entry = index.projection.tasks.get(taskId);
+    if (!entry) return;
+    const task = this.settledTask(entry.task);
+    if (includeAnswer && entry.answer) {
+      const message = this.readTaskEntry(index.record, entry.answer);
+      if (message?.type !== 'message' || message.message.role !== 'assistant')
+        throw new Error('Missing indexed assistant response');
+      task.result = message.message.content
+        .flatMap((part) => (part.type === 'text' ? [part.text] : []))
+        .join('');
+    }
+    return task;
   }
 
-  taskSummaries(sessionId: string, type?: string, limit?: number, exclude?: ReadonlySet<string>) {
-    return this.tasksBySession.get(sessionId)?.summaries(type, limit, exclude) ?? [];
+  taskOutput(sessionId: string, taskId: string, after?: number) {
+    const index = this.indexes.get(sessionId);
+    if (!index) return;
+    const entry = index.projection.tasks.get(taskId);
+    if (!entry) return;
+    const cursor = entry.task.outputCursor;
+    const record = cursor ? this.readTaskEntry(index.record, entry.address) : undefined;
+    return readTaskOutput(
+      (record?.type === 'task' ? record.output : undefined) ?? { cursor, truncated: false, chunks: [] },
+      after,
+    );
   }
 
   readyInboxSessions() {
-    return [...this.readyInbox];
+    return [...this.indexes.values()]
+      .filter(({ projection }) => projection.wake)
+      .map(({ record }) => record.id);
   }
 
   hasInbox(sessionId: string, messageId: string) {
-    return this.deliveryIds.get(sessionId)?.has(messageId) ?? false;
+    return this.indexes.get(sessionId)?.projection.inboxIds.has(messageId) ?? false;
   }
 
   log(id: string): SessionLogPort {
@@ -638,7 +645,7 @@ export class SessionRegistry implements SessionStore {
       this.logs.get(id)?.close();
       this.logs.delete(id);
       this.logErrors.delete(id);
-      this.latestRuns.delete(id);
+      this.indexes.delete(id);
       return { id, workspaceId: record.workspaceId };
     });
     if (all.length) {
@@ -648,11 +655,6 @@ export class SessionRegistry implements SessionStore {
         sessions: this.state.sessions.filter((entry) => !chosen.has(entry.id)),
         pendingDelete,
       });
-      for (const id of chosen) {
-        this.dropTaskHistory(id);
-        this.deliveryIds.delete(id);
-        this.readyInbox.delete(id);
-      }
       await this.recoverDeletion();
       for (const { id, key } of locations) {
         this.events.dispatchEvent(new CustomEvent('membership', { detail: id }));

@@ -9,6 +9,7 @@ import {
   lstatSync,
   openSync,
   readFileSync,
+  readSync,
   writeSync,
 } from 'node:fs';
 import { dirname } from 'node:path';
@@ -31,6 +32,60 @@ export interface LogHeader {
 export const entryId = /^[a-f0-9]{8,64}$/i;
 export const digest = (value: unknown) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 
+export interface RecordAddress {
+  id: string;
+  offset: number;
+  length: number;
+}
+
+function checkFile(handle: number, file: string, expectedLength?: number) {
+  const descriptor = fstatSync(handle),
+    path = lstatSync(file);
+  if (
+    !descriptor.isFile() ||
+    descriptor.nlink !== 1 ||
+    path.isSymbolicLink() ||
+    descriptor.dev !== path.dev ||
+    descriptor.ino !== path.ino
+  )
+    throw new Error('Session file outside managed storage or replaced while open');
+  if (expectedLength !== undefined && descriptor.size !== expectedLength)
+    throw new Error('Session file size changed outside its writer');
+}
+
+function parseRecord(line: string) {
+  let record: Record<string, unknown>;
+  try {
+    record = JSON.parse(line);
+  } catch {
+    throw new Error('Corrupt session log record');
+  }
+  const { checksum, ...entry } = record;
+  if (checksum !== digest(entry)) throw new Error('Corrupt session log checksum');
+  return entry;
+}
+
+export function readRecordAt<Event extends { type: string }>(
+  file: string,
+  address: RecordAddress,
+): LogEntry<Event> {
+  const handle = openSync(file, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0));
+  try {
+    checkFile(handle, file);
+    const bytes = Buffer.alloc(address.length);
+    for (let offset = 0; offset < bytes.length; ) {
+      const read = readSync(handle, bytes, offset, bytes.length - offset, address.offset + offset);
+      if (read === 0) throw new Error('Indexed session record is incomplete');
+      offset += read;
+    }
+    const entry = parseRecord(bytes.toString('utf8'));
+    if (entry.id !== address.id) throw new Error('Indexed session record has changed');
+    return entry as LogEntry<Event>;
+  } finally {
+    closeSync(handle);
+  }
+}
+
 /** Owns durable record identity, ordering, branch indexing and file integrity. */
 export abstract class RecordLog<Event extends { type: string }> {
   private handle!: number;
@@ -43,7 +98,7 @@ export abstract class RecordLog<Event extends { type: string }> {
 
   protected abstract decodeRecord(record: Record<string, unknown>): LogEntry<Event>;
   protected abstract validateRecord(entry: LogEntry<Event>, recovering: boolean): void;
-  protected abstract recordAdded(entry: LogEntry<Event>): void;
+  protected abstract recordAdded(entry: LogEntry<Event>, address: RecordAddress): void;
   protected abstract advancesBranch(entry: LogEntry<Event>): boolean;
 
   constructor(
@@ -61,10 +116,10 @@ export abstract class RecordLog<Event extends { type: string }> {
     const flags = this.readOnly ? constants.O_RDONLY : constants.O_RDWR | constants.O_CREAT;
     this.handle = openSync(this.file, flags | (constants.O_NOFOLLOW ?? 0), 0o600);
     try {
-      this.checkFile();
+      checkFile(this.handle, this.file);
       const bytes = readFileSync(this.handle);
       this.length = bytes.length;
-      this.checkFile(this.length);
+      checkFile(this.handle, this.file, this.length);
       if (!bytes.length && !this.readOnly) {
         this.write(this.header);
         syncDirectory(dirname(this.file));
@@ -76,29 +131,11 @@ export abstract class RecordLog<Event extends { type: string }> {
     }
   }
 
-  private checkFile(expectedLength?: number) {
-    const descriptor = fstatSync(this.handle),
-      path = lstatSync(this.file);
-    if (
-      !descriptor.isFile() ||
-      descriptor.nlink !== 1 ||
-      path.isSymbolicLink() ||
-      descriptor.dev !== path.dev ||
-      descriptor.ino !== path.ino
-    )
-      throw new Error('Session file outside managed storage or replaced while open');
-    if (expectedLength !== undefined && descriptor.size !== expectedLength)
-      throw new Error('Session file size changed outside its writer');
-  }
-
   private load(bytes: Buffer) {
     const end = bytes.lastIndexOf(10) + 1;
     if (!end) throw new Error('Invalid session log header');
-    const lines = bytes.subarray(0, end).toString('utf8').split('\n');
-    lines.pop();
-    const first = lines.shift();
-    if (!first) throw new Error('Missing session log header');
-    const header = JSON.parse(first);
+    const first = bytes.indexOf(10);
+    const header = JSON.parse(bytes.toString('utf8', 0, first));
     if (
       header?.type !== 'session' ||
       header.version !== 1 ||
@@ -107,22 +144,16 @@ export abstract class RecordLog<Event extends { type: string }> {
     )
       throw new Error('Invalid session log header');
     this.header = header;
-    for (const line of lines) {
-      let record: Record<string, unknown>;
-      try {
-        record = JSON.parse(line);
-      } catch {
-        throw new Error('Corrupt session log record');
-      }
-      const { checksum, ...entry } = record;
-      if (checksum !== digest(entry)) throw new Error('Corrupt session log checksum');
-      const normalized = this.decodeRecord(entry);
-      this.validateEntry(normalized, true);
-      this.remember(normalized);
+    for (let offset = first + 1; offset < end; ) {
+      const newline = bytes.indexOf(10, offset);
+      const entry = this.decodeRecord(parseRecord(bytes.toString('utf8', offset, newline)));
+      this.validateEntry(entry, true);
+      this.remember(entry, offset, newline - offset);
+      offset = newline + 1;
     }
     // An incomplete, unacknowledged final write can be discarded; complete corrupt records cannot.
     if (!this.readOnly && end < bytes.length) {
-      this.checkFile(bytes.length);
+      checkFile(this.handle, this.file, bytes.length);
       ftruncateSync(this.handle, end);
       fsyncSync(this.handle);
       this.length = end;
@@ -143,15 +174,15 @@ export abstract class RecordLog<Event extends { type: string }> {
     this.validateRecord(entry, recovering);
   }
 
-  private remember(entry: LogEntry<Event>) {
+  private remember(entry: LogEntry<Event>, offset: number, length: number) {
     this.records.push(entry);
     this.byId.set(entry.id, entry);
     if (this.advancesBranch(entry)) this.currentLeafId = entry.id;
-    this.recordAdded(entry);
+    this.recordAdded(entry, { id: entry.id, offset, length });
   }
 
   private write(value: unknown) {
-    this.checkFile(this.length);
+    checkFile(this.handle, this.file, this.length);
     const bytes = Buffer.from(JSON.stringify(value) + '\n');
     for (let offset = 0; offset < bytes.length; ) {
       const written = writeSync(this.handle, bytes, offset, bytes.length - offset, this.length + offset);
@@ -160,6 +191,7 @@ export abstract class RecordLog<Event extends { type: string }> {
     }
     fsyncSync(this.handle);
     this.length += bytes.length;
+    return bytes.length - 1;
   }
 
   protected get leafId() {
@@ -201,8 +233,10 @@ export abstract class RecordLog<Event extends { type: string }> {
       timestamp: new Date().toISOString(),
     } as LogEntry<Event>;
     this.validateEntry(entry);
+    const offset = this.length;
+    let length: number;
     try {
-      this.write({ ...entry, checksum: digest(entry) });
+      length = this.write({ ...entry, checksum: digest(entry) });
     } catch (error) {
       // The disk may contain a partial record. Prevent a later append from masking the damage.
       try {
@@ -215,7 +249,7 @@ export abstract class RecordLog<Event extends { type: string }> {
         cause: error,
       });
     }
-    this.remember(entry);
+    this.remember(entry, offset, length);
     this.changed?.(entry);
     return structuredClone(entry);
   }
@@ -230,7 +264,7 @@ export abstract class RecordLog<Event extends { type: string }> {
 
   serialize() {
     if (this.closed) throw new Error('Session log is closed');
-    this.checkFile(this.length);
+    checkFile(this.handle, this.file, this.length);
     return encodeLog(this.header, this.records);
   }
 

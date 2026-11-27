@@ -47,15 +47,9 @@ export interface SessionHistory {
   };
   inspectLog<T>(id: string, read: (log: SessionLogReader) => T, strict?: boolean): T | undefined;
   runSummary(id: string): RunInfo | undefined;
-  taskSummary(id: string): Omit<TaskSnapshot, 'result'> | undefined;
-  taskHistory(id: string): TaskSnapshot | undefined;
-  taskOutput(id: string, after?: number): TaskOutput | undefined;
-  taskSummaries(
-    sessionId: string,
-    type?: string,
-    limit?: number,
-    exclude?: ReadonlySet<string>,
-  ): Omit<TaskSnapshot, 'result'>[];
+  tasks(sessionId: string, type?: string, limit?: number, exclude?: ReadonlySet<string>): TaskSnapshot[];
+  taskStatus(sessionId: string, taskId: string, includeAnswer?: boolean): TaskSnapshot | undefined;
+  taskOutput(sessionId: string, taskId: string, after?: number): TaskOutput | undefined;
   readyInboxSessions(): string[];
   hasInbox(sessionId: string, messageId: string): boolean;
   logError(id: string): string | undefined;

@@ -489,7 +489,7 @@ test('stopping a manual checkpoint or unloading its plugin releases the lane and
     assert.equal(disabled.status, 200, JSON.stringify(disabled.body));
     await settled;
     await running;
-    assert.equal(ctx.harnessSessions.taskHistory(task.id)?.state, 'cancelled');
+    assert.equal(ctx.harnessSessions.taskStatus(session.id, task.id)?.state, 'cancelled');
     assert.equal(ctx.harnessRuns.current(session.id), undefined);
     assert.deepEqual(log.context(), before);
     assert.equal(await sendRun(ctx.harnessRuns, session.id, 'Continue'), 'Finished');

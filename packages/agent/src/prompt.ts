@@ -1,14 +1,14 @@
 import { Service, type Context } from 'mini-harness/cordis';
-import { ScopedLayers, scopeOf } from '@mini-harness/plugin-api/scopes';
+import { ScopedLayers, scopeOf, type ScopeKey } from '@mini-harness/plugin-api/scopes';
 import type { PromptPort, PromptContext, PromptSection } from './prompt-api.ts';
 
 export class Prompt implements PromptPort {
   private readonly sections = new ScopedLayers<{ context: Context; section: PromptSection }>();
 
-  register(section: PromptSection) {
+  register(section: PromptSection, scope?: ScopeKey) {
     const context = Service.caller(this);
     const { id, order = 500, priority = 0, render } = section;
-    return this.sections.add(scopeOf(context), context.fiber.uid + '/' + id, {
+    return this.sections.add(scope ?? scopeOf(context), context.fiber.uid + '/' + id, {
       context,
       section: { id, order, priority, render },
     });

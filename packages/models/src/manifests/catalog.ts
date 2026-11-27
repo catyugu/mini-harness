@@ -60,8 +60,7 @@ const plugin: Plugin.Object = {
       if (!adapter) return;
       // An adapter-only override intentionally reuses the selected catalog's metadata.
       // A paired adapter must instead agree with its own model contribution.
-      if (!adapter.matches(winner.entry.adapter) && entries.some((entry) => adapter.matches(entry.adapter)))
-        return;
+      if (adapter !== winner.entry.adapter && entries.some((entry) => entry.adapter === adapter)) return;
       return winner;
     }
     function merge(caller: Context, entries: Contribution[], groups: ModelSummary[][]) {

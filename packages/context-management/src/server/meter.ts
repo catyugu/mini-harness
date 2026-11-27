@@ -1,7 +1,7 @@
 import type {
   InputMeasurement,
   InputTokenCounts,
-  LlmAdapter,
+  LlmPort,
   LlmRequest,
   NativeContent,
   NativeMessage,
@@ -99,8 +99,8 @@ export type MeasuredRequest = LlmRequest & { maxTokens: number; inputMeasurement
 export async function measure(
   request: LlmRequest,
   capability: ProviderModel,
-  adapter: LlmAdapter,
-  scale = 1,
+  llm: Pick<LlmPort, 'countInputTokens'>,
+  calibrate: () => number,
 ): Promise<MeasuredRequest> {
   const window = capability.contextWindow;
   const maxTokens = request.maxTokens ?? capability.maxTokens;
@@ -116,13 +116,14 @@ export async function measure(
       'Configure a valid context window and output limit for ' + request.model.id,
     );
   const prepared = { ...request, maxTokens };
-  const exact = await adapter.countInputTokens?.(prepared);
+  const exact = await llm.countInputTokens(prepared);
   if (
     exact &&
     ![exact.system, exact.tools, exact.messages].every((count) => Number.isSafeInteger(count) && count >= 0)
   )
     throw new Error('Invalid adapter input token counts');
   const raw = exact ?? estimate(request);
+  const scale = exact ? 1 : calibrate();
   const counts = exact ?? {
     system: Math.ceil(raw.system * scale),
     tools: Math.ceil(raw.tools * scale),

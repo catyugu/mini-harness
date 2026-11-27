@@ -1,7 +1,7 @@
 import type { RecordAppend } from '@mini-harness/sessions/display-record';
 import { userContent } from '@mini-harness/sessions/user-content';
 import { randomUUID } from 'node:crypto';
-import { Context } from 'mini-harness/cordis';
+import type { Context } from 'mini-harness/cordis';
 import { tagScope, scopeTarget } from '@mini-harness/plugin-api/scopes';
 import type { ThinkingLevel, ModelChoice } from '@mini-harness/llm/vocabulary';
 import type { ProfileScopes } from '@mini-harness/plugin-api/configuration';
@@ -509,18 +509,12 @@ export class Runs implements RunPort {
           'agent/setup',
           scopeTarget(fiber.ctx),
         )) {
-          signal.throwIfAborted();
-          const activation = context.fiber.signal;
-          if (activation.aborted) continue;
-          const parent = tagScope(
-            context.extend({ [Context.isolate]: fiber.ctx[Context.isolate] }),
-            keyForRun,
-          );
-          const contribution = parent.inject(services, (run) =>
-            callback(run, id, AbortSignal.any([signal, activation, run.fiber.signal])),
-          );
-          fiber.ctx.effect(() => () => contribution.dispose());
-          await contribution;
+          await context.fiber.run(async (signal) => {
+            const release = await callback(id, keyForRun, signal);
+            if (!release) return;
+            if (signal.aborted) await release();
+            else fiber.ctx.effect(() => release);
+          }, signal);
         }
         return work(fiber.ctx, signal);
       }, signal);

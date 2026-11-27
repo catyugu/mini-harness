@@ -50,7 +50,7 @@ export async function requestModel(
       thinking = '';
     try {
       signal.throwIfAborted();
-      for await (const event of llm.stream(request)) {
+      await llm.stream(request, (event) => {
         if (event.type === 'done') message = event.message;
         else {
           signal.throwIfAborted();
@@ -64,7 +64,7 @@ export async function requestModel(
             options.thinking?.(event.text);
           }
         }
-      }
+      });
       if (!message) throw new Error('The model stream ended without a final message');
     } catch (error) {
       message = {

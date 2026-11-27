@@ -119,9 +119,9 @@ export function setup(ctx: Context) {
   ctx.on('harness/start', () => {
     for (const { id, parentId } of sessions.list()) {
       if (!parentId) continue;
-      for (const task of sessions.taskSummaries(id, 'agent-run'))
+      for (const task of sessions.tasks(id, 'agent-run'))
         if (task.metadata?.reportToParent && !sessions.hasInbox(parentId, task.id + ':settled'))
-          notify(sessions.taskHistory(task.id)!);
+          notify(sessions.taskStatus(id, task.id, true) ?? task);
     }
   });
 }

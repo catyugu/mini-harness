@@ -5,9 +5,48 @@ import { terminal, type TaskData, type TaskSnapshot } from '@mini-harness/tasks/
 import { defineTool, type ToolResult } from '@mini-harness/tools/api';
 import { executePreparedTool, prepareTool } from '@mini-harness/tools/invocation';
 import { conversationTools } from './tool-selection.ts';
-import { backgroundTool, relatedTask, relatedTasks } from './related-tasks.ts';
 
 export const metadata = { title: 'Background tasks' };
+
+const backgroundTool = 'background-tool';
+
+function relatedSessions(ctx: Context, id: string, includeChildren = true): [string, string][] {
+  return [
+    [id, backgroundTool],
+    ...(includeChildren
+      ? ctx.harnessSessions
+          .list()
+          .filter(({ parentId }) => parentId === id)
+          .map(({ id }): [string, string] => [id, 'agent-run'])
+      : []),
+  ];
+}
+
+function relatedTasks(ctx: Context, id: string, includeChildren = true) {
+  const scopes = relatedSessions(ctx, id, includeChildren);
+  const live = ctx.harnessTasks.list(new Set(scopes.map(([id]) => 'session:' + id)));
+  const types = new Map(scopes);
+  const matching = live.filter((task) => task.type === types.get(task.owner.slice('session:'.length)));
+  const skip = new Set(matching.map((task) => task.id));
+  const ended = scopes.flatMap(([session, type]) => ctx.harnessSessions.tasks(session, type, 50, skip));
+  const newest = (a: { createdAt: string }, b: { createdAt: string }) =>
+    b.createdAt.localeCompare(a.createdAt);
+  return [
+    ...matching.filter((task) => !terminal(task.state)).sort(newest),
+    ...ended
+      .concat(matching.filter((task) => terminal(task.state)))
+      .sort(newest)
+      .slice(0, 50),
+  ];
+}
+
+function relatedTask(ctx: Context, id: string, taskId: string) {
+  const live = ctx.harnessTasks.get(taskId);
+  for (const [session, type] of relatedSessions(ctx, id)) {
+    const task = live ?? ctx.harnessSessions.taskStatus(session, taskId);
+    if (task?.owner === 'session:' + session && task.type === type) return task;
+  }
+}
 
 function writableToolResult(result: ToolResult) {
   return {
@@ -85,8 +124,8 @@ const plugin: Plugin.Object = {
   apply(ctx) {
     const tasks = ctx.harnessTasks;
     const sessions = ctx.harnessSessions;
-    const output = (id: string, cursor?: number) =>
-      tasks.readOutput(id, cursor) ?? sessions.taskOutput(id, cursor);
+    const output = (task: TaskSnapshot, cursor?: number) =>
+      tasks.readOutput(task.id, cursor) ?? sessions.taskOutput(task.owner.slice(8), task.id, cursor);
     const json = (data: unknown) => ({ content: [{ type: 'text' as const, text: JSON.stringify(data) }] });
     ctx.effect(() =>
       ctx.harnessTools.register({
@@ -130,13 +169,15 @@ const plugin: Plugin.Object = {
               if (action === 'list') return json(relatedTasks(ctx, id).map(({ result: _, ...task }) => task));
               const task = taskId && relatedTask(ctx, id, taskId);
               if (!task) throw new DomainError('not_found', 'Task not found');
-              if (action === 'output') return json(output(task.id, cursor));
+              if (action === 'output') return json(output(task, cursor));
               if (action === 'cancel') tasks.cancel(task.id);
               if (action === 'wait' && tasks.get(task.id) && !terminal(task.state)) {
                 if (waitFor) await waitFor(task.id);
                 else await tasks.wait(task.id, signal);
               }
-              return json(tasks.get(task.id) ?? sessions.taskHistory(task.id) ?? task);
+              return json(
+                tasks.get(task.id) ?? sessions.taskStatus(task.owner.slice(8), task.id, true) ?? task,
+              );
             },
           }),
       }),
@@ -149,8 +190,8 @@ const plugin: Plugin.Object = {
     );
     ctx.on('harness/start', () => {
       for (const { id } of sessions.list())
-        for (const task of sessions.taskSummaries(id, backgroundTool))
-          if (!sessions.hasInbox(id, task.id + ':settled')) settled(ctx, sessions.taskHistory(task.id)!);
+        for (const task of sessions.tasks(id, backgroundTool))
+          if (!sessions.hasInbox(id, task.id + ':settled')) settled(ctx, task);
     });
     ctx.inject(['harnessRoutes', 'harnessChanges'], (web) => {
       const changes = web.harnessChanges;
@@ -162,7 +203,7 @@ const plugin: Plugin.Object = {
       );
       const route = '/api/sessions/:id/tasks';
       web.effect(() =>
-        web.harnessRoutes.register('GET', route, ({ params }) => relatedTasks(ctx, params.id, false, true)),
+        web.harnessRoutes.register('GET', route, ({ params }) => relatedTasks(ctx, params.id, false)),
       );
       web.effect(() =>
         web.harnessRoutes.register('GET', route + '/:task/output', ({ params, url }) => {
@@ -171,7 +212,7 @@ const plugin: Plugin.Object = {
           const cursor = Number(url.searchParams.get('after') ?? 0);
           if (!Number.isSafeInteger(cursor) || cursor < 0)
             throw new DomainError('invalid_input', 'Invalid cursor');
-          return output(task.id, cursor);
+          return output(task, cursor);
         }),
       );
       web.effect(() =>

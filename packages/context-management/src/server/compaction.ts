@@ -1,5 +1,5 @@
 import type {
-  LlmAdapter,
+  LlmPort,
   LlmRequest,
   NativeAssistantMessage,
   NativeMessage,
@@ -62,10 +62,10 @@ function transcript(messages: NativeMessage[]) {
 export async function checkpoint(
   request: LlmRequest,
   capability: ProviderModel,
-  adapter: LlmAdapter,
+  llm: Pick<LlmPort, 'countInputTokens'>,
   messages: NativeMessage[],
   execute: (request: LlmRequest) => Promise<NativeAssistantMessage>,
-  scale: number,
+  calibrate: () => number,
 ) {
   const assemble = (segment: NativeMessage[]) =>
     measure(
@@ -74,8 +74,8 @@ export async function checkpoint(
         messages: prepareModelMessages(capability, [...segment, user(instruction)]),
       },
       capability,
-      adapter,
-      scale,
+      llm,
+      calibrate,
     );
   async function summarize(outgoing: Awaited<ReturnType<typeof assemble>>) {
     const answer = await execute(outgoing);
@@ -103,6 +103,7 @@ export async function checkpoint(
   for (let from = 0; from < text.length; ) {
     const prefix = prior ? [prior] : [];
     const overhead = (await assemble(prefix)).inputMeasurement;
+    const scale = overhead.estimated ? calibrate() : 1;
     const length = tokenPrefix(text.slice(from), (overhead.budget - totalTokens(overhead)) / scale - 4);
     if (!length) throw new DomainError('unavailable', 'Summary model has too little input capacity');
     const outgoing = await assemble([...prefix, user(text.slice(from, from + length))]);

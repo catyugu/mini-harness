@@ -1,3 +1,5 @@
+import type { ScopeKey } from '@mini-harness/plugin-api/scopes';
+
 export interface PromptContext {
   readonly signal: AbortSignal;
   readonly [field: string]: unknown;
@@ -13,7 +15,7 @@ export interface PromptSection {
 
 export interface PromptPort {
   build(request: PromptContext): Promise<string>;
-  register(section: PromptSection): () => void;
+  register(section: PromptSection, scope?: ScopeKey): () => void;
 }
 
 declare module 'mini-harness/cordis' {

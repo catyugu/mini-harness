@@ -24,10 +24,10 @@ test('configured scopes share application resource owners', async (t) => {
   const session = root.harnessSessions.create({ workspaceId: workspace });
   const address = `session:${session.id}` as const;
 
-  for (const [name, service, description] of [
-    ['model-store', 'harnessModelStore', 'model store'],
-    ['sessions', 'harnessSessions', 'session registry'],
-    ['workspaces', 'harnessWorkspaces', 'workspace catalog'],
+  for (const [name, service] of [
+    ['model-store', 'harnessModelStore'],
+    ['sessions', 'harnessSessions'],
+    ['workspaces', 'harnessWorkspaces'],
   ] as const) {
     await assert.rejects(
       app.runtime.configuration.update({
@@ -38,7 +38,7 @@ test('configured scopes share application resource owners', async (t) => {
           },
         },
       }),
-      new RegExp(description + ' belongs to the application scope'),
+      /has been registered/,
     );
     assert.equal(root.harnessProfileScopes.context(address).get(service), root.get(service));
   }
@@ -670,7 +670,7 @@ export const apply = (ctx) => {
           }
         }
       };
-      ctx.provide('harnessLlm', { ...adapter, select: () => ({ ...adapter, matches: (candidate) => candidate === adapter }) });
+      ctx.provide('harnessLlm', { select: () => adapter, async countInputTokens() {}, async stream(request, emit) { for await (const event of adapter.stream(request)) emit(event); } });
     };
 `,
   );
@@ -798,19 +798,17 @@ test('Agent setup owns temporary tools and prompt sections and isolates sibling 
     'run-capabilities',
     {},
     `
+export const inject = ['harnessTools', 'harnessPrompt'];
 export function apply(ctx) {
-  ctx.on('agent/setup', (run, id) => {
-    const tools = run.get('harnessTools');
-    const prompt = run.get('harnessPrompt');
-    if (!tools || !prompt) throw new Error('Missing run services');
-    run.effect(() => tools.register({
+  ctx.on('agent/setup', (id, scope) => ctx.effect(function* () {
+    yield ctx.harnessTools.register({
       name: 'run_marker',
       description: 'A run-local tool',
       parameters: { type: 'object', properties: {} },
       async execute() { return { content: [{ type: 'text', text: id }] }; }
-    }));
-    run.effect(() => prompt.register({ id: 'run-marker', render: () => 'Run marker ' + id }));
-  });
+    }, scope);
+    yield ctx.harnessPrompt.register({ id: 'run-marker', render: () => 'Run marker ' + id }, scope);
+  }));
 }
 `,
   );

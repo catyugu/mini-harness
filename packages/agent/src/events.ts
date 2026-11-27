@@ -1,5 +1,5 @@
 import type { Context } from 'mini-harness/cordis';
-import { scopeTarget } from '@mini-harness/plugin-api/scopes';
+import { scopeTarget, type ScopeKey } from '@mini-harness/plugin-api/scopes';
 import type { AgentEvent, ModelFailure, ModelRetry } from './api.ts';
 import type { RecordPresentation, RecordPublisher } from '@mini-harness/sessions/display-record';
 import type { ModelChoice } from '@mini-harness/llm/vocabulary';
@@ -57,7 +57,11 @@ export type ToolResultTransform = Transform<ToolResult['content'], ToolResultCon
 declare module 'mini-harness/cordis' {
   interface Events {
     /** Configure capabilities owned by a single Agent run before its first step. */
-    'agent/setup'(ctx: Context, sessionId: string, signal: AbortSignal): void | Promise<void>;
+    'agent/setup'(
+      sessionId: string,
+      scope: ScopeKey,
+      signal: AbortSignal,
+    ): void | (() => void) | Promise<void | (() => void)>;
     /** Synchronous observer; presentations belong to the committed assistant message. */
     'agent/records'(event: AgentEvent, sink: RecordPublisher): readonly RecordPresentation[] | void;
     'agent/tool-result': ToolResultTransform;

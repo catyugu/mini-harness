@@ -6,13 +6,13 @@ import {
   type TaskContext,
   type TaskEvent,
   type TaskHandle,
+  type TaskHistoryRecord,
   type TaskOptions,
   type TaskOutput,
   type TaskPort,
   type TaskSnapshot,
 } from './api.ts';
 import { TaskOutputRing, readTaskOutput } from './output.ts';
-import { RecentTasks } from './history.ts';
 
 interface Entry {
   snapshot: TaskSnapshot;
@@ -30,7 +30,8 @@ const jsonData = <T>(value: T): T => (value === undefined ? value : JSON.parse(J
 
 export class TaskRuntime implements TaskPort {
   private readonly entries = new Map<string, Entry>();
-  private readonly recent = new RecentTasks();
+  private readonly recent = new Map<string, TaskHistoryRecord & { bytes: number }>();
+  private recentBytes = 0;
   private readonly listeners = new Set<(event: TaskEvent) => void>();
   private readonly removing = new Map<string, Promise<void>>();
   private closing = false;
@@ -65,14 +66,11 @@ export class TaskRuntime implements TaskPort {
       subscribe(listener) {
         const caller = Service.caller(this);
         const signal = caller.fiber.signal;
-        signal.throwIfAborted();
-        const dispose = runtime.subscribe(listener);
-        const unsubscribe = () => {
-          signal.removeEventListener('abort', unsubscribe);
-          dispose();
-        };
-        signal.addEventListener('abort', unsubscribe, { once: true });
-        return unsubscribe;
+        return caller.effect(() =>
+          runtime.subscribe((event) => {
+            if (!signal.aborted) listener(event);
+          }),
+        );
       },
       readOutput: runtime.readOutput.bind(runtime),
       removeOwner: runtime.removeOwner.bind(runtime),
@@ -219,10 +217,7 @@ export class TaskRuntime implements TaskPort {
         throw error;
       } finally {
         this.entries.delete(snapshot.id);
-        if (!committed) {
-          for (const removed of this.recent.add({ task: snapshot, output: entry.output?.read() }))
-            this.notify('deleted', removed);
-        }
+        if (!committed) this.remember({ task: snapshot, output: entry.output?.read() });
       }
       if (failure) throw reason;
       return value!;
@@ -272,6 +267,22 @@ export class TaskRuntime implements TaskPort {
     return handle;
   }
 
+  private remember(record: TaskHistoryRecord) {
+    const bytes = Buffer.byteLength(JSON.stringify(record));
+    this.recent.set(record.task.id, { ...record, bytes });
+    this.recentBytes += bytes;
+    for (const recent of this.recent.values()) {
+      if (this.recent.size <= 256 && this.recentBytes <= 16 * 1024 * 1024) break;
+      this.forget(recent);
+    }
+  }
+
+  private forget({ task, bytes }: TaskHistoryRecord & { bytes: number }) {
+    this.recent.delete(task.id);
+    this.recentBytes -= bytes;
+    this.notify('deleted', task);
+  }
+
   private assertWait(waiter: Entry, target: string) {
     for (let id: string | undefined = target; id; id = this.entries.get(id)?.waitingFor)
       if (id === waiter.snapshot.id) throw new Error('Circular task wait');
@@ -284,7 +295,10 @@ export class TaskRuntime implements TaskPort {
   }
 
   list(owner?: string | ReadonlySet<string>) {
-    return [...Array.from(this.entries.values(), ({ snapshot }) => snapshot), ...this.recent.snapshots()]
+    return [
+      ...Array.from(this.entries.values(), ({ snapshot }) => snapshot),
+      ...Array.from(this.recent.values(), ({ task }) => task),
+    ]
       .filter((task) => (typeof owner === 'string' ? task.owner === owner : (owner?.has(task.owner) ?? true)))
       .map(clone);
   }
@@ -357,7 +371,7 @@ export class TaskRuntime implements TaskPort {
     const operation = Promise.resolve()
       .then(async () => {
         await this.drain(this.owned(owner));
-        for (const task of this.recent.remove((task) => task.owner === owner)) this.notify('deleted', task);
+        for (const recent of this.recent.values()) if (recent.task.owner === owner) this.forget(recent);
       })
       .finally(() => this.removing.delete(owner));
     this.removing.set(owner, operation);
