@@ -310,7 +310,7 @@ test(
       .log(childId)
       .projection()
       .timeline.filter(isViewMessage)
-      .filter(({ role }) => role === 'user');
+      .filter((message) => message.role === 'user');
     assert.equal(childInputs.length, 2);
     assert.ok(
       childInputs.every(
@@ -321,7 +321,7 @@ test(
       .log(parent.id)
       .projection()
       .timeline.filter(isViewMessage)
-      .filter(({ role }) => role === 'user');
+      .filter((message) => message.role === 'user');
     assert.equal(parentInputs.length, 2);
     assert.ok(
       parentInputs.every(

@@ -605,7 +605,7 @@ export const apply = (ctx) => { ctx.provide('harnessProcess', processProvider('s
         .log(id)
         .projection()
         .timeline.filter(isViewMessage)
-        .filter(({ role }) => role === 'toolResult')
+        .filter((message) => message.role === 'toolResult')
         .at(-1),
       'tool result',
     );
@@ -730,7 +730,7 @@ export const apply = (ctx) => {
       .log(parent.id)
       .projection()
       .timeline.filter(isViewMessage)
-      .filter(({ role }) => role === 'toolResult')
+      .filter((message) => message.role === 'toolResult')
       .every(({ toolState }) => toolState === 'finished'),
   );
   assert.deepEqual(app.runtime.plugins.ctx.harnessModelPreference.recent(), applicationChoice);

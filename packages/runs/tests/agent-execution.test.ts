@@ -600,6 +600,7 @@ test('steering accepts off, skips deterministic failures and resets incompatible
     log
       .projection()
       .timeline.filter(isViewMessage)
+      .filter((message) => message.role === 'toolResult')
       .find(({ toolCallId }) => toolCallId === 'steered-call')?.toolState,
     'skipped',
   );
