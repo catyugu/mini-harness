@@ -26,7 +26,7 @@ const plugin: Plugin.Object = {
   inject: ['harnessLlm'],
   provide: ['harnessAgent'],
   apply(ctx) {
-    ctx.on('agent/records', reasoningRecords);
+    ctx.on('agent/records', reasoningRecords());
     ctx.provide(
       'harnessAgent',
       new AgentLoop(() => (ctx.fiber.effectiveConfig as { maxTurns: number }).maxTurns),

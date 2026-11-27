@@ -15,9 +15,9 @@ export class ToolRegistry {
   service(): ToolPort {
     const registry = this;
     return Service.track<ToolPort>({
-      register(definition) {
-        const context = Service.caller(this);
-        return registry.register(definition, { context, scope: scopeOf(context) });
+      register(definition, provider) {
+        const caller = Service.caller(this);
+        return registry.register(definition, { context: provider ?? caller, scope: scopeOf(caller) });
       },
       list(selection) {
         const caller = Service.caller(this);
@@ -28,16 +28,15 @@ export class ToolRegistry {
 
   register(
     definition: ToolDefinition | ToolFactory,
-    { context: owner, scope }: { context?: Context; scope?: ScopeKey } = {},
+    { context: owner, scope }: { context: Context; scope?: ScopeKey },
   ) {
     const { name } = definition;
     const factory = 'resolve' in definition ? definition : undefined;
     if (!toolNamePattern.test(name)) throw new Error('Invalid tool name: ' + name);
     const lifetime = new AbortController();
-    const active = new Set<Promise<unknown>>();
+    const activation = owner.fiber.signal;
     const registry = this;
-    const unavailable = () => new Error('Tool is no longer available: ' + name);
-    const expired = () => lifetime.signal.aborted || owner?.fiber.signal.aborted === true;
+    const expired = () => lifetime.signal.aborted || activation.aborted;
     const entry: ToolRegistration = {
       name,
       visible: (resourceId) =>
@@ -50,20 +49,14 @@ export class ToolRegistry {
         return bindTool(tool, {
           provider: owner,
           signal: lifetime.signal,
-          track(work) {
-            active.add(work);
-            const done = () => active.delete(work);
-            void work.then(done, done);
-          },
           available: () => registry.selected(name, selection) === entry,
         });
       },
     };
     const remove = this.tools.add(scope, name, entry);
-    return async () => {
+    return () => {
       remove();
-      lifetime.abort(new DOMException(unavailable().message, 'AbortError'));
-      await Promise.allSettled(active);
+      lifetime.abort(new DOMException('Tool is no longer available: ' + name, 'AbortError'));
     };
   }
 

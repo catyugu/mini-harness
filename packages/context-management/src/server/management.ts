@@ -51,20 +51,13 @@ export class ContextManagement {
 
   private model(choice: LlmRequest['model']) {
     const capability = this.models.capabilities(choice);
-    const adapter = this.llm.select(choice);
-    if (!capability || !adapter)
+    if (!capability || !this.llm.select(choice))
       throw new DomainError('invalid_input', 'Model capability or adapter unavailable: ' + choice.id);
-    return { capability, adapter };
+    return capability;
   }
 
   private measure(log: SessionLogPort, request: LlmRequest) {
-    const { capability, adapter } = this.model(request.model);
-    return measure(
-      request,
-      capability,
-      adapter,
-      adapter.countInputTokens ? 1 : calibration(log, request.model),
-    );
+    return measure(request, this.model(request.model), this.llm, () => calibration(log, request.model));
   }
 
   private async replace(
@@ -113,10 +106,8 @@ export class ContextManagement {
     const desired = target - fixed - retained;
     const checkpointTarget = desired > 0 ? Math.min(desired, available) : available;
     const { model } = selectModel(this.models, { explicit: settings.summaryModel ?? request.model });
-    const { capability, adapter } = this.model(model);
-    const scale = adapter.countInputTokens ? 1 : calibration(log, model);
-    const currentModel = this.model(request.model);
-    const currentScale = currentModel.adapter.countInputTokens ? 1 : calibration(log, request.model);
+    const capability = this.model(model);
+    let scale: number | undefined;
     const summaryRequest: LlmRequest = {
       model,
       systemPrompt:
@@ -131,7 +122,7 @@ export class ContextManagement {
     const summary = await checkpoint(
       summaryRequest,
       capability,
-      adapter,
+      this.llm,
       messages.slice(0, cut).map((message, index) => offloadMessage(message, contextEntryIds[index])),
       async (outgoing) => {
         validateRequestSnapshot(outgoing);
@@ -143,14 +134,9 @@ export class ContextManagement {
           },
         });
       },
-      scale,
+      () => (scale ??= calibration(log, model)),
     );
-    const next = await measure(
-      await rebuild([summary, ...kept]),
-      currentModel.capability,
-      currentModel.adapter,
-      currentScale,
-    );
+    const next = await this.measure(log, await rebuild([summary, ...kept]));
     validateRequestSnapshot(next);
     request.signal.throwIfAborted();
     if (totalTokens(next.inputMeasurement) >= totalTokens(counts)) return;

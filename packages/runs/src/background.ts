@@ -3,11 +3,58 @@ import { Type } from 'typebox';
 import { DomainError } from '@mini-harness/platform/errors';
 import { terminal, type TaskData, type TaskSnapshot } from '@mini-harness/tasks/api';
 import { defineTool, type ToolResult } from '@mini-harness/tools/api';
-import { invokeTool, prepareTool, withToolLease } from '@mini-harness/tools/invocation';
+import { executePreparedTool, prepareTool } from '@mini-harness/tools/invocation';
 import { conversationTools } from './tool-selection.ts';
-import { backgroundTool, relatedTask, relatedTasks } from './related-tasks.ts';
 
 export const metadata = { title: 'Background tasks' };
+
+const backgroundTool = 'background-tool';
+
+function relatedSessions(ctx: Context, id: string, includeChildren = true): [string, string][] {
+  return [
+    [id, backgroundTool],
+    ...(includeChildren
+      ? ctx.harnessSessions
+          .list()
+          .filter(({ parentId }) => parentId === id)
+          .map(({ id }): [string, string] => [id, 'agent-run'])
+      : []),
+  ];
+}
+
+function relatedTasks(ctx: Context, id: string, includeChildren = true, detail = false) {
+  const scopes = relatedSessions(ctx, id, includeChildren);
+  const live = ctx.harnessTasks.list(new Set(scopes.map(([id]) => 'session:' + id)));
+  const types = new Map(scopes);
+  const matching = live.filter((task) => task.type === types.get(task.owner.slice('session:'.length)));
+  const skip = new Set(matching.map((task) => task.id));
+  const ended = scopes
+    .flatMap(([session, type]) => ctx.harnessSessions.tasks(session, type, 50, skip))
+    .filter((task) => terminal(task.state));
+  const newest = (a: { createdAt: string }, b: { createdAt: string }) =>
+    b.createdAt.localeCompare(a.createdAt);
+  return [
+    ...matching.filter((task) => !terminal(task.state)).sort(newest),
+    ...ended
+      .concat(matching.filter((task) => terminal(task.state)))
+      .sort(newest)
+      .slice(0, 50)
+      .map((task) => {
+        if (!detail || skip.has(task.id)) return task;
+        const record = ctx.harnessSessions.taskStatus(task.owner.slice('session:'.length), task.id);
+        if (!record) throw new Error('Missing indexed task: ' + task.id);
+        return record;
+      }),
+  ];
+}
+
+function relatedTask(ctx: Context, id: string, taskId: string) {
+  const live = ctx.harnessTasks.get(taskId);
+  for (const [session, type] of relatedSessions(ctx, id)) {
+    const task = live ?? ctx.harnessSessions.taskStatus(session, taskId, false);
+    if (task?.owner === 'session:' + session && task.type === type) return task;
+  }
+}
 
 function writableToolResult(result: ToolResult) {
   return {
@@ -17,7 +64,7 @@ function writableToolResult(result: ToolResult) {
 }
 
 function sendNotice(ctx: Context, id: string, taskId: string, name: string, message: string, key: string) {
-  if (ctx.harnessTasks.sealed || !ctx.harnessSessions.get(id)) return;
+  if (ctx.fiber.signal.aborted || ctx.harnessTasks.sealed || !ctx.harnessSessions.get(id)) return;
   ctx.harnessSessions.assertAvailable(id);
   ctx.harnessRuns.send(id, {
     message: name + ': ' + message,
@@ -46,48 +93,48 @@ function start(ctx: Context, id: string, name: string, args: Record<string, unkn
   );
   if (!tool?.background) throw new Error('Tool does not support background execution: ' + name);
   const prepared = prepareTool(tool, args);
-  let taskId: string | undefined;
-  withToolLease(prepared, (lifetime, owner) => {
-    const task = ctx.harnessTasks.start(
-      {
-        ...service.task(id),
-        type: backgroundTool,
-        name: tool.label ?? tool.name,
-        metadata: { tool: name, arguments: prepared.args as TaskData },
-        provider: owner ?? ctx,
-        signal: lifetime,
-        project: (result: ToolResult) =>
-          ({
-            ...(tool.projectResult?.(result) ?? writableToolResult(result)),
-            isError: Boolean(result.isError || result.outcome),
-          }) as TaskData,
-      },
-      (task) => {
-        service.assertAvailable(id);
-        if (provider.get('harnessToolPolicy')?.(id, tool) === false)
-          throw new Error('Tool denied by conversation policy: ' + name);
-        let reports = 0;
-        return invokeTool(prepared, callId, {
-          signal: task.signal,
-          onUpdate: (update) => task.update(update as TaskData),
-          write: task.write,
-          report: (message) => sendNotice(ctx, id, task.id, name, message, 'report:' + ++reports),
-          waitFor: async (id, signal) => {
-            await task.waitFor(id, signal);
-          },
-        });
-      },
-    );
-    taskId = task.id;
-    return task.result;
-  });
-  return { taskId: taskId!, state: 'accepted' };
+  if (!prepared.binding) throw new Error('Background tool has no registered provider: ' + name);
+  const task = ctx.harnessTasks.start(
+    {
+      ...service.task(id),
+      type: backgroundTool,
+      name: tool.label ?? tool.name,
+      metadata: { tool: name, arguments: prepared.args as TaskData },
+      provider: prepared.binding.provider,
+      signal: prepared.binding.signal,
+      project: (result: ToolResult) =>
+        ({
+          ...(tool.projectResult?.(result) ?? writableToolResult(result)),
+          isError: Boolean(result.isError || result.outcome),
+        }) as TaskData,
+    },
+    (task) => {
+      service.assertAvailable(id);
+      if (provider.get('harnessToolPolicy')?.(id, tool) === false)
+        throw new Error('Tool denied by conversation policy: ' + name);
+      let reports = 0;
+      return executePreparedTool(prepared, callId, {
+        signal: task.signal,
+        onUpdate: (update) => task.update(update as TaskData),
+        write: task.write,
+        report: (message) => sendNotice(ctx, id, task.id, name, message, 'report:' + ++reports),
+        waitFor: async (id, signal) => {
+          await task.waitFor(id, signal);
+        },
+      });
+    },
+  );
+  return { taskId: task.id, state: 'accepted' };
 }
 
 const plugin: Plugin.Object = {
   inject: ['harnessTasks', 'harnessTools', 'harnessSessions', 'harnessRuns', 'harnessProfileScopes'],
   apply(ctx) {
     const tasks = ctx.harnessTasks;
+    const sessions = ctx.harnessSessions;
+    const output = (task: TaskSnapshot, cursor?: number) =>
+      tasks.readOutput(task.id, cursor) ??
+      sessions.taskOutput(task.owner.slice('session:'.length), task.id, cursor);
     const json = (data: unknown) => ({ content: [{ type: 'text' as const, text: JSON.stringify(data) }] });
     ctx.effect(() =>
       ctx.harnessTools.register({
@@ -131,13 +178,17 @@ const plugin: Plugin.Object = {
               if (action === 'list') return json(relatedTasks(ctx, id).map(({ result: _, ...task }) => task));
               const task = taskId && relatedTask(ctx, id, taskId);
               if (!task) throw new DomainError('not_found', 'Task not found');
-              if (action === 'output') return json(tasks.readOutput(task.id, cursor));
+              if (action === 'output') return json(output(task, cursor));
               if (action === 'cancel') tasks.cancel(task.id);
-              if (action === 'wait' && !terminal(task.state)) {
+              if (action === 'wait' && tasks.get(task.id) && !terminal(task.state)) {
                 if (waitFor) await waitFor(task.id);
                 else await tasks.wait(task.id, signal);
               }
-              return json(tasks.get(task.id) ?? task);
+              return json(
+                tasks.get(task.id) ??
+                  sessions.taskStatus(task.owner.slice('session:'.length), task.id) ??
+                  task,
+              );
             },
           }),
       }),
@@ -149,18 +200,13 @@ const plugin: Plugin.Object = {
       }),
     );
     ctx.on('harness/start', () => {
-      for (const { id } of ctx.harnessSessions.list()) {
-        const records = ctx.harnessSessions.inspectLog(id, (log) => log.entries());
-        const ids = new Set(
-          records?.flatMap((entry) =>
-            entry.type === 'task' && entry.task.type === backgroundTool ? [entry.task.id] : [],
-          ),
-        );
-        for (const id of ids) {
-          const task = tasks.get(id);
-          if (task && terminal(task.state)) settled(ctx, task);
-        }
-      }
+      for (const { id } of sessions.list())
+        for (const task of sessions.tasks(id, backgroundTool))
+          if (terminal(task.state) && !sessions.hasInbox(id, task.id + ':settled')) {
+            const record = sessions.taskStatus(id, task.id);
+            if (!record) throw new Error('Missing indexed task: ' + task.id);
+            settled(ctx, record);
+          }
     });
     ctx.inject(['harnessRoutes', 'harnessChanges'], (web) => {
       const changes = web.harnessChanges;
@@ -172,7 +218,7 @@ const plugin: Plugin.Object = {
       );
       const route = '/api/sessions/:id/tasks';
       web.effect(() =>
-        web.harnessRoutes.register('GET', route, ({ params }) => relatedTasks(ctx, params.id, false)),
+        web.harnessRoutes.register('GET', route, ({ params }) => relatedTasks(ctx, params.id, false, true)),
       );
       web.effect(() =>
         web.harnessRoutes.register('GET', route + '/:task/output', ({ params, url }) => {
@@ -181,7 +227,7 @@ const plugin: Plugin.Object = {
           const cursor = Number(url.searchParams.get('after') ?? 0);
           if (!Number.isSafeInteger(cursor) || cursor < 0)
             throw new DomainError('invalid_input', 'Invalid cursor');
-          return tasks.readOutput(task.id, cursor);
+          return output(task, cursor);
         }),
       );
       web.effect(() =>

@@ -17,6 +17,34 @@ const examples = fileURLToPath(new URL('../../docs/examples/', import.meta.url))
 function copyExample(directory: string, id: string) {
   cpSync(join(examples, id), join(directory, id), { recursive: true });
 }
+test('configured scopes share application resource owners', async (t) => {
+  const { app } = await fixture(t);
+  const root = app.runtime.plugins.ctx;
+  const workspace = root.harnessWorkspaces.defaultId!;
+  const session = root.harnessSessions.create({ workspaceId: workspace });
+  const address = `session:${session.id}` as const;
+
+  for (const [name, service] of [
+    ['model-store', 'harnessModelStore'],
+    ['sessions', 'harnessSessions'],
+    ['workspaces', 'harnessWorkspaces'],
+  ] as const) {
+    await assert.rejects(
+      app.runtime.configuration.update({
+        scopes: {
+          [address]: {
+            isolate: [service],
+            entries: { duplicate: { name: '@mini-harness/' + name, disabled: false } },
+          },
+        },
+      }),
+      /has been registered/,
+    );
+    assert.equal(root.harnessProfileScopes.context(address).get(service), root.get(service));
+  }
+  assert.equal(root.harnessSessions.get(session.id)?.workspaceId, workspace);
+});
+
 test('external services and their declared consumers compose through Cordis service ownership', async (t) => {
   const { paths, request } = await fixture(t);
   copyExample(paths.plugins, 'greeting-route');
@@ -642,7 +670,7 @@ export const apply = (ctx) => {
           }
         }
       };
-      ctx.provide('harnessLlm', { ...adapter, select: () => adapter });
+      ctx.provide('harnessLlm', { select: () => adapter, async countInputTokens() {}, async stream(request, emit) { for await (const event of adapter.stream(request)) emit(event); } });
     };
 `,
   );
@@ -763,7 +791,7 @@ export function apply(ctx) {
   assert.notEqual(await sendRun(root.harnessRuns, sibling.id, 'Default loop'), 'Custom answer');
 });
 
-test('Agent setup owns temporary tools and prompt sections and isolates sibling runs', async (t) => {
+test('Agent setup contributes to the Run’s resolved Tools and Prompt services', async (t) => {
   const { app, paths, mock, request } = await fixture(t);
   writePlugin(
     paths.plugins,
@@ -771,18 +799,17 @@ test('Agent setup owns temporary tools and prompt sections and isolates sibling 
     {},
     `
 export function apply(ctx) {
-  ctx.on('agent/setup', (run, id) => {
+  ctx.on('agent/setup', (run, id) => ctx.effect(function* () {
     const tools = run.get('harnessTools');
     const prompt = run.get('harnessPrompt');
-    if (!tools || !prompt) throw new Error('Missing run services');
-    run.effect(() => tools.register({
+    yield tools.register({
       name: 'run_marker',
       description: 'A run-local tool',
       parameters: { type: 'object', properties: {} },
       async execute() { return { content: [{ type: 'text', text: id }] }; }
-    }));
-    run.effect(() => prompt.register({ id: 'run-marker', render: () => 'Run marker ' + id }));
-  });
+    }, ctx);
+    yield prompt.register({ id: 'run-marker', render: () => 'Run marker ' + id }, ctx);
+  }));
 }
 `,
   );
@@ -792,7 +819,20 @@ export function apply(ctx) {
   assert.equal(configured.status, 200, JSON.stringify(configured.body));
   const root = app.runtime.plugins.ctx;
   const first = root.harnessSessions.create();
-  const second = root.harnessSessions.create();
+  const second = root.harnessSessions.create({ workspaceId: null });
+  const workspace = expectPresent(first.workspaceId, 'startup workspace');
+  const replaced = await request('/settings', 'PATCH', {
+    scopes: {
+      [`workspace:${workspace}`]: {
+        isolate: ['harnessTools', 'harnessPrompt'],
+        entries: {
+          tools: { name: '@mini-harness/tools', disabled: false },
+          prompt: { name: '@mini-harness/agent-prompt', disabled: false },
+        },
+      },
+    },
+  });
+  assert.equal(replaced.status, 200, JSON.stringify(replaced.body));
   await sendRun(root.harnessRuns, first.id, 'First run');
   assert.ok(
     !root.harnessTools
@@ -803,6 +843,7 @@ export function apply(ctx) {
   assert.match(JSON.stringify(mock.requests[0]), new RegExp('Run marker ' + first.id));
   assert.match(JSON.stringify(mock.requests[1]), new RegExp('Run marker ' + second.id));
   assert.doesNotMatch(JSON.stringify(mock.requests[1]), new RegExp('Run marker ' + first.id));
+  assert.match(JSON.stringify(mock.requests[0].tools), /run_marker/);
 });
 
 test('existing sessions inherit workspace contributions after the workspace plugin is reactivated', async (t) => {

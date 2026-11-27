@@ -138,7 +138,7 @@ export class PluginHost implements ProfileScopes, ProfileConfigurationPort {
     }, signal);
   }
 
-  forgetScopes(keys: ScopeAddress[]) {
+  forgetScopes(keys: ScopeAddress[], signal?: AbortSignal) {
     return this.enqueue(async () => {
       const released = new Set(keys);
       const scopes = { ...this.settings.scopes };
@@ -146,7 +146,7 @@ export class PluginHost implements ProfileScopes, ProfileConfigurationPort {
       const next = { ...this.settings, scopes };
       await this.apply(next, false, released);
       if (released.size) removeScopeData(join(dirname(this.directory), 'plugin-data'), released);
-    });
+    }, signal);
   }
 
   private writePlugin(

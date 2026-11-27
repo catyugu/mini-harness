@@ -4,7 +4,7 @@ import { ToolRegistry } from './registry.ts';
 
 export const metadata: PluginInfo = {
   title: 'Tools',
-  description: 'Tool registration and execution leases',
+  description: 'Scoped tool registration and execution',
 };
 
 const plugin: Plugin.Object = {

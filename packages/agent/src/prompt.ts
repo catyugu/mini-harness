@@ -5,10 +5,11 @@ import type { PromptPort, PromptContext, PromptSection } from './prompt-api.ts';
 export class Prompt implements PromptPort {
   private readonly sections = new ScopedLayers<{ context: Context; section: PromptSection }>();
 
-  register(section: PromptSection) {
-    const context = Service.caller(this);
+  register(section: PromptSection, provider?: Context) {
+    const caller = Service.caller(this);
+    const context = provider ?? caller;
     const { id, order = 500, priority = 0, render } = section;
-    return this.sections.add(scopeOf(context), context.fiber.uid + '/' + id, {
+    return this.sections.add(scopeOf(caller), context.fiber.uid + '/' + id, {
       context,
       section: { id, order, priority, render },
     });

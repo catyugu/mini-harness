@@ -240,17 +240,16 @@ export class SessionRun {
     let attemptsRecorded = false;
     let modelStep = 0;
     const publisher = recordPublisher(emit);
-    const observers = ctx.events
-      .listeners('agent/records', scopeTarget(ctx))
-      .map(({ callback }) => callback(publisher));
+    const target = scopeTarget(ctx);
+    const toolTransforms = () => ctx.events.listeners('agent/tool-result', target);
     const answer = await requireService(ctx, 'harnessAgent')
       .run(ctx, {
         signal,
         retry: modelRetry(ctx, id),
         onEvent: (event) => {
           const displays: RecordPresentation[] = [];
-          for (const observe of observers) {
-            const contribution = observe(event);
+          for (const { callback } of ctx.events.listeners('agent/records', target)) {
+            const contribution = callback(event, publisher);
             if (!contribution?.length) continue;
             if (event.type !== 'assistant')
               throw new Error('Record presentations require a committed assistant message');
@@ -307,19 +306,19 @@ export class SessionRun {
           const step: StepContext = { sessionId: id, turn, cwd, model, signal };
           const executor = requireService(ctx, 'harnessToolExecutor');
           const { tools: advertisedTools, assemble } = await this.requestBuilder(ctx, step, log);
-          const prepareHooks = ctx.events.listeners('agent/prepare-request', scopeTarget(ctx));
+          const prepareHooks = ctx.events.listeners('agent/prepare-request', target);
           if (failure && !prepareHooks.length) return;
           const initial = await assemble(log.context().contextMessages);
-          const request = await applyTransforms(prepareHooks, initial, {
+          const prepared = await applyTransforms(prepareHooks, initial, {
             ...step,
+            context: ctx,
             runId: submissionId,
             failure,
             rebuild: assemble,
           });
-          if (failure && request === initial) return;
-          const hooks = ctx.events.listeners('agent/tool-result', scopeTarget(ctx));
+          if (failure && prepared === initial) return;
           return {
-            request,
+            request: { ...prepared, signal },
             executor,
             tools: advertisedTools,
             execution: {
@@ -344,14 +343,15 @@ export class SessionRun {
                 return undefined;
               },
               update(call, value) {
-                if (value.state === undefined && hooks.length) return;
+                const transform = toolTransforms().length > 0;
+                if (value.state === undefined && transform) return;
                 emit({
                   type: 'tool',
                   id: call.id,
                   name: call.name,
                   state: value.state ?? 'running',
                   arguments: call.arguments,
-                  content: hooks.length ? undefined : value.content,
+                  content: transform ? undefined : value.content,
                 });
               },
               write(call, text, channel) {
@@ -359,6 +359,7 @@ export class SessionRun {
               },
             },
             async deliver(output, toolSignal, call) {
+              const hooks = toolTransforms();
               let executionId: string | undefined;
               let transformError: Error | undefined;
               if (toolResultState(output) === 'finished' && hooks.length) {
@@ -444,17 +445,17 @@ export class SessionRun {
       (await ctx.get('harnessPrompt')?.build({ sessionId, cwd, tools: metadata, signal })) ?? '';
     return {
       tools: advertised,
-      assemble: (messages: LlmRequest['messages']) =>
+      assemble: (messages: LlmRequest['messages'], requestSignal = signal) =>
         this.prepareRequest(
           ctx,
-          step,
+          { ...step, signal: requestSignal },
           { systemPrompt, messages, thinkingLevel: log.context().thinkingLevel },
           (content) => {
             for (const [name, tool] of advertised) if (!toolAvailable(tool)) advertised.delete(name);
             const schemas = metadata
               .filter(({ name }) => advertised.has(name))
               .map(({ name, description, parameters }) => ({ name, description, parameters }));
-            return executor.present(content, schemas, { model, turn: step.turn, signal });
+            return executor.present(content, schemas, { model, turn: step.turn, signal: requestSignal });
           },
         ),
     };

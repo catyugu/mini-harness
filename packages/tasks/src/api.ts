@@ -98,22 +98,18 @@ export interface TaskHistoryRecord {
   output?: TaskOutput;
 }
 
-export type TaskHistoryReader = (id: string) => TaskHistoryRecord | undefined;
-
 export interface TaskPort {
   readonly sealed: boolean;
   active(lane: string): TaskHandle | undefined;
   start<T>(options: TaskOptions<T>, execute: (context: TaskContext) => Promise<T>): TaskHandle<T>;
   get(id: string): TaskSnapshot | undefined;
-  /** Active tasks and bounded recent history; older durable records remain queryable by ID. */
-  list(owner?: string): TaskSnapshot[];
+  /** Live tasks and bounded recent observations of tasks without a durable commit. */
+  list(owner?: string | ReadonlySet<string>): TaskSnapshot[];
   cancel(id: string, reason?: unknown): boolean;
   wait(id: string, signal?: AbortSignal): Promise<TaskSnapshot>;
   subscribe(listener: (event: TaskEvent) => void): () => void;
   readOutput(id: string, after?: number): TaskOutput | undefined;
-  /** Register a read-only source of durable observations, not live handles. */
-  registerHistory(reader: TaskHistoryReader): () => void;
-  /** Exclude new work during removal, drain tasks and delete their history. The domain owns resource existence. */
+  /** Exclude new work during removal, drain tasks and discard their recent observations. The domain owns resource existence. */
   removeOwner(owner: string): Promise<void>;
 }
 

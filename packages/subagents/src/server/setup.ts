@@ -119,16 +119,16 @@ export function setup(ctx: Context) {
   ctx.on('harness/start', () => {
     for (const { id, parentId } of sessions.list()) {
       if (!parentId) continue;
-      const entries = sessions.inspectLog(id, (log) => log.entries());
-      const ids = new Set(
-        entries?.flatMap((entry) =>
-          entry.type === 'task' && entry.task.type === 'agent-run' ? [entry.task.id] : [],
-        ),
-      );
-      for (const id of ids) {
-        const task = tasks.get(id);
-        if (task && terminal(task.state)) notify(task);
-      }
+      for (const task of sessions.tasks(id, 'agent-run'))
+        if (
+          terminal(task.state) &&
+          task.metadata?.reportToParent &&
+          !sessions.hasInbox(parentId, task.id + ':settled')
+        ) {
+          const record = sessions.taskStatus(id, task.id);
+          if (!record) throw new Error('Missing indexed task: ' + task.id);
+          notify(record);
+        }
     }
   });
 }

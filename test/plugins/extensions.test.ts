@@ -596,15 +596,18 @@ export function apply(ctx) {
   assert.equal(ctx.harnessModels.resolve(model), undefined);
   assert.equal(ctx.harnessModels.capabilities(model), undefined);
   assert.equal(ctx.harnessLlm.select(model), null);
-  await assert.rejects(async () => {
-    for await (const _ of ctx.harnessLlm.stream({
-      model,
-      messages: [],
-      systemPrompt: '',
-      signal: new AbortController().signal,
-    }))
-      assert.fail('An ambiguous model must not stream');
-  }, /Multiple model adapters/);
+  await assert.rejects(
+    ctx.harnessLlm.stream(
+      {
+        model,
+        messages: [],
+        systemPrompt: '',
+        signal: new AbortController().signal,
+      },
+      () => assert.fail('An ambiguous model must not stream'),
+    ),
+    /Multiple model adapters/,
+  );
   await toggle('model-tie', true);
   assert.equal(list()[0]?.name, 'model-high');
   await toggle('model-high', true);
@@ -673,3 +676,67 @@ export async function apply(ctx) {
   assert.equal(ctx.harnessModels.resolve(model), undefined);
   assert.deepEqual(ctx.harnessModelPreference.recent(), { provider: '', id: '' });
 });
+
+test(
+  'unloading a streaming adapter closes the iterator before its resources',
+  { timeout: 5000 },
+  async (t) => {
+    const { app } = await fixture(t);
+    const ctx = app.runtime.plugins.ctx;
+    let enterCleanup!: () => void;
+    let releaseCleanup!: () => void;
+    const cleaning = new Promise<void>((resolve) => {
+      enterCleanup = resolve;
+    });
+    const hold = new Promise<void>((resolve) => {
+      releaseCleanup = resolve;
+    });
+    let released = false;
+    const model = { provider: 'stream-lifetime', id: 'test' };
+    const fiber = ctx.inject(['harnessLlm'], (plugin) => {
+      plugin.effect(() => () => {
+        released = true;
+      });
+      plugin.effect(() =>
+        plugin.harnessLlm.register({
+          accepts: (choice) => choice.provider === model.provider,
+          async *stream({ signal }) {
+            try {
+              yield { type: 'text-delta', text: 'partial' };
+              signal.throwIfAborted();
+              await new Promise<void>((_, reject) => {
+                signal.addEventListener('abort', () => reject(signal.reason), { once: true });
+              });
+            } finally {
+              enterCleanup();
+              await hold;
+            }
+          },
+        }),
+      );
+    });
+    await fiber;
+    let received!: (event: unknown) => void;
+    const firstEvent = new Promise<unknown>((resolve) => {
+      received = resolve;
+    });
+    const settled = assert.rejects(
+      ctx.harnessLlm.stream(
+        { model, messages: [], systemPrompt: '', signal: new AbortController().signal },
+        received,
+      ),
+      { name: 'AbortError' },
+    );
+    assert.deepEqual(await firstEvent, { type: 'text-delta', text: 'partial' });
+    const unloading = fiber.dispose();
+    try {
+      await cleaning;
+      assert.equal(released, false);
+    } finally {
+      releaseCleanup();
+    }
+    await unloading;
+    assert.equal(released, true);
+    await settled;
+  },
+);

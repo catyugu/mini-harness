@@ -28,7 +28,7 @@ const receipt = ctx.harnessRuns.send(sessionId, {
 
 ## Record publication
 
-Runs owns volatile record updates and their ordered replay. Plugins obtain `liveRecords(sessionId, runId)` and use its `set`, channel `append` and `remove` operations with stable record IDs. A committed Session display record with the same ID replaces its live counterpart. The producer defines the record's meaning and renderer; Runs does not interpret its channels. The `agent/records` hook supplies the same publication mechanism to observers of raw Agent events.
+Runs owns volatile record updates and their ordered replay. Plugins obtain `liveRecords(sessionId, runId)` and use its `set`, channel `append` and `remove` operations with stable record IDs. A committed Session display record with the same ID replaces its live counterpart. The producer defines the record's meaning and renderer; Runs does not interpret its channels. Runs dispatches `agent/records` to active contributors for each native Agent event. `runTask(provider, id, type, work)` schedules independent work in the conversation lane under the Fiber that implements it.
 
 Foreground tool output is streamed in named channels. Runs owns the bounded active output snapshot and publishes incremental output events; the durable tool result remains the final history source. File-changing plugins report paths using `recordChange` for the matching execution rather than requiring Runs to interpret tool result metadata.
 

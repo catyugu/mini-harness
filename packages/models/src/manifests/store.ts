@@ -1,5 +1,6 @@
 import type { Plugin } from 'mini-harness/cordis';
 import type { PluginInfo } from '@mini-harness/plugin-api/descriptor';
+import { applicationResources } from '@mini-harness/plugin-api/scopes';
 import { ModelStore } from '../server/store.ts';
 
 export const metadata: PluginInfo = {
@@ -18,9 +19,11 @@ const plugin: Plugin.Object = {
       },
       (error) => ctx.logger.warn(String(error)),
     );
-    ctx.effect(() => () => store.close());
+    ctx.effect(function* () {
+      yield applicationResources(ctx).provide('harnessModelStore', store);
+      yield () => store.close();
+    });
     await store.refresh();
-    ctx.provide('harnessModelStore', store);
   },
 };
 

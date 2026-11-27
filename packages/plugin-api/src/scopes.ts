@@ -57,6 +57,11 @@ export function scopeOf(ctx: Context): ScopeKey | undefined {
   return (ctx as Context & { [scopeTag]?: ScopeKey })[scopeTag];
 }
 
+/** Provide application resources in the application's service slots, with the declaring Fiber as owner. */
+export function applicationResources(ctx: Context) {
+  return ctx.extend({ [Context.isolate]: ctx[Context.root][Context.isolate] });
+}
+
 /** Route to unscoped listeners and listeners on the target's ancestry. */
 export function scopeTarget(base: Context, key = scopeOf(base)) {
   const filter = base[Context.filter];

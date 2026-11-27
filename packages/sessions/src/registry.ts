@@ -1,9 +1,7 @@
 import { displayRecords } from './projection.ts';
 import type { RecordAppend } from './shared/display-record.ts';
 import { userContent } from './user-content.ts';
-import type { RunInfo } from './shared/run-state.ts';
-import { runFromEntry } from './log-api.ts';
-import type { SessionEntry, SessionLogPort, SessionLogReader } from './log-api.ts';
+import type { SessionEntry, SessionEvent, SessionLogPort, SessionLogReader } from './log-api.ts';
 import { DomainError } from '@mini-harness/platform/errors';
 import { randomUUID } from 'node:crypto';
 import { lstatSync, unlinkSync } from 'node:fs';
@@ -12,8 +10,8 @@ import { writeJson } from '@mini-harness/platform/json';
 import type { Paths } from '@mini-harness/platform/runtime-paths';
 import type { WorkspacePort } from '@mini-harness/workspaces/api';
 import type { RecordOwner, SessionRecords, SessionStore } from './records.ts';
-import type { TaskOptions } from '@mini-harness/tasks/api';
-import { readTaskHistory } from './task-history.ts';
+import type { TaskOptions, TaskSnapshot } from '@mini-harness/tasks/api';
+import { readTaskOutput } from '@mini-harness/tasks/output';
 import {
   createScopeKey,
   scopeParentOf,
@@ -23,8 +21,8 @@ import {
 import type { ScopeAddress } from '@mini-harness/plugin-api/configuration';
 import type { CapabilityObservation } from '@mini-harness/plugin-api/observations';
 import type { ConversationPermission, SessionRecord } from './shared/identity.ts';
-import { advancesBranch, SessionLog } from './log.ts';
-import { syncDirectory } from './record-log.ts';
+import { advancesBranch, SessionLog, type LogIndex } from './log.ts';
+import { readRecordAt, syncDirectory, type RecordAddress } from './record-log.ts';
 import { loadCatalog, type CatalogState } from './catalog.ts';
 import {
   attachmentDirectory,
@@ -48,8 +46,7 @@ export class SessionRegistry implements SessionStore {
   private readonly participants = new Set<Participant>();
   private readonly logs = new Map<string, SessionLog>();
   private readonly runtimeScopes: Map<string, ScopeKey>;
-  private readonly latestRuns = new Map<string, RunInfo>();
-  private readonly taskOwners = new Map<string, string>();
+  private readonly indexes = new Map<string, { projection: LogIndex; record: SessionRecord }>();
   private readonly logErrors = new Map<string, string>();
   private closing = false;
   private pendingDeletion = Promise.resolve();
@@ -257,7 +254,7 @@ export class SessionRegistry implements SessionStore {
   }
 
   runSummary(id: string) {
-    const run = this.latestRuns.get(id);
+    const run = this.indexes.get(id)?.projection.run;
     return run && structuredClone(run);
   }
 
@@ -281,9 +278,6 @@ export class SessionRegistry implements SessionStore {
     const { id } = record;
     const writable = mode !== 'read';
     const onChange = (entry: SessionEntry) => {
-      if (entry.type === 'task') this.taskOwners.set(entry.task.id, id);
-      const run = runFromEntry(id, entry);
-      if (run) this.latestRuns.set(id, run);
       const inbox = entry.type.startsWith('inbox-');
       if (inbox || (entry.type === 'message' && entry.inboxId)) this.notify(id, false, true);
       if (!inbox && entry.type !== 'model-request' && entry.type !== 'tool-schema')
@@ -310,16 +304,13 @@ export class SessionRegistry implements SessionStore {
         !writable,
         (error) => {
           if (this.logs.get(id) === log) this.logs.delete(id);
-          this.latestRuns.delete(id);
+          this.indexes.delete(id);
           this.fault(id, error);
         },
       );
       if (writable) {
+        this.indexes.set(id, { projection: log.index, record });
         log.recover();
-        for (const entry of log.entries()) if (entry.type === 'task') this.taskOwners.set(entry.task.id, id);
-        const run = log.latestRun;
-        if (run) this.latestRuns.set(id, run);
-        else this.latestRuns.delete(id);
         if (this.logErrors.delete(id)) this.notify(id);
       }
       return log;
@@ -348,9 +339,68 @@ export class SessionRegistry implements SessionStore {
     };
   }
 
-  taskHistory(id: string) {
-    const owner = this.taskOwners.get(id);
-    if (owner) return this.inspectLog(owner, (log) => readTaskHistory(log.entries(), id));
+  tasks(sessionId: string, type?: string, limit = Infinity, exclude?: ReadonlySet<string>) {
+    const index = this.indexes.get(sessionId);
+    if (!index) return [];
+    // The index preserves first admission order, even when a task's latest record changes.
+    const entries =
+      limit === Infinity ? index.projection.tasks.values() : [...index.projection.tasks.values()].reverse();
+    const tasks: TaskSnapshot[] = [];
+    for (const { task } of entries) {
+      if (tasks.length >= limit) break;
+      if ((type === undefined || task.type === type) && !exclude?.has(task.id))
+        tasks.push(structuredClone(task));
+    }
+    return tasks;
+  }
+
+  private readTaskEntry(record: SessionRecord, address: RecordAddress) {
+    const existing = this.logs.get(record.id);
+    if (existing) return existing.indexedEntry(address.id);
+    return readRecordAt<SessionEvent>(nativeFile(this.paths, record, false), address);
+  }
+
+  taskStatus(sessionId: string, taskId: string, detail = true) {
+    const index = this.indexes.get(sessionId);
+    if (!index) return;
+    const entry = index.projection.tasks.get(taskId);
+    if (!entry) return;
+    if (!detail) return structuredClone(entry.task);
+    const record = this.readTaskEntry(index.record, entry.address);
+    if (record?.type !== 'task') throw new Error('Missing indexed task transition');
+    const task = structuredClone(record.task);
+    if (entry.answer) {
+      const message = this.readTaskEntry(index.record, entry.answer);
+      if (message?.type !== 'message' || message.message.role !== 'assistant')
+        throw new Error('Missing indexed assistant response');
+      task.result = message.message.content
+        .flatMap((part) => (part.type === 'text' ? [part.text] : []))
+        .join('');
+    }
+    return task;
+  }
+
+  taskOutput(sessionId: string, taskId: string, after?: number) {
+    const index = this.indexes.get(sessionId);
+    if (!index) return;
+    const entry = index.projection.tasks.get(taskId);
+    if (!entry) return;
+    const cursor = entry.task.outputCursor;
+    const record = cursor ? this.readTaskEntry(index.record, entry.address) : undefined;
+    return readTaskOutput(
+      (record?.type === 'task' ? record.output : undefined) ?? { cursor, truncated: false, chunks: [] },
+      after,
+    );
+  }
+
+  readyInboxSessions() {
+    return [...this.indexes.values()]
+      .filter(({ projection }) => projection.wake)
+      .map(({ record }) => record.id);
+  }
+
+  hasInbox(sessionId: string, messageId: string) {
+    return this.indexes.get(sessionId)?.projection.inboxIds.has(messageId) ?? false;
   }
 
   log(id: string): SessionLogPort {
@@ -591,7 +641,7 @@ export class SessionRegistry implements SessionStore {
       this.logs.get(id)?.close();
       this.logs.delete(id);
       this.logErrors.delete(id);
-      this.latestRuns.delete(id);
+      this.indexes.delete(id);
       return { id, workspaceId: record.workspaceId };
     });
     if (all.length) {
@@ -601,7 +651,6 @@ export class SessionRegistry implements SessionStore {
         sessions: this.state.sessions.filter((entry) => !chosen.has(entry.id)),
         pendingDelete,
       });
-      for (const [taskId, owner] of this.taskOwners) if (chosen.has(owner)) this.taskOwners.delete(taskId);
       await this.recoverDeletion();
       for (const { id, key } of locations) {
         this.events.dispatchEvent(new CustomEvent('membership', { detail: id }));

@@ -15,7 +15,7 @@ import { nativeExecutor } from '@mini-harness/tools/execution';
 import type { SessionStore } from '@mini-harness/sessions/records';
 import { startTestProfile } from '../../../test/support/profile.ts';
 import { defineTool } from '@mini-harness/tools/api';
-import type { LlmPort, NativeAssistantMessage, ToolCallPart } from '@mini-harness/llm/api';
+import type { LlmAdapter, NativeAssistantMessage, ToolCallPart } from '@mini-harness/llm/api';
 import type { ModelRetry } from '@mini-harness/agent/api';
 import { createFixturePaths } from '../../../test/support/mock-provider.ts';
 
@@ -42,7 +42,7 @@ const toolsAnswer = (...calls: ToolCallPart[]): NativeAssistantMessage => ({
 
 async function fixture(
   t: TestContext,
-  llm: Pick<LlmPort, 'stream'>,
+  llm: Pick<LlmAdapter, 'stream'>,
   retryModel?: () => Promise<ModelRetry>,
   thinkingLevels: (id: string) => ThinkingLevel[] | undefined = () => undefined,
   executor = nativeExecutor,
@@ -79,7 +79,16 @@ async function fixture(
       thinkingLevels: thinkingLevels(choice.id),
     }),
   });
-  ctx.provide('harnessLlm', { ...llm, register: () => () => {}, select: () => undefined });
+  ctx.provide('harnessLlm', {
+    async stream(
+      request: Parameters<LlmAdapter['stream']>[0],
+      emit: (event: import('@mini-harness/llm/api').LlmEvent) => void,
+    ) {
+      for await (const event of llm.stream(request)) emit(event);
+    },
+    register: () => () => {},
+    select: () => undefined,
+  });
   ctx.provide('harnessToolExecutor', executor);
   ctx.provide('harnessPrompt', { build: async () => 'Fixture', register: () => () => {} });
   if (retryModel) ctx.on('agent/model-retry', retryModel);

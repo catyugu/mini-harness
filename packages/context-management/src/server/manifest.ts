@@ -28,18 +28,15 @@ function setup(ctx: Context) {
   const statistics = new WeakMap<Pick<SessionLogPort, 'entries'>, Statistics>();
   const createManager = (scoped: Context, id: string) =>
     new ContextManagement(scoped.harnessModels, scoped.harnessLlm, modelRetry(scoped, id));
-  ctx.on('agent/setup', (run, id) => {
-    const manager = createManager(run, id);
-    const log = sessions.log(id);
-    run.on('agent/prepare-request', (request, step) =>
-      manager.prepare(
-        log,
-        request,
-        step.rebuild,
-        configuration(log.setting(owner), defaults()).settings,
-        step.runId,
-        step.failure,
-      ),
+  ctx.on('agent/prepare-request', (request, step) => {
+    const log = sessions.log(step.sessionId);
+    return createManager(step.context, step.sessionId).prepare(
+      log,
+      { ...request, signal: step.signal },
+      (messages) => step.rebuild(messages, step.signal),
+      configuration(log.setting(owner), defaults()).settings,
+      step.runId,
+      step.failure,
     );
   });
   ctx.effect(() => changes.register('context-management'));
@@ -59,6 +56,7 @@ function setup(ctx: Context) {
         routes.register('POST', '/api/sessions/:id/compact', async ({ params }) => {
           try {
             const compacted = await run.harnessRuns.runTask(
+              ctx,
               params.id,
               'compaction',
               async (scoped, signal, taskId) => {

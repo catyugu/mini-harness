@@ -1,4 +1,4 @@
-import { Service, type Plugin } from 'mini-harness/cordis';
+import { Service, type Context, type Plugin } from 'mini-harness/cordis';
 import { rankScoped, sameRank, scopeOf, type ScopeKey } from '@mini-harness/plugin-api/scopes';
 import type { LlmAdapter, LlmPort } from './api.ts';
 
@@ -13,24 +13,29 @@ const plugin: Plugin.Object = {
     const adapters = new Set<{
       adapter: LlmAdapter;
       priority: number;
-      owner: AbortSignal;
+      owner: Context;
+      signal: AbortSignal;
       scope?: ScopeKey;
     }>();
     const changed = () => {
       void ctx.parallel('llm/adapters-changed').catch((error) => ctx.logger.warn(String(error)));
     };
-    function matches(
-      caller: import('mini-harness/cordis').Context,
-      model: import('./vocabulary.ts').ModelChoice,
-    ) {
-      return rankScoped(scopeOf(caller), adapters).filter(
-        ({ adapter, owner }) => !owner.aborted && adapter.accepts(model),
+    function selected(caller: Context, model: import('./vocabulary.ts').ModelChoice) {
+      const [entry, next] = rankScoped(scopeOf(caller), adapters).filter(
+        ({ adapter, signal }) => !signal.aborted && adapter.accepts(model),
       );
+      return entry && sameRank(entry, next) ? null : entry;
     }
     const llm = Service.track<LlmPort>({
       register(adapter, priority = 0) {
         const caller = Service.caller(this);
-        const entry = { adapter, priority, owner: caller.fiber.signal, scope: scopeOf(caller) };
+        const entry = {
+          adapter,
+          priority,
+          owner: caller,
+          signal: caller.fiber.signal,
+          scope: scopeOf(caller),
+        };
         adapters.add(entry);
         changed();
         return () => {
@@ -38,20 +43,45 @@ const plugin: Plugin.Object = {
         };
       },
       select(model) {
-        const [entry, next] = matches(Service.caller(this), model);
-        return entry && sameRank(entry, next) ? null : entry?.adapter;
+        const entry = selected(Service.caller(this), model);
+        return entry === null ? null : entry?.adapter;
       },
-      async *stream(request) {
+      async countInputTokens(request) {
+        const entry = selected(Service.caller(this), request.model);
+        if (!entry) return;
+        const count = entry.adapter.countInputTokens;
+        if (count)
+          return entry.owner.fiber.run(
+            (signal) => count.call(entry.adapter, { ...request, signal }),
+            AbortSignal.any([entry.signal, request.signal]),
+          );
+      },
+      async stream(request, emit) {
         request.signal.throwIfAborted();
-        const [entry, next] = matches(Service.caller(this), request.model);
+        const entry = selected(Service.caller(this), request.model);
         const model = request.model.provider + '/' + request.model.id;
+        if (entry === null) throw new Error('Multiple model adapters accept ' + model);
         if (!entry) throw new Error('No model adapter accepts ' + model);
-        if (sameRank(entry, next)) throw new Error('Multiple model adapters accept ' + model);
-        const signal = AbortSignal.any([entry.owner, request.signal]);
-        for await (const event of entry.adapter.stream({ ...request, signal })) {
-          signal.throwIfAborted();
-          yield event;
-        }
+        await entry.owner.fiber.run(
+          async (signal) => {
+            const iterator = entry.adapter.stream({ ...request, signal })[Symbol.asyncIterator]();
+            let exhausted = false;
+            try {
+              while (true) {
+                const next = await iterator.next();
+                if (next.done) {
+                  exhausted = true;
+                  return;
+                }
+                signal.throwIfAborted();
+                emit(next.value);
+              }
+            } finally {
+              if (!exhausted) await iterator.return?.();
+            }
+          },
+          AbortSignal.any([entry.signal, request.signal]),
+        );
       },
     });
     ctx.provide('harnessLlm', llm);

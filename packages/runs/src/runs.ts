@@ -325,10 +325,7 @@ export class Runs implements RunPort {
   }
 
   recover() {
-    for (const { id } of this.registry.list()) {
-      const pending = this.registry.inspectLog(id, (log) => !log.inboxPaused() && log.inbox().length > 0);
-      if (pending) this.wake(id);
-    }
+    for (const id of this.registry.readyInboxSessions()) this.wake(id);
   }
 
   /** Revision preparation and task admission happen in one synchronous turn. */
@@ -467,13 +464,14 @@ export class Runs implements RunPort {
   }
 
   async runTask<T>(
+    provider: Context,
     id: string,
     type: string,
     work: (ctx: Context, signal: AbortSignal, taskId: string) => Promise<T>,
   ) {
     this.assertIdle(id);
     const task = this.tasks.start(
-      { ...this.registry.task(id), type, lane: this.lane(id) },
+      { ...this.registry.task(id), type, lane: this.lane(id), provider },
       ({ id: taskId, signal }) =>
         this.withAgentContext(id, signal, async (ctx, signal) => {
           this.sessionRun.closeUnfinishedTools(this.registry.log(id));
@@ -498,17 +496,26 @@ export class Runs implements RunPort {
     await this.scopes.prepare(key, signal);
     signal.throwIfAborted();
     const scope = this.scopes.context(key);
-    const fiber = tagScope(scope.extend(), this.registry.runScope(id)!).inject(
-      ['harnessAgent', 'harnessModels', 'harnessLlm'],
-      () => {},
-    );
+    const keyForRun = this.registry.runScope(id)!;
+    const services = ['harnessAgent', 'harnessModels', 'harnessLlm', 'harnessToolExecutor'];
+    const fiber = tagScope(scope.extend(), keyForRun).inject(services, () => {});
     try {
       await fiber;
-      if (!fiber.ctx.get('harnessAgent'))
-        throw new DomainError('unavailable', 'Required service is unavailable: harnessAgent');
+      for (const service of services)
+        if (!fiber.ctx.get(service))
+          throw new DomainError('unavailable', 'Required service is unavailable: ' + service);
       return await fiber.run(async (signal) => {
-        for (const { context, callback } of fiber.ctx.events.listeners('agent/setup', scopeTarget(fiber.ctx)))
-          await context.fiber.run((signal) => callback(fiber.ctx, id, signal), signal);
+        for (const { context, callback } of fiber.ctx.events.listeners(
+          'agent/setup',
+          scopeTarget(fiber.ctx),
+        )) {
+          await context.fiber.run(async (signal) => {
+            const release = await callback(fiber.ctx, id, signal);
+            if (!release) return;
+            if (signal.aborted) await release();
+            else fiber.ctx.effect(() => context.effect(() => release));
+          }, signal);
+        }
         return work(fiber.ctx, signal);
       }, signal);
     } finally {

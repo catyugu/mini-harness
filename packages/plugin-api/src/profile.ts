@@ -18,7 +18,7 @@ export interface ProfileConfigurationPort {
   /** True only while a settled graph is available; observe profile/graph-settled for its next stable boundary. */
   readonly stable: boolean;
   update(patch: unknown, signal?: AbortSignal): Promise<ProfileConfiguration>;
-  forgetScopes(keys: ScopeAddress[]): Promise<void>;
+  forgetScopes(keys: ScopeAddress[], signal?: AbortSignal): Promise<void>;
   subscribe(listener: () => void): () => void;
 }
 

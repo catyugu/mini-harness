@@ -36,15 +36,15 @@ The executor presents tool schemas, interprets the assistant response and delive
 
 | Hook                    | Purpose                                                              |
 | ----------------------- | -------------------------------------------------------------------- |
-| `agent/setup`           | Contribute capabilities to the run Context before execution.         |
-| `agent/records`         | Create a run-local record observer and presentation contributor.     |
+| `agent/setup`           | Register scoped capabilities before execution.                       |
+| `agent/records`         | Observe native events and contribute assistant record presentations. |
 | `agent/prepare-input`   | Transform prepared user content before acceptance.                   |
 | `agent/model-request`   | Transform model-visible content before a request.                    |
 | `agent/prepare-request` | Prepare the final request or recover it after a model input error.   |
 | `agent/model-retry`     | Choose whether to retry a failed request before output has streamed. |
 | `agent/tool-result`     | Transform accepted tool content after raw execution is persisted.    |
 
-These hooks are dispatched by conversation orchestration in Runs; a direct `harnessAgent.run` call uses its supplied callbacks. The native execution API and model request loop do not import session contracts. The conversation integration in `events.ts` owns scoped policy dispatch and record contributions. Register run-local effects on the supplied run Context so disposal releases them. Return transformed values instead of mutating inputs. The [execution reference](../../docs/subsystems/execution.md) describes their position in the persistence flow.
+These hooks are dispatched by conversation orchestration in Runs; a direct `harnessAgent.run` call uses its supplied callbacks. The native execution API and model request loop do not import session contracts. The conversation integration in `events.ts` owns scoped policy dispatch and record contributions. `agent/setup` receives the target Run Context. Resolve the target tool or prompt service from that Context and pass the contributing Context as the registration provider. Return the registration disposer (or an effect disposer for multiple registrations). Runs binds it to both the contributing Fiber and the Run, so either lifetime ending releases the contribution. Synchronous record observers own any per-run state they need. Return transformed values instead of mutating inputs. The [execution reference](../../docs/subsystems/execution.md) describes their position in the persistence flow.
 
 ## Configuration, lifetime and failures
 
