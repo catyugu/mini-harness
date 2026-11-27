@@ -24,7 +24,7 @@ export function providerManager(
     <p class="hint provider-status" role="status"></p>
   </div>`);
   const list = required(content.querySelector('.provider-list'));
-  const addArea = required(content.querySelector('.provider-add'));
+  const addArea = required(content.querySelector<HTMLElement>('.provider-add'));
   const status = required(content.querySelector('[role="status"]'));
   const add = button('Add provider', 'quiet');
   add.prepend(icon('plus'));

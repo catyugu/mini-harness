@@ -364,9 +364,11 @@ export class PluginHost implements ProfileScopes, ProfileConfigurationPort {
         this.ctx.logger.error(error);
       }
     } finally {
-      this.applying = undefined;
-      this.transaction = undefined;
-      this.graphSettled();
+      if (this.applying === work) {
+        this.applying = undefined;
+        this.transaction = undefined;
+        this.graphSettled();
+      }
     }
   }
 
