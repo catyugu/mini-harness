@@ -21,9 +21,7 @@ test('conversation edits branch the native session instead of appending and enfo
   await send('Original second');
   const before = (await request('/sessions/' + session.id)).body;
   const textOf = (message: any) =>
-    typeof message.content === 'string'
-      ? message.content
-      : message.content
+    message.content
           .filter((block: any) => block.type === 'text')
           .map((block: any) => block.text)
           .join('\n');

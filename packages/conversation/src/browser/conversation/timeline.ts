@@ -2,20 +2,13 @@ import type { HistoryEntry, MessageContent, ViewMessage } from '@mini-harness/se
 import type { LiveRecord, ToolProgress } from '@mini-harness/runs/stream';
 import type { MessageActionTarget } from '../history-api.ts';
 
-export const textOf = (content?: MessageContent) =>
-  typeof content === 'string'
-    ? content
-    : (content
-        ?.filter((part) => part.type === 'text')
-        .map(({ text }) => text)
-        .join('\n') ?? '');
+export const textOf = (content: MessageContent = []) =>
+  content.filter((part) => part.type === 'text').map(({ text }) => text).join('\n');
 
 export function hasContent(entry: HistoryEntry) {
   if (entry.type !== 'message' || entry.role === 'toolResult') return true;
-  if (entry.attachments?.length || entry.error) return true;
-  return typeof entry.content === 'string'
-    ? Boolean(entry.content)
-    : entry.content.some((part) => part.type === 'text' && Boolean(part.text));
+  if (entry.role === 'user' ? entry.attachments.length : entry.error) return true;
+  return entry.content.some((part) => part.type === 'text' && Boolean(part.text));
 }
 
 type TurnPart =
@@ -83,8 +76,7 @@ export function groupHistory(
       continue;
     }
     assistant.push(entry);
-    const blocks =
-      typeof entry.content === 'string' ? [{ type: 'text', text: entry.content }] : entry.content;
+    const blocks = entry.content;
     let adjacent = true;
     for (const [index, block] of blocks.entries()) {
       const id = entry.id + ':' + index;

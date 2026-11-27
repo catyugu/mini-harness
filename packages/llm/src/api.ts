@@ -47,7 +47,7 @@ export interface NativeUsage {
 }
 export interface NativeUserMessage {
   role: 'user';
-  content: string | (TextPart | ImagePart)[];
+  content: (TextPart | ImagePart)[];
   timestamp: number;
 }
 export type ModelErrorKind = 'context-overflow' | 'image-limit' | 'transient' | 'permanent';
@@ -216,7 +216,6 @@ export function validateNativeMessage(message: NativeMessage) {
     !Number.isFinite(message.timestamp)
   )
     throw new Error('Invalid session message');
-  if (message.role === 'user' && typeof message.content === 'string') return;
   if (!Array.isArray(message.content)) throw new Error('Invalid session message content');
   for (const block of message.content) {
     if (!block || typeof block !== 'object') throw new Error('Invalid session message content');

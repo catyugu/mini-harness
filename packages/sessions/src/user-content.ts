@@ -1,11 +1,10 @@
 import { createHash } from 'node:crypto';
 import type { PreparedMessage } from '@mini-harness/input/message';
-import type { NativeUserMessage } from '@mini-harness/llm/api';
+import type { NativeUserMessage, TextPart } from '@mini-harness/llm/api';
 import type { ViewAttachment } from './shared/message.ts';
 
 export function userContent(content: NativeUserMessage['content'], presentation?: PreparedMessage) {
-  const blocks = typeof content === 'string' ? [] : content;
-  const images = presentation?.images ?? blocks.filter((part) => part.type === 'image');
+  const images = presentation?.images ?? content.filter((part) => part.type === 'image');
   const identities = images.map(
     ({ data, mimeType }) =>
       [
@@ -25,9 +24,9 @@ export function userContent(content: NativeUserMessage['content'], presentation?
   for (const [key, image] of identities)
     if (!matched.has(key)) attachments.push({ ...image, name: 'Image ' + (attachments.length + 1) });
   return {
-    content:
-      presentation?.userText ??
-      (typeof content === 'string' ? content : blocks.filter((part) => part.type === 'text')),
+    content: presentation
+      ? [{ type: 'text', text: presentation.userText } satisfies TextPart]
+      : content.filter((part) => part.type === 'text'),
     attachments,
   };
 }

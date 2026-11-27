@@ -1,4 +1,5 @@
-import type { MessageContent, ViewMessage } from '@mini-harness/sessions/message';
+import type { NativeToolMessage } from '@mini-harness/llm/api';
+import type { ViewMessage } from '@mini-harness/sessions/message';
 import type {
   RecordAppend,
   RecordPublisher,
@@ -27,7 +28,7 @@ export interface ToolProgress {
   name: string;
   state: 'approval' | 'running';
   arguments?: unknown;
-  content?: MessageContent;
+  content?: NativeToolMessage['content'];
   streams?: Readonly<Record<string, string>>;
 }
 

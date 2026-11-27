@@ -162,8 +162,7 @@ export class SessionRun {
         context,
       );
       validateNativeMessage({ role: 'user', content, timestamp: 0 });
-      const preparedImages =
-        typeof content === 'string' ? [] : content.filter((part) => part.type === 'image');
+      const preparedImages = content.filter((part) => part.type === 'image');
       assertImageInput(
         requireService(ctx, 'harnessModels').capabilities(selected.model),
         preparedImages.length,

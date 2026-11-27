@@ -38,7 +38,7 @@ test('nested sessions cascade permanent deletion through native logs', async (t)
   assert.equal(registry.workspacePath(parent.id), undefined);
   const second = registry.create({ title: 'unrelated' });
   const log = registry.log(child.id);
-  log.append({ type: 'message', message: { role: 'user', content: 'hello', timestamp: Date.now() } });
+  log.append({ type: 'message', message: { role: 'user', content: [{ type: 'text', text: 'hello' }], timestamp: Date.now() } });
   const file = nativeFile(paths, child);
   assert.equal(registry.list().length, 3);
   assert.deepEqual(new Set(registry.descendants([parent.id])), new Set([parent.id, child.id]));
@@ -122,11 +122,11 @@ test('export includes all branches and rejects in-flight sessions', (t) => {
   ]);
   const first = log.append({
     type: 'message',
-    message: { role: 'user', content: prepared.text, timestamp: Date.now() },
+    message: { role: 'user', content: [{ type: 'text', text: prepared.text }], timestamp: Date.now() },
     presentation: prepared.input,
   });
   log.revise(
-    { type: 'message', message: { role: 'user', content: 'revision', timestamp: Date.now() } },
+    { type: 'message', message: { role: 'user', content: [{ type: 'text', text: 'revision' }], timestamp: Date.now() } },
     null,
     first.id,
   );
@@ -148,7 +148,7 @@ test('a corrupt log is isolated, remains deletable and never creates a log for a
   const invalid = nativeFile(paths, damaged);
   registry
     .log(healthy.id)
-    .append({ type: 'message', message: { role: 'user', content: 'intact', timestamp: Date.now() } });
+    .append({ type: 'message', message: { role: 'user', content: [{ type: 'text', text: 'intact' }], timestamp: Date.now() } });
   registry.dispose();
   appendFileSync(invalid, '{"checksum":"bad"}\n');
   const restored = new SessionRegistry(paths);
@@ -159,7 +159,7 @@ test('a corrupt log is isolated, remains deletable and never creates a log for a
     undefined,
   );
   assert.equal(existsSync(nativeFile(paths, unopened, false)), false);
-  assert.equal(restored.log(healthy.id).projection().timeline.filter(isViewMessage)[0].content, 'intact');
+  assert.deepEqual(restored.log(healthy.id).projection().timeline.filter(isViewMessage)[0].content, [{ type: 'text', text: 'intact' }]);
   assert.throws(() => restored.log(damaged.id), /session diagnostics/);
   assert.deepEqual(restored.diagnostics(), [{ id: damaged.id, message: 'Corrupt session log checksum' }]);
   assert.deepEqual(await restored.delete([damaged.id]), [damaged.id]);
@@ -219,6 +219,6 @@ test('public session logs expose record operations but not the writer lifecycle'
     assert.equal('close' in view, false);
     assert.equal('file' in view, false);
   });
-  log.append({ type: 'message', message: { role: 'user', content: 'Still writable', timestamp: 1 } });
-  assert.equal(registry.history(session.id).timeline.filter(isViewMessage)[0].content, 'Still writable');
+  log.append({ type: 'message', message: { role: 'user', content: [{ type: 'text', text: 'Still writable' }], timestamp: 1 } });
+  assert.deepEqual(registry.history(session.id).timeline.filter(isViewMessage)[0].content, [{ type: 'text', text: 'Still writable' }]);
 });

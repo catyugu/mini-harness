@@ -35,7 +35,7 @@ function fixture(t: test.TestContext) {
 }
 const user = (content: string) => ({
   type: 'message' as const,
-  message: { role: 'user' as const, content, timestamp: 1 },
+  message: { role: 'user' as const, content: [{ type: 'text' as const, text: content }], timestamp: 1 },
 });
 
 test('native log retains model semantics and gives defensive read projections', (t) => {
@@ -229,7 +229,7 @@ test('compaction and context edits change model context without deleting convers
       { start: 0, deleteCount: 1, insert: [user('Summary of earlier conversation:\nSummary').message] },
     ],
   });
-  assert.equal(log.originalMessage(keep.id)?.content, 'recent context');
+  assert.deepEqual(log.originalMessage(keep.id)?.content, [{ type: 'text', text: 'recent context' }]);
   log.append(user('new question'));
   assert.deepEqual(
     log
@@ -261,12 +261,12 @@ test('attachments retain full model input while display keeps the submitted text
     presentation: { userText: 'read this', attachments: [{ name: 'secret.txt', mimeType: 'text/plain' }] },
   });
   const state = log.projection();
-  assert.equal(state.timeline.filter(isViewMessage)[0].content, 'read this');
+  assert.deepEqual(state.timeline.filter(isViewMessage)[0].content, [{ type: 'text', text: 'read this' }]);
   assert.equal(
-    expectPresent(state.timeline.filter(isViewMessage)[0]?.attachments?.[0], 'session attachment').name,
+    expectPresent(state.timeline.filter(isViewMessage).find((entry) => entry.role === 'user')?.attachments[0], 'session attachment').name,
     'secret.txt',
   );
-  assert.match(String(state.contextMessages[0].content), /contents/);
+  assert.match(JSON.stringify(state.contextMessages[0].content), /contents/);
 });
 
 test('tool execution stays auditable while accepted content is stored as a compact reversible delta', (t) => {
@@ -347,5 +347,5 @@ test('recorded requests reuse their tool schema and restore transformed input af
   const third = log.recordRequest(request);
   assert.equal(log.entries().filter(({ type }) => type === 'tool-schema').length, 1);
   for (const { id } of [first, second, third]) assert.deepEqual(log.requestSnapshot(id), request);
-  assert.equal(log.projection().contextMessages[0].content, 'original');
+  assert.deepEqual(log.projection().contextMessages[0].content, [{ type: 'text', text: 'original' }]);
 });

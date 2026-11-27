@@ -312,7 +312,7 @@ test('a third-party plugin uses tools, models and subprocesses from a Profile wi
       const model = { provider, id: 'fixture' };
       assert.deepEqual(app.ctx.harnessModels.resolve(model), model);
       const signal = AbortSignal.timeout(10000);
-      const messages: NativeMessage[] = [{ role: 'user', content: 'Use the tool', timestamp: Date.now() }];
+      const messages: NativeMessage[] = [{ role: 'user', content: [{ type: 'text', text: 'Use the tool' }], timestamp: Date.now() }];
       const tools = new Map(app.ctx.harnessTools.list().map((tool) => [tool.name, tool]));
       const executor = app.ctx.harnessToolExecutor;
       const schemas = [...tools.values()].map(({ name, description, parameters }) => ({

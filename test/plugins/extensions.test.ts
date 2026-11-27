@@ -201,7 +201,7 @@ export const apply = (ctx) => {
       const terminal = (content, stopReason = 'stop') => ({ type: 'done', message: { role: 'assistant', timestamp: Date.now(), content, stopReason } });
       if (++attempts === 1) throw new Error('transient transport failure');
       if (attempts === 2) {
-        if (!request.systemPrompt.endsWith('[first][second]') || request.messages.at(-1).content !== 'Temporary context')
+        if (!request.systemPrompt.endsWith('[first][second]') || request.messages.at(-1).content[0]?.text !== 'Temporary context')
           throw new Error('waterfall did not compose');
         yield terminal([
           { type: 'toolCall', id: 'denied', name: 'check', arguments: { mode: 'denied' } },
@@ -227,7 +227,7 @@ export const apply = (ctx) => {
     ctx.on("agent/model-request", (request) => ({ ...request, systemPrompt: request.systemPrompt + '[second]' }));
     ctx.on("agent/model-request", (request, { turn }) => turn === 1 ? ({
       ...request, systemPrompt: request.systemPrompt + '[first]',
-      messages: [...request.messages, { role: 'user', content: 'Temporary context', timestamp: Date.now() }]
+      messages: [...request.messages, { role: 'user', content: [{ type: 'text', text: 'Temporary context' }], timestamp: Date.now() }]
     }) : undefined, { prepend: true });
     ctx.on("agent/model-retry", ({ error, attempt }) => error === 'transient transport failure' && attempt === 1 ? {} : undefined);
     ctx.effect(() => ctx.harnessTools.register({ name: 'check', description: 'Check mode', parameters: { type: 'object' },
@@ -271,17 +271,17 @@ export const apply = (ctx) => {
   const requests = sessionLog.entries().filter((entry) => entry.type === 'model-request');
   assert.equal(requests.length, 2);
   assert.match(requests[0].request.systemPrompt, /\[first\]\[second\]$/);
-  assert.equal(
+  assert.deepEqual(
     expectPresent(
       expectPresent(requests[0].request.messagesPatch, 'transformed message patch').insert.at(-1),
       'transformed message',
     ).content,
-    'Temporary context',
+    [{ type: 'text', text: 'Temporary context' }],
   );
   assert.equal(requests[1].request.messagesPatch, undefined);
-  assert.equal(
+  assert.deepEqual(
     expectPresent(sessionLog.requestSnapshot(requests[0].id).messages.at(-1), 'model input message').content,
-    'Temporary context',
+    [{ type: 'text', text: 'Temporary context' }],
   );
   assert.equal(
     expectPresent(sessionLog.requestSnapshot(requests[1].id).messages.at(-1), 'model tool result').role,

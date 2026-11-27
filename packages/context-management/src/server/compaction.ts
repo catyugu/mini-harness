@@ -13,9 +13,9 @@ import { measure, messageTokens, tokenPrefix, totalTokens } from './meter.ts';
 const title = 'Summary of earlier conversation:\n';
 const instruction =
   'Write a continuation checkpoint for the next assistant. Merge earlier checkpoints and preserve user constraints, decisions, identifiers, diagnostics, source references, progress and next steps. Respond with the checkpoint only.';
-const user = (content: string): NativeUserMessage & { content: string } => ({
+const user = (content: string): NativeUserMessage => ({
   role: 'user',
-  content,
+  content: [{ type: 'text', text: content }],
   timestamp: Date.now(),
 });
 
@@ -39,9 +39,7 @@ function transcript(messages: NativeMessage[]) {
       ({ role, content }) =>
         role +
         ': ' +
-        (typeof content === 'string'
-          ? content
-          : content
+        content
               .map((part) => {
                 switch (part.type) {
                   case 'text':
@@ -54,7 +52,7 @@ function transcript(messages: NativeMessage[]) {
                     return part.name + ' ' + JSON.stringify(part.arguments);
                 }
               })
-              .join('\n')),
+              .join('\n'),
     )
     .join('\n\n');
 }

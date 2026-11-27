@@ -14,7 +14,7 @@ export function setup(ctx: Context) {
     const invocation = await loader.invocation(cwd, original.userText);
     signal.throwIfAborted();
     if (!invocation) return;
-    const parts = typeof content === 'string' ? [{ type: 'text' as const, text: content }] : content;
+    const parts = content;
     const first = parts[0];
     // Remove the invocation from the original text when it is still the first model-visible block.
     // Keep the suffix intact, including any text attachments added during input normalization.

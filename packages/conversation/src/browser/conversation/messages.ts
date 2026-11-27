@@ -229,8 +229,8 @@ export function createMessageView(
       result.textContent = output;
       body.append(result);
     }
-    for (const block of typeof data.content === 'string' ? [] : (data.content ?? [])) {
-      if (block.type !== 'image' || !imageMime.test(block.mimeType ?? '') || !block.data) continue;
+    for (const block of data.content ?? []) {
+      if (block.type !== 'image' || !imageMime.test(block.mimeType) || !block.data) continue;
       const img = document.createElement('img');
       img.alt = 'Tool output';
       img.loading = 'lazy';
@@ -256,7 +256,7 @@ export function createMessageView(
     const entry = document.createElement(notification ? 'details' : 'div');
     entry.className = notification ? 'async-message ui-record ui-disclosure' : 'message-row user';
     const text = textOf(message.content);
-    const attachments = message.attachments ?? [];
+    const attachments = message.attachments;
     const bubble = document.createElement('article');
     bubble.className = notification ? 'async-message-body' : 'message user';
     if (notification) {

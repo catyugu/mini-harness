@@ -655,7 +655,7 @@ export const apply = (ctx) => {
           request.signal.throwIfAborted();
           const model = resolve(request.model);
           const last = request.messages.at(-1);
-          const text = typeof last.content === 'string' ? last.content : last.content.filter(part => part.type === 'text').map(part => part.text).join('');
+          const text = last.content.filter(part => part.type === 'text').map(part => part.text).join('');
           if (last.role === 'user' && (text === 'Delegate inherited' || text === 'Delegate explicit')) {
             if (!request.tools.some(tool => tool.name === 'delegate')) throw new Error('Delegation tool unavailable');
             const explicit = text === 'Delegate explicit';
@@ -763,7 +763,7 @@ export function apply(ctx) {
         throw new Error('Missing isolated run context');
       const turn = await input.prepare(1);
       const content = turn.request.messages.at(-1).content;
-      const text = typeof content === 'string' ? content : content[0].text;
+      const text = content[0].text;
       run.effect(() => () => appendFileSync(${JSON.stringify(file)}, text + '\\n'));
       if (text === 'fail') throw new Error('Expected custom agent failure');
       return { role: 'assistant', content: [{ type: 'text', text: 'Custom answer' }], timestamp: Date.now() };

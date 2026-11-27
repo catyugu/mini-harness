@@ -73,7 +73,6 @@ export function prepareModelMessages(capabilities: Capabilities, messages: Nativ
   return messages.map((message) => {
     if (
       message.role === 'assistant' ||
-      !Array.isArray(message.content) ||
       !message.content.some(({ type }) => type === 'image')
     )
       return message;

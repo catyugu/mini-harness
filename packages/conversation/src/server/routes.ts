@@ -85,10 +85,7 @@ export function registerSessionRoutes(ctx: Context, read: (id: string) => Conver
           ) ?? [];
         for (const message of messages.reverse()) {
           if (message.role === 'toolResult') continue;
-          const content =
-            typeof message.content === 'string'
-              ? message.content
-              : message.content
+          const content = message.content
                   .filter((part) => part.type === 'text')
                   .map((part) => part.text)
                   .join(' ');

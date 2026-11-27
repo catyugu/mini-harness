@@ -33,7 +33,7 @@ test('model adapter streams native messages, tool calls and metadata through the
     adapter.discoverModels({ ...connection, baseUrl: mock.url + '/missing' }, t.signal),
     /HTTP 404/,
   );
-  const input: NativeMessage = { role: 'user', content: 'Inspect the note', timestamp: Date.now() };
+  const input: NativeMessage = { role: 'user', content: [{ type: 'text', text: 'Inspect the note' }], timestamp: Date.now() };
   const request = {
     model: choice,
     systemPrompt: 'You inspect files.',
@@ -200,7 +200,7 @@ test('built-in edits retain native routing and credentials, including after rest
   for await (const event of adapter.stream({
     model,
     systemPrompt: '',
-    messages: [{ role: 'user', content: 'Use the saved built-in configuration', timestamp: Date.now() }],
+    messages: [{ role: 'user', content: [{ type: 'text', text: 'Use the saved built-in configuration' }], timestamp: Date.now() }],
     signal: t.signal,
   }))
     events.push(event);
@@ -309,7 +309,7 @@ test('abort reaches the model transport and yields a native terminal message wit
     for await (const event of new PiLlm(adapter).stream({
       model: { provider: 'local-mock', id: 'mock-model' },
       systemPrompt: '',
-      messages: [{ role: 'user', content: 'Wait', timestamp: Date.now() }],
+      messages: [{ role: 'user', content: [{ type: 'text', text: 'Wait' }], timestamp: Date.now() }],
       signal: controller.signal,
     }))
       events.push(event);

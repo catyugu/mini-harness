@@ -185,10 +185,7 @@ function setup(ctx: Context) {
             const message = sessions.log(id).originalMessage(entry, raw);
             if (!message)
               return { state: 'error', content: [{ type: 'text', text: 'Original message not found' }] };
-            const parts =
-              typeof message.content === 'string'
-                ? [{ type: 'text' as const, text: message.content }]
-                : message.content;
+            const parts = message.content;
             if (image !== undefined) {
               const part = parts[image - 1];
               if (part?.type !== 'image')

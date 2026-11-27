@@ -4,7 +4,7 @@ import { splitPoint } from '../src/server/compaction.ts';
 
 test('retention includes the complete latest exchange even when it exceeds the minimum', () => {
   const messages = [
-    { role: 'user', content: 'History', timestamp: 0 },
+    { role: 'user', content: [{ type: 'text', text: 'History' }], timestamp: 0 },
     {
       role: 'assistant',
       content: [{ type: 'toolCall', id: 'probe', name: 'probe', arguments: {} }],

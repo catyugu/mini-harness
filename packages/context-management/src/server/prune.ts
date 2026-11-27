@@ -53,7 +53,7 @@ export function prune({ contextMessages, contextEntryIds }: SessionContext): Con
 
 /** Preserve original part positions so read_context can restore the image. */
 export function offloadMessage(message: NativeMessage, id: string): NativeMessage {
-  if (message.role === 'assistant' || typeof message.content === 'string') return message;
+  if (message.role === 'assistant') return message;
   const parts = message.content;
   const content = parts.map((part, index) =>
     part.type === 'image'

@@ -397,7 +397,6 @@ export class Runs implements RunPort {
           : delivered.find(({ id }) => id === run.inputEntryId);
       if (input?.type !== 'message' || input.message.role !== 'user') return;
       const { message, presentation, selection } = input;
-      const parts = typeof message.content === 'string' ? [] : message.content;
       const attachments: Attachment[] = [],
         missing: string[] = [];
       for (const { name, mimeType, id: attachmentId, data } of userContent(message.content, presentation)
@@ -407,10 +406,7 @@ export class Runs implements RunPort {
         else if (data) attachments.push({ name, mimeType, data });
         else missing.push(name);
       }
-      const text =
-        typeof message.content === 'string'
-          ? message.content
-          : parts.flatMap((part) => (part.type === 'text' ? [part.text] : [])).join('\n');
+      const text = message.content.flatMap((part) => (part.type === 'text' ? [part.text] : [])).join('\n');
       return {
         message: presentation?.userText ?? text,
         attachments,
