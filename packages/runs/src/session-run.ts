@@ -63,10 +63,12 @@ export function selectInputModel(
   parentId: string | null,
 ) {
   return selectModel(models, {
-    explicit: item.model,
-    stored: previous.model,
-    fallback,
-    preferStored: Boolean(parentId || item.mode === 'steer' || item.origin?.source !== 'user'),
+    choices: item.model
+      ? [item.model]
+      : parentId || item.mode === 'steer' || item.origin?.source !== 'user'
+        ? [previous.model, fallback]
+        : [fallback, previous.model],
+    unavailable: item.model && 'Unknown model: ' + item.model.provider + '/' + item.model.id,
     thinkingLevel: item.thinkingLevel,
     inherited: previous.thinkingLevel,
   });
@@ -132,7 +134,7 @@ export class SessionRun {
     const selection = (item: Input, previous = log.context()) => {
       const models = requireService(ctx, 'harnessModels');
       const selected = selectInputModel(models, item, previous, fallback, record.parentId);
-      assertImageInput(models.capabilities(selected.model), item.images.length);
+      assertImageInput(selected.capabilities, item.images.length);
       validateNativeMessage({
         role: 'user',
         content: [{ type: 'text', text: item.text }, ...item.images],
@@ -165,7 +167,7 @@ export class SessionRun {
       const preparedImages =
         typeof content === 'string' ? [] : content.filter((part) => part.type === 'image');
       assertImageInput(
-        requireService(ctx, 'harnessModels').capabilities(selected.model),
+        selected.capabilities,
         preparedImages.length,
       );
       signal.throwIfAborted();
@@ -419,7 +421,9 @@ export class SessionRun {
       context,
     );
     const prepared = present ? present(transformed) : transformed;
-    const capabilities = requireService(ctx, 'harnessModels').capabilities(context.model);
+    const selected = requireService(ctx, 'harnessModels').resolve(context.model);
+    if (!selected) throw new Error('Model is no longer available: ' + context.model.id);
+    const { capabilities } = selected;
     resolveThinking(capabilities, prepared.thinkingLevel);
     return {
       ...prepared,

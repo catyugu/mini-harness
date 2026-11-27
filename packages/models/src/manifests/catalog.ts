@@ -125,12 +125,11 @@ const plugin: Plugin.Object = {
         },
         resolve(choice) {
           const caller = Service.caller(this);
-          return match(caller, visible(caller), choice)?.model;
-        },
-        capabilities(choice) {
-          const caller = Service.caller(this);
           const selected = match(caller, visible(caller), choice);
-          return selected?.entry.source.capabilities(selected.model);
+          if (!selected) return;
+          const { model, entry } = selected;
+          const capabilities = entry.source.capabilities(model);
+          if (capabilities) return { model, capabilities };
         },
       }),
     );

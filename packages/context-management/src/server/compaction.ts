@@ -62,7 +62,7 @@ function transcript(messages: NativeMessage[]) {
 export async function checkpoint(
   request: LlmRequest,
   capability: ProviderModel,
-  llm: Pick<LlmPort, 'countInputTokens'>,
+  llm: Pick<LlmPort, 'bind'>,
   messages: NativeMessage[],
   execute: (request: LlmRequest) => Promise<NativeAssistantMessage>,
   calibrate: () => number,

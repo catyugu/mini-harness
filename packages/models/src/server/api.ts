@@ -11,8 +11,16 @@ export interface ModelSource {
   capabilities(choice: ModelChoice): ProviderModel | undefined;
 }
 
-export interface ModelCatalogPort extends ModelSource {
+export interface ModelSelection {
+  model: ModelChoice;
+  capabilities: ProviderModel;
+}
+
+export interface ModelCatalogPort {
+  list(): ModelSummary[];
   available(): Promise<ModelSummary[]>;
+  /** A single matched contribution supplies both the model and its capabilities. */
+  resolve(choice: ModelChoice): ModelSelection | undefined;
   /** Register model metadata and its adapter together, with one scope, priority and lifetime. */
   register(source: ModelSource, adapter: LlmAdapter, priority?: number): () => void;
 }

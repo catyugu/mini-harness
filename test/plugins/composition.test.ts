@@ -643,10 +643,11 @@ export const apply = (ctx) => {
       };
       const list = () => ids.map(id => ({ provider, id, name: id, configured: true, thinkingLevels: ['off'] }));
       ctx.provide('harnessModels', {
-        list, available: async () => list(), resolve,
-        capabilities(choice) {
+        list, available: async () => list(),
+        resolve(choice) {
           const model = resolve(choice);
-          return { id: model.id, name: model.id, input: ['text'], contextWindow: 32000, maxTokens: 1024, reasoning: false };
+          if (!model) return;
+          return { model, capabilities: { id: model.id, name: model.id, input: ['text'], contextWindow: 32000, maxTokens: 1024, reasoning: false } };
         }
       });
       const adapter = {
@@ -670,7 +671,7 @@ export const apply = (ctx) => {
           }
         }
       };
-      ctx.provide('harnessLlm', { select: () => adapter, async countInputTokens() {}, async stream(request, emit) { for await (const event of adapter.stream(request)) emit(event); } });
+      ctx.provide('harnessLlm', { select: () => adapter, bind: () => ({ async countInputTokens() {}, async stream(request, emit) { for await (const event of adapter.stream(request)) emit(event); } }) });
     };
 `,
   );

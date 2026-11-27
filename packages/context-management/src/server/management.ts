@@ -50,10 +50,10 @@ export class ContextManagement {
   ) {}
 
   private model(choice: LlmRequest['model']) {
-    const capability = this.models.capabilities(choice);
-    if (!capability || !this.llm.select(choice))
+    const selected = this.models.resolve(choice);
+    if (!selected)
       throw new DomainError('invalid_input', 'Model capability or adapter unavailable: ' + choice.id);
-    return capability;
+    return selected.capabilities;
   }
 
   private measure(log: SessionLogPort, request: LlmRequest) {
@@ -105,8 +105,11 @@ export class ContextManagement {
     if (available <= 0) return;
     const desired = target - fixed - retained;
     const checkpointTarget = desired > 0 ? Math.min(desired, available) : available;
-    const { model } = selectModel(this.models, { explicit: settings.summaryModel ?? request.model });
-    const capability = this.model(model);
+    const choice = settings.summaryModel ?? request.model;
+    const { model, capabilities: capability } = selectModel(this.models, {
+      choices: [choice],
+      unavailable: 'Unknown model: ' + choice.provider + '/' + choice.id,
+    });
     let scale: number | undefined;
     const summaryRequest: LlmRequest = {
       model,

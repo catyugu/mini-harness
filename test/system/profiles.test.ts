@@ -304,13 +304,13 @@ test('a third-party plugin uses tools, models and subprocesses from a Profile wi
       false,
     );
     assert.equal(app.ctx.get('harnessModelStore'), undefined);
-    assert.deepEqual(app.ctx.harnessModels.resolve({ provider: 'adapter-one', id: 'dynamic' }), {
+    assert.deepEqual(app.ctx.harnessModels.resolve({ provider: 'adapter-one', id: 'dynamic' })?.model, {
       provider: 'adapter-one',
       id: 'dynamic',
     });
     for (const provider of ['adapter-one', 'adapter-two']) {
       const model = { provider, id: 'fixture' };
-      assert.deepEqual(app.ctx.harnessModels.resolve(model), model);
+      assert.deepEqual(app.ctx.harnessModels.resolve(model)?.model, model);
       const signal = AbortSignal.timeout(10000);
       const messages: NativeMessage[] = [{ role: 'user', content: 'Use the tool', timestamp: Date.now() }];
       const tools = new Map(app.ctx.harnessTools.list().map((tool) => [tool.name, tool]));

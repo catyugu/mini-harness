@@ -99,7 +99,11 @@ export interface NativeToolMessage {
   elapsedMs?: number;
 }
 export type NativeMessage = NativeUserMessage | NativeAssistantMessage | NativeToolMessage;
+/** Runtime-only binding carried from measurement to execution; not a log field. */
+export const requestBinding = Symbol('LLM request binding');
+
 export interface LlmRequest {
+  [requestBinding]?: LlmBinding;
   model: ModelChoice;
   systemPrompt: string;
   messages: NativeMessage[];
@@ -114,7 +118,7 @@ export type ModelRequestContent = Pick<
   'messages' | 'systemPrompt' | 'thinkingLevel' | 'maxTokens'
 >;
 
-export type ModelRequestSnapshot = Omit<LlmRequest, 'signal' | 'messages'> & {
+export type ModelRequestSnapshot = Omit<LlmRequest, 'signal' | 'messages' | typeof requestBinding> & {
   messages?: NativeMessage[];
 };
 
@@ -204,8 +208,19 @@ export interface LlmPort {
   register(adapter: LlmAdapter, priority?: number): () => void;
   /** Returns the selected adapter, null for an ambiguous match, or undefined for no match. */
   select(model: ModelChoice): Omit<LlmAdapter, 'stream' | 'countInputTokens'> | null | undefined;
+  /** Bind a request to one adapter. A replaced binding cannot begin new execution. */
+  bind(model: ModelChoice): LlmBinding;
+}
+
+export interface LlmBinding {
   countInputTokens(request: LlmRequest): Promise<InputTokenCounts | undefined>;
   stream(request: LlmRequest, emit: (event: LlmEvent) => void): Promise<void>;
+}
+
+export class ModelTransportError extends Error {
+  constructor(error: unknown, readonly kind: ModelErrorKind | undefined) {
+    super(error instanceof Error ? error.message : String(error), { cause: error });
+  }
 }
 
 export function validateNativeMessage(message: NativeMessage) {

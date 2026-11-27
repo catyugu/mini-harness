@@ -1,10 +1,12 @@
 import { setTimeout as sleep } from 'node:timers/promises';
-import type {
-  LlmPort,
-  LlmRequest,
-  ModelAttemptMetrics,
-  ModelErrorKind,
-  NativeAssistantMessage,
+import {
+  ModelTransportError,
+  requestBinding,
+  type LlmPort,
+  type LlmRequest,
+  type ModelAttemptMetrics,
+  type ModelErrorKind,
+  type NativeAssistantMessage,
 } from '@mini-harness/llm/api';
 import type { ModelFailure, ModelRetry } from './api.ts';
 
@@ -27,7 +29,7 @@ function failedMessage(
 }
 
 export async function requestModel(
-  llm: Pick<LlmPort, 'stream'> & Partial<Pick<LlmPort, 'select'>>,
+  llm: Pick<LlmPort, 'bind'>,
   request: LlmRequest,
   options: {
     request?(request: LlmRequest): void;
@@ -50,7 +52,7 @@ export async function requestModel(
       thinking = '';
     try {
       signal.throwIfAborted();
-      await llm.stream(request, (event) => {
+      await (request[requestBinding] ?? llm.bind(model)).stream(request, (event) => {
         if (event.type === 'done') message = event.message;
         else {
           signal.throwIfAborted();
@@ -68,7 +70,7 @@ export async function requestModel(
       if (!message) throw new Error('The model stream ended without a final message');
     } catch (error) {
       message = {
-        ...failedMessage(request, error, partial, llm.select?.(model)?.classifyError?.(error)),
+        ...failedMessage(request, error, partial, error instanceof ModelTransportError ? error.kind : undefined),
         ...(thinking && {
           content: [
             { type: 'thinking' as const, thinking },

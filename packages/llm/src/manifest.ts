@@ -1,6 +1,6 @@
 import { Service, type Context, type Plugin } from 'mini-harness/cordis';
 import { rankScoped, sameRank, scopeOf, type ScopeKey } from '@mini-harness/plugin-api/scopes';
-import type { LlmAdapter, LlmPort } from './api.ts';
+import { ModelTransportError, type LlmAdapter, type LlmPort } from './api.ts';
 
 export const metadata = {
   title: 'Model transport',
@@ -46,42 +46,64 @@ const plugin: Plugin.Object = {
         const entry = selected(Service.caller(this), model);
         return entry === null ? null : entry?.adapter;
       },
-      async countInputTokens(request) {
-        const entry = selected(Service.caller(this), request.model);
-        if (!entry) return;
-        const count = entry.adapter.countInputTokens;
-        if (count)
-          return entry.owner.fiber.run(
-            (signal) => count.call(entry.adapter, { ...request, signal }),
-            AbortSignal.any([entry.signal, request.signal]),
-          );
-      },
-      async stream(request, emit) {
-        request.signal.throwIfAborted();
-        const entry = selected(Service.caller(this), request.model);
-        const model = request.model.provider + '/' + request.model.id;
+      bind(choice) {
+        const caller = Service.caller(this);
+        const entry = selected(caller, choice);
+        const model = choice.provider + '/' + choice.id;
         if (entry === null) throw new Error('Multiple model adapters accept ' + model);
         if (!entry) throw new Error('No model adapter accepts ' + model);
-        await entry.owner.fiber.run(
-          async (signal) => {
-            const iterator = entry.adapter.stream({ ...request, signal })[Symbol.asyncIterator]();
-            let exhausted = false;
-            try {
-              while (true) {
-                const next = await iterator.next();
-                if (next.done) {
-                  exhausted = true;
-                  return;
-                }
-                signal.throwIfAborted();
-                emit(next.value);
-              }
-            } finally {
-              if (!exhausted) await iterator.return?.();
-            }
+        const validate = (request: import('./api.ts').LlmRequest) => {
+          request.signal.throwIfAborted();
+          if (request.model.provider !== choice.provider || request.model.id !== choice.id)
+            throw new Error('Model request does not match its adapter binding');
+          if (selected(caller, choice) !== entry)
+            throw new Error('Model adapter changed after request preparation: ' + model);
+        };
+        return {
+          async countInputTokens(request) {
+            validate(request);
+            const count = entry.adapter.countInputTokens;
+            if (count)
+              return entry.owner.fiber.run(
+                (signal) => count.call(entry.adapter, { ...request, signal }),
+                AbortSignal.any([entry.signal, request.signal]),
+              );
           },
-          AbortSignal.any([entry.signal, request.signal]),
-        );
+          async stream(request, emit) {
+            validate(request);
+            await entry.owner.fiber.run(
+              async (signal) => {
+                let iterator: AsyncIterator<import('./api.ts').LlmEvent>;
+                try {
+                  iterator = entry.adapter.stream({ ...request, signal })[Symbol.asyncIterator]();
+                } catch (error) {
+                  throw new ModelTransportError(error, entry.adapter.classifyError?.(error));
+                }
+                let exhausted = false;
+                try {
+                  while (true) {
+                    let next: IteratorResult<import('./api.ts').LlmEvent>;
+                    try {
+                      next = await iterator.next();
+                    } catch (error) {
+                      signal.throwIfAborted();
+                      throw new ModelTransportError(error, entry.adapter.classifyError?.(error));
+                    }
+                    if (next.done) {
+                      exhausted = true;
+                      return;
+                    }
+                    signal.throwIfAborted();
+                    emit(next.value);
+                  }
+                } finally {
+                  if (!exhausted) await iterator.return?.();
+                }
+              },
+              AbortSignal.any([entry.signal, request.signal]),
+            );
+          },
+        };
       },
     });
     ctx.provide('harnessLlm', llm);

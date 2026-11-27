@@ -582,11 +582,11 @@ export function apply(ctx) {
   await toggle('model-low', false);
   assert.equal(catalogChanges, 1);
   assert.equal(list()[0]?.name, 'model-low');
-  assert.deepEqual(ctx.harnessModels.capabilities(model)?.input, ['text']);
+  assert.deepEqual(ctx.harnessModels.resolve(model)?.capabilities.input, ['text']);
   assert.equal(await sendRun(ctx.harnessRuns, session.id, 'Low priority', undefined, { model }), 'model-low');
   await toggle('model-high', false);
   assert.equal(list()[0]?.name, 'model-high');
-  assert.deepEqual(ctx.harnessModels.capabilities(model)?.input, ['text', 'image']);
+  assert.deepEqual(ctx.harnessModels.resolve(model)?.capabilities.input, ['text', 'image']);
   assert.equal(
     await sendRun(ctx.harnessRuns, session.id, 'High priority', undefined, { model }),
     'model-high',
@@ -594,10 +594,9 @@ export function apply(ctx) {
   await toggle('model-tie', false);
   assert.deepEqual(list(), []);
   assert.equal(ctx.harnessModels.resolve(model), undefined);
-  assert.equal(ctx.harnessModels.capabilities(model), undefined);
   assert.equal(ctx.harnessLlm.select(model), null);
   await assert.rejects(
-    ctx.harnessLlm.stream(
+    async () => ctx.harnessLlm.bind(model).stream(
       {
         model,
         messages: [],
@@ -632,13 +631,13 @@ export function apply(ctx) {
     second();
     first();
   }
-  assert.deepEqual(ctx.harnessModels.resolve(model), model);
+  assert.deepEqual(ctx.harnessModels.resolve(model)?.model, model);
   const before = catalogChanges;
   await ctx.harnessModelPreference.remember(model);
   await ctx.parallel('models/source-changed', 'auth');
   assert.equal(catalogChanges, before);
 
-  const metadata = ctx.harnessModels.capabilities(model)!;
+  const metadata = ctx.harnessModels.resolve(model)!.capabilities;
   const entries = list();
   const dispose = ctx.harnessModels.register(
     {
@@ -721,7 +720,7 @@ test(
       received = resolve;
     });
     const settled = assert.rejects(
-      ctx.harnessLlm.stream(
+      ctx.harnessLlm.bind(model).stream(
         { model, messages: [], systemPrompt: '', signal: new AbortController().signal },
         received,
       ),

@@ -1,10 +1,11 @@
-import type {
-  InputMeasurement,
-  InputTokenCounts,
-  LlmPort,
-  LlmRequest,
-  NativeContent,
-  NativeMessage,
+import {
+  requestBinding,
+  type InputMeasurement,
+  type InputTokenCounts,
+  type LlmPort,
+  type LlmRequest,
+  type NativeContent,
+  type NativeMessage,
 } from '@mini-harness/llm/api';
 import type { SessionLogPort } from '@mini-harness/sessions/log-api';
 import type { ProviderModel } from '@mini-harness/models/catalog';
@@ -99,7 +100,7 @@ export type MeasuredRequest = LlmRequest & { maxTokens: number; inputMeasurement
 export async function measure(
   request: LlmRequest,
   capability: ProviderModel,
-  llm: Pick<LlmPort, 'countInputTokens'>,
+  llm: Pick<LlmPort, 'bind'>,
   calibrate: () => number,
 ): Promise<MeasuredRequest> {
   const window = capability.contextWindow;
@@ -116,7 +117,8 @@ export async function measure(
       'Configure a valid context window and output limit for ' + request.model.id,
     );
   const prepared = { ...request, maxTokens };
-  const exact = await llm.countInputTokens(prepared);
+  const binding = llm.bind(request.model);
+  const exact = await binding.countInputTokens(prepared);
   if (
     exact &&
     ![exact.system, exact.tools, exact.messages].every((count) => Number.isSafeInteger(count) && count >= 0)
@@ -131,5 +133,5 @@ export async function measure(
   };
   const budget = window - maxTokens - Math.min(4096, Math.max(16, Math.ceil(window * (exact ? 0.01 : 0.04))));
   if (budget <= 0) throw new DomainError('invalid_input', 'No input capacity after reserving model output');
-  return { ...prepared, inputMeasurement: { ...counts, window, budget, estimated: !exact } };
+  return { ...prepared, [requestBinding]: binding, inputMeasurement: { ...counts, window, budget, estimated: !exact } };
 }
