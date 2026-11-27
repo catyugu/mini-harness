@@ -69,34 +69,37 @@ function fileBody() {
     previousArgs = args;
     target.update(tool);
     input.replaceChildren();
-  if (args && typeof args === 'object') {
-    if (tool.name === 'write' && 'content' in args && typeof args.content === 'string') {
-      const label = document.createElement('span');
-      label.textContent = 'Requested content';
-      input.append(label, textOutput(args.content));
-    }
-    if (tool.name === 'edit' && 'edits' in args && Array.isArray(args.edits)) {
-      const label = document.createElement('span');
-      label.textContent = 'Requested edits';
-      input.append(label);
-      for (const edit of args.edits) {
-        if (!edit || typeof edit.oldText !== 'string' || typeof edit.newText !== 'string') continue;
-        const before = textOutput(edit.oldText);
-        before.classList.add('file-edit-before');
-        before.setAttribute('aria-label', 'Before');
-        const after = textOutput(edit.newText);
-        after.classList.add('file-edit-after');
-        after.setAttribute('aria-label', 'After');
-        input.append(before, after);
+    if (args && typeof args === 'object') {
+      if (tool.name === 'write' && 'content' in args && typeof args.content === 'string') {
+        const label = document.createElement('span');
+        label.textContent = 'Requested content';
+        input.append(label, textOutput(args.content));
+      }
+      if (tool.name === 'edit' && 'edits' in args && Array.isArray(args.edits)) {
+        const label = document.createElement('span');
+        label.textContent = 'Requested edits';
+        input.append(label);
+        for (const edit of args.edits) {
+          if (!edit || typeof edit.oldText !== 'string' || typeof edit.newText !== 'string') continue;
+          const before = textOutput(edit.oldText);
+          before.classList.add('file-edit-before');
+          before.setAttribute('aria-label', 'Before');
+          const after = textOutput(edit.newText);
+          after.classList.add('file-edit-after');
+          after.setAttribute('aria-label', 'After');
+          input.append(before, after);
+        }
       }
     }
-  }
     input.hidden = !input.childElementCount;
   }
   function updateResult(tool: ToolView) {
     if (previousContent === tool.content) return;
     previousContent = tool.content;
-    const blocks = typeof tool.content === 'string' ? [{ type: 'text' as const, text: tool.content }] : tool.content ?? [];
+    const blocks =
+      typeof tool.content === 'string'
+        ? [{ type: 'text' as const, text: tool.content }]
+        : (tool.content ?? []);
     const children: HTMLElement[] = [];
     for (const block of blocks) {
       const existing = result.children[children.length];
@@ -107,7 +110,10 @@ function fileBody() {
       }
       if (block.type === 'image') {
         const image = rasterImage(block.mimeType, block.data, 'File image');
-        if (image) children.push(existing instanceof HTMLImageElement && existing.src === image.src ? existing : image);
+        if (image)
+          children.push(
+            existing instanceof HTMLImageElement && existing.src === image.src ? existing : image,
+          );
       }
     }
     for (const [index, child] of children.entries())
@@ -116,7 +122,13 @@ function fileBody() {
     result.hidden = !children.length;
   }
   input.hidden = result.hidden = true;
-  return { node, update(tool: ToolView) { updateInput(tool); updateResult(tool); } };
+  return {
+    node,
+    update(tool: ToolView) {
+      updateInput(tool);
+      updateResult(tool);
+    },
+  };
 }
 
 function setup(ctx: Context) {

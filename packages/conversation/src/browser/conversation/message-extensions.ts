@@ -147,10 +147,14 @@ export class MessageExtensions {
   }
 
   subscribeToTools(listener: (name: string, placement: ToolPlacement) => void, signal: AbortSignal) {
-    this.events.addEventListener('tools', (event) => {
-      const { name, placement } = (event as CustomEvent<{ name: string; placement: ToolPlacement }>).detail;
-      listener(name, placement);
-    }, { signal });
+    this.events.addEventListener(
+      'tools',
+      (event) => {
+        const { name, placement } = (event as CustomEvent<{ name: string; placement: ToolPlacement }>).detail;
+        listener(name, placement);
+      },
+      { signal },
+    );
   }
 
   toolRenderer(name: string, placement: ToolPlacement) {

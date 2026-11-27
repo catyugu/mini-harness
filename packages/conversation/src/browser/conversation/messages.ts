@@ -334,8 +334,9 @@ export function createMessageView(
     'tool-progress:' + JSON.stringify([runId, callId]);
 
   function updateTools(runId: string | undefined, tools: Parameters<typeof groupHistory>[3]) {
-    const existing = [...nodes.keys()].filter(key => key.startsWith('tool-progress:'));
-    if (existing.length !== tools.length || tools.some(tool => !nodes.has(progressKey(runId, tool.id)))) return false;
+    const existing = [...nodes.keys()].filter((key) => key.startsWith('tool-progress:'));
+    if (existing.length !== tools.length || tools.some((tool) => !nodes.has(progressKey(runId, tool.id))))
+      return false;
     for (const tool of tools) {
       const entry = nodes.get(progressKey(runId, tool.id))!;
       if (entry.source === tool) continue;

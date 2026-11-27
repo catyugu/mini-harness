@@ -13,7 +13,10 @@ export function apply(ctx: Context) {
     miniPrimitives.status(record.title + ': ' + String(record.content ?? ''));
   ctx.effect(() => ctx.miniMessages.registerRecord(browserPluginId(ctx), 'note', renderRecord));
   ctx.effect(() =>
-    ctx.miniMessages.registerTool('save_task_note', () => ({ node: miniPrimitives.status('Saved to task notes'), update() {} })),
+    ctx.miniMessages.registerTool('save_task_note', () => ({
+      node: miniPrimitives.status('Saved to task notes'),
+      update() {},
+    })),
   );
   ctx.effect(() =>
     ctx.miniSettingsRegistry.register(

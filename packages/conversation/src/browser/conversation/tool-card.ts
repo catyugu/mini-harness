@@ -58,7 +58,7 @@ export function createToolCard(initial: ToolCardData, extensions: MessageExtensi
     if (previousContent !== tool.content) {
       previousContent = tool.content;
       const blocks = typeof tool.content === 'string' ? [] : (tool.content ?? []);
-      const rendered = blocks.flatMap(block => {
+      const rendered = blocks.flatMap((block) => {
         if (block.type !== 'image') return [];
         const image = rasterImage(block.mimeType, block.data, 'Tool output');
         return image ? [image] : [];
@@ -123,7 +123,7 @@ export function createToolCard(initial: ToolCardData, extensions: MessageExtensi
       }
       case 'status': {
         const contribution = updateStatus(current);
-        const label = contribution?.hasChildNodes() ? '' : labels[current.state] ?? current.state;
+        const label = contribution?.hasChildNodes() ? '' : (labels[current.state] ?? current.state);
         if (statusLabel.textContent !== label) statusLabel.textContent = label;
         statusLabel.hidden = !label;
         break;
@@ -147,8 +147,12 @@ export function createToolCard(initial: ToolCardData, extensions: MessageExtensi
     current = tool;
     if (node.dataset.state !== tool.state) node.dataset.state = tool.state;
     const elapsed = tool.elapsedMs;
-    const label = elapsed === undefined || !Number.isFinite(elapsed) ? '' :
-      elapsed < 1000 ? Math.round(elapsed) + ' ms' : (elapsed / 1000).toFixed(1) + ' s';
+    const label =
+      elapsed === undefined || !Number.isFinite(elapsed)
+        ? ''
+        : elapsed < 1000
+          ? Math.round(elapsed) + ' ms'
+          : (elapsed / 1000).toFixed(1) + ' s';
     if (duration.textContent !== label) duration.textContent = label;
     duration.hidden = !label;
     refresh('summary');

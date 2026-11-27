@@ -42,12 +42,16 @@ export function mountHistory(ctx: Context, extensions: MessageExtensions, signal
   extensions.subscribeToFooters(render, signal);
   extensions.subscribeToRecords(render, signal);
   control.subscribe(['session', 'history', 'run', 'records'], render, signal);
-  control.subscribe(['tools'], () => {
-    const { tools, run } = control.get();
-    if (tools === renderedTools) return;
-    if (view.updateTools(run?.id, tools)) renderedTools = tools;
-    else render();
-  }, signal);
+  control.subscribe(
+    ['tools'],
+    () => {
+      const { tools, run } = control.get();
+      if (tools === renderedTools) return;
+      if (view.updateTools(run?.id, tools)) renderedTools = tools;
+      else render();
+    },
+    signal,
+  );
   control.subscribe(
     ['partial'],
     () => {

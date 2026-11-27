@@ -35,7 +35,8 @@ test('renders Markdown and tool results, and stops a pending reply', async ({ pa
     }
     if (last.content === 'Change course') return 'Steering accepted';
     if (last.content === 'Stop this tool') return { tool: 'wait_for_stop', args: {} };
-    if (last.content === 'Stream a tool') return { tool: 'stream_fixture', args: { label: 'Stream fixture' } };
+    if (last.content === 'Stream a tool')
+      return { tool: 'stream_fixture', args: { label: 'Stream fixture' } };
     if (last.content.startsWith('Write a continuation checkpoint')) return checkpointFixture;
     if (last.content === 'Reuse the tool ID')
       return { tool: 'read', args: { path: 'sample.txt' }, callId: 'reused-tool' };
@@ -79,9 +80,9 @@ export const apply = (ctx) => {
             }
           };
           write('First line\\n', 'stdout');
-          await gate(${JSON.stringify(join(paths.cwd, "stream-more"))});
+          await gate(${JSON.stringify(join(paths.cwd, 'stream-more'))});
           write('Second line\\n', 'stdout');
-          await gate(${JSON.stringify(join(paths.cwd, "stream-finish"))});
+          await gate(${JSON.stringify(join(paths.cwd, 'stream-finish'))});
           return { content: [{ type: 'text', text: 'First line\\nSecond line\\nComplete' }], details: { finished: true }, detailKeys: ['finished'] };
         }
       }));
@@ -325,19 +326,22 @@ export const apply = (ctx) => {
     await expect(output).toHaveText('First line');
     const summary = expectPresent(await header.elementHandle(), 'stream summary');
     const pre = expectPresent(await output.elementHandle(), 'stream output');
-    const action = expectPresent(await stream.getByRole('button', { name: 'Fixture action' }).elementHandle(), 'stream action');
+    const action = expectPresent(
+      await stream.getByRole('button', { name: 'Fixture action' }).elementHandle(),
+      'stream action',
+    );
     await action.focus();
     writeFileSync(join(paths.cwd, 'stream-more'), '');
     await expect(output).toHaveText(/First line\s+Second line/);
     await expect(stream.getByRole('button', { name: 'Fixture action' })).toBeFocused();
-    expect(await pre.evaluate(node => node.isConnected)).toBe(true);
-    expect(await summary.evaluate(node => node.isConnected)).toBe(true);
-    expect(await action.evaluate(node => node.isConnected)).toBe(true);
+    expect(await pre.evaluate((node) => node.isConnected)).toBe(true);
+    expect(await summary.evaluate((node) => node.isConnected)).toBe(true);
+    expect(await action.evaluate((node) => node.isConnected)).toBe(true);
     writeFileSync(join(paths.cwd, 'stream-finish'), '');
     await expect(header).toHaveAccessibleName(/Stream complete/);
     await expect(output).toHaveText(/First line\s+Second line\s+Complete/);
-    expect(await pre.evaluate(node => node.isConnected)).toBe(true);
-    expect(await action.evaluate(node => node.isConnected)).toBe(true);
+    expect(await pre.evaluate((node) => node.isConnected)).toBe(true);
+    expect(await action.evaluate((node) => node.isConnected)).toBe(true);
     await expect(page.locator('body')).toHaveAttribute('data-stream-mounted', '1');
     await page.getByRole('button', { name: 'New conversation', exact: true }).click();
     await expect(page.locator('body')).toHaveAttribute('data-stream-released', '1');
