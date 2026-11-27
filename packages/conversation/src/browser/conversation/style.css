@@ -63,36 +63,33 @@
   padding: 6px 11px;
   white-space: pre-wrap;
 }
-.message.assistant {
-  white-space: pre-wrap;
-}
-.message.assistant:has(> *) {
-  white-space: normal;
-}
 .message.assistant > :first-child {
   margin-top: 0;
 }
 .message.assistant > :last-child {
   margin-bottom: 0;
 }
-.tool-card pre {
-  max-width: 100%;
-  margin: 0;
-  padding: 12px;
-  overflow: auto;
-  color: var(--muted);
-  font: var(--font-meta) / 1.5 var(--font-mono);
-}
 .tool-card > summary > .ui-record-label {
   font-weight: 500;
 }
+.tool-summary-slot {
+  display: flex;
+  align-items: center;
+  flex: 1 1 0;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+}
 .tool-duration {
-  flex-shrink: 0;
+  flex: none;
+  white-space: nowrap;
   color: var(--muted);
   font-size: var(--font-caption);
   font-variant-numeric: tabular-nums;
 }
 .tool-state {
+  flex: none;
+  white-space: nowrap;
   padding: 1px 3px;
   color: var(--muted);
   font-size: var(--font-caption);
@@ -106,6 +103,9 @@
 .tool-card:is([data-state='denied'], [data-state='skipped'], [data-state='cancelled']) .tool-state {
   color: var(--warning);
 }
+.tool-content {
+  min-width: 0;
+}
 .tool-content:not(:empty),
 .async-message-body {
   padding: 5px 0 8px 20px;
@@ -114,16 +114,6 @@
   color: var(--muted);
   font-size: var(--font-meta);
   overflow-wrap: anywhere;
-}
-.tool-content pre {
-  max-height: 300px;
-  border-radius: 5px;
-  background: var(--panel);
-}
-.tool-content img {
-  display: block;
-  max-width: 100%;
-  max-height: 450px;
 }
 
 .composer-wrap {
@@ -547,10 +537,6 @@ button.file-card:hover {
     min-width: 36px;
     min-height: 36px;
   }
-}
-.tool-arguments {
-  border-bottom: 1px solid var(--border);
-  color: var(--muted);
 }
 .attachments {
   display: flex;

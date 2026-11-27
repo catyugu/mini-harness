@@ -10,8 +10,8 @@ import type {
   ToolView,
 } from '../history-api.ts';
 import { icon } from '@mini-harness/ui-primitives/icons';
-import { renderMarkdown } from '@mini-harness/ui-primitives/markdown';
-import { imageMime } from './attachment-card.ts';
+import { markdownSource, renderMarkdown } from '@mini-harness/ui-primitives/markdown';
+import { textOutput, rasterImage } from '@mini-harness/ui-primitives/primitives';
 import { attachmentView } from './attachment-view.ts';
 import { renderReferences } from './file-references.ts';
 import type { MessageExtensions } from './message-extensions.ts';
@@ -43,7 +43,27 @@ export function createMessageView(
   const nodes = new Map<string, { node: HTMLElement; source: unknown }>();
   const recordUpdates = new WeakMap<HTMLElement, (record: LiveRecord) => void>();
   const preview = document.createElement('div');
-  preview.className = 'message assistant';
+  preview.className = 'message assistant markdown';
+  let frame: number | undefined;
+
+  function cancelPreview() {
+    if (frame === undefined) return;
+    cancelAnimationFrame(frame);
+    frame = undefined;
+  }
+  signal.addEventListener('abort', cancelPreview, { once: true });
+
+  function schedulePreview() {
+    if (frame !== undefined) return;
+    frame = requestAnimationFrame(() => {
+      frame = undefined;
+      const { partial } = ctx.miniConversation.get();
+      if (!partial || !messages.contains(preview) || markdownSource.get(preview) === partial) return;
+      renderMarkdown(preview, partial);
+      scrollToEnd();
+    });
+  }
+
   let following = true;
   let followedOffset: number | undefined;
 
@@ -184,7 +204,7 @@ export function createMessageView(
     resources.set(item, resource);
     const summary = document.createElement('summary');
     const name = document.createElement('strong');
-    name.className = 'ui-record-label';
+    name.className = 'ui-record-label ui-truncate';
     name.textContent = data.name.replaceAll('_', ' ');
     name.title = data.name;
     const status = document.createElement('span');
@@ -202,6 +222,13 @@ export function createMessageView(
     if (customStatus) status.append(customStatus);
     else status.textContent = labels[data.state] ?? data.state;
     summary.append(icon('chevron'), name);
+    const annotation = extensions.render(data, resource.signal, 'summary');
+    if (annotation) {
+      const slot = document.createElement('span');
+      slot.className = 'tool-summary-slot';
+      slot.append(annotation);
+      summary.append(slot);
+    }
     const elapsed = data.elapsedMs;
     if (elapsed !== undefined && Number.isFinite(elapsed)) {
       const duration = document.createElement('span');
@@ -210,32 +237,19 @@ export function createMessageView(
         elapsed < 1000 ? Math.round(elapsed) + ' ms' : (elapsed / 1000).toFixed(1) + ' s';
       summary.append(duration);
     }
-    const annotation = extensions.render(data, resource.signal, 'summary');
-    if (annotation) summary.append(annotation);
     summary.append(status);
     const body = document.createElement('div');
     body.className = 'tool-content';
-    if (data.arguments !== undefined) {
-      const args = document.createElement('pre');
-      args.className = 'tool-arguments';
-      args.textContent = JSON.stringify(data.arguments, null, 2);
-      body.append(args);
-    }
-    const custom = extensions.render(data, resource.signal);
+    const custom = extensions.render(data, resource.signal, 'body');
     if (custom) body.append(custom);
-    const output = custom ? '' : textOf(data.content) || Object.values(data.streams ?? {}).join('');
-    if (output) {
-      const result = document.createElement('pre');
-      result.textContent = output;
-      body.append(result);
-    }
-    for (const block of typeof data.content === 'string' ? [] : (data.content ?? [])) {
-      if (block.type !== 'image' || !imageMime.test(block.mimeType ?? '') || !block.data) continue;
-      const img = document.createElement('img');
-      img.alt = 'Tool output';
-      img.loading = 'lazy';
-      img.src = 'data:' + block.mimeType + ';base64,' + block.data;
-      body.append(img);
+    else {
+      const output = textOf(data.content) || Object.values(data.streams ?? {}).join('');
+      if (output) body.append(textOutput(output));
+      for (const block of typeof data.content === 'string' ? [] : (data.content ?? [])) {
+        if (block.type !== 'image') continue;
+        const image = rasterImage(block.mimeType, block.data, 'Tool output');
+        if (image) body.append(image);
+      }
     }
     const action = extensions.render(data, resource.signal, 'action');
     if (action) {
@@ -360,6 +374,9 @@ export function createMessageView(
   }
 
   function reset() {
+    cancelPreview();
+    preview.replaceChildren();
+    markdownSource.delete(preview);
     for (const node of resources.keys()) remove(node);
     messages.replaceChildren();
     nodes.clear();
@@ -378,6 +395,11 @@ export function createMessageView(
     tools: Parameters<typeof groupHistory>[3],
     records: readonly LiveRecord[],
   ) {
+    if (!partial) {
+      cancelPreview();
+      preview.replaceChildren();
+      markdownSource.delete(preview);
+    }
     const pending = new Set(nodes.keys());
     const progressKey = (runId: string | undefined, callId: string) =>
       'tool-progress:' + JSON.stringify([runId, callId]);
@@ -450,7 +472,6 @@ export function createMessageView(
             toolCard(part, node),
           );
         case 'partial':
-          preview.textContent = partial;
           return preview;
         default:
           return retain(part.type + ':' + part.id, part.text, (previous) => {
@@ -516,6 +537,7 @@ export function createMessageView(
     reconcile(messages, desired);
     for (const node of resources.keys()) if (!messages.contains(node)) remove(node);
     refreshActions();
+    if (partial) schedulePreview();
     scrollToEnd();
   }
 
@@ -527,8 +549,7 @@ export function createMessageView(
     refreshActions,
     partial(text: string) {
       if (!text || !messages.contains(preview)) return false;
-      preview.textContent = text;
-      scrollToEnd();
+      if (markdownSource.get(preview) !== text) schedulePreview();
       return true;
     },
   };

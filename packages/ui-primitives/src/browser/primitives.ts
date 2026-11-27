@@ -218,3 +218,21 @@ export function recordRow(title: string | HTMLElement, body: HTMLElement, traili
   details.append(summary, body);
   return details;
 }
+
+/** Bounded, scrollable plain text; the caller owns its meaning and composition. */
+export function textOutput(text: string) {
+  const node = document.createElement('pre');
+  node.className = 'ui-text-output';
+  node.textContent = text;
+  return node;
+}
+
+export function rasterImage(mimeType: string | undefined, data: string | undefined, alt: string) {
+  if (!mimeType || !/^image\/(?:png|jpeg|gif|webp)$/.test(mimeType) || !data) return;
+  const image = document.createElement('img');
+  image.className = 'ui-raster-image';
+  image.alt = alt;
+  image.loading = 'lazy';
+  image.src = 'data:' + mimeType + ';base64,' + data;
+  return image;
+}
