@@ -232,8 +232,16 @@ test('log query errors propagate identically for temporary readers and writers',
   const restored = new SessionRegistry(paths);
   t.after(() => restored.dispose());
   const error = new DomainError('unavailable', 'Caller error');
-  const read = () => { throw error; };
-  assert.throws(() => restored.inspectLog(session.id, read), (thrown) => thrown === error);
+  const read = () => {
+    throw error;
+  };
+  assert.throws(
+    () => restored.inspectLog(session.id, read),
+    (thrown) => thrown === error,
+  );
   restored.log(session.id);
-  assert.throws(() => restored.inspectLog(session.id, read), (thrown) => thrown === error);
+  assert.throws(
+    () => restored.inspectLog(session.id, read),
+    (thrown) => thrown === error,
+  );
 });

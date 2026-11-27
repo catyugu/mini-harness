@@ -262,7 +262,7 @@ export class TaskRuntime implements TaskPort {
     this.notify('created', snapshot);
     settle(
       Promise.resolve()
-        .then(() => provider ? provider.fiber.run(() => run(), signal) : run())
+        .then(() => (provider ? provider.fiber.run(() => run(), signal) : run()))
         .catch((error) => {
           if (terminal(snapshot.state)) throw error;
           return run({ error });
