@@ -342,8 +342,7 @@ export class ModelStore implements ModelStorePort {
           if (!model.templateId && !builtin.api)
             throw invalid('This built-in provider has no protocol for new models');
         }
-        if (override.baseUrl !== undefined || override.models !== undefined)
-          next.builtins[id] = override;
+        if (override.baseUrl !== undefined || override.models !== undefined) next.builtins[id] = override;
         else delete next.builtins[id];
       } else {
         const previous = Object.hasOwn(next.providers, id) ? next.providers[id] : undefined;

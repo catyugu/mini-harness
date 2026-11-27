@@ -168,9 +168,9 @@ export function resolveModel(
     provider,
     input: [...model.input],
     thinkingLevels: model.reasoning
-      ? (baseline?.reasoning
-          ? baseline.thinkingLevels
-          : thinkingLevels.filter((level) => level !== 'xhigh' && level !== 'max'))
+      ? baseline?.reasoning
+        ? baseline.thinkingLevels
+        : thinkingLevels.filter((level) => level !== 'xhigh' && level !== 'max')
       : ['off'],
   };
 }

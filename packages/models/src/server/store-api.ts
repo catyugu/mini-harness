@@ -1,11 +1,7 @@
 import type { Api, Model } from '@earendil-works/pi-ai';
 import type { ModelChoice, ThinkingLevel } from '@mini-harness/llm/vocabulary';
 import type { ModelSource } from './api.ts';
-import type {
-  ProtocolInfo,
-  ProviderInfo,
-  ProviderModelDefinition,
-} from '../shared/catalog.ts';
+import type { ProtocolInfo, ProviderInfo, ProviderModelDefinition } from '../shared/catalog.ts';
 import type { ModelStore } from './store.ts';
 import type { ProviderConnection } from './provider-settings.ts';
 
