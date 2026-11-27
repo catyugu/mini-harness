@@ -4,7 +4,7 @@ import type { PluginInfo } from '@mini-harness/plugin-api/descriptor';
 import { AgentLoop } from '../agent.ts';
 import { reasoningRecords } from '../reasoning.ts';
 import { Type } from 'typebox';
-import { turnLimit } from '../limits.ts';
+import { turnLimit } from '../shared/limits.ts';
 
 const Config = defineConfig(
   Type.Object(

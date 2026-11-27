@@ -1,7 +1,7 @@
 import type { Context } from 'mini-harness/cordis';
 import { browserPluginId, browserPluginSettings } from '@mini-harness/ui-runtime/plugin-settings';
 import { button, field } from '@mini-harness/ui-primitives/primitives';
-import { shellLimits } from '../limits.ts';
+import { shellLimits } from '../shared/limits.ts';
 import type { ToolView } from '@mini-harness/conversation/browser/history-api';
 
 function registerConfiguration(ctx: Context) {

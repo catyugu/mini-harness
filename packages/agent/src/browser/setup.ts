@@ -1,7 +1,7 @@
 import type { Context } from 'mini-harness/cordis';
 import { browserPluginId, browserPluginSettings } from '@mini-harness/ui-runtime/plugin-settings';
 import { button, field } from '@mini-harness/ui-primitives/primitives';
-import { turnLimit } from '../limits.ts';
+import { turnLimit } from '../shared/limits.ts';
 
 function registerConfiguration(ctx: Context) {
   const configuration = browserPluginSettings(ctx);

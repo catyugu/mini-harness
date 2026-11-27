@@ -3,7 +3,7 @@ import type { Plugin } from 'mini-harness/cordis';
 import type { PluginInfo } from '@mini-harness/plugin-api/descriptor';
 import { setup } from './server/setup.ts';
 import { Type } from 'typebox';
-import { shellLimits } from './limits.ts';
+import { shellLimits } from './shared/limits.ts';
 
 const Config = defineConfig({
   ...Type.Object(
