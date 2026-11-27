@@ -25,7 +25,9 @@ test('refresh and navigation preserve a run while another conversation completes
       release = done;
     });
     let advance = () => {};
-    const whileAway = new Promise<void>(resolve => { advance = resolve; });
+    const whileAway = new Promise<void>((resolve) => {
+      advance = resolve;
+    });
     const mock = await createMockProvider(({ messages }) => {
       if (messages.at(-1)?.content === 'Keep working') {
         return (async function* () {
@@ -75,12 +77,14 @@ test('refresh and navigation preserve a run while another conversation completes
       const first = page.getByRole('button', { name: 'Keep working', exact: true });
       const id = expectPresent(await first.getAttribute('id'), 'conversation id').slice('session-'.length);
       advance();
-      await expect.poll(async () => {
-        const response = await page.request.get(service.url + '/api/sessions/' + id, {
-          headers: { Authorization: 'Bearer ' + service.token },
-        });
-        return (await response.json()).partial;
-      }).toBe('Continued after');
+      await expect
+        .poll(async () => {
+          const response = await page.request.get(service.url + '/api/sessions/' + id, {
+            headers: { Authorization: 'Bearer ' + service.token },
+          });
+          return (await response.json()).partial;
+        })
+        .toBe('Continued after');
       await expect(page.locator('.message.assistant')).toHaveText('Independent reply');
       let resume: () => void = () => {
         throw new Error('Not started');
@@ -566,9 +570,11 @@ export const apply = (ctx) => {
     await expect(panel.getByRole('button', { name: 'Finished 1', exact: true })).toBeVisible();
     await toggle.click();
     await configure({ 'task-control': { disabled: true } });
-    const query = page.waitForResponse(response =>
-      /\/api\/sessions\/[^/]+\/tasks$/.test(new URL(response.url()).pathname) &&
-      response.request().method() === 'GET');
+    const query = page.waitForResponse(
+      (response) =>
+        /\/api\/sessions\/[^/]+\/tasks$/.test(new URL(response.url()).pathname) &&
+        response.request().method() === 'GET',
+    );
     await toggle.click();
     expect((await query).status()).toBe(200);
     await expect(panel.getByRole('button', { name: 'Fixture job · Cancelled', exact: true })).toBeVisible();

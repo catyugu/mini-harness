@@ -387,12 +387,19 @@ export function createMessageView(
     // A grouped text part is identified by its first source block. If the committed
     // text merged into a preceding part, retain that existing part instead of moving
     // the preview over it.
-    const firstText = completedMessage && (typeof completedMessage.content === 'string'
-      ? (completedMessage.content ? 0 : -1)
-      : completedMessage.content.findIndex(block => block.type === 'text' && Boolean(block.text)));
-    const completedPart = completedTurn?.type === 'turn' && firstText !== undefined && firstText >= 0
-      ? completedTurn.parts.find(part => part.type === 'text' && part.id === completedMessage!.id + ':' + firstText)
-      : undefined;
+    const firstText =
+      completedMessage &&
+      (typeof completedMessage.content === 'string'
+        ? completedMessage.content
+          ? 0
+          : -1
+        : completedMessage.content.findIndex((block) => block.type === 'text' && Boolean(block.text)));
+    const completedPart =
+      completedTurn?.type === 'turn' && firstText !== undefined && firstText >= 0
+        ? completedTurn.parts.find(
+            (part) => part.type === 'text' && part.id === completedMessage!.id + ':' + firstText,
+          )
+        : undefined;
     const pending = new Set(nodes.keys());
     function retain<T extends HTMLElement>(key: string, source: unknown, render: (prior?: T) => T) {
       pending.delete(key);

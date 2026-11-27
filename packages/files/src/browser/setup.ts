@@ -69,11 +69,16 @@ function fileBody() {
     if (previousArgs === args) return;
     previousArgs = args;
     target.update(tool);
-    const fields = args && typeof args === 'object' ? args as Record<string, unknown> : {};
+    const fields = args && typeof args === 'object' ? (args as Record<string, unknown>) : {};
     const content = tool.name === 'write' && typeof fields.content === 'string' ? fields.content : undefined;
-    const edits: { oldText: string; newText: string }[] = tool.name === 'edit' && Array.isArray(fields.edits)
-      ? fields.edits.flatMap(edit => edit && typeof edit.oldText === 'string' && typeof edit.newText === 'string'
-        ? [{ oldText: edit.oldText, newText: edit.newText }] : []) : [];
+    const edits: { oldText: string; newText: string }[] =
+      tool.name === 'edit' && Array.isArray(fields.edits)
+        ? fields.edits.flatMap((edit) =>
+            edit && typeof edit.oldText === 'string' && typeof edit.newText === 'string'
+              ? [{ oldText: edit.oldText, newText: edit.newText }]
+              : [],
+          )
+        : [];
     const key = JSON.stringify([content, edits]);
     if (previousInput === key) return;
     previousInput = key;

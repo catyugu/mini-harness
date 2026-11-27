@@ -10,7 +10,8 @@ test('the composed browser graph serves its runtime dependencies and excludes se
   const session = app.runtime.plugins.ctx.harnessSessions.create();
   const taskPath = '/sessions/' + session.id + '/tasks';
   assert.deepEqual(await request(taskPath), { status: 200, body: [] });
-  const registeredTools = () => app.runtime.plugins.ctx.harnessTools.list({ resourceId: session.id }).map(({ name }) => name);
+  const registeredTools = () =>
+    app.runtime.plugins.ctx.harnessTools.list({ resourceId: session.id }).map(({ name }) => name);
   assert.ok(registeredTools().includes('start_background'));
   const { body: snapshot }: { body: BrowserBootstrap } = await request('/bootstrap');
   const mounted = new Map(snapshot.ui.map((entry) => [entry.id, entry]));
