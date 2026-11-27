@@ -2,7 +2,7 @@ import { DomainError } from '@mini-harness/platform/errors';
 import { constants, type BigIntStats, type Dir, type Stats } from 'node:fs';
 import type * as fs from 'node:fs/promises';
 import type { FileHandle } from 'node:fs/promises';
-import { resolve } from 'node:path';
+import { dirname, resolve } from 'node:path';
 
 export class FileTypeError extends DomainError {
   constructor(readonly kind: 'directory' | 'not-directory' | 'unsupported') {
@@ -27,13 +27,28 @@ export function explicitFileReader(
   native: Pick<typeof fs, 'open' | 'stat' | 'opendir'>,
   cwd: string,
 ): FileReader {
+  async function statPath(target: string): Promise<Stats> {
+    try {
+      return await native.stat(target);
+    } catch (error) {
+      const { code } = error as NodeJS.ErrnoException;
+      if (code === 'ENOTDIR') throw new FileTypeError('not-directory');
+      const parent = dirname(target);
+      // Windows reports a non-directory ancestor as ENOENT rather than ENOTDIR.
+      if (process.platform === 'win32' && code === 'ENOENT' && parent !== target) {
+        const info = await statPath(parent).catch((cause: unknown) => {
+          if ((cause as NodeJS.ErrnoException).code !== 'ENOENT') throw cause;
+          return undefined;
+        });
+        if (info && !info.isDirectory()) throw new FileTypeError('not-directory');
+      }
+      throw error;
+    }
+  }
+
   async function openFile(path: string) {
     const target = resolve(cwd, path);
-    const info = await native.stat(target).catch((error: NodeJS.ErrnoException) => {
-      if (error.code === 'ENOTDIR') throw new FileTypeError('not-directory');
-      throw error;
-    });
-    checkType(info);
+    checkType(await statPath(target));
     return native.open(target, constants.O_RDONLY);
   }
   return {

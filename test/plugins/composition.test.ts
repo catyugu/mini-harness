@@ -11,6 +11,36 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { fixture } from '../support/api-fixture.ts';
 
+// Both views of a substituted File Access service read the provider's data.
+function virtualFileAccess(content: string) {
+  return `
+      const data = Buffer.from(${JSON.stringify(content)});
+      const stat = async () => ({ size: data.length, isDirectory: () => false, isFile: () => true });
+      ctx.provide('harnessFileAccess', {
+        native: {
+          stat,
+          async open() {
+            let offset = 0;
+            return {
+              async read(buffer) {
+                const bytesRead = data.copy(buffer, 0, offset);
+                offset += bytesRead;
+                return { bytesRead, buffer };
+              },
+              async close() {}
+            };
+          }
+        },
+        open: () => ({
+          access: async () => {},
+          readFile: async () => data,
+          stat,
+          async *chunks() { yield data; }
+        })
+      });
+  `;
+}
+
 const examples = fileURLToPath(new URL('../../docs/examples/', import.meta.url));
 function copyExample(directory: string, id: string) {
   cpSync(join(examples, id), join(directory, id), { recursive: true });
@@ -403,13 +433,7 @@ test('file tools and HTTP preview consume the same selected File Access provider
     `
 export const provide = ["harnessFileAccess"];
 export function apply(ctx) {
-      const data = Buffer.from('Provided file content');
-      ctx.provide('harnessFileAccess', { open: () => ({
-        access: async () => {},
-        readFile: async () => data,
-        stat: async () => ({ size: data.length, isDirectory: () => false }),
-        async *chunks() { yield data; }
-      }) });
+      ${virtualFileAccess('Provided file content')}
     }
 `,
   );
@@ -536,11 +560,7 @@ export const apply = (ctx) => { ctx.provide('harnessProcess', ${processProvider(
 import { PassThrough, Readable } from "node:stream";
 export const provide = ["harnessFileAccess","harnessProcess"];
 export const apply = (ctx) => {
-      ctx.provide('harnessFileAccess', { open: () => ({
-        access: async () => {}, stat: async () => ({ isDirectory: () => false }),
-        readFile: async () => Buffer.from('scoped file'),
-        async *chunks() { yield Buffer.from('scoped file'); }
-      }) });
+      ${virtualFileAccess('scoped file')}
       ctx.provide('harnessProcess', ${processProvider('parent process')});
     };
 `,

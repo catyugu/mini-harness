@@ -11,7 +11,7 @@ import { expectPresent } from '../support/required.ts';
 import { createMockProvider, createFixturePaths } from '../support/mock-provider.ts';
 
 test(
-  'Native execution honors file policy and recursive task waits release the single child slot',
+  'Native execution reads explicit paths and recursive task waits release the single child slot',
   { timeout: 30000 },
   async (t) => {
     const mock = await createMockProvider(({ messages }) => {
@@ -98,15 +98,14 @@ test(
     );
     const check = app.runtime.plugins.ctx.harnessSessions.create();
     await sendRun(app.runtime.plugins.ctx.harnessRuns, check.id, 'read policy');
-    const failure = app.runtime.plugins.ctx.harnessSessions
+    const result = app.runtime.plugins.ctx.harnessSessions
       .log(check.id)
       .projection()
       .timeline.filter(isViewMessage)
       .find((message) => message.role === 'toolResult');
-    assert.ok(failure);
-    assert.equal(failure.isError, true);
-    assert.match(JSON.stringify(failure.content), /permitted root/);
-    assert.doesNotMatch(JSON.stringify(failure.content), /private fixture/);
+    assert.ok(result);
+    assert.equal(result.isError, false);
+    assert.match(JSON.stringify(result.content), /private fixture/);
     await waitUntil(
       () => activeRunCount(app.runtime.plugins.ctx),
       (count) => count === 0,

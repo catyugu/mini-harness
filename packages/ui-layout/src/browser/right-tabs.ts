@@ -99,6 +99,7 @@ export function createRightTabs(
   }
 
   function describe(tab: Tab): TabDescriptor | undefined {
+    if (tab.stop) return;
     const { type, key, resource } = tab;
     const data = resource.restored ? resource.data : types.get(type)?.persistence?.save(resource.data);
     return data === undefined ? undefined : { type, key, data };
