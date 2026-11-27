@@ -188,7 +188,12 @@ export const apply = (ctx) => {
     await page.getByRole('textbox', { name: 'Message' }).fill('Stop this response');
     await page.getByRole('button', { name: 'Send' }).click();
     await waiting;
-    await page.getByRole('button', { name: 'Stop response' }).click();
+    const viewport = expectPresent(page.viewportSize(), 'viewport');
+    await page.setViewportSize({ width: 320, height: 720 });
+    const stop = page.getByRole('button', { name: 'Stop response' });
+    await expect(stop).toBeInViewport({ ratio: 0.99 });
+    await stop.click();
+    await page.setViewportSize(viewport);
     await expect(page.getByLabel('Latest run')).toHaveAttribute('data-state', 'cancelled');
     await expect(page.locator('.message.error')).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Retry' })).toHaveCount(0);
