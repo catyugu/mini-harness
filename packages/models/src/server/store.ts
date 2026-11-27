@@ -148,12 +148,11 @@ export class ModelStore implements ModelStorePort {
     id: string,
     { api, baseUrl, name, headers, apiKey: key, models }: ProviderConfiguration['providers'][string],
   ): CatalogProvider {
-    const connection = { api, baseUrl };
+    const connection = { id, api, baseUrl };
     return {
-      id,
+      ...connection,
       name,
       canSetKey: true,
-      ...connection,
       headers,
       key,
       models: models.map((model) => resolveModel(model, connection)),
@@ -168,10 +167,6 @@ export class ModelStore implements ModelStorePort {
         .filter(([id]) => !defaults.has(id))
         .map(([id, config]) => this.custom(id, config)),
     ];
-  }
-
-  private provider(id: string) {
-    return this.effective.get(id);
   }
 
   private publishCatalog(
@@ -190,7 +185,7 @@ export class ModelStore implements ModelStorePort {
 
   /** A check owns its result only until the next edit, removal or refresh of that provider. */
   private async refreshStatus(id: string, replace = false) {
-    const provider = this.provider(id);
+    const provider = this.effective.get(id);
     const current = this.status.get(id);
     if (!provider || (!replace && current?.checking)) return;
     const entry = { value: current?.value ?? { configured: false }, checking: true };
@@ -233,7 +228,7 @@ export class ModelStore implements ModelStorePort {
         name: model.name,
         input: model.input,
         configured: this.authStatus(provider).configured,
-        thinkingLevels: model.thinkingLevels ?? [],
+        thinkingLevels: model.thinkingLevels,
       })),
     );
   }
@@ -248,7 +243,7 @@ export class ModelStore implements ModelStorePort {
   }
 
   requestModel(choice: ModelChoice) {
-    const provider = this.provider(choice.provider);
+    const provider = this.effective.get(choice.provider);
     if (!provider) return;
     const model = choice.id ? provider.models.find(({ id }) => id === choice.id) : provider.models[0];
     if (model) return { provider, model };
@@ -348,21 +343,18 @@ export class ModelStore implements ModelStorePort {
             throw invalid('This built-in provider has no protocol for new models');
         }
         if (override.baseUrl !== undefined || override.models !== undefined)
-          next.builtins = { ...next.builtins, [id]: override };
+          next.builtins[id] = override;
         else delete next.builtins[id];
       } else {
         const previous = Object.hasOwn(next.providers, id) ? next.providers[id] : undefined;
         if (values.create && previous)
           throw new DomainError('conflict', 'A provider with this ID already exists');
         if (!values.create && !previous) throw new DomainError('not_found', 'Unknown provider');
-        next.providers = {
-          ...next.providers,
-          [id]: parseCustom(id, {
-            ...values,
-            apiKey: previous?.apiKey,
-            headers: previous?.headers,
-          }),
-        };
+        next.providers[id] = parseCustom(id, {
+          ...values,
+          apiKey: previous?.apiKey,
+          headers: previous?.headers,
+        });
       }
       await this.commit(id, next, key || undefined);
       return id;
@@ -372,7 +364,7 @@ export class ModelStore implements ModelStorePort {
   removeProvider(input: unknown) {
     return this.enqueue(async () => {
       const id = providerId(record(input)?.id);
-      if (!this.provider(id)) throw new DomainError('not_found', 'Unknown provider');
+      if (!this.effective.get(id)) throw new DomainError('not_found', 'Unknown provider');
       const next = structuredClone(this.configuration);
       delete next.providers[id];
       delete next.builtins[id];
@@ -398,7 +390,7 @@ export class ModelStore implements ModelStorePort {
     const api = protocol(values.api);
     const baseUrl = endpoint(values.baseUrl);
     let key = credential(values.key);
-    const provider = id ? this.provider(id) : undefined;
+    const provider = id ? this.effective.get(id) : undefined;
     // A draft endpoint only receives credentials typed into the draft.
     if (!key && provider?.baseUrl === baseUrl && provider.api === api)
       key =

@@ -118,12 +118,7 @@ export class PiLlm implements LlmAdapter {
     const selected = store.requestModel(request.model);
     if (!selected) throw new Error('Model is unavailable through the Pi adapter');
     const { provider } = selected;
-    const model: Model<Api> = {
-      cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-      ...selected.model,
-      input: [...selected.model.input],
-      provider: provider.id,
-    };
+    const { thinkingLevels: _levels, ...model } = selected.model;
     const native = this.builtin.getProvider(provider.id);
     let runtime = this.builtin;
     if (native && provider.endpointOverride) {

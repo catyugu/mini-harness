@@ -192,6 +192,9 @@ test('built-in edits retain native routing and credentials, including after rest
   assert.equal(store.providers().find((provider) => provider.id === id)?.models[0].templateId, original.id);
   const restoredChoice = { provider: id, id: original.id };
   const expected = store.requestModel(restoredChoice)?.model;
+  assert.ok(expected);
+  assert.equal(expected.provider, id);
+  assert.equal('models' in expected || 'authStatus' in expected || 'key' in expected, false);
   await store.refresh();
   assert.deepEqual(store.requestModel(restoredChoice)?.model, expected);
   assert.equal(expected?.contextWindow, original.contextWindow);

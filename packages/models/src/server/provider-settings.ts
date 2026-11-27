@@ -156,16 +156,21 @@ export function parseConfiguration(value: unknown): ProviderConfiguration {
 /** Independent models use the provider connection; native derivatives retain the adapter definition. */
 export function resolveModel(
   model: ModelConfig,
-  connection: ProviderConnection,
+  { id: provider, api, baseUrl }: ProviderConnection & { id: string },
   baseline?: CatalogModel,
 ): CatalogModel {
   return {
-    ...connection,
+    api,
+    baseUrl,
+    cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
     ...baseline,
     ...model,
+    provider,
+    input: [...model.input],
     thinkingLevels: model.reasoning
-      ? ((baseline?.reasoning ? baseline.thinkingLevels : undefined) ??
-        thinkingLevels.filter((level) => level !== 'xhigh' && level !== 'max'))
+      ? (baseline?.reasoning
+          ? baseline.thinkingLevels
+          : thinkingLevels.filter((level) => level !== 'xhigh' && level !== 'max'))
       : ['off'],
   };
 }

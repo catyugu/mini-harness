@@ -1,10 +1,9 @@
 import type { Api, Model } from '@earendil-works/pi-ai';
-import type { ModelChoice } from '@mini-harness/llm/vocabulary';
+import type { ModelChoice, ThinkingLevel } from '@mini-harness/llm/vocabulary';
 import type { ModelSource } from './api.ts';
 import type {
   ProtocolInfo,
   ProviderInfo,
-  ProviderModel,
   ProviderModelDefinition,
 } from '../shared/catalog.ts';
 import type { ModelStore } from './store.ts';
@@ -15,9 +14,7 @@ export type Credential =
   | { type: 'oauth'; refresh: string; access: string; expires: number; [key: string]: unknown };
 
 export type AuthStatus = { configured: boolean; source?: string };
-export type CatalogModel = ProviderModel &
-  ProviderConnection &
-  Partial<Omit<Model<Api>, keyof ProviderModel | keyof ProviderConnection | 'provider'>>;
+export type CatalogModel = Model<Api> & { thinkingLevels: ThinkingLevel[] };
 export interface CatalogProvider extends ProviderConnection {
   id: string;
   name: string;
