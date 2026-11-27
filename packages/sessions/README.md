@@ -34,7 +34,7 @@ The [public contract](src/records.ts) groups four kinds of operation:
 
 `log(id)` returns a record-operation port. The registry retains ownership of the underlying writer and its close/recovery lifecycle; plugins must not open a second writer for the same log. `inspectLog` supports observation without exposing writer ownership. History returns defensive projections rather than mutable backing records. The same log holds Inbox delivery IDs, message origins and the automatic wake pause.
 
-`task(id)` supplies a Task `owner` and synchronous durable `commit` callback. It first opens or recovers the log so admission does not create work with an unavailable history owner. Pass that binding to `harnessTasks.start`; use Tasks for result projection, cancellation and waiting. Sessions indexes the latest transition by task and by owning conversation when loading or appending the log. The history API reads summaries from the index. It uses record addresses to load requested output and assistant replies when the writer is closed.
+`task(id)` supplies a Task `owner` and synchronous durable `commit` callback. It first opens or recovers the log so admission does not create work with an unavailable history owner. Pass that binding to `harnessTasks.start`; use Tasks for result projection, cancellation and waiting. Sessions indexes the latest committed transition by task and by owning conversation when loading or appending the log. The history API returns recorded states without inferring live execution. `tasks()` returns summaries without result or progress; limited queries use newest admission order. `taskStatus()` reads details by record address (pass `false` for a summary), and `taskOutput()` reads stored output.
 
 ## Lifecycle and dependencies
 

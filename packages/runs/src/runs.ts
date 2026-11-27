@@ -513,7 +513,7 @@ export class Runs implements RunPort {
             const release = await callback(fiber.ctx, id, signal);
             if (!release) return;
             if (signal.aborted) await release();
-            else fiber.ctx.effect(() => release);
+            else fiber.ctx.effect(() => context.effect(() => release));
           }, signal);
         }
         return work(fiber.ctx, signal);

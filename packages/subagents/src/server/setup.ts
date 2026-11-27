@@ -120,8 +120,15 @@ export function setup(ctx: Context) {
     for (const { id, parentId } of sessions.list()) {
       if (!parentId) continue;
       for (const task of sessions.tasks(id, 'agent-run'))
-        if (task.metadata?.reportToParent && !sessions.hasInbox(parentId, task.id + ':settled'))
-          notify(sessions.taskStatus(id, task.id, true) ?? task);
+        if (
+          terminal(task.state) &&
+          task.metadata?.reportToParent &&
+          !sessions.hasInbox(parentId, task.id + ':settled')
+        ) {
+          const record = sessions.taskStatus(id, task.id);
+          if (!record) throw new Error('Missing indexed task: ' + task.id);
+          notify(record);
+        }
     }
   });
 }

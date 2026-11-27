@@ -85,6 +85,8 @@ test('durable retained tasks recover by ID without reconstructing execution hand
     mode: 'queue',
     messageId: 'already-delivered:settled',
   });
+  assert.equal(ctx.harnessSessions.taskStatus(session.id, lost, false)?.state, 'running');
+  assert.equal(ctx.harnessSessions.tasks(session.id).find(({ id }) => id === done.id)?.result, undefined);
   await app.close();
   await assert.rejects(unfinished.result);
   app = await createMiniHarnessServer(paths);
@@ -97,18 +99,20 @@ test('durable retained tasks recover by ID without reconstructing execution hand
   );
   renameSync(file, file + '.held');
   try {
-    assert.equal(ctx.harnessSessions.taskStatus(session.id, done.id)?.result, 'finished');
+    assert.equal(ctx.harnessSessions.taskStatus(session.id, done.id, false)?.state, 'completed');
+    assert.equal(ctx.harnessSessions.taskStatus(session.id, done.id, false)?.result, undefined);
     assert.deepEqual(
       ctx.harnessSessions.tasks(session.id, 'agent-run', 1).map(({ id }) => id),
       [run.id],
     );
-    assert.equal(ctx.harnessSessions.taskStatus(session.id, run.id)?.state, 'completed');
-    assert.equal(ctx.harnessSessions.taskStatus(session.id, unfinished.id)?.state, 'interrupted');
-    assert.equal(ctx.harnessSessions.taskStatus(session.id, lost)?.state, 'interrupted');
+    assert.equal(ctx.harnessSessions.taskStatus(session.id, run.id, false)?.state, 'completed');
+    assert.equal(ctx.harnessSessions.taskStatus(session.id, unfinished.id, false)?.state, 'interrupted');
+    assert.equal(ctx.harnessSessions.taskStatus(session.id, lost, false)?.state, 'interrupted');
   } finally {
     renameSync(file + '.held', file);
   }
-  assert.equal(ctx.harnessSessions.taskStatus(session.id, run.id, true)?.result, answer);
+  assert.equal(ctx.harnessSessions.taskStatus(session.id, done.id)?.result, 'finished');
+  assert.equal(ctx.harnessSessions.taskStatus(session.id, run.id)?.result, answer);
   assert.deepEqual(ctx.harnessSessions.taskOutput(session.id, done.id)?.chunks, [
     { start: 0, end: 5, channel: 'stdout', text: 'hello' },
   ]);

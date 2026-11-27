@@ -22,13 +22,15 @@ function relatedSessions(ctx: Context, id: string, includeChildren = true): [str
   ];
 }
 
-function relatedTasks(ctx: Context, id: string, includeChildren = true) {
+function relatedTasks(ctx: Context, id: string, includeChildren = true, detail = false) {
   const scopes = relatedSessions(ctx, id, includeChildren);
   const live = ctx.harnessTasks.list(new Set(scopes.map(([id]) => 'session:' + id)));
   const types = new Map(scopes);
   const matching = live.filter((task) => task.type === types.get(task.owner.slice('session:'.length)));
   const skip = new Set(matching.map((task) => task.id));
-  const ended = scopes.flatMap(([session, type]) => ctx.harnessSessions.tasks(session, type, 50, skip));
+  const ended = scopes
+    .flatMap(([session, type]) => ctx.harnessSessions.tasks(session, type, 50, skip))
+    .filter((task) => terminal(task.state));
   const newest = (a: { createdAt: string }, b: { createdAt: string }) =>
     b.createdAt.localeCompare(a.createdAt);
   return [
@@ -36,14 +38,20 @@ function relatedTasks(ctx: Context, id: string, includeChildren = true) {
     ...ended
       .concat(matching.filter((task) => terminal(task.state)))
       .sort(newest)
-      .slice(0, 50),
+      .slice(0, 50)
+      .map((task) => {
+        if (!detail || skip.has(task.id)) return task;
+        const record = ctx.harnessSessions.taskStatus(task.owner.slice('session:'.length), task.id);
+        if (!record) throw new Error('Missing indexed task: ' + task.id);
+        return record;
+      }),
   ];
 }
 
 function relatedTask(ctx: Context, id: string, taskId: string) {
   const live = ctx.harnessTasks.get(taskId);
   for (const [session, type] of relatedSessions(ctx, id)) {
-    const task = live ?? ctx.harnessSessions.taskStatus(session, taskId);
+    const task = live ?? ctx.harnessSessions.taskStatus(session, taskId, false);
     if (task?.owner === 'session:' + session && task.type === type) return task;
   }
 }
@@ -125,7 +133,7 @@ const plugin: Plugin.Object = {
     const tasks = ctx.harnessTasks;
     const sessions = ctx.harnessSessions;
     const output = (task: TaskSnapshot, cursor?: number) =>
-      tasks.readOutput(task.id, cursor) ?? sessions.taskOutput(task.owner.slice(8), task.id, cursor);
+      tasks.readOutput(task.id, cursor) ?? sessions.taskOutput(task.owner.slice('session:'.length), task.id, cursor);
     const json = (data: unknown) => ({ content: [{ type: 'text' as const, text: JSON.stringify(data) }] });
     ctx.effect(() =>
       ctx.harnessTools.register({
@@ -176,7 +184,7 @@ const plugin: Plugin.Object = {
                 else await tasks.wait(task.id, signal);
               }
               return json(
-                tasks.get(task.id) ?? sessions.taskStatus(task.owner.slice(8), task.id, true) ?? task,
+                tasks.get(task.id) ?? sessions.taskStatus(task.owner.slice('session:'.length), task.id) ?? task,
               );
             },
           }),
@@ -191,7 +199,11 @@ const plugin: Plugin.Object = {
     ctx.on('harness/start', () => {
       for (const { id } of sessions.list())
         for (const task of sessions.tasks(id, backgroundTool))
-          if (!sessions.hasInbox(id, task.id + ':settled')) settled(ctx, task);
+          if (terminal(task.state) && !sessions.hasInbox(id, task.id + ':settled')) {
+            const record = sessions.taskStatus(id, task.id);
+            if (!record) throw new Error('Missing indexed task: ' + task.id);
+            settled(ctx, record);
+          }
     });
     ctx.inject(['harnessRoutes', 'harnessChanges'], (web) => {
       const changes = web.harnessChanges;
@@ -203,7 +215,7 @@ const plugin: Plugin.Object = {
       );
       const route = '/api/sessions/:id/tasks';
       web.effect(() =>
-        web.harnessRoutes.register('GET', route, ({ params }) => relatedTasks(ctx, params.id, false)),
+        web.harnessRoutes.register('GET', route, ({ params }) => relatedTasks(ctx, params.id, false, true)),
       );
       web.effect(() =>
         web.harnessRoutes.register('GET', route + '/:task/output', ({ params, url }) => {

@@ -53,7 +53,15 @@ function messagePatch(base: NativeMessage[], actual: NativeMessage[]): MessagePa
 }
 
 export interface LogIndex {
-  tasks: Map<string, { task: TaskSnapshot; address: RecordAddress; entered: number; answer?: RecordAddress }>;
+  tasks: Map<
+    string,
+    {
+      task: Omit<TaskSnapshot, 'result' | 'progress'>;
+      address: RecordAddress;
+      entered: number;
+      answer?: RecordAddress;
+    }
+  >;
   inboxIds: Set<string>;
   wake: boolean;
   run?: RunInfo;
@@ -186,7 +194,8 @@ export class SessionLog extends RecordLog<SessionEvent> implements SessionLogPor
           run && task.state === 'completed' && this.assistant && this.assistant.seq > entered
             ? this.assistant.address
             : undefined;
-        this.index.tasks.set(task.id, { task, address, entered, answer });
+        const { result: _result, progress: _progress, ...summary } = task;
+        this.index.tasks.set(task.id, { task: summary, address, entered, answer });
       }
     }
     const run = runFromEntry(this.sessionId, entry);

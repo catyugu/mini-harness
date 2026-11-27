@@ -56,12 +56,12 @@ export type ToolResultTransform = Transform<ToolResult['content'], ToolResultCon
 
 declare module 'mini-harness/cordis' {
   interface Events {
-    /** Configure capabilities owned by a single Agent run before its first step. */
+    /** Configure capabilities before the first step. Cleanup is owned by both the Run and contributor. */
     'agent/setup'(
       target: Context,
       sessionId: string,
       signal: AbortSignal,
-    ): void | (() => void) | Promise<void | (() => void)>;
+    ): void | (() => void | Promise<void>) | Promise<void | (() => void | Promise<void>)>;
     /** Synchronous observer; presentations belong to the committed assistant message. */
     'agent/records'(event: AgentEvent, sink: RecordPublisher): readonly RecordPresentation[] | void;
     'agent/tool-result': ToolResultTransform;

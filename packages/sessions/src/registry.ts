@@ -10,7 +10,7 @@ import { writeJson } from '@mini-harness/platform/json';
 import type { Paths } from '@mini-harness/platform/runtime-paths';
 import type { WorkspacePort } from '@mini-harness/workspaces/api';
 import type { RecordOwner, SessionRecords, SessionStore } from './records.ts';
-import { terminal, type TaskOptions, type TaskSnapshot } from '@mini-harness/tasks/api';
+import type { TaskOptions, TaskSnapshot } from '@mini-harness/tasks/api';
 import { readTaskOutput } from '@mini-harness/tasks/output';
 import {
   createScopeKey,
@@ -342,23 +342,16 @@ export class SessionRegistry implements SessionStore {
   tasks(sessionId: string, type?: string, limit = Infinity, exclude?: ReadonlySet<string>) {
     const index = this.indexes.get(sessionId);
     if (!index) return [];
-    const tasks = [];
-    for (const { task } of index.projection.tasks.values())
-      if ((type === undefined || task.type === type) && !exclude?.has(task.id)) tasks.push(task);
-    if (limit !== Infinity) tasks.sort((a, b) => b.createdAt.localeCompare(a.createdAt)).splice(limit);
-    return tasks.map((task) => this.settledTask(task));
-  }
-
-  private settledTask(task: TaskSnapshot) {
-    return structuredClone(
-      terminal(task.state)
-        ? task
-        : {
-            ...task,
-            state: 'interrupted' as const,
-            error: 'No live executor remains for this task',
-          },
-    );
+    // The index preserves first admission order, even when a task's latest record changes.
+    const entries =
+      limit === Infinity ? index.projection.tasks.values() : [...index.projection.tasks.values()].reverse();
+    const tasks: TaskSnapshot[] = [];
+    for (const { task } of entries) {
+      if (tasks.length >= limit) break;
+      if ((type === undefined || task.type === type) && !exclude?.has(task.id))
+        tasks.push(structuredClone(task));
+    }
+    return tasks;
   }
 
   private readTaskEntry(record: SessionRecord, address: RecordAddress) {
@@ -367,13 +360,16 @@ export class SessionRegistry implements SessionStore {
     return readRecordAt<SessionEvent>(nativeFile(this.paths, record, false), address);
   }
 
-  taskStatus(sessionId: string, taskId: string, includeAnswer = false) {
+  taskStatus(sessionId: string, taskId: string, detail = true) {
     const index = this.indexes.get(sessionId);
     if (!index) return;
     const entry = index.projection.tasks.get(taskId);
     if (!entry) return;
-    const task = this.settledTask(entry.task);
-    if (includeAnswer && entry.answer) {
+    if (!detail) return structuredClone(entry.task);
+    const record = this.readTaskEntry(index.record, entry.address);
+    if (record?.type !== 'task') throw new Error('Missing indexed task transition');
+    const task = structuredClone(record.task);
+    if (entry.answer) {
       const message = this.readTaskEntry(index.record, entry.answer);
       if (message?.type !== 'message' || message.message.role !== 'assistant')
         throw new Error('Missing indexed assistant response');
