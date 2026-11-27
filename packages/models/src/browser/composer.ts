@@ -1,18 +1,16 @@
 import type { Context } from 'mini-harness/cordis';
 import type { ThinkingLevel } from '@mini-harness/llm/vocabulary';
-import { fromMarkup, scopedElements } from '@mini-harness/ui-primitives/primitives';
-import { createModelPicker } from './model-picker.ts';
+import { fromMarkup } from '@mini-harness/ui-primitives/primitives';
 import { createThinkingPicker } from './thinking-picker.ts';
 
 export function mountModelControls(ctx: Context, signal: AbortSignal) {
   const { miniComposer: model, miniConversation: control } = ctx;
   const root = fromMarkup(`<div class="model-controls">
-<button id="modelSelect" class="model-select" type="button">Choose model</button>
             <button id="thinkingLevel" class="model-select" type="button" aria-haspopup="listbox" aria-expanded="false" aria-controls="thinkingResults" hidden>Default</button>
             <div id="thinkingPicker" class="ui-popover model-picker thinking-picker" popover="auto"><div id="thinkingResults" role="listbox" aria-label="Thinking levels"></div></div>
   </div>`);
-  const { element } = scopedElements(root);
-  const modelPicker = createModelPicker(element<'button'>('modelSelect'), model.choose, signal);
+  const modelPicker = ctx.miniModels.createPicker(model.choose, signal);
+  root.prepend(modelPicker.node);
   const thinkingPicker = createThinkingPicker(root, model.chooseThinking, signal);
   const removeCommand = model.command({
     name: 'model',
@@ -29,7 +27,7 @@ export function mountModelControls(ctx: Context, signal: AbortSignal) {
     if (!running() && !modelPicker.selected()) {
       control.report(new Error('Choose a configured model before sending.'));
       modelPicker.open();
-      return false;
+      return true;
     }
   });
   signal.addEventListener('abort', removeValidation, { once: true });
@@ -58,7 +56,7 @@ export function mountModelControls(ctx: Context, signal: AbortSignal) {
       previousCatalog = catalog;
       previousModel = choice;
       previousThinking = thinking;
-      const selected = modelPicker.update(catalog.models, catalog.providers, choice);
+      const selected = modelPicker.update(choice);
       const advertised = selected?.thinkingLevels ?? [];
       const levels: ThinkingLevel[] = advertised.length
         ? ['off', ...advertised.filter((level) => level !== 'off')]

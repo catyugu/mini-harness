@@ -1,7 +1,6 @@
 import type { Context } from 'mini-harness/cordis';
 import type { ModelChoice } from '@mini-harness/llm/vocabulary';
 import type {} from '@mini-harness/models/browser/api';
-import { createModelPicker } from '@mini-harness/models/browser/model-picker';
 import { button, field, toggle } from '@mini-harness/ui-primitives/primitives';
 import { ratioIssue, type ContextSettings } from '../shared/state.ts';
 
@@ -16,17 +15,10 @@ export function settingsForm(
   const heading = document.createElement('h4');
   heading.textContent = 'Compaction';
   const auto = toggle('Auto compaction', true);
-  const model = button('Current model');
-  model.classList.add('context-model');
-  const modelRow = document.createElement('div');
-  modelRow.className = 'ui-field';
-  const caption = document.createElement('span');
-  caption.textContent = 'Summary model';
-  modelRow.append(caption, model);
   const save = button('Apply', 'primary');
   const reset = button('Restore Default');
   const actions = document.createElement('div');
-  actions.className = 'context-actions';
+  actions.className = 'context-actions ui-stack';
   actions.append(save, reset);
   const error = document.createElement('p');
   error.className = 'hint form-error';
@@ -45,32 +37,33 @@ export function settingsForm(
     input.max = '99.9';
     input.step = '0.1';
     input.setAttribute('aria-label', label);
-    return { key, input, row: field(label, input) };
+    return { key, input, row: field(label, input, 'compact') };
   });
   const fields = document.createElement('fieldset');
   fields.className = 'context-fields';
-  fields.append(field('Auto compaction', auto), ...ratios.map(({ row }) => row), modelRow, actions);
-  node.append(heading, fields, error);
   let choice: ModelChoice | null = null;
-  const picker = createModelPicker(
-    model,
+  const picker = ctx.miniModels.createPicker(
     (value) => {
       choice = value;
-      renderModel();
+      picker.update(choice);
     },
     signal,
-    'Current model',
-    () => {
-      choice = null;
-      renderModel();
+    {
+      label: 'Summary model',
+      emptyLabel: 'Current model',
+      selectEmpty() {
+        choice = null;
+        picker.update(choice);
+      },
     },
   );
-  function renderModel() {
-    const { models, providers } = ctx.miniModels.get();
-    picker.update(models, providers, choice);
-    model.setAttribute('aria-label', 'Summary model');
-  }
-  ctx.miniModels.subscribe(renderModel, signal);
+  fields.append(
+    field('Auto compaction', auto, 'compact'),
+    ...ratios.map(({ row }) => row),
+    field('Summary model', picker.node, 'wide'),
+    actions,
+  );
+  node.append(heading, fields, error);
   async function submit(operation: () => Promise<void>) {
     fields.disabled = true;
     error.hidden = true;
@@ -101,7 +94,7 @@ export function settingsForm(
     auto.checked = next.autoCompact;
     for (const { key, input } of ratios) input.value = String(Number((next[key] * 100).toFixed(4)));
     choice = next.summaryModel;
-    renderModel();
+    picker.update(choice);
   }
   return { node, reset, update };
 }

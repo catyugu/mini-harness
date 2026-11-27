@@ -10,7 +10,7 @@ Metadata supplies display information, not scope or authority. Any plugin may de
 
 The CLI and browser accept native Cordis declarations. The host resolves installed server imports to the active mini-harness installation. Browser imports use the published browser-safe import map. Use the root [exports](../package.json) for actual public specifiers and [Cordis](cordis.md) for activation and cleanup. Private `@mini-harness/*` workspace import paths are not installed SDK exports; the similarly named shipped Profile modules identify activations, not separately published packages.
 
-The local-directory examples use the loader's `plugin.js` server and `web.js` browser conventions. For an npm package, declare its entry points explicitly and include a compatible `mini-harness` peer dependency, as in [Task notes package.json](examples/task-notes/package.json). A plugin's native `Config` validates its Entry configuration; see [Plugin API](../packages/plugin-api/README.md) and the [settings cookbook](cookbook/adding-a-settings-page.md).
+The local-directory examples use the loader's `plugin.js` server and `web.js` browser conventions. Use section IDs for Settings contributions and opening the associated page. For an npm package, declare its entry points explicitly and include a compatible `mini-harness` peer dependency, as in [Task notes package.json](examples/task-notes/package.json). A plugin's native `Config` validates its Entry configuration; see [Plugin API](../packages/plugin-api/README.md) and the [settings cookbook](cookbook/adding-a-settings-page.md).
 
 ## Find the owning contract
 

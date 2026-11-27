@@ -103,7 +103,7 @@ export async function startIsolatedHost(
 
 export const settingsSection = (page: Page, name: string) =>
   page.getByRole('navigation', { name: 'Settings sections' }).getByRole('button', { name, exact: true });
-export const modelButton = (page: Page) => page.locator('#modelSelect');
+export const modelButton = (page: Page) => page.getByRole('button', { name: /^(Choose model|Model: )/ });
 export const modelSearch = (page: Page) => page.getByRole('combobox', { name: 'Search models' });
 export const suggestions = (page: Page) => page.getByRole('listbox', { name: 'Input suggestions' });
 

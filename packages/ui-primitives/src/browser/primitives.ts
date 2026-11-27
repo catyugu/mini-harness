@@ -9,14 +9,26 @@ export function fromMarkup<T extends HTMLElement = HTMLElement>(markup: string):
 
 /** Position an already visible floating surface relative to its anchor. */
 export function positionFloating(anchor: HTMLElement, panel: HTMLElement, options: FloatingOptions = {}) {
-  const { width, maxHeight = 520, align = 'start', prefer = 'below' } = options;
+  placeFloating(anchor.getBoundingClientRect(), viewportBounds(), panel, options);
+}
+
+function viewportBounds() {
   const viewport = window.visualViewport;
-  const left = viewport?.offsetLeft ?? 0;
-  const top = viewport?.offsetTop ?? 0;
-  const right = left + (viewport?.width ?? innerWidth);
-  const bottom = top + (viewport?.height ?? innerHeight);
+  return new DOMRectReadOnly(
+    viewport?.offsetLeft ?? 0,
+    viewport?.offsetTop ?? 0,
+    viewport?.width ?? innerWidth,
+    viewport?.height ?? innerHeight,
+  );
+}
+
+function placeFloating(
+  bounds: DOMRectReadOnly,
+  { left, top, right, bottom }: DOMRectReadOnly,
+  panel: HTMLElement,
+  { width, maxHeight = 520, align = 'start', prefer = 'below' }: FloatingOptions,
+) {
   const availableWidth = Math.max(0, right - left - 16);
-  const bounds = anchor.getBoundingClientRect();
   panel.style.maxWidth = availableWidth + 'px';
   if (width !== undefined) panel.style.width = Math.min(width, availableWidth) + 'px';
   panel.style.maxHeight = Math.max(0, Math.min(maxHeight, bottom - top - 16)) + 'px';
@@ -39,24 +51,88 @@ export function bindPopover(
   signal: AbortSignal,
   options: FloatingOptions = {},
 ) {
-  const position = () => {
-    if (panel.matches(':popover-open')) {
-      if (!trigger.getClientRects().length) panel.hidePopover();
-      else positionFloating(trigger, panel, options);
+  let frame = 0;
+  let previousAnchor: DOMRectReadOnly | undefined;
+  let previousViewport: DOMRectReadOnly | undefined;
+  let previousPanel: number[] = [];
+  const panelSize = () => [panel.offsetWidth, panel.offsetHeight, panel.scrollHeight];
+  function sameBounds(previous: DOMRectReadOnly | undefined, current: DOMRectReadOnly) {
+    return (
+      previous?.x === current.x &&
+      previous.y === current.y &&
+      previous.width === current.width &&
+      previous.height === current.height
+    );
+  }
+  function position() {
+    const anchor = trigger.getBoundingClientRect();
+    if (
+      (!anchor.width && !anchor.height) ||
+      trigger.closest('[inert]') ||
+      getComputedStyle(trigger).visibility !== 'visible'
+    ) {
+      panel.hidePopover();
+      return false;
     }
-  };
+    const viewport = viewportBounds();
+    if (
+      !sameBounds(previousAnchor, anchor) ||
+      !sameBounds(previousViewport, viewport) ||
+      panelSize().some((size, index) => size !== previousPanel[index])
+    ) {
+      placeFloating(anchor, viewport, panel, options);
+      previousAnchor = anchor;
+      previousViewport = viewport;
+      // Placement can change the height cap. Compare against the resulting size.
+      previousPanel = panelSize();
+    }
+    return true;
+  }
+  // Scrolling and sibling layout can move an anchor without resizing it.
+  function follow() {
+    if (panel.matches(':popover-open') && position()) frame = requestAnimationFrame(follow);
+  }
   panel.addEventListener(
-    'toggle',
-    () => {
-      trigger.setAttribute('aria-expanded', String(panel.matches(':popover-open')));
-      position();
+    'keydown',
+    (event) => {
+      if (event.key !== 'Escape' || event.defaultPrevented || event.isComposing) return;
+      event.preventDefault();
+      panel.hidePopover();
+      trigger.focus({ preventScroll: true });
     },
     { signal },
   );
-  window.addEventListener('resize', position, { signal });
-  window.visualViewport?.addEventListener('resize', position, { signal });
-  window.visualViewport?.addEventListener('scroll', position, { signal });
-  return position;
+  panel.addEventListener(
+    'toggle',
+    () => {
+      cancelAnimationFrame(frame);
+      const open = panel.matches(':popover-open');
+      trigger.setAttribute('aria-expanded', String(open));
+      if (open) {
+        previousAnchor = undefined;
+        follow();
+      }
+    },
+    { signal },
+  );
+  signal.addEventListener(
+    'abort',
+    () => {
+      cancelAnimationFrame(frame);
+      if (panel.matches(':popover-open')) panel.hidePopover();
+      trigger.setAttribute('aria-expanded', 'false');
+    },
+    { once: true },
+  );
+  return () => {
+    // TS 5.9 predates the source option used for native popover nesting and focus.
+    const surface = panel as HTMLElement & { showPopover(options: { source: HTMLElement }): void };
+    surface.showPopover({ source: trigger });
+    if (panel.matches(':popover-open')) {
+      previousAnchor = undefined;
+      position();
+    }
+  };
 }
 
 export function closeOnBackdrop(dialog: HTMLDialogElement) {
@@ -98,11 +174,17 @@ export function iconButton(label: string, name: Parameters<typeof icon>[0], clas
   return node;
 }
 
-export function field(label: string, control: HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement) {
-  const node = document.createElement('label');
-  node.className = 'ui-field';
-  const caption = document.createElement('span');
-  caption.textContent = label;
+export function field(label: string | HTMLElement, control: HTMLElement, layout?: 'compact' | 'wide') {
+  const node = document.createElement(
+    control instanceof HTMLInputElement ||
+      control instanceof HTMLSelectElement ||
+      control instanceof HTMLTextAreaElement
+      ? 'label'
+      : 'div',
+  );
+  node.className = layout ? 'ui-field ui-field-' + layout : 'ui-field';
+  const caption = typeof label === 'string' ? document.createElement('span') : label;
+  if (typeof label === 'string') caption.textContent = label;
   node.append(caption, control);
   return node;
 }

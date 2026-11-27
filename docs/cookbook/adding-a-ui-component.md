@@ -25,7 +25,7 @@ The [packaging reference](../plugins.md) describes explicit `browser`, `browserD
 
 ## 3. Exercise the contributions
 
-Open **Example panel** in the sidebar and use **Preview** to open its dialog. Open Settings → Extensions for its informational category. On an assistant turn, **Use message in draft** inserts the raw turn text through the existing composer model.
+Open **Example panel** in the sidebar and use **Preview** to open its dialog. Open **Settings → Browser panel** for its informational category. On an assistant turn, **Use message in draft** inserts the raw turn text through the existing composer model.
 
 Set `replaceComposer: true` to select the example's renderer for `conversation.composer-view`. It uses the same `composer` key at a higher priority, so it replaces that contribution. Type a draft, switch conversations, and remove the example: the standard renderer returns with controller/draft state intact. [UI Slots](../../packages/ui-slots/README.md) owns priority, conflict and disposal rules.
 

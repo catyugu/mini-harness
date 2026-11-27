@@ -7,6 +7,7 @@ import type { ModelCatalog, ProviderInfo, ProviderModel } from '../shared/catalo
 import { RemoteStore } from '@mini-harness/ui-runtime/remote-store';
 import { icon } from '@mini-harness/ui-primitives/icons';
 import { button, field, fromMarkup, confirmAction, required } from '@mini-harness/ui-primitives/primitives';
+import { createModelPicker } from './model-picker.ts';
 import { mountModelControls } from './composer.ts';
 
 const setup = async (ctx: Context) => {
@@ -23,11 +24,17 @@ const setup = async (ctx: Context) => {
   });
   await state.refresh();
   ctx.effect(() => ctx.miniProjections.register('models', state));
-  ctx.provide('miniModels', state);
+  ctx.provide('miniModels', {
+    get: state.get,
+    subscribe: state.subscribe,
+    createPicker: (onSelect, signal, options) => createModelPicker(state, onSelect, signal, options),
+  });
   ctx.inject(['miniComposer', 'miniConversation', 'miniSlots'], (composer) => {
     composer.effect(() =>
-      composer.miniSlots.register('conversation.composer-trailing', (signal) =>
-        mountModelControls(composer, signal),
+      composer.miniSlots.register(
+        'conversation.composer-primary',
+        (signal) => mountModelControls(composer, signal),
+        { key: 'primary' },
       ),
     );
   });
@@ -56,12 +63,16 @@ const setup = async (ctx: Context) => {
       });
     return options;
   });
+  ctx.miniSettingsRegistry.registerSection(
+    { id: 'model', title: 'Model', icon: 'model', order: 20 },
+    ctx.fiber.signal,
+  );
   ctx.effect(() =>
     ctx.miniSettingsRegistry.register(
       browserPluginId(ctx),
       {
         id: 'providers',
-        section: { title: 'Model', icon: 'model', order: 20 },
+        sectionId: 'model',
         render({ signal }) {
           if (!state.get().canManageProviders) {
             const hint = document.createElement('p');
@@ -78,7 +89,7 @@ const setup = async (ctx: Context) => {
       browserPluginSettings(ctx),
     ),
   );
-  if (!state.get().models.some((model) => model.configured)) settings.open('Model');
+  if (!state.get().models.some((model) => model.configured)) settings.open('model');
 };
 
 function providerManager(ctx: Context, providers: () => ProviderInfo[], refresh: () => Promise<void>) {
@@ -315,8 +326,8 @@ function customEndpoint(provider?: ProviderInfo) {
         <label>Max output tokens<input name="tokens" type="number" min="1" max="10000000" required></label>
       </div>
       <div class="setting-columns">
-        <label class="switch-line">Image input<input name="image" type="checkbox"></label>
-        <label class="switch-line">Reasoning<input name="reasoning" type="checkbox"></label>
+        <label class="ui-field ui-field-compact">Image input<input name="image" type="checkbox"></label>
+        <label class="ui-field ui-field-compact">Reasoning<input name="reasoning" type="checkbox"></label>
       </div>
     </fieldset>`);
     const [id, name, context, tokens, image, reasoning] = row.querySelectorAll('input');

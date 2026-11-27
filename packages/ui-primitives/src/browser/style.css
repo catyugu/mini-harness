@@ -110,15 +110,10 @@
     line-height: 1.5;
     overflow-wrap: anywhere;
   }
-  .ui-confirm .ui-actions {
-    display: flex;
-    justify-content: flex-end;
-    gap: 8px;
-  }
   .ui-confirm .ui-button {
     min-width: 84px;
   }
-  .ui-field select:focus-visible,
+  .ui-field > select:focus-visible,
   select.ui-input:focus-visible {
     border-color: var(--focus);
   }
@@ -218,7 +213,36 @@
     font-size: var(--font-ui);
     line-height: var(--line-ui);
   }
-  .ui-field :is(input:not([type='checkbox'], [type='radio']), select, textarea),
+  .ui-field > .form-error {
+    grid-column: 1 / -1;
+  }
+  .ui-field-compact,
+  .ui-field-wide {
+    align-items: center;
+    gap: var(--space);
+  }
+  .ui-field-compact {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .ui-field-compact > input[type='number'] {
+    inline-size: 5em;
+  }
+  .ui-field-wide {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr);
+  }
+  .ui-field > :first-child :where(strong, small) {
+    display: block;
+  }
+  .ui-field > :first-child small {
+    color: var(--muted);
+    font-size: var(--font-meta);
+  }
+  @container (inline-size < 225px) {
+    .ui-field-wide {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+  .ui-field > :is(input:not([type='checkbox'], [type='radio']), select, textarea),
   .ui-input {
     width: 100%;
     min-width: 0;
@@ -286,6 +310,55 @@
     overscroll-behavior: contain;
     padding: 16px;
   }
+  .ui-nav-action {
+    justify-content: flex-start;
+    width: 100%;
+    min-width: 0;
+    text-align: left;
+  }
+  .ui-nav-action > svg {
+    flex: 0 0 16px;
+    height: 16px;
+  }
+  .ui-nav-action[aria-current='page'] {
+    background: var(--selected);
+  }
+  @container (inline-size < 64px) {
+    .ui-nav-action {
+      justify-content: center;
+      padding-inline: 0;
+    }
+    .ui-nav-label {
+      display: none;
+    }
+  }
+  @media (pointer: coarse) {
+    .ui-nav-action {
+      min-height: var(--control-touch);
+    }
+  }
+  .ui-option {
+    display: block;
+    width: 100%;
+    text-align: left;
+    padding: 8px 10px;
+    border: 0;
+    background: transparent;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .ui-option:hover,
+  .ui-option[aria-selected='true'] {
+    background: var(--hover);
+  }
+  .ui-option strong {
+    font-weight: 600;
+  }
+  .ui-option small {
+    font-size: var(--font-meta);
+    color: var(--muted);
+  }
   .ui-list-item {
     min-width: 0;
     text-align: left;
@@ -296,11 +369,6 @@
   @media (max-width: 560px) {
     .ui-button {
       min-height: var(--control-touch);
-    }
-    .ui-field :is(input:not([type='checkbox'], [type='radio']), select, textarea),
-    .ui-input {
-      min-height: var(--control-touch);
-      font-size: 16px;
     }
     .ui-dialog {
       width: calc(100% - 20px);
@@ -331,6 +399,11 @@
     }
   }
   @media (max-width: 860px) {
+    .ui-field > :is(input:not([type='checkbox'], [type='radio']), select, textarea),
+    .ui-input {
+      min-height: var(--control-touch);
+      font-size: 16px;
+    }
     .icon-button,
     .link-button,
     .small-button {
@@ -503,6 +576,46 @@
     align-items: center;
     gap: var(--gap, var(--space));
     min-inline-size: 0;
+  }
+  .ui-wrap {
+    flex-wrap: wrap;
+  }
+  .ui-action-items {
+    flex: none;
+    gap: inherit;
+  }
+  .ui-action-items:not(:has(> .ui-action-item > :not([hidden]))) {
+    display: none;
+  }
+  .ui-action-item {
+    flex: none;
+    inline-size: max-content;
+    max-inline-size: calc(100vw - 32px);
+  }
+  .ui-action-item:has(> [hidden]) {
+    display: none;
+  }
+  .ui-action-more {
+    flex: none;
+    width: 32px;
+    min-height: 32px;
+    padding: 4px;
+  }
+  .ui-action-more[aria-expanded='true'] {
+    background: var(--hover);
+  }
+  .ui-action-overflow {
+    font: inherit;
+    white-space: inherit;
+    display: flex;
+    align-items: flex-start;
+    flex-direction: column;
+    gap: var(--space);
+    width: max-content;
+  }
+  .ui-action-overflow:not(:popover-open) {
+    visibility: hidden;
+    pointer-events: none;
   }
   .ui-stack {
     display: flex;

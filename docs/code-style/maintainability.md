@@ -88,3 +88,9 @@ await ctx.fiber.run((signal) => refresh(signal));
 Before adding a wrapper, fallback, cache, mode, or dependency, identify the concrete requirement it serves. Prefer deletion or a stronger existing contract when either solves the problem.
 
 See [Tests](testing.md) and [Module imports](module-imports.md) for verification and dependency boundaries.
+
+## Browser views
+
+- The container allocates space and the component owns its internal DOM, styles and interaction. Share tokens, documented CSS primitives and public component contracts. Keep selectors and DOM operations within the owning component.
+- Use flex, grid and container queries for ordinary layout. Use one source for responsive modes that also drive input, focus or modality. Derive CSS variables and ARIA from owned state.
+- Keep reusable primitives independent of features. Put model selection, conversation controls and other feature-specific views in their owning plugins. Use stable IDs for object identity and treat titles as changeable display text.

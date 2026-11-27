@@ -10,8 +10,8 @@ Browser plugins import [`mini-harness/ui-settings`](src/browser/api.ts):
 
 | Service                | Contract                                                                               |
 | ---------------------- | -------------------------------------------------------------------------------------- |
-| `miniSettings`         | Open the dialog, optionally at a section, and observe closure.                         |
-| `miniSettingsRegistry` | Register a section contribution or plugin-detail renderer, and mount plugin details.   |
+| `miniSettings`         | Open the dialog by section ID and observe closure.                                     |
+| `miniSettingsRegistry` | Define sections and register controls or plugin-detail renderers.                      |
 | `miniSettingsData`     | Read and subscribe to the browser's projection of the committed Profile configuration. |
 
 `GET /api/settings` reads the committed configuration; `PATCH /api/settings` delegates an update to `harnessProfileConfig`. Per-plugin configuration routes and generated plugin forms belong to [Plugins](../plugins/README.md). Settings itself has no configuration schema.
@@ -20,7 +20,9 @@ Browser plugins import [`mini-harness/ui-settings`](src/browser/api.ts):
 
 Use `miniSettingsRegistry.register(owner, contribution, configuration)` inside a Cordis effect. `owner` is the browser Entry ID from `browserPluginId(ctx)`; `configuration` normally comes from `browserPluginSettings(ctx)`. The [Task notes example](../../docs/examples/task-notes/web.ts) is a complete, build-checked contribution, and the [settings cookbook](../../docs/cookbook/adding-a-settings-page.md) explains its setup.
 
-A contribution has an ID unique within its owner, a section title or section description, optional order, and a renderer. Sections with the same title share one page; section order controls navigation and contribution order controls content placement. Registration rejects invalid IDs, duplicate owner/ID pairs and non-finite order values.
+Define a page with `registerSection({ id, title, icon, order }, signal)`. The defining Entry owns that ID and its navigation metadata for the given lifetime. Its returned updater can change the label, icon or order while preserving the section's identity and mounted controls. Settings defines `general`.
+
+Contributions reference `sectionId`, have their own owner-local ID, and optionally specify an order within the section. The registry shows a section when its definition and at least one contribution are present. Definitions and contributions can arrive in either order.
 
 The renderer receives a `SettingsContext` with its own `signal`, `configuration`, and `bind`. `bind(control, key, { read, write })` initializes the control, subscribes to accepted updates and writes changes through the configuration owner. Append its returned element to show inline failures. While a write is pending it disables the control; on completion it rereads the accepted value, so rejected edits do not become a separate local setting.
 

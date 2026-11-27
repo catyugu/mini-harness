@@ -46,7 +46,7 @@ function pluginCatalog(
 ) {
   const { miniPages: pages, miniSettingsRegistry: registry } = ctx;
   const entry = fromMarkup<HTMLButtonElement>(
-    '<button type="button" class="nav-action" aria-label="Browse plugins" aria-controls="pluginCatalog"><span class="nav-label">Plugins</span></button>',
+    '<button type="button" class="ui-button ui-nav-action" data-variant="quiet" aria-label="Browse plugins" aria-controls="pluginCatalog"><span class="ui-nav-label ui-truncate">Plugins</span></button>',
   );
   entry.prepend(icon('plugin'));
   const page =
@@ -66,15 +66,18 @@ function pluginCatalog(
   </div>`);
   const builtinStatus = required(builtins.querySelector<HTMLElement>('.catalog-status'));
   const builtinList = required(builtins.querySelector('.builtin-list'));
-  entry.dataset.pageLink = 'plugins';
   ctx.effect(() => ctx.miniSlots.register('sidebar.actions', entry, { order: -10 }));
-  ctx.effect(() => pages.register('plugins', page));
+  ctx.effect(() => pages.register('plugins', page, entry));
+  registry.registerSection(
+    { id: 'built-in-plugins', title: 'Built-in plugins', icon: 'plugin', order: 30 },
+    ctx.fiber.signal,
+  );
   ctx.effect(() =>
     registry.register(
       browserPluginId(ctx),
       {
         id: 'built-in-plugins',
-        section: { title: 'Built-in plugins', icon: 'plugin', order: 30 },
+        sectionId: 'built-in-plugins',
         render: () => builtins,
       },
       browserPluginSettings(ctx),

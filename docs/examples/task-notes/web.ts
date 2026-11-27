@@ -15,11 +15,12 @@ export function apply(ctx: Context) {
   ctx.effect(() =>
     ctx.miniMessages.registerTool('save_task_note', () => miniPrimitives.status('Saved to task notes')),
   );
+  ctx.miniSettingsRegistry.registerSection({ id: 'task-notes', title: 'Task notes' }, ctx.fiber.signal);
   ctx.effect(() =>
     ctx.miniSettingsRegistry.register(
       browserPluginId(ctx),
       {
-        section: 'Extensions',
+        sectionId: 'task-notes',
         id: 'task-notes',
         render({ bind }) {
           const input = document.createElement('input');

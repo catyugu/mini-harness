@@ -14,13 +14,11 @@ const setup = (ctx: Context) => {
         browserPluginId(ctx),
         {
           id: 'theme',
-          section: { title: 'General', icon: 'settings', order: 10 },
+          sectionId: 'general',
           order: -10,
           render({ bind }) {
-            const content = document.createElement('div');
-            content.className = 'settings-preference';
-            const label = document.createElement('label');
-            label.className = 'switch-line';
+            const content = document.createElement('label');
+            content.className = 'ui-field ui-field-wide';
             const title = document.createElement('strong');
             title.textContent = 'Theme';
             const theme = document.createElement('select');
@@ -28,9 +26,9 @@ const setup = (ctx: Context) => {
             theme.add(new Option('System', 'system'));
             theme.add(new Option('Light', 'light'));
             theme.add(new Option('Dark', 'dark'));
-            label.append(title, theme);
             content.append(
-              label,
+              title,
+              theme,
               bind<string>(theme, 'appearance', {
                 read: (value) => {
                   theme.value = value;

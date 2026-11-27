@@ -15,19 +15,18 @@ export function mountComposer(ctx: Context, signal: AbortSignal) {
           <div id="suggestions" class="suggestions" role="listbox" aria-label="Input suggestions" hidden></div>
           <div id="draftMode" class="draft-mode" hidden><span></span><button type="button" aria-label="Cancel editing">Cancel</button></div>
           <div id="promptEditor"></div>
-          <div class="composer-footer">
-            <div class="composer-leading">
-              <div id="composerExtensions" class="composer-tools"></div>
+          <div class="composer-footer ui-row">
+            <div class="composer-leading ui-row">
               <button id="permissionSelect" class="permission-select" type="button" aria-haspopup="listbox" aria-expanded="false" aria-controls="permissionResults"></button>
               <div id="permissionPicker" class="ui-popover permission-picker" popover="auto">
                 <div id="permissionResults" role="listbox" aria-label="Conversation permissions"></div>
               </div>
-              <div id="composerOptions" class="composer-tools"></div>
+              <div id="composerTools"></div>
             </div>
-            <div class="composer-secondary">
-              <div id="composerTrailing" class="composer-trailing"></div>
+            <div class="composer-secondary ui-row">
+              <div id="composerPrimary" class="ui-row"></div>
               <select id="messageMode" class="small-button" aria-label="Message sending mode" hidden></select>
-              <div class="composer-actions">
+              <div class="composer-actions ui-row ui-fixed">
                 <button id="stop" type="button" aria-label="Stop response" hidden data-icon="stop"></button>
                 <button id="send" type="submit" aria-label="Send" data-icon="send"></button>
               </div>
@@ -48,12 +47,19 @@ export function mountComposer(ctx: Context, signal: AbortSignal) {
   );
   const prompt = editor.element;
   const ui = createComposer(ctx, composer, editor, model, control.report, signal);
-  const removeToolbar = ctx.miniSlots.define('conversation.composer', element('composerExtensions'));
-  signal.addEventListener('abort', removeToolbar, { once: true });
-  const removeOptions = ctx.miniSlots.define('conversation.composer-options', element('composerOptions'));
-  signal.addEventListener('abort', removeOptions, { once: true });
-  const removeTrailing = ctx.miniSlots.define('conversation.composer-trailing', element('composerTrailing'));
-  signal.addEventListener('abort', removeTrailing, { once: true });
+  const tools = ctx.miniPrimitives.overflowActions(
+    element('composerTools'),
+    'More composer controls',
+    signal,
+  );
+  const removeActions = ctx.miniSlots.define('conversation.composer', tools);
+  signal.addEventListener('abort', removeActions, { once: true });
+  const removePrimary = ctx.miniSlots.define(
+    'conversation.composer-primary',
+    element('composerPrimary'),
+    'single',
+  );
+  signal.addEventListener('abort', removePrimary, { once: true });
   const permissionButton = element<'button'>('permissionSelect');
   const permissionPopup = element('permissionPicker');
   const permissionResults = element('permissionResults');
@@ -115,15 +121,14 @@ export function mountComposer(ctx: Context, signal: AbortSignal) {
       }),
     );
   }
-  const positionPermission = bindPopover(permissionButton, permissionPopup, signal, {
+  const openPermission = bindPopover(permissionButton, permissionPopup, signal, {
     width: 290,
     prefer: 'above',
   });
   permissionButton.onclick = () => {
     if (permissionPopup.matches(':popover-open')) permissionPopup.hidePopover();
     else {
-      permissionPopup.showPopover();
-      positionPermission();
+      openPermission();
       permissionResults.querySelector<HTMLButtonElement>('[aria-selected="true"]')?.focus();
     }
   };
@@ -162,7 +167,7 @@ export function mountComposer(ctx: Context, signal: AbortSignal) {
     if (control.get().interaction.operation || model.draft().awaitingAcceptance) return;
     if (!model.draft().text.trim() && !model.draft().attachments.length) return;
     if (ui.submitCommand()) return;
-    if (ctx.bail('composer/before-send') === false) return;
+    if (ctx.bail('composer/before-send')) return;
     try {
       await model.send();
     } catch (error) {

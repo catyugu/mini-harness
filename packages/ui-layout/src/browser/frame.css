@@ -6,6 +6,7 @@
     min-width: 0;
   }
   .sidebar {
+    container-type: inline-size;
     position: relative;
     display: flex;
     flex: 0 0 var(--left-width);
@@ -32,36 +33,10 @@
     font-size: var(--font-section);
     font-weight: 600;
   }
-  .sidebar-bottom button {
-    display: flex;
-    align-items: center;
-    gap: var(--space);
-    text-align: left;
-    border: 1px solid var(--border);
-    border-radius: 9px;
-    padding: 9px 10px;
-    background: var(--surface);
-    font-size: var(--font-ui);
-  }
-  .sidebar-bottom button {
-    min-height: 44px;
-    line-height: var(--line-ui);
-  }
-  .sidebar-bottom button svg {
-    flex: 0 0 18px;
-  }
-  .sidebar-bottom button:hover {
-    background: var(--hover);
-  }
   .sidebar-bottom {
     flex-shrink: 0;
     border-top: 1px solid var(--border);
     padding-top: 9px;
-  }
-  .sidebar-bottom button {
-    width: 100%;
-    background: transparent;
-    border-color: transparent;
   }
   .main {
     flex: 1;
@@ -127,50 +102,7 @@
     flex: 0 1 auto;
     max-width: 100%;
   }
-  #headerActions,
-  #headerInline {
-    display: flex;
-    align-items: center;
-    gap: var(--space);
-    flex: 0 0 auto;
-    min-width: 0;
-  }
-  #headerInline > * {
-    flex: 0 0 auto;
-  }
-  #headerInline:not(:has(> :not([hidden]))) {
-    display: none;
-  }
-  #headerMore {
-    display: grid;
-    place-items: center;
-    flex: 0 0 32px;
-    width: 32px;
-    height: 32px;
-    min-height: 0;
-    padding: 4px;
-    color: var(--muted);
-  }
-  #headerMore[aria-expanded='true'] {
-    background: var(--hover);
-  }
-  #headerMore svg {
-    width: 18px;
-    height: 18px;
-  }
-  #headerOverflow {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 4px;
-    width: max-content;
-    max-width: calc(100vw - 16px);
-  }
-  #headerOverflow:not(:popover-open) {
-    visibility: hidden;
-    pointer-events: none;
-  }
-  #headerOverflow > * {
+  #headerActions {
     flex: none;
   }
 

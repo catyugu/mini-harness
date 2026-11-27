@@ -47,12 +47,11 @@ function detail(label: string, signal: AbortSignal) {
   panel.setAttribute('role', 'dialog');
   panel.setAttribute('aria-label', label);
   node.append(trigger, panel);
-  const position = bindPopover(trigger, panel, signal, { width: 340, prefer: 'above', maxHeight: 510 });
+  const show = bindPopover(trigger, panel, signal, { width: 340, prefer: 'above', maxHeight: 510 });
   trigger.onclick = () => {
     if (panel.matches(':popover-open')) panel.hidePopover();
     else {
-      panel.showPopover();
-      position();
+      show();
     }
   };
   return { node, trigger, panel };
@@ -295,50 +294,53 @@ function mountStats(ctx: Context) {
   };
 
   ctx.effect(() =>
-    ctx.miniSlots.register('conversation.composer-options', (signal) => {
-      const node = document.createElement('div');
-      const trigger = iconButton('Context settings', 'settings');
-      const panel = document.createElement('div');
-      panel.className = 'ui-popover context-details';
-      panel.setAttribute('popover', 'auto');
-      panel.setAttribute('role', 'dialog');
-      panel.setAttribute('aria-label', 'Context settings');
-      node.append(trigger, panel);
-      const position = bindPopover(trigger, panel, signal, { width: 300, prefer: 'above' });
-      const draft = () => {
-        const key = workspace();
-        return key ? drafts.get(key) : undefined;
-      };
-      const currentSettings = () => state?.settings ?? draft() ?? defaults();
-      trigger.onclick = () => {
-        if (panel.matches(':popover-open')) panel.hidePopover();
-        else {
-          form.update(currentSettings());
-          panel.showPopover();
-          position();
-        }
-      };
-      const form = settingsForm(ctx, signal, write, async () => {
-        await write(null);
-        return currentSettings();
-      });
-      panel.append(form.node);
-      let shownId = id;
-      let shownWorkspace = workspace();
-      const render = () => {
-        const key = workspace();
-        trigger.disabled = Boolean(id && !state) || Boolean(conversation.get().interaction.operation);
-        if (shownId !== id || shownWorkspace !== key) {
-          shownId = id;
-          shownWorkspace = key;
+    ctx.miniSlots.register(
+      'conversation.composer',
+      (signal) => {
+        const node = document.createElement('div');
+        const trigger = iconButton('Context settings', 'settings');
+        const panel = document.createElement('div');
+        panel.className = 'ui-popover context-details';
+        panel.setAttribute('popover', 'auto');
+        panel.setAttribute('role', 'dialog');
+        panel.setAttribute('aria-label', 'Context settings');
+        node.append(trigger, panel);
+        const show = bindPopover(trigger, panel, signal, { width: 300, prefer: 'above' });
+        const draft = () => {
+          const key = workspace();
+          return key ? drafts.get(key) : undefined;
+        };
+        const currentSettings = () => state?.settings ?? draft() ?? defaults();
+        trigger.onclick = () => {
           if (panel.matches(':popover-open')) panel.hidePopover();
-        }
-        form.reset.disabled = !(id ? state?.customized : draft());
-      };
-      updates.addEventListener('change', render, { signal });
-      render();
-      return node;
-    }),
+          else {
+            form.update(currentSettings());
+            show();
+          }
+        };
+        const form = settingsForm(ctx, signal, write, async () => {
+          await write(null);
+          return currentSettings();
+        });
+        panel.append(form.node);
+        let shownId = id;
+        let shownWorkspace = workspace();
+        const render = () => {
+          const key = workspace();
+          trigger.disabled = Boolean(id && !state) || Boolean(conversation.get().interaction.operation);
+          if (shownId !== id || shownWorkspace !== key) {
+            shownId = id;
+            shownWorkspace = key;
+            if (panel.matches(':popover-open')) panel.hidePopover();
+          }
+          form.reset.disabled = !(id ? state?.customized : draft());
+        };
+        updates.addEventListener('change', render, { signal });
+        render();
+        return node;
+      },
+      { order: 10 },
+    ),
   );
 
   ctx.inject(['miniMessages'], (history) => {
@@ -390,12 +392,16 @@ function setup(ctx: Context) {
   );
   ctx.inject(['miniSettingsRegistry', 'miniModels'], (settings) => {
     const { configuration, read } = profileSettings(ctx);
+    settings.miniSettingsRegistry.registerSection(
+      { id: 'context', title: 'Context', icon: 'file-text', order: 40 },
+      settings.fiber.signal,
+    );
     settings.effect(() =>
       settings.miniSettingsRegistry.register(
         browserPluginId(ctx),
         {
           id: 'context-management',
-          section: { title: 'Context', icon: 'file-text', order: 40 },
+          sectionId: 'context',
           order: 10,
           render({ signal }) {
             const form = settingsForm(

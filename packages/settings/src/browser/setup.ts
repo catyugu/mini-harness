@@ -18,12 +18,16 @@ const setup = async (ctx: Context) => {
   ctx.effect(() => ctx.miniProjections.register('settings', store));
   ctx.provide('miniSettingsData', store);
   const registry = new SettingsRegistry();
+  registry.registerSection(
+    { id: 'general', title: 'General', icon: 'settings', order: 10 },
+    ctx.fiber.signal,
+  );
   const layout = ctx.miniLayout;
   ctx.provide('miniSettingsRegistry', registry);
   const settings = mountSettings(ctx, registry);
   ctx.provide('miniSettings', settings);
   const launcher = fromMarkup<HTMLButtonElement>(
-    '<button type="button" aria-label="Settings"><span data-icon="settings"></span><span class="nav-label">Settings</span></button>',
+    '<button type="button" class="ui-button ui-nav-action" data-variant="quiet" aria-label="Settings"><span data-icon="settings"></span><span class="ui-nav-label ui-truncate">Settings</span></button>',
   );
   launcher.onclick = () => {
     layout.closeDrawer();
@@ -59,11 +63,21 @@ function mountSettings(ctx: Context, registry: SettingsRegistry) {
   back.prepend(icon('chevron'));
   ctx.effect(() => ctx.miniSlots.register('dialog.root', panel));
   closeOnBackdrop(panel);
-  const pages = new Map<string, { section: HTMLElement; trigger: HTMLButtonElement; content: HTMLElement }>();
+  const pages = new Map<
+    string,
+    {
+      section: HTMLElement;
+      trigger: HTMLButtonElement;
+      content: HTMLElement;
+      heading: HTMLElement;
+      label: HTMLSpanElement;
+    }
+  >();
   let selected: string | undefined;
+  let firstSection: string | undefined;
 
-  function select(title?: string, detail = false) {
-    selected = title && pages.has(title) ? title : nav.querySelector('button')?.dataset.section;
+  function select(id?: string, detail = false) {
+    selected = id && pages.has(id) ? id : firstSection;
     for (const [name, { section, trigger }] of pages) {
       section.hidden = name !== selected;
       if (name === selected) trigger.setAttribute('aria-current', 'page');
@@ -75,41 +89,39 @@ function mountSettings(ctx: Context, registry: SettingsRegistry) {
 
   function render() {
     const groups = registry.sections();
-    const titles = new Set(groups.map(({ section }) => section.title));
-    for (const [title, { section, trigger }] of pages) {
-      if (titles.has(title)) continue;
+    firstSection = groups[0]?.section.id;
+    const ids = new Set(groups.map(({ section }) => section.id));
+    for (const [id, { section, trigger }] of pages) {
+      if (ids.has(id)) continue;
       section.remove();
       trigger.remove();
-      pages.delete(title);
+      pages.delete(id);
     }
-    groups.forEach(({ section: { title, icon: symbol }, nodes }, index) => {
-      let page = pages.get(title);
+    groups.forEach(({ section: { id, title, icon: symbol }, nodes }, index) => {
+      let page = pages.get(id);
       if (!page) {
         const section = document.createElement('section');
         section.hidden = true;
         const heading = document.createElement('h3');
-        heading.textContent = title;
         const content = document.createElement('div');
         content.className = 'settings-contributions';
         section.append(heading, content);
         const trigger = document.createElement('button');
         trigger.type = 'button';
         trigger.className = 'link-button';
-        trigger.dataset.section = title;
+        const label = document.createElement('span');
+        label.className = 'ui-truncate';
         trigger.onclick = () => {
-          select(title, true);
-          if (matchMedia('(max-width: 560px)').matches) back.focus();
+          select(id, true);
+          back.focus();
         };
-        page = { section, trigger, content };
-        pages.set(title, page);
+        page = { section, trigger, content, heading, label };
+        pages.set(id, page);
       }
-      const { section, trigger, content } = page;
-      const nextSymbol = JSON.stringify(symbol);
-      if (!trigger.childElementCount || trigger.dataset.symbol !== nextSymbol) {
-        trigger.replaceChildren(icon(symbol ?? 'plugin'), document.createTextNode(title));
-        if (nextSymbol === undefined) delete trigger.dataset.symbol;
-        else trigger.dataset.symbol = nextSymbol;
-      }
+      const { section, trigger, content, heading, label } = page;
+      heading.textContent = title;
+      trigger.replaceChildren(icon(symbol ?? 'plugin'), label);
+      label.textContent = title;
       if (sections.children[index] !== section)
         sections.insertBefore(section, sections.children[index] ?? null);
       if (nav.children[index] !== trigger) nav.insertBefore(trigger, nav.children[index] ?? null);
@@ -130,8 +142,8 @@ function mountSettings(ctx: Context, registry: SettingsRegistry) {
     if (selected) pages.get(selected)?.trigger.focus();
   };
   return {
-    open(title?: string) {
-      select(title, Boolean(title));
+    open(id?: string) {
+      select(id, Boolean(id && pages.has(id)));
       if (!panel.open) panel.showModal();
     },
     onClose: (listener: () => void, signal: AbortSignal) =>

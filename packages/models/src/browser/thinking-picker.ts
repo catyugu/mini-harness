@@ -23,7 +23,7 @@ export function createThinkingPicker(
     results = element('thinkingResults');
   let options: HTMLButtonElement[] = [];
 
-  const position = bindPopover(button, popup, signal, {
+  const show = bindPopover(button, popup, signal, {
     width: 180,
     maxHeight: 320,
     align: 'end',
@@ -32,8 +32,7 @@ export function createThinkingPicker(
 
   function open() {
     if (button.hidden || popup.matches(':popover-open')) return;
-    popup.showPopover();
-    position();
+    show();
     (options.find((option) => option.getAttribute('aria-selected') === 'true') ?? options[0])?.focus();
   }
 
@@ -85,7 +84,7 @@ export function createThinkingPicker(
       options = entries.map(({ value, label }) => {
         const option = document.createElement('button');
         option.type = 'button';
-        option.className = 'suggestion model-option';
+        option.className = 'ui-option model-option';
         option.setAttribute('role', 'option');
         option.setAttribute('aria-selected', String(value === selected));
         const content = document.createElement('span');

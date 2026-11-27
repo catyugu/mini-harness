@@ -64,46 +64,7 @@
   border: 0;
   padding: 0;
 }
-.context-fields .ui-field {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 0.5rem;
-}
-.context-fields .ui-field > :last-child {
-  justify-self: end;
-}
-.context-fields .ui-field input[type='number'] {
-  width: 5em;
-  max-width: 100%;
-}
-.context-fields .ui-field:has(.context-model) {
-  grid-template-columns: max-content minmax(0, 1fr);
-}
-.context-fields .ui-field > .context-model {
-  justify-self: stretch;
-}
-.context-model {
-  max-width: 100%;
-  min-width: 0;
-  display: flex;
-  gap: 0.4rem;
-}
-.context-model span {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.context-model svg {
-  flex: none;
-  width: 12px;
-  height: 12px;
-  transform: rotate(90deg);
-}
 .context-actions {
-  display: grid;
-  gap: 0.5rem;
   margin-top: 0.75rem;
 }
 .context-bar {

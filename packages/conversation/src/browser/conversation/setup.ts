@@ -21,10 +21,10 @@ const setup = (ctx: Context) => {
       browserPluginId(ctx),
       {
         id: 'message-mode',
-        section: { title: 'General', icon: 'settings', order: 10 },
+        sectionId: 'general',
         render({ bind }) {
           const content = fromMarkup(
-            '<div class="settings-preference"><label class="switch-line"><span><strong>Default sending mode</strong><small>Default handling of new messages while the agent is running.</small></span></label></div>',
+            '<div><label class="ui-field ui-field-wide"><span><strong>Default sending mode</strong><small>Default handling of new messages while the agent is running.</small></span></label></div>',
           );
           const control = document.createElement('select');
           control.setAttribute('aria-label', 'Default sending mode');
@@ -59,9 +59,10 @@ const setup = (ctx: Context) => {
       (signal) => {
         const button = document.createElement('button');
         button.type = 'button';
-        button.className = 'new-session';
+        button.className = 'ui-button ui-nav-action';
         button.setAttribute('aria-label', 'New conversation');
-        button.innerHTML = '<span data-icon="plus"></span><span class="nav-label">New conversation</span>';
+        button.innerHTML =
+          '<span data-icon="plus"></span><span class="ui-nav-label ui-truncate">New conversation</span>';
         button.addEventListener(
           'click',
           () => {

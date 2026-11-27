@@ -189,36 +189,33 @@
   resize: none;
   overflow: auto;
 }
-.composer-footer,
-.composer-leading,
-.composer-secondary,
-.composer-actions {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-}
 .composer-footer {
-  flex-wrap: wrap;
+  --gap: 6px;
   min-height: var(--control);
   padding-left: 4px;
 }
-.composer-leading {
-  flex-wrap: wrap;
+.composer-leading,
+.composer-secondary {
+  flex: 1 1 0;
 }
 .composer-secondary {
-  flex: 1 1 auto;
-  flex-wrap: wrap;
   justify-content: flex-end;
 }
 .composer-actions {
-  flex: none;
   margin-left: auto;
 }
+#composerTools,
+#composerPrimary {
+  flex: 1 1 0;
+}
+
 @container (max-width: 640px) {
   .composer-footer {
     flex-direction: column;
     align-items: stretch;
+  }
+  .composer-footer > * {
+    flex: auto;
   }
 }
 #send,
@@ -454,27 +451,6 @@ button.file-card:hover {
     height: 40px;
   }
 }
-.composer-trailing {
-  display: flex;
-  align-items: center;
-  flex: 1 1 160px;
-  flex-wrap: wrap;
-  min-width: 0;
-  gap: 6px;
-}
-.composer-trailing:empty {
-  display: none;
-}
-.composer-tools:empty {
-  display: none;
-}
-.composer-tools {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 2px;
-  min-width: 0;
-}
 #send,
 #stop {
   color: var(--on-accent);
@@ -592,28 +568,6 @@ button.file-card:hover {
   bottom: auto;
   top: calc(100% + 6px);
 }
-.suggestion {
-  display: block;
-  width: 100%;
-  text-align: left;
-  padding: 8px 10px;
-  border: 0;
-  background: transparent;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.suggestion:hover,
-.suggestion[aria-selected='true'] {
-  background: var(--hover);
-}
-.suggestion strong {
-  font-weight: 600;
-}
-.suggestion small {
-  font-size: var(--font-meta);
-  color: var(--muted);
-}
 .suggestion-group {
   margin-left: 9px;
 }
@@ -658,13 +612,6 @@ button.file-card:hover {
   flex: none;
   margin: 0;
   max-width: 105px;
-}
-@media (max-width: 560px) {
-  .composer-tools .icon-button {
-    min-width: 32px;
-    width: 32px;
-    padding-inline: 4px;
-  }
 }
 .composer-wrap {
   flex-shrink: 0;

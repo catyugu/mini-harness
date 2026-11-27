@@ -2,7 +2,7 @@ import type { PluginConfiguration } from '@mini-harness/plugin-api/plugin-config
 import type { PluginSettingsContribution, SettingsContribution, SettingsSection } from './api.ts';
 
 interface Entry {
-  section: SettingsContribution['section'];
+  sectionId: string;
   order: number;
   node: HTMLElement;
 }
@@ -57,18 +57,36 @@ export class SettingsRegistry extends EventTarget {
     refresh();
   }
 
+  private readonly definitions = new Map<string, SettingsSection>();
   private readonly entries = new Map<string, Entry>();
 
+  registerSection({ id, ...metadata }: SettingsSection, signal: AbortSignal) {
+    if (!validId.test(id) || this.definitions.has(id))
+      throw new Error('Invalid or duplicate settings section: ' + id);
+    signal.throwIfAborted();
+    const update = (next: Omit<SettingsSection, 'id'>) => {
+      signal.throwIfAborted();
+      if (!next.title.trim() || !Number.isFinite(next.order ?? 100))
+        throw new Error('Invalid settings section metadata: ' + id);
+      this.definitions.set(id, { ...next, id });
+      this.dispatchEvent(new Event('change'));
+    };
+    update(metadata);
+    signal.addEventListener(
+      'abort',
+      () => {
+        this.definitions.delete(id);
+        this.dispatchEvent(new Event('change'));
+      },
+      { once: true },
+    );
+    return update;
+  }
+
   register(owner: string, contribution: SettingsContribution, configuration: PluginConfiguration) {
-    const { id, section, order = 0, render } = contribution;
-    const title = typeof section === 'string' ? section : section.title;
+    const { id, sectionId, order = 0, render } = contribution;
     const key = owner + '/' + id;
-    if (
-      !title.trim() ||
-      !/^[a-z][a-z0-9.-]{0,95}$/.test(id) ||
-      !Number.isFinite(order) ||
-      (typeof section !== 'string' && section.order !== undefined && !Number.isFinite(section.order))
-    )
+    if (!validId.test(id) || !validId.test(sectionId) || !Number.isFinite(order))
       throw new Error('Invalid settings contribution: ' + key);
     if (this.entries.has(key)) throw new Error('Duplicate settings contribution: ' + key);
     const lifetime = new AbortController();
@@ -79,7 +97,7 @@ export class SettingsRegistry extends EventTarget {
         configuration,
         bind: (control, field, binding) => bindControl(configuration, signal, control, field, binding),
       });
-      this.entries.set(key, { section, order, node });
+      this.entries.set(key, { sectionId, order, node });
       this.dispatchEvent(new Event('change'));
     } catch (error) {
       lifetime.abort();
@@ -93,26 +111,26 @@ export class SettingsRegistry extends EventTarget {
   }
 
   sections() {
-    const groups = new Map<string, { section: SettingsSection; nodes: HTMLElement[] }>();
+    const groups = new Map<string, HTMLElement[]>();
     const entries = [...this.entries].sort(
       ([a, first], [b, second]) => first.order - second.order || a.localeCompare(b),
     );
-    for (const [, entry] of entries) {
-      const section = typeof entry.section === 'string' ? { title: entry.section } : entry.section;
-      let group = groups.get(section.title);
-      if (!group) {
-        group = { section, nodes: [] };
-        groups.set(section.title, group);
-      }
-      if ((section.order ?? Infinity) < (group.section.order ?? Infinity)) group.section = section;
-      group.nodes.push(entry.node);
+    for (const [, { sectionId, node }] of entries) {
+      if (!this.definitions.has(sectionId)) continue;
+      const nodes = groups.get(sectionId) ?? [];
+      nodes.push(node);
+      groups.set(sectionId, nodes);
     }
-    return [...groups.values()].sort(
-      ({ section: a }, { section: b }) =>
-        (a.order ?? 100) - (b.order ?? 100) || a.title.localeCompare(b.title),
-    );
+    return [...this.definitions.values()]
+      .sort((a, b) => (a.order ?? 100) - (b.order ?? 100) || a.id.localeCompare(b.id))
+      .flatMap((section) => {
+        const nodes = groups.get(section.id);
+        return nodes ? [{ section, nodes }] : [];
+      });
   }
 }
+
+const validId = /^[a-z][a-z0-9.-]{0,95}$/;
 
 function bindControl<T>(
   configuration: PluginConfiguration,
