@@ -239,12 +239,20 @@ export class ModelStore implements ModelStorePort {
       .then(async () => {
         await previous?.work;
         if (signal.aborted) return;
+        const deadline = AbortSignal.any([signal, AbortSignal.timeout(5000)]);
         let auth: boolean | string = false;
         try {
-          auth = await check.call(provider, signal);
+          const result = await check.call(provider, deadline);
+          deadline.throwIfAborted();
+          auth = result;
         } catch (error) {
           if (!signal.aborted)
-            this.report(new Error('Could not determine authentication status for ' + id, { cause: error }));
+            this.report(
+              new Error(
+                (deadline.aborted ? 'Authentication check timed out for ' : 'Could not determine authentication status for ') + id,
+                { cause: error },
+              ),
+            );
         }
         if (!signal.aborted)
           this.setStatus(

@@ -18,6 +18,7 @@ export interface CatalogProvider extends ProviderConnection {
   models: readonly CatalogModel[];
   key?: string;
   headers?: Record<string, string | null>;
+  /** Must settle on abort, including the store's authentication deadline. */
   authStatus?(signal: AbortSignal): Promise<boolean | string>;
   endpointOverride?: string;
   discoveryKey?(credential: Credential | undefined, signal: AbortSignal): Promise<string | undefined>;

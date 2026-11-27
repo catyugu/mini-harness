@@ -314,8 +314,8 @@ test('abort reaches the model transport and yields a native terminal message wit
 });
 
 test(
-  'authentication queries join checks without blocking edits and dispose cancelled work',
-  { timeout: 10000 },
+  'authentication queries join bounded checks without blocking edits and dispose cancelled work',
+  { timeout: 15000 },
   async (t) => {
     const mock = await createMockProvider();
     const { root, paths } = createFixturePaths(mock.url);
@@ -373,6 +373,15 @@ test(
     release();
     assert.equal((await firstQuery).find(({ provider }) => provider === 'slow-auth')?.configured, true);
 
+    check = async (signal) => {
+      await new Promise<void>((resolve) => signal.addEventListener('abort', () => resolve(), { once: true }));
+      return true;
+    };
+    const timed = await store.available();
+    assert.equal(timed.find(({ provider }) => provider === 'slow-auth')?.configured, false);
+    assert.equal(timed.find(({ provider }) => provider === 'local-mock')?.configured, true);
+    assert.ok(errors.some((error) => String(error).includes('Authentication check timed out for slow-auth')));
+
     let checking!: () => void;
     const pending = new Promise<void>((resolve) => {
       checking = resolve;
@@ -398,6 +407,7 @@ test(
       throw new Error('Authentication unavailable');
     };
     changes.length = 0;
+    errors.length = 0;
     await store.saveProvider({ id: 'slow-auth', key: 'saved-key' });
     const available = await query;
     assert.equal(available.find(({ provider }) => provider === 'slow-auth')?.configured, false);

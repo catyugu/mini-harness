@@ -55,6 +55,9 @@ export function providerEditor(
   const endpointField = field('API endpoint', endpoint);
   const api = document.createElement('select');
   const apiField = field('API protocol', api);
+  const resetProtocolSettings = fromMarkup<HTMLInputElement>('<input type="checkbox" checked>');
+  const resetProtocolField = field('Reset model compatibility and thinking-level settings', resetProtocolSettings, 'compact');
+  const changingProtocol = () => provider?.custom === true && provider.api !== api.value;
   const catalog = catalogEditor();
   const restoreEndpoint = button('Use default endpoint', 'quiet');
   const restoreModels = button('Restore default models', 'quiet');
@@ -122,9 +125,10 @@ export function providerEditor(
     api.replaceChildren(...options.map(([value, label]) => new Option(label, value)));
     api.value = protocol;
     api.disabled = !isCustom;
+    resetProtocolField.hidden = true;
     customConnection.hidden = customCatalog.hidden = !isCustom;
     if (isCustom) {
-      customConnection.append(endpointField, apiField);
+      customConnection.append(endpointField, apiField, resetProtocolField);
       customCatalog.append(catalog.root);
       catalog.actions.replaceChildren(discover);
     } else {
@@ -199,13 +203,16 @@ export function providerEditor(
   };
 
   mode.onchange = picker.onchange = updateFields;
-  endpoint.oninput =
-    key.oninput =
-    api.onchange =
-      () => {
-        error.textContent = '';
-        resetDiscovery();
-      };
+  const connectionChanged = () => {
+    error.textContent = '';
+    resetDiscovery();
+  };
+  endpoint.oninput = key.oninput = connectionChanged;
+  api.onchange = () => {
+    resetProtocolField.hidden =
+      !changingProtocol() || !provider?.models.some(({ compat, thinkingLevelMap }) => compat !== undefined || thinkingLevelMap !== undefined);
+    connectionChanged();
+  };
   form.onsubmit = async (event) => {
     event.preventDefault();
     if (save.disabled) return;
@@ -235,6 +242,9 @@ export function providerEditor(
     save.disabled = cancel.disabled = true;
     try {
       const isCustom = custom();
+      let models = catalog.customized() ? catalog.models() : undefined;
+      if (changingProtocol() && resetProtocolSettings.checked)
+        models = models?.map(({ compat: _compat, thinkingLevelMap: _mapping, ...model }) => model);
       const { id: saved } = await browserRequest<{ id: string }>(ctx, '/providers', {
         ...payload('PUT', {
           id: isCustom ? id.value.trim() : builtin()?.id,
@@ -243,7 +253,7 @@ export function providerEditor(
           api: isCustom ? api.value : undefined,
           baseUrl: endpoint.value.trim(),
           key: key.value.trim(),
-          models: catalog.customized() ? catalog.models() : undefined,
+          models,
         }),
         signal,
       });
