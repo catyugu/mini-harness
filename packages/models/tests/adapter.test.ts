@@ -22,6 +22,17 @@ test('model adapter streams native messages, tool calls and metadata through the
   await adapter.refresh();
   await new PiLlm(adapter).registerModels();
   const choice = { provider: 'local-mock', id: 'mock-model' };
+  const connection = { api: 'openai-completions', baseUrl: mock.url, key: 'test-only-key' };
+  const discovered = await adapter.discoverModels(connection, t.signal);
+  assert.deepEqual(
+    discovered.map(({ id }) => id),
+    ['mock-model', 'discovered-model'],
+  );
+  assert.equal(discovered[1].contextWindow, 65536);
+  await assert.rejects(
+    adapter.discoverModels({ ...connection, baseUrl: mock.url + '/missing' }, t.signal),
+    /HTTP 404/,
+  );
   const input: NativeMessage = { role: 'user', content: 'Inspect the note', timestamp: Date.now() };
   const request = {
     model: choice,

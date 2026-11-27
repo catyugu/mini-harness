@@ -1,25 +1,28 @@
 import type { Context } from 'mini-harness/cordis';
 import { browserRequest, payload } from '@mini-harness/ui-runtime/http';
-import { button, confirmAction, fromMarkup, required } from '@mini-harness/ui-primitives/primitives';
+import {
+  button,
+  confirmAction,
+  fromMarkup,
+  iconButton,
+  required,
+} from '@mini-harness/ui-primitives/primitives';
 import { icon } from '@mini-harness/ui-primitives/icons';
 import type { ProviderInfo, ProtocolInfo } from '../shared/pi-provider.ts';
 import { providerEditor } from './provider-editor.ts';
 
-const listed = ({
-  configured,
-  storedCredential,
-  custom,
-  endpointCustomized,
-  modelsCustomized,
-}: ProviderInfo) => configured || storedCredential || custom || endpointCustomized || modelsCustomized;
+const removable = (provider: ProviderInfo) =>
+  provider.custom || provider.storedCredential || provider.endpointCustomized || provider.modelsCustomized;
+const listed = (provider: ProviderInfo) => provider.configured || removable(provider);
 
 export function providerManager(
   ctx: Context,
   snapshot: () => { providers: ProviderInfo[]; protocols: ProtocolInfo[]; canManageProviders: boolean },
+  refresh: () => Promise<void>,
   signal: AbortSignal,
 ) {
   const content = fromMarkup(`<div class="model-settings">
-    <div class="provider-list"></div>
+    <div class="provider-list ui-stack"></div>
     <div class="provider-add"></div>
     <p class="hint provider-status" role="status"></p>
   </div>`);
@@ -30,7 +33,6 @@ export function providerManager(
   add.prepend(icon('plus'));
   addArea.append(add);
   let active: { form: HTMLFormElement; controller: AbortController } | undefined;
-  let focusProvider: string | undefined;
 
   function closeEditor() {
     active?.controller.abort();
@@ -39,8 +41,27 @@ export function providerManager(
     add.hidden = false;
   }
 
-  function edit(mount: Element, provider?: ProviderInfo) {
+  function finish(id?: string) {
     closeEditor();
+    render();
+    const control = id
+      ? list.querySelector<HTMLButtonElement>('[data-provider="' + CSS.escape(id) + '"]')
+      : add;
+    control?.focus();
+  }
+
+  async function refreshAfterCommit(message: string) {
+    status.textContent = message;
+    try {
+      await refresh();
+    } catch (error) {
+      if (!signal.aborted)
+        status.textContent =
+          message + ' Could not refresh models: ' + (error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  function edit(mount: Element, provider?: ProviderInfo) {
     status.textContent = '';
     const controller = new AbortController();
     const lifetime = AbortSignal.any([signal, controller.signal]);
@@ -52,22 +73,16 @@ export function providerManager(
       protocols,
       lifetime,
       {
-        cancel() {
-          closeEditor();
-          focusProvider = provider?.id;
-          render();
-          if (!provider) add.focus();
-        },
-        saved(id) {
-          closeEditor();
-          status.textContent = 'Provider saved.';
-          focusProvider = id;
-          render();
+        cancel: () => finish(provider?.id),
+        async saved(id) {
+          await refreshAfterCommit('Provider saved.');
+          if (!lifetime.aborted) finish(id);
         },
       },
     );
     active = { form, controller };
-    add.hidden = !provider;
+    add.hidden = true;
+    for (const control of list.querySelectorAll('button')) control.disabled = true;
     mount.append(form);
     form.querySelector<HTMLElement>('[data-initial-focus]:not([disabled])')?.focus();
   }
@@ -89,8 +104,7 @@ export function providerManager(
         .sort((a, b) => a.name.localeCompare(b.name))
         .map((provider) => {
           const card = fromMarkup(`<article class="ui-card provider-card">
-          <div class="provider-row"><div><strong></strong><small class="provider-state"></small></div><div class="ui-actions"></div></div>
-          <div class="provider-inline"></div>
+          <div class="provider-row ui-row"><div><strong></strong><small class="provider-state"></small></div><div class="ui-actions"></div></div>
         </article>`);
           required(card.querySelector('strong')).textContent = provider.name;
           const summary = required(card.querySelector<HTMLElement>('.provider-state'));
@@ -104,17 +118,10 @@ export function providerManager(
           const editButton = button('Edit', 'quiet');
           editButton.setAttribute('aria-label', 'Edit ' + provider.name);
           editButton.dataset.provider = provider.id;
-          editButton.onclick = () => edit(required(card.querySelector('.provider-inline')), provider);
+          editButton.onclick = () => edit(card, provider);
           actions.append(editButton);
-          if (
-            provider.custom ||
-            provider.storedCredential ||
-            provider.endpointCustomized ||
-            provider.modelsCustomized
-          ) {
-            const remove = button('Remove', 'quiet');
-            remove.classList.add('danger');
-            remove.setAttribute('aria-label', 'Remove ' + provider.name);
+          if (removable(provider)) {
+            const remove = iconButton('Remove ' + provider.name, 'trash');
             remove.onclick = async () => {
               if (
                 !(await confirmAction(
@@ -131,7 +138,7 @@ export function providerManager(
                   ...payload('DELETE', { id: provider.id }),
                   signal,
                 });
-                status.textContent = 'Provider removed.';
+                await refreshAfterCommit('Provider removed.');
                 add.focus();
               } catch (error) {
                 if (!signal.aborted)
@@ -149,15 +156,6 @@ export function providerManager(
       list.append(
         fromMarkup('<p class="hint">Add a provider to make its models available in the composer.</p>'),
       );
-    if (focusProvider) {
-      const control = list.querySelector<HTMLButtonElement>(
-        '[data-provider="' + CSS.escape(focusProvider) + '"]',
-      );
-      if (control) {
-        focusProvider = undefined;
-        control.focus();
-      }
-    }
   }
 
   add.onclick = () => edit(addArea);
@@ -167,7 +165,6 @@ export function providerManager(
     render,
     reset() {
       closeEditor();
-      focusProvider = undefined;
       status.textContent = '';
       render();
     },

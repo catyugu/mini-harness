@@ -72,7 +72,7 @@ const setup = async (ctx: Context) => {
         id: 'providers',
         sectionId: 'model',
         render({ signal }) {
-          const manager = providerManager(ctx, state.get, signal);
+          const manager = providerManager(ctx, state.get, state.refresh, signal);
           settings.onClose(manager.reset, signal);
           state.subscribe(manager.render, signal);
           return manager.content;
