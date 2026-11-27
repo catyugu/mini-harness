@@ -120,7 +120,7 @@ export class Runs implements RunPort {
   }
 
   private taskChanged(id: string, { type, task }: TaskEvent) {
-    if (type !== 'transition') return;
+    if (type !== 'transition' && type !== 'commit-failed') return;
     const events = this.streams.get(id);
     if (!events || events.info.id !== task.id) return;
     const info = events.info;
@@ -137,7 +137,7 @@ export class Runs implements RunPort {
       events.publish({ type: 'run', run: next });
       if (firstAdmission)
         this.observe({ type: 'run-started', sessionId: id, run: next }, this.current(id)?.signal);
-      if (ended) this.observe({ type: 'run-ended', sessionId: id, run: next });
+      if (ended && type === 'transition') this.observe({ type: 'run-ended', sessionId: id, run: next });
     } finally {
       if (ended) {
         if (this.streams.get(id) === events) this.streams.delete(id);

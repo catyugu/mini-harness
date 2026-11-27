@@ -139,7 +139,7 @@ function setup(ctx: Context) {
           true,
         );
         const manual = ctx.harnessTasks
-          .list('session:' + id)
+          .list(new Set(['session:' + id]))
           .some((task) => task.type === 'compaction' && !terminal(task.state));
         return {
           ...(result ?? { ...configuration(undefined, defaults()), turns: 0, steps: 0, assistantUsage: {} }),

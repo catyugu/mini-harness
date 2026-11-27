@@ -566,7 +566,7 @@ test(
     const finished = assert.rejects(first.result, /Interrupted by a new message/);
     await entered.promise;
     assert.deepEqual(
-      ctx.harnessTasks.list('session:' + id).map(({ type }) => type),
+      ctx.harnessTasks.list(new Set(['session:' + id])).map(({ type }) => type),
       ['agent-run'],
     );
     runs.send(id, { message: 'Interrupt one', origin: user });

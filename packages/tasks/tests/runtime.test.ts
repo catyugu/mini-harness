@@ -140,6 +140,10 @@ test('failed admission does not publish or execute a task', async () => {
 
 test('a durable projection fault cannot acknowledge a successful task', async () => {
   const runtime = new TaskRuntime();
+  const terminalEvents: string[] = [];
+  runtime.subscribe(({ type, task }) => {
+    if (task.state === 'completed' || task.state === 'failed') terminalEvents.push(type);
+  });
   const task = runtime.start(
     {
       owner: 'one',
@@ -151,6 +155,7 @@ test('a durable projection fault cannot acknowledge a successful task', async ()
   );
   await assert.rejects(task.result, /write failed/);
   assert.equal(runtime.get(task.id)?.state, 'failed');
+  assert.deepEqual(terminalEvents, ['commit-failed']);
 });
 
 test('owner removal rejects new work immediately and emits deletion after cleanup', async () => {

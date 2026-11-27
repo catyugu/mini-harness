@@ -159,9 +159,9 @@ const setup = (ctx: Context) => {
     ctx.miniMessages.registerTool(
       'delegate',
       ({ details }) => {
-        if (details?.state !== 'accepted') return;
+        if (details?.state !== 'accepted' && details?.state !== 'queued') return;
         const node = document.createElement('span');
-        node.textContent = 'Accepted';
+        node.textContent = details.state === 'queued' ? 'Queued' : 'Accepted';
         return node;
       },
       'status',

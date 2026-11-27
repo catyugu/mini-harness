@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import type { RunPort } from '@mini-harness/runs/api';
 import type { SessionStore } from '@mini-harness/sessions/records';
 import type { ModelChoice } from '@mini-harness/llm/vocabulary';
@@ -46,7 +47,7 @@ export class Delegation {
     return this.sessions.depth(id) < this.settings().maxDepth;
   }
 
-  delegate(
+  async delegate(
     parentId: string,
     request: { task: string; provider?: string; model?: string },
     signal?: AbortSignal,
@@ -62,13 +63,26 @@ export class Delegation {
       workspaceId: parent.workspaceId,
       title: childTitle(request.task),
     });
-    const { taskId } = this.runs.send(record.id, {
-      message: request.task,
-      model,
-      origin: { source: 'agent', senderSessionId: parentId, taskId: creator },
-      mode: 'queue',
-    });
-    if (!taskId) throw new Error('Child conversation accepted the task but could not start: ' + record.id);
-    return { sessionId: record.id, taskId, state: 'accepted' as const };
+    const messageId = randomUUID();
+    let taskId: string | undefined;
+    try {
+      ({ taskId } = this.runs.send(record.id, {
+        message: request.task,
+        model,
+        messageId,
+        origin: { source: 'agent', senderSessionId: parentId, taskId: creator },
+        mode: 'queue',
+      }));
+    } catch (error) {
+      if (!this.sessions.hasInbox(record.id, messageId)) {
+        // A faulted log may have reached storage even though its append did not acknowledge success.
+        if (!this.sessions.logError(record.id)) await this.sessions.delete([record.id]);
+        throw error;
+      }
+      taskId = this.runs.current(record.id)?.id;
+    }
+    return taskId
+      ? { sessionId: record.id, taskId, state: 'accepted' as const }
+      : { sessionId: record.id, state: 'queued' as const };
   }
 }

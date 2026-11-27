@@ -52,7 +52,7 @@ export function setup(ctx: Context) {
       const tasks = scope.harnessTasks;
       scope.effect(() =>
         registry.beforeDelete({
-          busy: (id) => tasks.list('session:' + id).some((task) => !terminal(task.state)),
+          busy: (id) => tasks.list(new Set(['session:' + id])).some((task) => !terminal(task.state)),
           async quiesce(ids) {
             await Promise.all(ids.map((id) => tasks.removeOwner('session:' + id)));
           },

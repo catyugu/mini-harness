@@ -17,6 +17,7 @@ import { join } from 'node:path';
 import { getPaths } from '@mini-harness/platform/paths';
 import { loadCatalog } from '../src/catalog.ts';
 import { SessionRegistry } from '../src/registry.ts';
+import { DomainError } from '@mini-harness/platform/errors';
 
 function fixture(t: test.TestContext) {
   const temp = mkdtempSync(join(tmpdir(), 'mini-harness-sessions-'));
@@ -221,4 +222,18 @@ test('public session logs expose record operations but not the writer lifecycle'
   });
   log.append({ type: 'message', message: { role: 'user', content: 'Still writable', timestamp: 1 } });
   assert.equal(registry.history(session.id).timeline.filter(isViewMessage)[0].content, 'Still writable');
+});
+
+test('log query errors propagate identically for temporary readers and writers', (t) => {
+  const { registry, paths } = fixture(t);
+  const session = registry.create();
+  registry.log(session.id);
+  registry.dispose();
+  const restored = new SessionRegistry(paths);
+  t.after(() => restored.dispose());
+  const error = new DomainError('unavailable', 'Caller error');
+  const read = () => { throw error; };
+  assert.throws(() => restored.inspectLog(session.id, read), (thrown) => thrown === error);
+  restored.log(session.id);
+  assert.throws(() => restored.inspectLog(session.id, read), (thrown) => thrown === error);
 });

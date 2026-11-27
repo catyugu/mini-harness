@@ -170,7 +170,7 @@ export class SessionRun {
       signal.throwIfAborted();
       this.sessions.assertAvailable(id);
       return {
-        selection: selected,
+        selection: { model: selected.model, thinkingLevel: selected.thinkingLevel },
         presentation: isDeepStrictEqual(item.images, preparedImages)
           ? presentation
           : { ...presentation, images: item.images },

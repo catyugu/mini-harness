@@ -16,10 +16,10 @@ const handle = ctx.harnessTasks.start({ owner: resourceId, pool, lane: resourceI
 await handle.result;
 ```
 
-`TaskHandle.result` returns the executor's value. A caller can separately query snapshots, subscribe to updates, read bounded output by byte cursor and request cancellation. Use `project` to publish a serializable result. Output allocation begins at the first write.
+`TaskHandle.result` returns the executor's value. `list(owners)` filters by an explicit owner set; omitting it lists all owners, and an empty set lists none. A caller can separately query snapshots, subscribe to updates, read bounded output by byte cursor and request cancellation. Use `project` to publish a serializable result. Output allocation begins at the first write.
 
 ## Lifetime and admission
 
 A task can specify its provider Fiber independently of its resource owner. Cancellation requests abort its signal and settlement waits for actual cleanup. A cancelled waiter leaves the independent work it was waiting for running. At a whole-task wait point the executor yields pool capacity, then reacquires capacity before resuming. Exclusive lanes remain occupied during waits. The runtime rejects circular waits.
 
-Owner removal blocks admission and drains that owner's work. Application shutdown seals admission before draining tasks. A synchronous `commit` records transitions before successful acknowledgment. Durably committed tasks leave the runtime at settlement. [Sessions](../sessions/README.md) serves conversation task history. Tasks retains bounded observations for executions without a successful durable commit.
+Owner removal blocks admission and drains that owner's work. Application shutdown seals admission before draining tasks. A synchronous `commit` records admission before execution and records transitions before successful acknowledgment. A failed terminal commit emits a local `commit-failed` observation, not a durable transition. Durably committed tasks leave the runtime at settlement. [Sessions](../sessions/README.md) serves conversation task history. Tasks retains bounded observations for executions without a successful durable commit.

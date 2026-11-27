@@ -31,7 +31,7 @@ export function setup(ctx: Context) {
       name: 'delegate',
       label: 'Delegate',
       description:
-        'Start a child agent asynchronously. Returns its session ID and task ID immediately; the child continues independently. Use task_control to inspect, await or cancel it. Set provider/model to override the default.',
+        'Submit work to a child agent asynchronously. Returns its session ID and, once scheduled, task ID. A queued receipt means the input was accepted but execution has not started. Use task_control to inspect, await or cancel it. Set provider/model to override the default.',
       parameters: Type.Object({
         task: Type.String({ minLength: 1, maxLength: 12000 }),
         provider: Type.Optional(Type.String({ maxLength: 160 })),
@@ -39,7 +39,7 @@ export function setup(ctx: Context) {
       }),
       isConcurrencySafe: () => true,
       execute: async (args, { signal, executionId }) => {
-        const child = delegation.delegate(id, args, signal, executionId);
+        const child = await delegation.delegate(id, args, signal, executionId);
         return {
           content: [{ type: 'text', text: JSON.stringify(child) }],
           details: child,

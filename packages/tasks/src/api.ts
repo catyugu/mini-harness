@@ -57,7 +57,7 @@ export interface TaskSnapshot {
 }
 
 export type TaskEvent = {
-  type: 'created' | 'transition' | 'updated' | 'output' | 'deleted';
+  type: 'created' | 'transition' | 'commit-failed' | 'updated' | 'output' | 'deleted';
   task: TaskSnapshot;
 };
 
@@ -104,7 +104,7 @@ export interface TaskPort {
   start<T>(options: TaskOptions<T>, execute: (context: TaskContext) => Promise<T>): TaskHandle<T>;
   get(id: string): TaskSnapshot | undefined;
   /** Live tasks and bounded recent observations of tasks without a durable commit. */
-  list(owner?: string | ReadonlySet<string>): TaskSnapshot[];
+  list(owners?: ReadonlySet<string>): TaskSnapshot[];
   cancel(id: string, reason?: unknown): boolean;
   wait(id: string, signal?: AbortSignal): Promise<TaskSnapshot>;
   subscribe(listener: (event: TaskEvent) => void): () => void;
