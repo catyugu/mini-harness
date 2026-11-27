@@ -142,7 +142,7 @@ export function apply(ctx) {
     await expect(page.getByText('Updated plugin preview', { exact: true })).toBeVisible();
     await page.getByRole('button', { name: 'Settings', exact: true }).click();
     await settingsSection(page, 'General').click();
-    await expect(page.getByRole('combobox', { name: 'Add instructions' })).toBeVisible();
+    await expect(page.getByRole('combobox', { name: 'Default sending mode' })).toBeVisible();
     const preferences = page.getByRole('checkbox', { name: 'Plugin preferences' });
     await expect(preferences).not.toBeChecked();
     await preferences.check();
@@ -193,7 +193,7 @@ export function apply(ctx) {
     await expect(page.getByText('Updated plugin preview', { exact: true })).toHaveCount(0);
     await page.getByRole('button', { name: 'Settings', exact: true }).click();
     await settingsSection(page, 'General').click();
-    await expect(page.getByRole('combobox', { name: 'Add instructions' })).toBeVisible();
+    await expect(page.getByRole('combobox', { name: 'Default sending mode' })).toBeVisible();
     await expect(page.getByText('Plugin preferences', { exact: true })).toHaveCount(0);
     await expect(settingsSection(page, 'Extensions')).toBeHidden();
     await page.getByRole('button', { name: 'Close settings' }).click();

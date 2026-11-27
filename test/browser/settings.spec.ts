@@ -37,7 +37,7 @@ test('settings stay reachable across viewport sizes and theme changes persist', 
     ).toHaveText(['General', 'Model', 'Built-in plugins', 'Context']);
     await settingsSection(page, 'General').click();
     await expect(dialog.getByRole('combobox').nth(0)).toHaveAccessibleName('Theme');
-    await expect(dialog.getByRole('combobox').nth(1)).toHaveAccessibleName('Add instructions');
+    await expect(dialog.getByRole('combobox').nth(1)).toHaveAccessibleName('Default sending mode');
     if (viewport.width <= 560) {
       await dialog.getByRole('button', { name: 'All settings' }).click();
       await expect(settingsSection(page, 'General')).toBeFocused();

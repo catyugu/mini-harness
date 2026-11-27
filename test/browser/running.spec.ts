@@ -187,11 +187,11 @@ test('running messages can queue follow-ups and run shell commands from the GUI'
     await page.getByRole('button', { name: 'Settings', exact: true }).click();
     const settings = page.getByRole('dialog', { name: 'Settings' });
     await settings.getByRole('button', { name: 'General', exact: true }).click();
-    const addInstructions = settings.getByRole('combobox', { name: 'Add instructions' });
-    await expect(addInstructions).toHaveValue('interrupt');
-    await addInstructions.selectOption('queue');
-    await expect(addInstructions).toHaveValue('queue');
-    await expect(addInstructions).toBeEnabled();
+    const defaultSendingMode = settings.getByRole('combobox', { name: 'Default sending mode' });
+    await expect(defaultSendingMode).toHaveValue('interrupt');
+    await defaultSendingMode.selectOption('queue');
+    await expect(defaultSendingMode).toHaveValue('queue');
+    await expect(defaultSendingMode).toBeEnabled();
     await settings.getByRole('button', { name: 'Close settings' }).click();
     await expect(mode).toHaveValue('steer');
     await mode.selectOption('queue');

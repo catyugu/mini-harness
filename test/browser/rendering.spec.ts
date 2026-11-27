@@ -210,7 +210,7 @@ export const apply = (ctx) => {
 
     await page.getByRole('button', { name: 'Settings', exact: true }).click();
     await settingsSection(page, 'General').click();
-    const mode = page.getByRole('combobox', { name: 'Add instructions' });
+    const mode = page.getByRole('combobox', { name: 'Default sending mode' });
     await mode.selectOption('steer');
     await expect(mode).toBeEnabled();
     await page.getByRole('button', { name: 'Close settings' }).click();
