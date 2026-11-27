@@ -9,7 +9,6 @@ import {
 } from '@mini-harness/ui-primitives/primitives';
 import { icon } from '@mini-harness/ui-primitives/icons';
 import { maxModelTokens, modelDefaults, type ProviderModelDefinition } from '../shared/pi-provider.ts';
-import type { ProviderModel } from '../shared/catalog.ts';
 
 export function catalogEditor() {
   const root = fromMarkup(`<section class="catalog-editor">
@@ -96,7 +95,7 @@ export function catalogEditor() {
       target.dataset.drop = event.clientY < rect.top + rect.height / 2 ? 'before' : 'after';
     };
     handle.onpointerup = () => {
-      if (!target) return;
+      if (!target || node.closest('fieldset')?.disabled) return;
       const destination = target;
       const before = destination.dataset.drop === 'before';
       clearTarget();
@@ -115,6 +114,13 @@ export function catalogEditor() {
       advanced.hidden = !advanced.hidden;
       expand.setAttribute('aria-expanded', String(!advanced.hidden));
     };
+    node.addEventListener(
+      'invalid',
+      () => {
+        if (advanced.hidden) expand.click();
+      },
+      true,
+    );
     remove.onclick = () => {
       const next = node.nextElementSibling ?? node.previousElementSibling;
       removeRow(node);
@@ -125,38 +131,38 @@ export function catalogEditor() {
       customized = true;
     };
     list.append(node);
-    return { id, expand };
+    if (!model) {
+      customized = true;
+      expand.click();
+      id.focus();
+    }
   }
 
-  add.onclick = () => {
-    customized = true;
-    const { id, expand } = addRow();
-    expand.click();
-    id.focus();
-  };
+  add.onclick = () => addRow();
 
   return {
     root,
     actions,
-    models,
-    customized: () => customized,
+    value: () => (customized ? models() : undefined),
     reset(initial: readonly ProviderModelDefinition[], override: boolean) {
       list.replaceChildren();
       customized = override;
       initial.forEach(addRow);
     },
-    reveal(control: HTMLElement) {
-      const node = control.closest('.catalog-model');
-      node?.querySelector<HTMLButtonElement>('[aria-expanded="false"]')?.click();
-    },
-    applySelection(found: readonly ProviderModel[], selected: readonly ProviderModel[]) {
+    async select(found: readonly ProviderModelDefinition[], signal: AbortSignal) {
+      const existing = new Set(
+        models()
+          .map(({ id }) => id)
+          .filter(Boolean),
+      );
+      const selected = await selectDiscovered(found, existing, signal);
+      if (!selected) return;
       const listed = new Set(found.map(({ id }) => id));
       const picked = new Set(selected.map(({ id }) => id));
       for (const node of [...list.children]) {
         const { id } = required(readers.get(node))();
         if (listed.has(id) && !picked.has(id)) removeRow(node);
       }
-      const existing = new Set(models().map(({ id }) => id));
       for (const model of selected) {
         if (existing.has(model.id)) continue;
         addRow(model);
@@ -167,8 +173,8 @@ export function catalogEditor() {
   };
 }
 
-export function selectDiscovered(
-  models: readonly ProviderModel[],
+function selectDiscovered(
+  models: readonly ProviderModelDefinition[],
   existing: ReadonlySet<string>,
   signal: AbortSignal,
 ) {
@@ -211,13 +217,9 @@ export function selectDiscovered(
   };
   search.oninput = update;
   list.addEventListener('change', update);
-  let selected: ProviderModel[] | undefined;
   cancel.onclick = () => modal.close();
-  apply.onclick = () => {
-    selected = choices.filter(({ check }) => check.checked).map(({ model }) => model);
-    modal.close();
-  };
-  return new Promise<ProviderModel[] | undefined>((resolve) => {
+  apply.onclick = () => modal.close('apply');
+  return new Promise<ProviderModelDefinition[] | undefined>((resolve) => {
     const abort = () => modal.close();
     signal.addEventListener('abort', abort, { once: true });
     modal.addEventListener(
@@ -225,7 +227,11 @@ export function selectDiscovered(
       () => {
         signal.removeEventListener('abort', abort);
         modal.remove();
-        resolve(signal.aborted ? undefined : selected);
+        resolve(
+          !signal.aborted && modal.returnValue === 'apply'
+            ? choices.filter(({ check }) => check.checked).map(({ model }) => model)
+            : undefined,
+        );
       },
       { once: true },
     );

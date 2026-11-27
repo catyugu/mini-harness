@@ -3,8 +3,7 @@ import { browserRequest, payload } from '@mini-harness/ui-runtime/http';
 import { button, confirmAction, field, fromMarkup, required } from '@mini-harness/ui-primitives/primitives';
 import { icon } from '@mini-harness/ui-primitives/icons';
 import type { ProtocolInfo, ProviderInfo, ProviderModelDefinition } from '../shared/pi-provider.ts';
-import type { ProviderModel } from '../shared/catalog.ts';
-import { catalogEditor, selectDiscovered } from './catalog-editor.ts';
+import { catalogEditor } from './catalog-editor.ts';
 
 export function providerEditor(
   ctx: Context,
@@ -14,7 +13,7 @@ export function providerEditor(
   signal: AbortSignal,
   actions: { cancel(): void; saved(id: string): void },
 ) {
-  const form = fromMarkup<HTMLFormElement>(`<form class="provider-editor" novalidate>
+  const form = fromMarkup<HTMLFormElement>(`<form class="provider-editor">
     <fieldset class="provider-draft"><div class="provider-fields"></div></fieldset>
     <p class="form-error" role="alert"></p>
     <footer class="ui-actions"></footer>
@@ -76,6 +75,13 @@ export function providerEditor(
     if (options) {
       required(options.querySelector('summary')).prepend(icon('chevron'));
       options.append(body);
+      options.addEventListener(
+        'invalid',
+        () => {
+          options.open = true;
+        },
+        true,
+      );
     }
     fields.append(options ?? body);
 
@@ -122,27 +128,17 @@ export function providerEditor(
     endpoint.oninput = api.onchange = updateDiscovery;
     updateDiscovery();
     discover.onclick = () => {
-      if (!endpoint.checkValidity()) {
-        endpoint.reportValidity();
-        return;
-      }
+      if (!endpoint.reportValidity()) return;
       return run(async () => {
         discover.textContent = 'Fetching models…';
         try {
-          const found = await browserRequest<ProviderModel[]>(ctx, '/providers/discovery', {
+          const found = await browserRequest<ProviderModelDefinition[]>(ctx, '/providers/discovery', {
             ...payload('POST', { ...connection(), id: selected?.id, key: key.value.trim() }),
             signal,
           });
           if (signal.aborted) return;
           if (!found.length) throw new Error('The endpoint returned no available models.');
-          const existing = new Set(
-            catalog
-              .models()
-              .map(({ id }) => id)
-              .filter(Boolean),
-          );
-          const picked = await selectDiscovered(found, existing, signal);
-          if (picked) catalog.applySelection(found, picked);
+          await catalog.select(found, signal);
         } finally {
           discover.textContent = 'Fetch available models';
         }
@@ -152,29 +148,19 @@ export function providerEditor(
     form.onsubmit = (event) => {
       event.preventDefault();
       if (save.disabled) return;
-      const invalid = [...form.querySelectorAll<HTMLInputElement | HTMLSelectElement>('input, select')].find(
-        (control) => !control.matches(':disabled') && !control.checkValidity(),
-      );
-      if (invalid) {
-        if (options) options.open = true;
-        catalog.reveal(invalid);
-        report(invalid.validationMessage);
-        invalid.focus();
-        return;
-      }
+      let models = catalog.value();
       if (
         !provider &&
         selected &&
         !selected.configured &&
         !key.value.trim() &&
         !endpoint.value.trim() &&
-        !catalog.customized()
+        models === undefined
       ) {
         report('Enter an API key or customize the provider to add it.');
         return;
       }
       void run(async () => {
-        let models = catalog.customized() ? catalog.models() : undefined;
         if (
           provider?.custom &&
           provider.api !== api.value &&

@@ -68,7 +68,7 @@
   height: 1px;
   opacity: 0;
 }
-.provider-options-body {
+.ui-disclosure > .provider-options-body {
   padding-top: var(--space);
 }
 .catalog-editor {
@@ -87,6 +87,13 @@
   font-size: var(--font-meta);
   color: var(--muted);
   font-weight: 500;
+}
+.provider-editor .ui-field {
+  color: var(--muted);
+  font-size: var(--font-meta);
+}
+.provider-editor :is(input, select) {
+  color: var(--ink);
 }
 .catalog-editor > button {
   justify-self: start;
@@ -121,6 +128,9 @@
   touch-action: none;
   user-select: none;
 }
+fieldset:disabled .catalog-drag {
+  pointer-events: none;
+}
 .catalog-model[data-dragging] {
   opacity: 0.55;
 }
@@ -144,6 +154,11 @@
   align-items: center;
   gap: var(--space) var(--space-3);
   font-size: var(--font-ui);
+}
+.catalog-capabilities > span {
+  flex-basis: 100%;
+  color: var(--muted);
+  font-size: var(--font-meta);
 }
 .catalog-capabilities label,
 .discovery-all {
