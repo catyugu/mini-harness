@@ -369,11 +369,10 @@ test('the open model picker follows local plugin installation, enablement and re
 export const inject = ['harnessModels'];
 export function apply(ctx) {
 const model = { provider: 'live-plugin', id: 'live' };
-const resolve = (choice) => choice.provider === model.provider ? model : undefined;
+const resolve = (choice) => choice.provider === model.provider && choice.id === model.id ? model : undefined;
 ctx.effect(() => ctx.harnessModels.register({
   list: () => [{ ...model, name: 'Live plugin model', configured: true, input: ['text'], thinkingLevels: [] }],
-  resolve,
-  capabilities: () => ({ id: model.id, name: 'Live plugin model', input: ['text'], contextWindow: 32000, maxTokens: 1024, reasoning: false }),
+  resolve: (choice) => resolve(choice) && { model, capabilities: { id: model.id, name: 'Live plugin model', input: ['text'], contextWindow: 32000, maxTokens: 1024, reasoning: false } },
 }, {
   accepts: (choice) => Boolean(resolve(choice)),
   async *stream() {

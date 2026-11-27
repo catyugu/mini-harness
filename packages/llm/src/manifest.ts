@@ -1,11 +1,21 @@
 import { Service, type Context, type Plugin } from 'mini-harness/cordis';
 import { rankScoped, sameRank, scopeOf, type ScopeKey } from '@mini-harness/plugin-api/scopes';
-import { ModelStreamError, type LlmAdapter, type LlmPort } from './api.ts';
+import { ModelStreamError, type LlmAdapter, type LlmPort, type LlmRequest } from './api.ts';
 
 export const metadata = {
   title: 'Model transport',
   description: 'Select a registered adapter to stream a model response',
 };
+
+async function* streamAdapter(adapter: LlmAdapter, request: LlmRequest) {
+  try {
+    yield* adapter.stream(request);
+  } catch (error) {
+    request.signal.throwIfAborted();
+    const kind = adapter.classifyError?.(error);
+    throw kind ? new ModelStreamError(error, kind) : error;
+  }
+}
 
 const plugin: Plugin.Object = {
   provide: ['harnessLlm'],
@@ -64,24 +74,9 @@ const plugin: Plugin.Object = {
         if (!entry) throw new Error('No model adapter accepts ' + model);
         await entry.owner.fiber.run(
           async (signal) => {
-            const iterator = entry.adapter.stream({ ...request, signal })[Symbol.asyncIterator]();
-            let exhausted = false;
-            try {
-              while (true) {
-                const next = await iterator.next().catch((error: unknown) => {
-                  signal.throwIfAborted();
-                  const kind = entry.adapter.classifyError?.(error);
-                  throw kind ? new ModelStreamError(error, kind) : error;
-                });
-                if (next.done) {
-                  exhausted = true;
-                  return;
-                }
-                signal.throwIfAborted();
-                emit(next.value);
-              }
-            } finally {
-              if (!exhausted) await iterator.return?.();
+            for await (const event of streamAdapter(entry.adapter, { ...request, signal })) {
+              signal.throwIfAborted();
+              emit(event);
             }
           },
           AbortSignal.any([entry.signal, request.signal]),

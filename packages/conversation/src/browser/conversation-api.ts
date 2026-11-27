@@ -44,9 +44,9 @@ export interface ConversationState {
   queue: readonly ConversationView['queue'][number][];
   interaction: {
     operation?: 'open' | 'submit';
-    cancelling?: boolean;
+    cancelling: boolean;
     status: string;
-    error?: boolean;
+    error: boolean;
   };
 }
 

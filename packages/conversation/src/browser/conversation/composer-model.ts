@@ -52,10 +52,13 @@ export function createComposerModel(ctx: Context): ComposerModel {
   const draft = () => entry().edit ?? entry().input;
   let snapshot: { owner: Draft; version: number; value: ComposerDraft } | undefined;
   const change = (focus = false) => changes.dispatchEvent(new CustomEvent('change', { detail: focus }));
-  function edited(current: Draft, focus = false, inputChanged = true) {
+  function changed(current: Draft, focus = false) {
     current.version++;
-    if (inputChanged) delete current.failedRun;
     if (current === draft()) change(focus);
+  }
+  function edited(current: Draft, focus = false) {
+    delete current.failedRun;
+    changed(current, focus);
   }
   let selected = key();
   selection.subscribe(() => {
@@ -205,13 +208,13 @@ export function createComposerModel(ctx: Context): ComposerModel {
       if (current.model?.provider === model?.provider && current.model?.id === model?.id) return;
       current.model = model && { ...model };
       current.thinkingLevel = undefined;
-      edited(current, false, false);
+      changed(current);
     },
     chooseThinking(level) {
       const current = draft();
       if (current.thinkingLevel !== level) {
         current.thinkingLevel = level;
-        edited(current, false, false);
+        changed(current);
       }
     },
     setText(text, start = text.length, end = start) {

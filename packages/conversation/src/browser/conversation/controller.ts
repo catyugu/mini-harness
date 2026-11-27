@@ -33,7 +33,7 @@ export function createConversationController(ctx: Context): ConversationControll
     records: [],
     queue: [],
     mode: modeFor(),
-    interaction: { status: '' },
+    interaction: { status: '', cancelling: false, error: false },
   };
   let visit = new AbortController(),
     queueRevision = 0,
@@ -54,7 +54,7 @@ export function createConversationController(ctx: Context): ConversationControll
   const interact = (patch: Partial<ConversationState['interaction']>) =>
     update({ interaction: { ...state.interaction, ...patch } });
   const status = (text: string, error = false) => {
-    if (state.interaction.status !== text || Boolean(state.interaction.error) !== error)
+    if (state.interaction.status !== text || state.interaction.error !== error)
       interact({ status: text, error });
   };
   const report = (message: string | Error) =>
@@ -356,7 +356,7 @@ export function createConversationController(ctx: Context): ConversationControll
     clear() {
       begin();
       select();
-      update({ interaction: { status: '' } });
+      update({ interaction: { status: '', cancelling: false, error: false } });
     },
     async cancel() {
       const id = active(),
