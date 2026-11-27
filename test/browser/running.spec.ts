@@ -614,22 +614,23 @@ export const apply = (ctx) => {
     await configure({ 'background-tasks': { disabled: true } });
     await expect(tasks).toHaveCount(0);
     await expect(agentToggle).toBeVisible();
-    const taskMarkup = await oldTask.evaluate(node => node.innerHTML);
+    const taskMarkup = await oldTask.evaluate((node) => node.innerHTML);
     const taskRequests: string[] = [];
-    page.on('request', request => {
-      if (/\/api\/sessions\/[^/]+\/tasks(?:\/|\?|$)/.test(new URL(request.url()).pathname)) taskRequests.push(request.url());
+    page.on('request', (request) => {
+      if (/\/api\/sessions\/[^/]+\/tasks(?:\/|\?|$)/.test(new URL(request.url()).pathname))
+        taskRequests.push(request.url());
     });
 
     await agentToggle.click();
     await agentPanel.getByRole('button', { name: 'Open conversation: Child fixture', exact: true }).click();
     await expect(trail).toBeVisible();
-    expect(await oldTask.evaluate(node => node.innerHTML)).toBe(taskMarkup);
+    expect(await oldTask.evaluate((node) => node.innerHTML)).toBe(taskMarkup);
     await configure({ subagents: { disabled: true }, 'task-control': { disabled: true } });
     await expect(agents).toHaveCount(0);
     await expect(trail).toHaveCount(0);
     await expect(more).toBeHidden();
-    const agentMarkup = await oldAgent.evaluate(node => node.innerHTML);
-    const trailMarkup = await oldTrail.evaluate(node => node.innerHTML);
+    const agentMarkup = await oldAgent.evaluate((node) => node.innerHTML);
+    const trailMarkup = await oldTrail.evaluate((node) => node.innerHTML);
     await page.getByRole('button', { name: 'New conversation', exact: true }).click();
     await prompt.fill('Without header plugins');
     await page.getByRole('button', { name: 'Send', exact: true }).click();
@@ -637,9 +638,9 @@ export const apply = (ctx) => {
     await expect(tasks).toHaveCount(0);
     await expect(agents).toHaveCount(0);
     await expect(trail).toHaveCount(0);
-    expect(await oldTask.evaluate(node => node.innerHTML)).toBe(taskMarkup);
-    expect(await oldAgent.evaluate(node => node.innerHTML)).toBe(agentMarkup);
-    expect(await oldTrail.evaluate(node => node.innerHTML)).toBe(trailMarkup);
+    expect(await oldTask.evaluate((node) => node.innerHTML)).toBe(taskMarkup);
+    expect(await oldAgent.evaluate((node) => node.innerHTML)).toBe(agentMarkup);
+    expect(await oldTrail.evaluate((node) => node.innerHTML)).toBe(trailMarkup);
     expect(taskRequests).toEqual([]);
   } finally {
     await service.stop();
