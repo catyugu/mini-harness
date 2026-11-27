@@ -58,7 +58,13 @@ export function createMessageView(
     frame = requestAnimationFrame(() => {
       frame = undefined;
       const { partial } = ctx.miniConversation.get();
-      if (!partial || !preview || !messages.contains(preview.node) || markdownSource.get(preview.node) === partial) return;
+      if (
+        !partial ||
+        !preview ||
+        !messages.contains(preview.node) ||
+        markdownSource.get(preview.node) === partial
+      )
+        return;
       renderMarkdown(preview.node, partial);
       scrollToEnd();
     });
@@ -358,9 +364,13 @@ export function createMessageView(
       preview = undefined;
     }
     const rows = groupHistory(entries, run?.id, partial, tools, records);
-    const completedTurn = completing && rows.filter(row => row.type === 'turn' && row.runId === completing.runId).at(-1);
-    const completedPart = completedTurn?.type === 'turn' && completedTurn.parts.find(part =>
-      part.type === 'text' && nodes.get('text:' + part.id)?.source !== part.text);
+    const completedTurn =
+      completing && rows.filter((row) => row.type === 'turn' && row.runId === completing.runId).at(-1);
+    const completedPart =
+      completedTurn?.type === 'turn' &&
+      completedTurn.parts.find(
+        (part) => part.type === 'text' && nodes.get('text:' + part.id)?.source !== part.text,
+      );
     const pending = new Set(nodes.keys());
     function retain<T extends HTMLElement>(key: string, source: unknown, render: (prior?: T) => T) {
       pending.delete(key);
@@ -439,7 +449,8 @@ export function createMessageView(
         }
         default:
           return retain(part.type + ':' + part.id, part.text, (previous) => {
-            const node = previous ?? (part === completedPart ? completing!.node : document.createElement('div'));
+            const node =
+              previous ?? (part === completedPart ? completing!.node : document.createElement('div'));
             node.className = part.type === 'error' ? 'message error' : 'message assistant';
             if (part.type === 'error') node.textContent = part.text;
             else renderMarkdown(node, part.text);
@@ -460,7 +471,10 @@ export function createMessageView(
           return retain('user:' + row.id, undefined, () => renderUser(row));
         case 'turn': {
           const wrapper = retain('turn:' + row.id, undefined, () => {
-            const node = row === completedTurn && completedPart ? completing!.node.parentElement! : document.createElement('div');
+            const node =
+              row === completedTurn && completedPart
+                ? completing!.node.parentElement!
+                : document.createElement('div');
             node.className = 'message-row assistant assistant-turn';
             return node;
           });

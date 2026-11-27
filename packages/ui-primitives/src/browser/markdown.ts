@@ -13,9 +13,12 @@ const rendered = new WeakMap<HTMLElement, { interactive: boolean; blocks: Block[
 export function renderMarkdown(target: HTMLElement, text: string, interactive = true) {
   target.classList.add('markdown');
   const prior = rendered.get(target);
-  const previous = prior?.interactive === interactive &&
+  const previous =
+    prior?.interactive === interactive &&
     prior.blocks.length === target.childNodes.length &&
-    prior.blocks.every(({ node }, index) => node === target.childNodes[index]) ? prior.blocks : [];
+    prior.blocks.every(({ node }, index) => node === target.childNodes[index])
+      ? prior.blocks
+      : [];
   if (prior && previous === prior.blocks && markdownSource.get(target) === text) return;
   const fragment = purify.sanitize(marked.parse(text, { async: false, gfm: true }), {
     RETURN_DOM_FRAGMENT: true,
@@ -60,18 +63,23 @@ export function renderMarkdown(target: HTMLElement, text: string, interactive = 
     link.target = '_blank';
     link.rel = 'noopener noreferrer';
   }
-  const candidates = [...fragment.childNodes].map(node => ({
+  const candidates = [...fragment.childNodes].map((node) => ({
     key: node instanceof Element ? node.outerHTML : node.nodeType + ':' + node.nodeValue,
     node,
   }));
 
   // Match unchanged prefix and suffix first, then reuse unchanged interior blocks in order.
   let start = 0;
-  while (start < previous.length && start < candidates.length && previous[start].key === candidates[start].key) {
+  while (
+    start < previous.length &&
+    start < candidates.length &&
+    previous[start].key === candidates[start].key
+  ) {
     candidates[start] = previous[start];
     start++;
   }
-  let oldEnd = previous.length, newEnd = candidates.length;
+  let oldEnd = previous.length,
+    newEnd = candidates.length;
   while (oldEnd > start && newEnd > start && previous[oldEnd - 1].key === candidates[newEnd - 1].key) {
     candidates[--newEnd] = previous[--oldEnd];
   }
