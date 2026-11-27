@@ -52,19 +52,8 @@ export function mountComposer(ctx: Context, signal: AbortSignal) {
     'More composer controls',
     signal,
   );
-  const actionSlots = [
-    'conversation.composer',
-    'conversation.composer-options',
-    'conversation.composer-trailing',
-  ] as const;
-  const actions = new Map<(typeof actionSlots)[number], readonly HTMLElement[]>();
-  for (const slot of actionSlots) {
-    const dispose = ctx.miniSlots.define(slot, (nodes) => {
-      actions.set(slot, nodes);
-      tools(actionSlots.flatMap((key) => actions.get(key) ?? []));
-    });
-    signal.addEventListener('abort', dispose, { once: true });
-  }
+  const removeActions = ctx.miniSlots.define('conversation.composer', tools);
+  signal.addEventListener('abort', removeActions, { once: true });
   const removePrimary = ctx.miniSlots.define(
     'conversation.composer-primary',
     element('composerPrimary'),

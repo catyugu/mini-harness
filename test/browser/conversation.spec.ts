@@ -160,9 +160,6 @@ test('crowded composer controls remain reachable in a short mobile viewport', as
         `
 export const inject = ['miniSlots', 'miniPrimitives', 'miniComposer'];
 export function apply(ctx) {
-  const leading = ctx.miniPrimitives.button('A wide trailing action');
-  leading.style.width = '320px';
-  ctx.effect(() => ctx.miniSlots.register('conversation.composer-trailing', leading, { order: -100 }));
   for (let number = 1; number <= 12; ++number) {
     const action = ctx.miniPrimitives.button('Extra action ' + number);
     action.onclick = () => ctx.miniComposer.insert('Inserted text');

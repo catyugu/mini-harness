@@ -25,7 +25,7 @@ Use a standard, `compact` or `wide` field layout. Rows can wrap when the enclosi
 
 Use `overflowActions(host, label, signal)` for a constrained row with a native overflow popover. Pass the ordered elements to the returned placement function. An owner with fixed sibling controls can supply a bounding element and the available width. The same elements move between the row and the menu as room changes. The primitive measures each contribution in its own max-content box, with the same viewport cap and inherited typography in both locations. Controls can size their own content inside that box.
 
-Use `bindPopover(trigger, panel, signal, options)` for native popovers. The returned function opens the panel with the trigger as its source. The binding tracks the trigger's position while open and reflects native visibility in `aria-expanded`.
+Use `bindPopover(trigger, panel, signal, options)` for native popovers. The returned function opens the panel with the trigger as its source. The binding tracks the trigger's position and the panel's size while open and reflects native visibility in `aria-expanded`.
 
 ## Markdown and lifecycle
 

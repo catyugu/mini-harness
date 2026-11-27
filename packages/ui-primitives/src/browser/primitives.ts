@@ -54,6 +54,8 @@ export function bindPopover(
   let frame = 0;
   let previousAnchor: DOMRectReadOnly | undefined;
   let previousViewport: DOMRectReadOnly | undefined;
+  let previousPanel: number[] = [];
+  const panelSize = () => [panel.offsetWidth, panel.offsetHeight, panel.scrollHeight];
   function sameBounds(previous: DOMRectReadOnly | undefined, current: DOMRectReadOnly) {
     return (
       previous?.x === current.x &&
@@ -73,10 +75,16 @@ export function bindPopover(
       return false;
     }
     const viewport = viewportBounds();
-    if (!sameBounds(previousAnchor, anchor) || !sameBounds(previousViewport, viewport)) {
+    if (
+      !sameBounds(previousAnchor, anchor) ||
+      !sameBounds(previousViewport, viewport) ||
+      panelSize().some((size, index) => size !== previousPanel[index])
+    ) {
       placeFloating(anchor, viewport, panel, options);
       previousAnchor = anchor;
       previousViewport = viewport;
+      // Placement can change the height cap. Compare against the resulting size.
+      previousPanel = panelSize();
     }
     return true;
   }

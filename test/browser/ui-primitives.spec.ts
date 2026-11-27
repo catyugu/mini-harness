@@ -31,12 +31,19 @@ export function apply(ctx) {
   const panel = document.createElement('div');
   panel.popover = 'auto';
   panel.className = 'ui-popover';
+  panel.setAttribute('role', 'region');
+  panel.setAttribute('aria-label', 'Details');
   const dismiss = ui.button('Detail action');
   dismiss.autofocus = true;
-  panel.append(dismiss);
+  const content = document.createElement('div');
+  content.textContent = 'Expanded details';
+  content.style.height = '48px';
+  content.hidden = true;
+  dismiss.onclick = () => content.hidden = !content.hidden;
+  panel.append(dismiss, content);
   const details = document.createElement('div');
   details.append(nested, panel);
-  nested.onclick = ui.bindPopover(nested, panel, signal);
+  nested.onclick = ui.bindPopover(nested, panel, signal, { prefer: 'above' });
   ctx.effect(() => {
     document.body.append(area);
     return () => area.remove();
@@ -74,6 +81,18 @@ export function apply(ctx) {
   const initial = (await action.boundingBox())!.y;
   await area.evaluate((node) => (node.style.top = '100px'));
   await expect.poll(async () => (await action.boundingBox())?.y ?? 0).toBeGreaterThan(initial + 30);
+  const floating = page.getByRole('region', { name: 'Details', exact: true });
+  const before = (await floating.boundingBox())!;
+  const bottom = async () => {
+    const box = (await floating.boundingBox())!;
+    return box.y + box.height;
+  };
+  await action.click();
+  await expect(floating.getByText('Expanded details')).toBeVisible();
+  await expect.poll(bottom).toBeCloseTo(before.y + before.height, 0);
+  await action.click();
+  await expect(floating.getByText('Expanded details')).toBeHidden();
+  await expect.poll(bottom).toBeCloseTo(before.y + before.height, 0);
   await page.keyboard.press('Escape');
   await expect(details).toBeFocused();
   const anchor = overflow.locator('button', { hasText: 'Open details' });
