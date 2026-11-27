@@ -96,6 +96,10 @@ test('model adapter streams native messages, tool calls and metadata through the
     adapter.saveProvider({ ...edit, models: [{ ...advanced, thinkingLevelMap: { high: 5 } }] }),
     /Invalid thinking level map/,
   );
+  await assert.rejects(
+    adapter.saveProvider({ ...edit, api: 'google-generative-ai', models: [{ ...advanced, compat: { supportsDeveloperRole: false } }] }),
+    /Unsupported compatibility settings/,
+  );
   await adapter.saveProvider({
     ...edit,
     models: [{ ...advanced, compat: { supportsDeveloperRole: false } }],

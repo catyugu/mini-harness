@@ -140,11 +140,14 @@ export function parseCustom(id: string, value: unknown): CustomConfig {
     (!headers || Object.values(headers).some((value) => value !== null && typeof value !== 'string'))
   )
     throw invalid('Invalid provider headers: ' + id);
+  const api = protocol(entry.api);
+  const models = parseModels(entry.models, parseModel);
+  for (const model of models) validateCompatibility(model, api);
   return {
     name: modelName(entry.name, id),
-    api: protocol(entry.api),
+    api,
     baseUrl: endpoint(entry.baseUrl),
-    models: parseModels(entry.models, parseModel),
+    models,
     apiKey: entry.apiKey,
     headers: headers as CustomConfig['headers'],
   };
@@ -189,14 +192,7 @@ export function resolveModel(
   { id: provider, api, baseUrl }: ProviderConnection & { id: string },
   baseline?: CatalogModel,
 ): CatalogModel {
-  const protocol = baseline?.api ?? api;
-  if (model.compat !== undefined) {
-    const schema = Object.hasOwn(CompatSchemasByApi, protocol)
-      ? CompatSchemasByApi[protocol as keyof typeof CompatSchemasByApi]
-      : undefined;
-    if (!schema || !Check({ ...schema, additionalProperties: false }, model.compat))
-      throw invalid('Unsupported compatibility settings for ' + protocol + '/' + model.id);
-  }
+  validateCompatibility(model, baseline?.api ?? api);
   return {
     api,
     baseUrl,
@@ -206,4 +202,13 @@ export function resolveModel(
     provider,
     input: [...model.input],
   };
+}
+
+function validateCompatibility(model: ModelConfig, protocol: string) {
+  if (model.compat === undefined) return;
+  const schema = Object.hasOwn(CompatSchemasByApi, protocol)
+    ? CompatSchemasByApi[protocol as keyof typeof CompatSchemasByApi]
+    : undefined;
+  if (!schema || !Check({ ...schema, additionalProperties: false }, model.compat))
+    throw invalid('Unsupported compatibility settings for ' + protocol + '/' + model.id);
 }

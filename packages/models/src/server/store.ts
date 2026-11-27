@@ -84,7 +84,7 @@ class FileCredentials {
 export class ModelStore implements ModelStorePort {
   readonly credentials: FileCredentials;
   private readonly file: string;
-  private readonly defaults = new Set<readonly CatalogProvider[]>();
+  private defaults = new Set<readonly CatalogProvider[]>();
   private configuration: ProviderConfiguration = { providers: {}, builtins: {} };
   private readonly status = new Map<string, AuthStatus>();
   private readonly checks = new Map<string, { controller: AbortController; work: Promise<void> }>();
@@ -110,13 +110,13 @@ export class ModelStore implements ModelStorePort {
   registerDefaults(providers: readonly CatalogProvider[]) {
     return this.enqueue(() => {
       const ids = providers.map(({ id }) => id);
-      this.defaults.add(providers);
-      this.publishCatalog(this.configuration, ids);
+      this.replaceDefaults(new Set([...this.defaults, providers]), ids);
       return async () => {
         const retired = await this.enqueue(() => {
           const checks = ids.map((id) => this.checks.get(id)?.work);
-          this.defaults.delete(providers);
-          this.publishCatalog(this.configuration, ids);
+          const next = new Set(this.defaults);
+          next.delete(providers);
+          this.replaceDefaults(next, ids);
           return checks;
         });
         await Promise.all(retired);
@@ -130,8 +130,14 @@ export class ModelStore implements ModelStorePort {
     );
   }
 
-  private defaultProviders() {
-    return new Map([...this.defaults].flat().map((provider) => [provider.id, provider] as const));
+  private replaceDefaults(next: typeof this.defaults, ids: string[]) {
+    const providers = this.buildCatalog(this.configuration, this.defaultProviders(next));
+    this.defaults = next;
+    this.publishCatalog(this.configuration, ids, providers);
+  }
+
+  private defaultProviders(sources = this.defaults) {
+    return new Map([...sources].flat().map((provider) => [provider.id, provider] as const));
   }
 
   private builtin(provider: CatalogProvider, configuration: ProviderConfiguration): CatalogProvider {
@@ -171,8 +177,7 @@ export class ModelStore implements ModelStorePort {
     };
   }
 
-  private buildCatalog(configuration: ProviderConfiguration) {
-    const defaults = this.defaultProviders();
+  private buildCatalog(configuration: ProviderConfiguration, defaults = this.defaultProviders()) {
     return [
       ...[...defaults.values()].map((provider) => this.builtin(provider, configuration)),
       ...Object.entries(configuration.providers)
