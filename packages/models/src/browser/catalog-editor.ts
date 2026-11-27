@@ -11,9 +11,9 @@ import { icon } from '@mini-harness/ui-primitives/icons';
 import { maxModelTokens, modelDefaults, type ProviderModelDefinition } from '../shared/pi-provider.ts';
 
 export function catalogEditor() {
-  const root = fromMarkup(`<section class="model-catalog-editor">
-    <div class="model-catalog-heading"><h3>Model catalog</h3><div class="ui-actions"></div></div>
-    <div class="model-catalog-rows"></div>
+  const root = fromMarkup(`<section class="model-catalog-editor ui-stack">
+    <div class="model-catalog-heading ui-row ui-wrap"><h3>Model catalog</h3><div class="ui-actions"></div></div>
+    <div class="model-catalog-rows ui-stack"></div>
   </section>`);
   const actions = required(root.querySelector('.ui-actions'));
   const list = required(root.querySelector('.model-catalog-rows'));
@@ -29,17 +29,17 @@ export function catalogEditor() {
   }
 
   function addRow(model?: ProviderModelDefinition) {
-    const node = fromMarkup(`<div class="model-catalog-model" role="group" aria-label="Model">
+    const node = fromMarkup(`<div class="model-catalog-entry" role="group" aria-label="Model">
       <div class="model-catalog-row">
         <input class="ui-input" aria-label="Model ID" placeholder="Model ID" maxlength="160" required>
         <input class="ui-input model-catalog-name" aria-label="Display name" placeholder="Display name" maxlength="160">
       </div>
-      <div class="model-catalog-advanced" hidden>
+      <div class="model-catalog-advanced ui-stack" hidden>
         <div class="model-catalog-grid">
           <label class="ui-field">Context window<input type="number" min="1" max="${maxModelTokens}" required></label>
           <label class="ui-field">Max output tokens<input type="number" min="1" max="${maxModelTokens}" required></label>
         </div>
-        <div class="model-catalog-capabilities">
+        <div class="model-catalog-capabilities ui-row ui-wrap">
           <span>Input types</span>
           <label><input type="checkbox"> Text</label>
           <label><input type="checkbox"> Image</label>
@@ -88,7 +88,7 @@ export function catalogEditor() {
       clearTarget();
       const candidate = document
         .elementFromPoint(event.clientX, event.clientY)
-        ?.closest<HTMLElement>('.model-catalog-model');
+        ?.closest<HTMLElement>('.model-catalog-entry');
       if (!candidate || candidate === node || candidate.parentElement !== list) return;
       target = candidate;
       const rect = candidate.getBoundingClientRect();
@@ -179,10 +179,10 @@ function selectDiscovered(
   signal: AbortSignal,
 ) {
   if (signal.aborted) return Promise.resolve(undefined);
-  const content = fromMarkup(`<div class="discovery-picker">
+  const content = fromMarkup(`<div class="ui-stack">
     <label class="ui-field">Search models<input type="search" autocomplete="off"></label>
     <label class="discovery-all"><input type="checkbox"> Select all</label>
-    <div class="discovery-list"></div>
+    <div class="discovery-list ui-scroll"></div>
     <footer class="ui-actions"></footer>
   </div>`);
   const search = required(content.querySelector<HTMLInputElement>('[type="search"]'));

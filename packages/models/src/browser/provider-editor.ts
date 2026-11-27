@@ -13,8 +13,8 @@ export function providerEditor(
   signal: AbortSignal,
   actions: { cancel(): void; saved(id: string): void },
 ) {
-  const form = fromMarkup<HTMLFormElement>(`<form class="provider-editor">
-    <fieldset class="provider-draft"><div class="provider-fields"></div></fieldset>
+  const form = fromMarkup<HTMLFormElement>(`<form class="provider-editor ui-stack">
+    <fieldset class="provider-draft ui-stack"><div class="provider-fields ui-stack"></div></fieldset>
     <p class="form-error" role="alert"></p>
     <footer class="ui-actions"></footer>
   </form>`);
@@ -66,7 +66,7 @@ export function providerEditor(
     key.placeholder = selected?.storedCredential ? 'Leave blank to keep the saved key' : 'Enter API key';
     if (custom || selected?.canSetKey) fields.append(field('API key', key));
 
-    const body = fromMarkup('<div class="provider-options-body"></div>');
+    const body = fromMarkup('<div class="provider-options-body ui-stack"></div>');
     const options = custom
       ? undefined
       : fromMarkup<HTMLDetailsElement>(
@@ -197,7 +197,7 @@ export function providerEditor(
   if (provider) {
     renderDraft(provider, provider.custom);
   } else {
-    const mode = fromMarkup(`<fieldset class="provider-mode" aria-label="Provider type">
+    const mode = fromMarkup(`<fieldset class="provider-mode ui-row ui-wrap" aria-label="Provider type">
       <label class="ui-button"><input type="radio" name="provider-type" value="builtin" checked>Built-in provider</label>
       <label class="ui-button"><input type="radio" name="provider-type" value="custom">Custom API</label>
     </fieldset>`);

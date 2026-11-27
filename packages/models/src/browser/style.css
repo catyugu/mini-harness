@@ -1,20 +1,5 @@
-.provider-list,
-.provider-draft,
-.provider-fields,
-.provider-options-body,
-.model-catalog-editor,
-.model-catalog-rows,
-.model-catalog-advanced,
-.discovery-picker {
-  display: grid;
-  gap: var(--space);
-  min-width: 0;
-}
 .provider-row {
-  display: flex;
-  align-items: center;
   justify-content: space-between;
-  gap: var(--space);
   padding: var(--space) var(--space-3);
   font-size: var(--font-ui);
 }
@@ -34,7 +19,6 @@
   display: none;
 }
 .provider-editor {
-  display: grid;
   gap: var(--space-3);
   padding: var(--space-3);
   background: var(--panel);
@@ -48,8 +32,6 @@
   border: 0;
 }
 .provider-mode {
-  display: flex;
-  flex-wrap: wrap;
   gap: var(--space-1);
 }
 .provider-mode label {
@@ -76,9 +58,6 @@
   padding-top: var(--space-3);
 }
 .model-catalog-heading {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
   justify-content: space-between;
   gap: var(--space-1);
 }
@@ -96,9 +75,9 @@
   color: var(--ink);
 }
 .model-catalog-editor > button {
-  justify-self: start;
+  align-self: flex-start;
 }
-.model-catalog-model {
+.model-catalog-entry {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: var(--space-1);
@@ -131,13 +110,13 @@
 fieldset:disabled .model-catalog-drag {
   pointer-events: none;
 }
-.model-catalog-model[data-dragging] {
+.model-catalog-entry[data-dragging] {
   opacity: 0.55;
 }
-.model-catalog-model[data-drop='before'] {
+.model-catalog-entry[data-drop='before'] {
   box-shadow: 0 -2px var(--focus);
 }
-.model-catalog-model[data-drop='after'] {
+.model-catalog-entry[data-drop='after'] {
   box-shadow: 0 2px var(--focus);
 }
 .model-catalog-advanced {
@@ -149,9 +128,6 @@ fieldset:disabled .model-catalog-drag {
   gap: var(--space);
 }
 .model-catalog-capabilities {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
   gap: var(--space) var(--space-3);
   font-size: var(--font-ui);
 }
@@ -173,7 +149,7 @@ fieldset:disabled .model-catalog-drag {
   .model-catalog-name {
     display: none;
   }
-  .model-catalog-model:has([aria-expanded='true']) .model-catalog-name {
+  .model-catalog-entry:has([aria-expanded='true']) .model-catalog-name {
     display: block;
     grid-column: 1 / -1;
     grid-row: 2;
@@ -186,8 +162,6 @@ fieldset:disabled .model-catalog-drag {
 }
 .discovery-list {
   max-height: min(40vh, 360px);
-  overflow: auto;
-  overscroll-behavior: contain;
   border-block: 1px solid var(--border);
 }
 .discovery-list > label {

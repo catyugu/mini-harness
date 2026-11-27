@@ -21,7 +21,7 @@ export function providerManager(
   signal: AbortSignal,
 ) {
   const content = fromMarkup(`<div class="model-settings">
-    <div class="provider-list"></div>
+    <div class="provider-list ui-stack"></div>
     <div class="provider-add"></div>
     <p class="hint provider-status" role="status"></p>
   </div>`);
@@ -91,7 +91,7 @@ export function providerManager(
         .sort((a, b) => a.name.localeCompare(b.name))
         .map((provider) => {
           const card = fromMarkup(`<article class="ui-card provider-card">
-          <div class="provider-row"><div><strong></strong><small class="provider-state"></small></div><div class="ui-actions"></div></div>
+          <div class="provider-row ui-row"><div><strong></strong><small class="provider-state"></small></div><div class="ui-actions"></div></div>
         </article>`);
           required(card.querySelector('strong')).textContent = provider.name;
           const summary = required(card.querySelector<HTMLElement>('.provider-state'));

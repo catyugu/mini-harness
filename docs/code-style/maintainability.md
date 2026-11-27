@@ -96,6 +96,6 @@ See [Tests](testing.md) and [Module imports](module-imports.md) for verification
 
 ## Browser views
 
-- The container allocates space and the component owns its internal DOM, styles and interaction. Share tokens, documented CSS primitives and public component contracts. Keep selectors and DOM operations within the owning component.
+- The container allocates space and the component owns its internal DOM, styles and interaction. Share tokens, documented CSS primitives and public component contracts. Keep selectors and DOM operations within the owning component. Scope feature selectors under their component root or use owner-specific class names; do not depend on stylesheet load order.
 - Use flex, grid and container queries for ordinary layout. Use one source for responsive modes that also drive input, focus or modality. Derive CSS variables and ARIA from owned state.
 - Keep reusable primitives independent of features. Put model selection, conversation controls and other feature-specific views in their owning plugins. Use stable IDs for object identity and treat titles as changeable display text.
