@@ -132,9 +132,14 @@ export class SessionRegistry implements SessionStore {
     return key && scopeParentOf(key);
   }
 
-  assertAvailable(id?: string, workspaceId = id && this.get(id)?.workspaceId) {
+  assertAvailable(id?: string, workspaceId?: string | null) {
     if (this.closing) throw new DomainError('unavailable', 'Agent service is unavailable during shutdown');
-    if (id && this.deleting.has(id)) throw new DomainError('conflict', 'Conversation is being deleted');
+    if (id !== undefined) {
+      const record = this.get(id);
+      if (!record) throw new DomainError('not_found', 'Conversation not found');
+      if (this.deleting.has(id)) throw new DomainError('conflict', 'Conversation is being deleted');
+      if (workspaceId === undefined) workspaceId = record.workspaceId;
+    }
     if (workspaceId) this.workspaceService()?.assertAvailable(workspaceId);
   }
 
@@ -467,17 +472,18 @@ export class SessionRegistry implements SessionStore {
     if (existing) return read(existing.port);
     const record = this.get(id);
     if (!record) return;
+    let log: SessionLog | undefined;
     try {
-      const log = this.openLog(record, 'read');
-      if (!log) return;
-      try {
-        return read(log.port);
-      } finally {
-        log.close();
-      }
+      log = this.openLog(record, 'read');
     } catch (error) {
       if (!strict && error instanceof DomainError && error.code === 'unavailable') return;
       throw error;
+    }
+    if (!log) return;
+    try {
+      return read(log.port);
+    } finally {
+      log.close();
     }
   }
 

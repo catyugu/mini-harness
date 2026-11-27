@@ -23,6 +23,12 @@ interface Entry {
   onEvent?: (event: TaskEvent) => void;
 }
 
+type Transition =
+  | { state: 'queued' | 'waiting' }
+  | { state: 'running'; startedAt: string }
+  | { state: 'completed'; result: TaskSnapshot['result']; finishedAt: string }
+  | { state: 'failed' | 'cancelled' | 'interrupted'; error: string; finishedAt: string };
+
 const describe = (error: unknown) => (error instanceof Error ? error.message : String(error));
 const clone = <T>(value: T): T => structuredClone(value);
 // Observation data crosses the JSON persistence boundary, unlike handle results.
@@ -106,15 +112,10 @@ export class TaskRuntime implements TaskPort {
       release = undefined;
       held?.();
     };
-    const update = (patch: Partial<TaskSnapshot>, type: TaskEvent['type'] = 'updated') => {
-      if (terminal(snapshot.state)) return;
-      Object.assign(snapshot, clone(patch));
-      this.notify(type, snapshot);
-    };
-    const transition = (patch: Partial<TaskSnapshot>) => {
-      const next = { ...snapshot, ...patch };
-      persist(next, terminal(next.state) ? entry.output?.read() : undefined);
-      update(patch, 'transition');
+    const transition = (phase: Transition) => {
+      persist({ ...snapshot, ...phase }, terminal(phase.state) ? entry.output?.read() : undefined);
+      Object.assign(snapshot, phase);
+      this.notify('transition', snapshot);
     };
     const enter = async () => {
       signal.throwIfAborted();
@@ -128,12 +129,17 @@ export class TaskRuntime implements TaskPort {
       id: snapshot.id,
       owner: snapshot.owner,
       signal,
-      update: (progress) => update({ progress: jsonData(progress) }),
+      update: (progress) => {
+        if (terminal(snapshot.state)) return;
+        snapshot.progress = jsonData(progress);
+        this.notify('updated', snapshot);
+      },
       write: (text, channel = 'log') => {
         if (terminal(snapshot.state) || !text) return;
         entry.output ??= new TaskOutputRing();
         entry.output.write(text, channel);
-        update({ outputCursor: entry.output.cursor }, 'output');
+        snapshot.outputCursor = entry.output.cursor;
+        this.notify('output', snapshot);
       },
       waitFor: async (id, cancellation) => {
         const target = this.get(id);
@@ -168,7 +174,10 @@ export class TaskRuntime implements TaskPort {
         }
       },
     };
-    const cancelled = () => update({ cancellationRequested: true });
+    const cancelled = () => {
+      snapshot.cancellationRequested = true;
+      this.notify('updated', snapshot);
+    };
     const run = async (failure?: { error: unknown }) => {
       let value: T;
       try {
@@ -197,23 +206,20 @@ export class TaskRuntime implements TaskPort {
         (error === signal.reason ||
           (error instanceof Error && (error.name === 'AbortError' || error.cause === signal.reason)));
       const reason = aborted ? signal.reason : error;
-      const state = failure
-        ? aborted
-          ? reason instanceof TaskInterrupted
-            ? 'interrupted'
-            : 'cancelled'
-          : 'failed'
-        : 'completed';
+      const state = aborted ? (reason instanceof TaskInterrupted ? 'interrupted' : 'cancelled') : 'failed';
       const finishedAt = new Date().toISOString();
       // Keep the bounded output available to readers; release execution resources at settlement.
       let committed = false;
       try {
         transition(
-          failure ? { state, error: describe(reason), finishedAt } : { state, result: projected, finishedAt },
+          failure
+            ? { state, error: describe(reason), finishedAt }
+            : { state: 'completed', result: projected, finishedAt },
         );
         committed = Boolean(commit);
       } catch (error) {
-        update({ state: 'failed', error: describe(error), finishedAt }, 'transition');
+        Object.assign(snapshot, { state: 'failed', error: describe(error), finishedAt });
+        this.notify('transition', snapshot);
         throw error;
       } finally {
         this.entries.delete(snapshot.id);

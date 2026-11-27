@@ -111,6 +111,33 @@ test('ownership, not creation, controls cancellation and deletion', async () => 
   assert.equal(runtime.list().length, 0);
 });
 
+test('failed admission does not publish or execute a task', async () => {
+  const runtime = new TaskRuntime();
+  let executed = false;
+  const events: string[] = [];
+  runtime.subscribe(({ type }) => events.push(type));
+  assert.throws(
+    () =>
+      runtime.start(
+        {
+          owner: 'one',
+          lane: 'one',
+          commit() {
+            throw new Error('write failed');
+          },
+        },
+        async () => {
+          executed = true;
+        },
+      ),
+    /write failed/,
+  );
+  const next = runtime.start({ owner: 'one', lane: 'one' }, async () => {});
+  await next.result;
+  assert.equal(executed, false);
+  assert.equal(events.filter((type) => type === 'created').length, 1);
+});
+
 test('a durable projection fault cannot acknowledge a successful task', async () => {
   const runtime = new TaskRuntime();
   const task = runtime.start(
