@@ -35,6 +35,23 @@ export interface SessionCatalog {
   modifiedAt(record: SessionRecord): string;
 }
 
+/** Small indexed observation, independent of the addressed execution result. */
+export interface TaskSummary extends Omit<TaskSnapshot, 'result'> {
+  resultSummary?: { summary?: string; isError: boolean };
+}
+
+export function summarizeTask({ result, ...task }: TaskSnapshot): TaskSummary {
+  if (!result || typeof result !== 'object' || Array.isArray(result)) return task;
+  const { summary, isError } = result;
+  return {
+    ...task,
+    resultSummary: {
+      summary: typeof summary === 'string' ? summary.slice(0, 400) : undefined,
+      isError: Boolean(isError),
+    },
+  };
+}
+
 export interface SessionHistory {
   revisionTarget(
     id: string,
@@ -48,9 +65,10 @@ export interface SessionHistory {
   inspectLog<T>(id: string, read: (log: SessionLogReader) => T, strict?: boolean): T | undefined;
   runSummary(id: string): RunInfo | undefined;
   /** Committed task summaries without result or progress; limited queries use newest admission first. */
-  tasks(sessionId: string, type?: string, limit?: number, exclude?: ReadonlySet<string>): TaskSnapshot[];
-  /** Read the committed task; pass false for its indexed summary without loading details. */
-  taskStatus(sessionId: string, taskId: string, detail?: boolean): TaskSnapshot | undefined;
+  tasks(sessionId: string, type?: string, limit?: number, exclude?: ReadonlySet<string>): TaskSummary[];
+  taskSummary(sessionId: string, taskId: string): TaskSummary | undefined;
+  /** Read the committed result by its record address. */
+  taskStatus(sessionId: string, taskId: string): TaskSnapshot | undefined;
   taskOutput(sessionId: string, taskId: string, after?: number): TaskOutput | undefined;
   readyInboxSessions(): string[];
   hasInbox(sessionId: string, messageId: string): boolean;

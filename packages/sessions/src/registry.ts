@@ -9,8 +9,8 @@ import { dirname } from 'node:path';
 import { writeJson } from '@mini-harness/platform/json';
 import type { Paths } from '@mini-harness/platform/runtime-paths';
 import type { WorkspacePort } from '@mini-harness/workspaces/api';
-import type { RecordOwner, SessionRecords, SessionStore } from './records.ts';
-import type { TaskOptions, TaskSnapshot } from '@mini-harness/tasks/api';
+import type { RecordOwner, SessionRecords, SessionStore, TaskSummary } from './records.ts';
+import type { TaskOptions } from '@mini-harness/tasks/api';
 import { readTaskOutput } from '@mini-harness/tasks/output';
 import {
   createScopeKey,
@@ -350,7 +350,7 @@ export class SessionRegistry implements SessionStore {
     // The index preserves first admission order, even when a task's latest record changes.
     const entries =
       limit === Infinity ? index.projection.tasks.values() : [...index.projection.tasks.values()].reverse();
-    const tasks: TaskSnapshot[] = [];
+    const tasks: TaskSummary[] = [];
     for (const { task } of entries) {
       if (tasks.length >= limit) break;
       if ((type === undefined || task.type === type) && !exclude?.has(task.id))
@@ -365,12 +365,15 @@ export class SessionRegistry implements SessionStore {
     return readRecordAt<SessionEvent>(nativeFile(this.paths, record, false), address);
   }
 
-  taskStatus(sessionId: string, taskId: string, detail = true) {
+  taskSummary(sessionId: string, taskId: string) {
+    return structuredClone(this.indexes.get(sessionId)?.projection.tasks.get(taskId)?.task);
+  }
+
+  taskStatus(sessionId: string, taskId: string) {
     const index = this.indexes.get(sessionId);
     if (!index) return;
     const entry = index.projection.tasks.get(taskId);
     if (!entry) return;
-    if (!detail) return structuredClone(entry.task);
     const record = this.readTaskEntry(index.record, entry.address);
     if (record?.type !== 'task') throw new Error('Missing indexed task transition');
     const task = structuredClone(record.task);

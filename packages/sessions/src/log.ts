@@ -1,7 +1,8 @@
 import { isThinkingLevel, type ToolSchema } from '@mini-harness/llm/vocabulary';
 import { pluginIdPattern, isScopeAddress } from '@mini-harness/plugin-api/selection';
 import { isRunning, type RunInfo } from './shared/run-state.ts';
-import { terminal, type TaskSnapshot } from '@mini-harness/tasks/api';
+import { terminal } from '@mini-harness/tasks/api';
+import { summarizeTask, type TaskSummary } from './records.ts';
 import { runFromEntry } from './log-api.ts';
 import { isDeepStrictEqual } from 'node:util';
 import {
@@ -56,7 +57,7 @@ export interface LogIndex {
   tasks: Map<
     string,
     {
-      task: Omit<TaskSnapshot, 'result' | 'progress'>;
+      task: TaskSummary;
       address: RecordAddress;
       entered: number;
       answer?: RecordAddress;
@@ -194,7 +195,7 @@ export class SessionLog extends RecordLog<SessionEvent> implements SessionLogPor
           run && task.state === 'completed' && this.assistant && this.assistant.seq > entered
             ? this.assistant.address
             : undefined;
-        const { result: _result, progress: _progress, ...summary } = task;
+        const { progress: _progress, ...summary } = summarizeTask(task);
         this.index.tasks.set(task.id, { task: summary, address, entered, answer });
       }
     }

@@ -3,6 +3,7 @@ import { Type } from 'typebox';
 import { DomainError } from '@mini-harness/platform/errors';
 import { terminal, type TaskData, type TaskSnapshot } from '@mini-harness/tasks/api';
 import { defineTool, type ToolResult } from '@mini-harness/tools/api';
+import { summarizeTask } from '@mini-harness/sessions/records';
 import { executePreparedTool, prepareTool } from '@mini-harness/tools/invocation';
 import { conversationTools } from './tool-selection.ts';
 
@@ -10,10 +11,10 @@ export const metadata = { title: 'Background tasks' };
 
 const backgroundTool = 'background-tool';
 
-function relatedSessions(ctx: Context, id: string, includeChildren = true): [string, string][] {
+function relatedSessions(ctx: Context, id: string, scope: 'own' | 'children'): [string, string][] {
   return [
     [id, backgroundTool],
-    ...(includeChildren
+    ...(scope === 'children'
       ? ctx.harnessSessions
           .list()
           .filter(({ parentId }) => parentId === id)
@@ -22,14 +23,16 @@ function relatedSessions(ctx: Context, id: string, includeChildren = true): [str
   ];
 }
 
-function relatedTasks(ctx: Context, id: string, includeChildren = true, detail = false) {
-  const scopes = relatedSessions(ctx, id, includeChildren);
+function relatedTasks(ctx: Context, id: string, scope: 'own' | 'children') {
+  const scopes = relatedSessions(ctx, id, scope);
   const live = ctx.harnessTasks.list(new Set(scopes.map(([id]) => 'session:' + id)));
   const types = new Map(scopes);
-  const matching = live.filter((task) => task.type === types.get(task.owner.slice('session:'.length)));
+  const matching = live
+    .filter((task) => task.type === types.get(task.owner.slice('session:'.length)))
+    .map(summarizeTask);
   const skip = new Set(matching.map((task) => task.id));
   const ended = scopes
-    .flatMap(([session, type]) => ctx.harnessSessions.tasks(session, type, 50, skip))
+    .flatMap(([session, type]) => ctx.harnessSessions.tasks(session, type, Infinity, skip))
     .filter((task) => terminal(task.state));
   const newest = (a: { createdAt: string }, b: { createdAt: string }) =>
     b.createdAt.localeCompare(a.createdAt);
@@ -38,20 +41,14 @@ function relatedTasks(ctx: Context, id: string, includeChildren = true, detail =
     ...ended
       .concat(matching.filter((task) => terminal(task.state)))
       .sort(newest)
-      .slice(0, 50)
-      .map((task) => {
-        if (!detail || skip.has(task.id)) return task;
-        const record = ctx.harnessSessions.taskStatus(task.owner.slice('session:'.length), task.id);
-        if (!record) throw new Error('Missing indexed task: ' + task.id);
-        return record;
-      }),
+      .slice(0, 50),
   ];
 }
 
-function relatedTask(ctx: Context, id: string, taskId: string) {
+function relatedTask(ctx: Context, id: string, taskId: string, scope: 'own' | 'children') {
   const live = ctx.harnessTasks.get(taskId);
-  for (const [session, type] of relatedSessions(ctx, id)) {
-    const task = live ?? ctx.harnessSessions.taskStatus(session, taskId, false);
+  for (const [session, type] of relatedSessions(ctx, id, scope)) {
+    const task = live ?? ctx.harnessSessions.taskSummary(session, taskId);
     if (task?.owner === 'session:' + session && task.type === type) return task;
   }
 }
@@ -166,19 +163,26 @@ const plugin: Plugin.Object = {
             label: 'Task',
             description:
               'List, inspect, read output from, await, or cancel background work or a direct child run.',
-            parameters: Type.Object({
-              action: Type.Union(
-                ['list', 'status', 'output', 'wait', 'cancel'].map((action) => Type.Literal(action)),
-              ),
-              taskId: Type.Optional(Type.String({ minLength: 1, maxLength: 128 })),
-              cursor: Type.Optional(Type.Integer({ minimum: 0 })),
-            }),
+            parameters: Type.Union([
+              Type.Object({ action: Type.Literal('list') }, { additionalProperties: false }),
+              Type.Object({
+                action: Type.Union([Type.Literal('status'), Type.Literal('wait'), Type.Literal('cancel')]),
+                taskId: Type.String({ minLength: 1, maxLength: 128 }),
+              }, { additionalProperties: false }),
+              Type.Object({
+                action: Type.Literal('output'),
+                taskId: Type.String({ minLength: 1, maxLength: 128 }),
+                cursor: Type.Optional(Type.Integer({ minimum: 0 })),
+              }, { additionalProperties: false }),
+            ]),
             isConcurrencySafe: ({ action }) => action !== 'wait',
-            async execute({ action, taskId, cursor }, { waitFor, signal }) {
-              if (action === 'list') return json(relatedTasks(ctx, id).map(({ result: _, ...task }) => task));
-              const task = taskId && relatedTask(ctx, id, taskId);
+            async execute(args, { waitFor, signal }) {
+              const { action } = args;
+              if (action === 'list')
+                return json(relatedTasks(ctx, id, 'children').map(({ resultSummary: _, ...task }) => task));
+              const task = relatedTask(ctx, id, args.taskId, 'children');
               if (!task) throw new DomainError('not_found', 'Task not found');
-              if (action === 'output') return json(output(task, cursor));
+              if (action === 'output') return json(output(task, args.cursor));
               if (action === 'cancel') tasks.cancel(task.id);
               if (action === 'wait' && tasks.get(task.id) && !terminal(task.state)) {
                 if (waitFor) await waitFor(task.id);
@@ -218,11 +222,18 @@ const plugin: Plugin.Object = {
       );
       const route = '/api/sessions/:id/tasks';
       web.effect(() =>
-        web.harnessRoutes.register('GET', route, ({ params }) => relatedTasks(ctx, params.id, false, true)),
+        web.harnessRoutes.register('GET', route, ({ params }) => relatedTasks(ctx, params.id, 'own')),
+      );
+      web.effect(() =>
+        web.harnessRoutes.register('GET', route + '/:task', ({ params }) => {
+          const task = relatedTask(ctx, params.id, params.task, 'own');
+          if (!task) throw new DomainError('not_found', 'Task not found');
+          return tasks.get(task.id) ?? sessions.taskStatus(params.id, task.id);
+        }),
       );
       web.effect(() =>
         web.harnessRoutes.register('GET', route + '/:task/output', ({ params, url }) => {
-          const task = relatedTask(ctx, params.id, params.task);
+          const task = relatedTask(ctx, params.id, params.task, 'own');
           if (!task) throw new DomainError('not_found', 'Task not found');
           const cursor = Number(url.searchParams.get('after') ?? 0);
           if (!Number.isSafeInteger(cursor) || cursor < 0)
@@ -232,7 +243,7 @@ const plugin: Plugin.Object = {
       );
       web.effect(() =>
         web.harnessRoutes.register('DELETE', route + '/:task', ({ params }) => {
-          const task = relatedTask(ctx, params.id, params.task);
+          const task = relatedTask(ctx, params.id, params.task, 'own');
           if (!task) throw new DomainError('not_found', 'Task not found');
           return { cancelled: tasks.cancel(task.id) };
         }),

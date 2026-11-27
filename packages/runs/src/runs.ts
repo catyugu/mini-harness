@@ -22,6 +22,12 @@ import { RunEvents } from './events.ts';
 import type { RunInput, RunPolicy, RunPort, RunSubmission } from './api.ts';
 import type { SessionStore } from '@mini-harness/sessions/records';
 
+class RunInterrupted extends DOMException {
+  constructor() {
+    super('Interrupted by a new message', 'AbortError');
+  }
+}
+
 interface Revision extends RunInput {
   parentId: string | null;
   expectedLeafId: string | null;
@@ -217,8 +223,7 @@ export class Runs implements RunPort {
           this.wake(
             id,
             pending,
-            task.signal.reason instanceof DOMException &&
-              task.signal.reason.message === 'Interrupted by a new message',
+            task.signal.reason instanceof RunInterrupted,
           ),
       );
       this.changed(id);
@@ -283,7 +288,7 @@ export class Runs implements RunPort {
     });
     const active = this.current(id);
     if (active && this.streams.has(id) && mode === 'interrupt' && !log.inboxPaused())
-      active.cancel(new DOMException('Interrupted by a new message', 'AbortError'));
+      active.cancel(new RunInterrupted());
     const task = active ?? this.wake(id);
     return { messageId, taskId: task?.id, run: this.info(id), queue: log.queue() };
   }
