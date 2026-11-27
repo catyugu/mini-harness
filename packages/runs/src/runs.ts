@@ -510,7 +510,7 @@ export class Runs implements RunPort {
           scopeTarget(fiber.ctx),
         )) {
           await context.fiber.run(async (signal) => {
-            const release = await callback(id, keyForRun, signal);
+            const release = await callback(fiber.ctx, id, signal);
             if (!release) return;
             if (signal.aborted) await release();
             else fiber.ctx.effect(() => release);

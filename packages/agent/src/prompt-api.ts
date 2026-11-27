@@ -1,4 +1,4 @@
-import type { ScopeKey } from '@mini-harness/plugin-api/scopes';
+import type { Context } from 'mini-harness/cordis';
 
 export interface PromptContext {
   readonly signal: AbortSignal;
@@ -15,7 +15,8 @@ export interface PromptSection {
 
 export interface PromptPort {
   build(request: PromptContext): Promise<string>;
-  register(section: PromptSection, scope?: ScopeKey): () => void;
+  /** Register in the caller’s prompt service and scope under the provider Fiber. */
+  register(section: PromptSection, provider?: Context): () => void;
 }
 
 declare module 'mini-harness/cordis' {

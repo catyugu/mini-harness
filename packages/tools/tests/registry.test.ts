@@ -124,7 +124,7 @@ test('Tools activates and registers a definition without Sessions or a policy pr
   }
 });
 
-test('disposing a tool provider drains the active call before releasing its resources', async () => {
+test('unregister cancels immediately and provider disposal drains before resource cleanup', async () => {
   const ctx = new Context();
   const tools = ctx.plugin(toolsPlugin);
   await tools;
@@ -141,12 +141,13 @@ test('disposing a tool provider drains the active call before releasing its reso
     finish = resolve;
   });
   let released = false;
+  let unregister!: () => void;
   const provider = ctx.inject(['harnessTools'], (plugin) => {
     plugin.effect(() => () => {
       released = true;
     });
-    plugin.effect(() =>
-      plugin.harnessTools.register(
+    plugin.effect(() => {
+      unregister = plugin.harnessTools.register(
         defineTool({
           name: 'inspect',
           description: 'Inspect',
@@ -159,24 +160,27 @@ test('disposing a tool provider drains the active call before releasing its reso
             return { content: [] };
           },
         }),
-      ),
-    );
+      );
+      return unregister;
+    });
   });
   try {
     await provider;
     const tool = ctx.harnessTools.list()[0];
     const pending = assert.rejects(runTool(tool, 'test', {}), { name: 'AbortError' });
     await started;
-    const unload = provider.dispose();
     try {
+      assert.equal(unregister(), undefined);
       await cancelled;
       assert.equal(released, false);
       assert.equal(toolAvailable(tool), false);
     } finally {
+      const unload = provider.dispose();
+      assert.equal(released, false);
       finish();
+      await unload;
     }
     await pending;
-    await unload;
     assert.equal(released, true);
   } finally {
     await tools.dispose();

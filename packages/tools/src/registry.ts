@@ -15,9 +15,9 @@ export class ToolRegistry {
   service(): ToolPort {
     const registry = this;
     return Service.track<ToolPort>({
-      register(definition, scope) {
-        const context = Service.caller(this);
-        return registry.register(definition, { context, scope: scope ?? scopeOf(context) });
+      register(definition, provider) {
+        const caller = Service.caller(this);
+        return registry.register(definition, { context: provider ?? caller, scope: scopeOf(caller) });
       },
       list(selection) {
         const caller = Service.caller(this);

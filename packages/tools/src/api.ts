@@ -71,7 +71,12 @@ export interface ToolInvocation {
 }
 
 export interface ToolPort {
-  register(tool: ToolDefinition | ToolFactory, scope?: ScopeKey): () => void;
+  /**
+   * Register in the caller's tool service and scope. The provider Fiber owns execution.
+   * The disposer removes the registration and requests cancellation of accepted calls.
+   * Dispose the provider Fiber before releasing resources used by active calls.
+   */
+  register(tool: ToolDefinition | ToolFactory, provider?: Context): () => void;
   list(selection?: ToolSelection): ToolDefinition[];
 }
 
