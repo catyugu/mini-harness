@@ -36,7 +36,7 @@ export class PluginHost implements ProfileScopes, ProfileConfigurationPort {
   private pending = Promise.resolve();
   private readonly listeners = new Set<() => void>();
   private closing = false;
-  private started = false;
+  private graphReady = false;
 
   constructor(
     readonly ctx: Context,
@@ -90,7 +90,7 @@ export class PluginHost implements ProfileScopes, ProfileConfigurationPort {
   }
 
   get stable() {
-    return this.started && !this.applying && !this.closing;
+    return this.graphReady && !this.applying && !this.closing;
   }
 
   subscribe(listener: () => void) {
@@ -134,7 +134,6 @@ export class PluginHost implements ProfileScopes, ProfileConfigurationPort {
     return this.enqueue(async () => {
       const next = mergeSettings(this.settings, patch);
       await this.apply(next, false);
-      this.publish();
       return this.settings;
     }, signal);
   }
@@ -145,10 +144,8 @@ export class PluginHost implements ProfileScopes, ProfileConfigurationPort {
       const scopes = { ...this.settings.scopes };
       for (const key of keys) delete scopes[key];
       const next = { ...this.settings, scopes };
-      const changed = !isDeepStrictEqual(next, this.settings);
       await this.apply(next, false, released);
       if (released.size) removeScopeData(join(dirname(this.directory), 'plugin-data'), released);
-      if (changed) this.publish();
     });
   }
 
@@ -181,7 +178,6 @@ export class PluginHost implements ProfileScopes, ProfileConfigurationPort {
       );
       if (isDeepStrictEqual(next, this.settings)) return;
       await this.apply(next, false);
-      this.publish();
     }, signal);
   }
 
@@ -335,22 +331,39 @@ export class PluginHost implements ProfileScopes, ProfileConfigurationPort {
     await this.apply({ ...this.settings, scopes: {} }, true);
     await this.ctx.parallel('harness/ready');
     await this.apply(this.settings, true);
-    this.started = true;
+    this.graphReady = true;
     this.publish();
+    this.graphSettled();
   }
 
-  private apply(settings: ProfileConfiguration, starting: boolean, released?: ReadonlySet<ScopeAddress>) {
+  private graphSettled() {
+    if (this.stable)
+      void this.ctx.parallel('profile/graph-settled').catch((error) => this.ctx.logger.error(error));
+  }
+
+  private async apply(settings: ProfileConfiguration, starting: boolean, released?: ReadonlySet<ScopeAddress>) {
+    const changed = !starting && !isDeepStrictEqual(settings, this.settings);
     const transaction = (this.transaction = {});
     const work = this.lifecycle.run(transaction, () =>
       Promise.resolve().then(() => this.configureGraph(settings, starting, released)),
     );
     this.applying = work;
-    return work.finally(() => {
-      if (this.applying === work) {
-        this.applying = undefined;
-        this.transaction = undefined;
+    try {
+      await work;
+      if (!starting) {
+        this.graphReady = true;
+        if (changed) this.publish();
       }
-    });
+      try {
+        this.ctx.get('harnessChanges')?.invalidate('plugins');
+      } catch (error) {
+        this.ctx.logger.error(error);
+      }
+    } finally {
+      this.applying = undefined;
+      this.transaction = undefined;
+      this.graphSettled();
+    }
   }
 
   private async configureGraph(
@@ -419,7 +432,6 @@ export class PluginHost implements ProfileScopes, ProfileConfigurationPort {
         this.catalog.commit(descriptors);
         this.failures = failures;
         this.browserState = browserState;
-        this.ctx.get('harnessChanges')?.invalidate('plugins');
       }
     } catch (error) {
       try {
@@ -430,6 +442,7 @@ export class PluginHost implements ProfileScopes, ProfileConfigurationPort {
             throw new Error('Could not reactivate plugin ' + id, { cause: restored?.error });
         }
       } catch (restore) {
+        this.graphReady = false;
         throw new AggregateError([error, restore], 'Could not restore plugin configuration');
       }
       throw error;

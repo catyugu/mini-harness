@@ -44,7 +44,11 @@ const plugin: Plugin.Object = {
     const select = (model: ModelChoice) => {
       if (same(model, current)) return;
       current = { ...model };
-      void ctx.parallel('models/preference-changed').catch((error) => ctx.logger.warn(String(error)));
+      try {
+        ctx.get('harnessChanges')?.invalidate('models');
+      } catch (error) {
+        ctx.logger.warn(String(error));
+      }
     };
     ctx.harnessPluginSettings.subscribe<ModelChoice>('model', (model) => {
       // A completed older write must not overwrite a newer accepted selection.

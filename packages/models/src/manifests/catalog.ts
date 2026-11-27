@@ -32,12 +32,9 @@ const plugin: Plugin.Object = {
       void ctx.parallel('models/catalog-changed').catch((error) => ctx.logger.warn(String(error)));
     };
     ctx.on('models/catalog-changed', project);
-    ctx.on('models/preference-changed', project);
     ctx.on('models/source-changed', publish);
     ctx.on('llm/adapters-changed', publish);
-    ctx.inject(['harnessProfileConfig'], (scope) => {
-      scope.effect(() => scope.harnessProfileConfig.subscribe(publish));
-    });
+    ctx.on('profile/graph-settled', publish);
     function visible(caller: Context) {
       return rankScoped(scopeOf(caller), sources).filter(({ owner }) => !owner.aborted);
     }
@@ -83,8 +80,14 @@ const plugin: Plugin.Object = {
             sources.delete(entry);
             throw error;
           }
+          publish();
           return () => {
-            if (sources.delete(entry)) release();
+            if (!sources.delete(entry)) return;
+            try {
+              release();
+            } finally {
+              publish();
+            }
           };
         },
         list() {
