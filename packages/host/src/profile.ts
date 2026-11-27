@@ -440,10 +440,7 @@ export async function loadProfile(
         errors.set(id, error);
         return true;
       });
-      for (const [id, error] of await entries.update(
-        catalog.entries(plans, context),
-      ))
-        errors.set(id, error);
+      for (const [id, error] of await entries.update(catalog.entries(plans, context))) errors.set(id, error);
       return errors;
     },
     read: () => current,

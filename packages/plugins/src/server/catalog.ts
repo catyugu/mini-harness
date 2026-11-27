@@ -179,18 +179,20 @@ export class PluginCatalog {
     return plans.flatMap((plan) => {
       const server = plan.server;
       if (!server) return [];
-      return [{
-        id: scope ? scope + '/' + plan.id : plan.id,
-        context,
-        config: plan.config,
-        module: server.module,
-        live: plan.live,
-        load: () => server.plugin,
-        prepare: (ctx) => {
-          const changes = context.get('harnessChanges');
-          if (changes) ctx.effect(() => changes.register('plugin:' + plan.id));
+      return [
+        {
+          id: scope ? scope + '/' + plan.id : plan.id,
+          context,
+          config: plan.config,
+          module: server.module,
+          live: plan.live,
+          load: () => server.plugin,
+          prepare: (ctx) => {
+            const changes = context.get('harnessChanges');
+            if (changes) ctx.effect(() => changes.register('plugin:' + plan.id));
+          },
         },
-      }];
+      ];
     });
   }
 
@@ -209,9 +211,10 @@ export class PluginCatalog {
         const values = entry.config;
         const plugin = item.native?.plugin;
         const config = plugin ? structuredClone(values) : this.configValues(item, values);
-        const server = plugin && item.location
-          ? { module: item.location.url + '#' + (item.location.exportName ?? 'default'), plugin }
-          : undefined;
+        const server =
+          plugin && item.location
+            ? { module: item.location.url + '#' + (item.location.exportName ?? 'default'), plugin }
+            : undefined;
         plans.push({
           id,
           config,
