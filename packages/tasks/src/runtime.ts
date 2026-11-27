@@ -283,9 +283,9 @@ export class TaskRuntime implements TaskPort {
     return clone(this.recent.get(id)?.task);
   }
 
-  list(owner?: string) {
+  list(owner?: string | ReadonlySet<string>) {
     return [...Array.from(this.entries.values(), ({ snapshot }) => snapshot), ...this.recent.snapshots()]
-      .filter((task) => owner === undefined || task.owner === owner)
+      .filter((task) => (typeof owner === 'string' ? task.owner === owner : (owner?.has(task.owner) ?? true)))
       .map(clone);
   }
 

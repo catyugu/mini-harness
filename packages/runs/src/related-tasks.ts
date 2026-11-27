@@ -11,7 +11,7 @@ export function relatedTasks(ctx: Context, id: string, includeChildren = true, d
       if (child.parentId === id) scopes.set('session:' + child.id, 'agent-run');
 
   const live = new Map<string, TaskSnapshot>();
-  for (const task of ctx.harnessTasks.list())
+  for (const task of ctx.harnessTasks.list(new Set(scopes.keys())))
     if (task.type && scopes.get(task.owner) === task.type) live.set(task.id, task);
   const history = [...scopes].flatMap(([owner, type]) =>
     sessions.taskSummaries(owner.slice('session:'.length), type, 50),

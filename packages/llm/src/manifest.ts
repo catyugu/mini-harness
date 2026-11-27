@@ -1,3 +1,5 @@
+import { PassThrough } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
 import { Service, type Context, type Plugin } from 'mini-harness/cordis';
 import { rankScoped, sameRank, scopeOf, type ScopeKey } from '@mini-harness/plugin-api/scopes';
 import type { LlmAdapter, LlmEvent, LlmPort, LlmRequest, SelectedLlmAdapter } from './api.ts';
@@ -13,54 +15,24 @@ async function* streamOwned(
   adapter: LlmAdapter,
   request: LlmRequest,
 ) {
-  type Pull = Promise<IteratorResult<LlmEvent>>;
-  let pull: Pull | undefined;
-  let exhausted = false;
-  let open!: (value: { iterator: AsyncIterator<LlmEvent>; signal: AbortSignal }) => void;
-  let fail!: (reason: unknown) => void;
-  const ready = new Promise<Parameters<typeof open>[0]>((resolve, reject) => {
-    open = resolve;
-    fail = reject;
-  });
-  let stop!: () => void;
-  const closed = new Promise<void>((resolve) => {
-    stop = resolve;
-  });
+  const output = new PassThrough({ objectMode: true, highWaterMark: 1 });
+  const consumer = new AbortController();
+  const lifetime = AbortSignal.any([activation, request.signal, consumer.signal]);
   const work = owner.fiber.run(
-    async (signal) => {
-      const iterator = adapter.stream({ ...request, signal })[Symbol.asyncIterator]();
-      signal.addEventListener('abort', stop, { once: true });
-      open({ iterator, signal });
-      try {
-        if (!signal.aborted) await closed;
-      } finally {
-        signal.removeEventListener('abort', stop);
-        const pending = pull?.catch(() => {});
-        try {
-          if (!exhausted) await iterator.return?.();
-        } finally {
-          await pending;
-        }
-      }
-    },
-    AbortSignal.any([activation, request.signal]),
+    (signal) => pipeline(adapter.stream({ ...request, signal }), output, { signal }),
+    lifetime,
   );
-  void work.catch(fail);
-
+  // Fiber admission can fail before the pipeline starts.
+  void work.catch((error) => output.destroy(error instanceof Error ? error : new Error(String(error))));
   try {
-    const { iterator, signal } = await ready;
-    while (true) {
-      signal.throwIfAborted();
-      const next = await (pull = Promise.resolve(iterator.next()));
-      pull = undefined;
-      exhausted = Boolean(next.done);
-      signal.throwIfAborted();
-      if (exhausted) break;
-      yield next.value;
+    for await (const event of output) {
+      lifetime.throwIfAborted();
+      yield event as LlmEvent;
     }
-  } finally {
-    stop();
     await work;
+  } finally {
+    consumer.abort();
+    await work.catch(() => {});
   }
 }
 

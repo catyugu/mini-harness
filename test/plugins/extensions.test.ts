@@ -697,9 +697,13 @@ test(
       plugin.effect(() =>
         plugin.harnessLlm.register({
           accepts: (choice) => choice.provider === model.provider,
-          async *stream() {
+          async *stream({ signal }) {
             try {
               yield { type: 'text-delta', text: 'partial' };
+              signal.throwIfAborted();
+              await new Promise<void>((_, reject) => {
+                signal.addEventListener('abort', () => reject(signal.reason), { once: true });
+              });
             } finally {
               enterCleanup();
               await hold;
