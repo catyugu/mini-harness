@@ -14,7 +14,7 @@ External plugins import the following root-package exports. The workspace packag
 | `mini-harness/plugin-configuration` | [PluginConfiguration](src/shared/plugin-configuration.ts) and Entry-owned configuration handles.                                     |
 | `mini-harness/observations`         | [Capability observations](src/observations.ts), `observe` and the `harness/observe` event.                                           |
 
-Use `defineConfig` as a plugin's native Cordis `Config` export. It clones the candidate, applies JSON Schema defaults, validates synchronously, then runs an optional semantic refinement. Its `jsonSchema` also describes the configuration form for plugins that declare `configForm`. The [settings cookbook](../../docs/cookbook/adding-a-settings-page.md) and [greeting example](../../docs/examples/greeting-service/plugin.ts) show complete declarations.
+Use `defineConfig` as a plugin's native Cordis `Config` export. It clones the candidate, applies JSON Schema defaults, validates synchronously, then runs an optional semantic refinement. Its `jsonSchema` describes the validation contract; browser configuration views are authored separately by each plugin. The [settings cookbook](../../docs/cookbook/adding-a-settings-page.md) and [greeting example](../../docs/examples/greeting-service/plugin.ts) show complete declarations.
 
 ## Scope contracts
 

@@ -6,7 +6,6 @@ import type { PluginMetadata } from '../shared/metadata.ts';
 import { RemoteStore } from '@mini-harness/ui-runtime/remote-store';
 import { icon } from '@mini-harness/ui-primitives/icons';
 import { button, fromMarkup, saveToggle, toggle, required } from '@mini-harness/ui-primitives/primitives';
-import { schemaForm } from './fields.ts';
 
 type CatalogPlugin = Omit<PluginMetadata, 'instances'>;
 const optional = (plugin: CatalogPlugin) => !plugin.id.startsWith('core:');
@@ -130,29 +129,9 @@ function pluginCatalog(
     diagnostics.className = 'hint';
     diagnostics.textContent = plugin.error ?? '';
     section.append(diagnostics);
-    if (plugin.configForm && plugin.configSchema) {
-      const values = snapshot().settings.entries[plugin.id]?.config ?? {};
-      section.append(
-        schemaForm(plugin.id, plugin.configSchema, values, plugin.configForm.description, async (config) => {
-          let failure = '';
-          const saved = await mutate(
-            () =>
-              browserRequest(ctx, '/settings', payload('PATCH', { entries: { [plugin.id]: { config } } })),
-            (error) => {
-              failure = error.message;
-            },
-          );
-          if (!saved || failure) return failure;
-          const latest = snapshot().plugins.find(({ id }) => id === plugin.id);
-          diagnostics.textContent = latest?.error ?? '';
-          return latest?.error ? 'Configuration saved. Plugin failed to start: ' + latest.error : 'Saved.';
-        }),
-      );
-    } else {
-      const configuration = document.createElement('div');
-      section.append(configuration);
-      registry.mountPlugin(plugin.id, configuration, signal);
-    }
+    const configuration = document.createElement('div');
+    section.append(configuration);
+    registry.mountPlugin(plugin.id, configuration, signal);
     content.replaceChildren(section);
     back.focus();
   }
@@ -237,9 +216,7 @@ function pluginCatalog(
     const groups = [
       {
         title: 'Built-in configuration',
-        plugins: plugins.filter(
-          (plugin) => !plugin.external && (plugin.configForm || registry.hasPlugin(plugin.id)),
-        ),
+        plugins: plugins.filter((plugin) => !plugin.external && registry.hasPlugin(plugin.id)),
       },
       { title: 'Local plugins', plugins: plugins.filter((plugin) => plugin.external) },
     ];

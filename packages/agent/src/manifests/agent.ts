@@ -4,11 +4,12 @@ import type { PluginInfo } from '@mini-harness/plugin-api/descriptor';
 import { AgentLoop } from '../agent.ts';
 import { reasoningRecords } from '../reasoning.ts';
 import { Type } from 'typebox';
+import { turnLimit } from '../limits.ts';
 
 const Config = defineConfig(
   Type.Object(
     {
-      maxTurns: Type.Integer({ minimum: 1, maximum: 1024, default: 128, title: 'Maximum turns per run' }),
+      maxTurns: Type.Integer(turnLimit),
     },
     { additionalProperties: false },
   ),
@@ -17,7 +18,6 @@ const Config = defineConfig(
 export const metadata: PluginInfo = {
   title: 'Agent',
   description: 'Model and tool execution loop',
-  configForm: {},
   browser: 'packages/agent/src/browser/setup.js',
   browserStyles: ['packages/agent/src/browser/style.css'],
 };

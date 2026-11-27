@@ -1,6 +1,6 @@
 # Add plugin settings
 
-Use the native Entry Config schema as the source of truth. The plugin editor can generate ordinary fields directly from that schema. Add a custom settings contribution when the interaction needs more than generated fields.
+Use the native Entry Config schema as the source of truth. Register a plugin-owned browser configuration view with `miniSettingsRegistry.registerPlugin(browserPluginId(ctx), render)` for the Plugins page, or contribute controls to a Settings section. The renderer owns all controls, layout and save behavior; the schema validates writes.
 
 ## 1. Define and validate configuration
 

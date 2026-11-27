@@ -78,7 +78,6 @@ test('a failed browser plugin reports the saved state and can be retried', async
       );
       writeJson(join(folder, 'plugin.json'), {
         title: 'Retry UI',
-        configForm: {},
         browserDirectory: 'web',
       });
       mkdirSync(join(folder, 'web'));
@@ -137,10 +136,12 @@ export function apply(ctx) {
   ).toHaveCount(0);
   await expect(page.getByText(/Browser setup failed.*Not ready/)).toBeVisible();
   await expect(page.locator('body')).toHaveAttribute('data-retry-effect', 'released');
-  await page.getByRole('button', { name: 'Retry UI settings' }).click();
-  await page.getByLabel('Ready · retry-ui').check();
-  await page.getByRole('button', { name: 'Save configuration' }).click();
-  await expect(page.getByText('Saved.', { exact: true })).toBeVisible();
+  const retry = await fetch(host.url + '/api/settings', {
+    method: 'PATCH',
+    headers: { Authorization: 'Bearer ' + host.token, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ entries: { 'retry-ui': { config: { ready: true } } } }),
+  });
+  expect(retry.status, await retry.text()).toBe(200);
   await page.getByRole('button', { name: 'New conversation' }).click();
   await expect(page.getByRole('button', { name: 'Recovered UI', exact: true })).toHaveCount(1);
   await expect(page.locator('body')).toHaveAttribute('data-retry-effect', 'mounted');

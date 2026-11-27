@@ -7,3 +7,11 @@
 .tool-exit-code[data-failed='true'] {
   color: var(--danger);
 }
+
+.shell-config {
+  margin-block-start: 24px;
+}
+.shell-config > .ui-button {
+  align-self: start;
+  margin-block-start: 12px;
+}

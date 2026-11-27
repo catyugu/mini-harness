@@ -90,4 +90,5 @@
 }
 .subagent-config > .ui-button {
   align-self: start;
+  margin-block-start: 12px;
 }

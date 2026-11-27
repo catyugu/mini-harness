@@ -142,13 +142,6 @@
   font-size: var(--font-ui);
   line-height: 1.55;
 }
-.schema-config {
-  --gap: var(--space);
-  margin-block-start: 24px;
-}
-.schema-config > .ui-button {
-  align-self: start;
-}
 .catalog-back svg {
   transform: rotate(180deg);
 }
@@ -183,13 +176,6 @@
     height: 48px;
   }
 }
-.plugin-config {
-  border: 0;
-  margin: 0;
-  padding: 0;
-  min-width: 0;
-}
-
 .builtin-group + .builtin-group {
   margin-top: 24px;
 }

@@ -56,7 +56,7 @@ export function scopeAddresses(configuration: ProfileConfiguration) {
   return Object.keys(configuration.scopes) as ScopeAddress[];
 }
 
-/** A synchronous native Cordis schema backed by JSON Schema, also usable by configuration forms. */
+/** A synchronous native Cordis configuration schema backed by JSON Schema. */
 export function defineConfig(
   schema: Record<string, any>,
   refine?: (config: Readonly<Record<string, unknown>>) => string | undefined,
