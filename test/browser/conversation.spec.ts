@@ -110,6 +110,11 @@ test('the model picker filters providers and restores an accepted choice after r
   await expect(modelButton(page)).toHaveText('Second Model');
   const thinking = page.locator('#thinkingLevel');
   await expect(thinking).toHaveAttribute('aria-label', 'Thinking level: Default');
+  const modelBounds = await modelButton(page).boundingBox();
+  const thinkingBounds = await thinking.boundingBox();
+  const sendBounds = await page.getByRole('button', { name: 'Send', exact: true }).boundingBox();
+  expect(thinkingBounds!.x - modelBounds!.x - modelBounds!.width).toBeLessThan(16);
+  expect(sendBounds!.x - thinkingBounds!.x - thinkingBounds!.width).toBeLessThan(16);
   await thinking.click();
   const levels = page.getByRole('listbox', { name: 'Thinking levels' });
   await expect(levels).toBeVisible();

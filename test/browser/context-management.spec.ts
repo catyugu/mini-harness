@@ -28,6 +28,9 @@ test('context settings update the selected summary model and distinguish convers
   const globalAuto = global.getByRole('switch', { name: 'Auto compaction' });
   const globalModel = global.getByRole('button', { name: 'Summary model' });
   await expect(globalModel).toHaveText('Current model');
+  const modelBounds = await globalModel.boundingBox();
+  const triggerBounds = await trigger.boundingBox();
+  expect(modelBounds!.x + modelBounds!.width).toBeCloseTo(triggerBounds!.x + triggerBounds!.width);
   await globalModel.click();
   await global.getByRole('option', { name: /Mock Model/ }).click();
   await expect(globalModel).toHaveText('Mock Model');

@@ -60,7 +60,7 @@ export function settingsForm(
   fields.append(
     field('Auto compaction', auto, 'compact'),
     ...ratios.map(({ row }) => row),
-    field('Summary model', picker.node, 'wide'),
+    field('Summary model', picker.node, 'compact'),
     actions,
   );
   node.append(heading, fields, error);

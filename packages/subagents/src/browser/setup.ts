@@ -1,3 +1,4 @@
+import { registerConfiguration } from './configuration.ts';
 import type { Context } from 'mini-harness/cordis';
 import { isRunning, type RunInfo } from '@mini-harness/sessions/run-state';
 import { icon } from '@mini-harness/ui-primitives/icons';
@@ -17,6 +18,7 @@ function duration(run: RunInfo) {
 }
 
 const setup = (ctx: Context) => {
+  ctx.inject(['miniSettingsRegistry', 'miniModels'], registerConfiguration);
   const signal = ctx.fiber.signal;
   const services = ctx.harnessBrowser;
   const trail = document.createElement('nav');

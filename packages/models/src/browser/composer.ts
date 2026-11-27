@@ -5,11 +5,11 @@ import { createThinkingPicker } from './thinking-picker.ts';
 
 export function mountModelControls(ctx: Context, signal: AbortSignal) {
   const { miniComposer: model, miniConversation: control } = ctx;
-  const root = fromMarkup(`<div class="model-controls">
-            <button id="thinkingLevel" class="model-select" type="button" aria-haspopup="listbox" aria-expanded="false" aria-controls="thinkingResults" hidden>Default</button>
+  const root = fromMarkup(`<div class="model-controls ui-row">
+            <button id="thinkingLevel" class="ui-button ui-fixed model-select" data-variant="quiet" type="button" aria-haspopup="listbox" aria-expanded="false" aria-controls="thinkingResults" hidden>Default</button>
             <div id="thinkingPicker" class="ui-popover model-picker thinking-picker" popover="auto"><div id="thinkingResults" role="listbox" aria-label="Thinking levels"></div></div>
   </div>`);
-  const modelPicker = ctx.miniModels.createPicker(model.choose, signal);
+  const modelPicker = ctx.miniModels.createPicker(model.choose, signal, { variant: 'quiet' });
   root.prepend(modelPicker.node);
   const thinkingPicker = createThinkingPicker(root, model.chooseThinking, signal);
   const removeCommand = model.command({

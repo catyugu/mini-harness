@@ -1,5 +1,10 @@
 import type { ModelChoice } from '@mini-harness/llm/vocabulary';
-import { bindPopover, fromMarkup, required } from '@mini-harness/ui-primitives/primitives';
+import {
+  bindPopover,
+  button as createButton,
+  fromMarkup,
+  required,
+} from '@mini-harness/ui-primitives/primitives';
 import { icon } from '@mini-harness/ui-primitives/icons';
 import type { Context } from 'mini-harness/cordis';
 import type { ModelPicker, ModelPickerOptions } from './api.ts';
@@ -11,13 +16,12 @@ export function createModelPicker(
   catalog: Pick<Context['miniModels'], 'get' | 'subscribe'>,
   onSelect: (model: ModelChoice) => void,
   signal: AbortSignal,
-  { emptyLabel = 'Choose model', selectEmpty, label: accessibleLabel }: ModelPickerOptions = {},
+  { emptyLabel = 'Choose model', selectEmpty, label: accessibleLabel, variant }: ModelPickerOptions = {},
 ): ModelPicker {
   const node = document.createElement('div');
   node.className = 'model-picker-control';
-  const button = document.createElement('button');
-  button.type = 'button';
-  button.className = 'model-select';
+  const button = createButton('', variant);
+  button.classList.add('model-select');
   const caption = document.createElement('span');
   caption.className = 'ui-truncate';
   button.append(caption, icon('chevron'));

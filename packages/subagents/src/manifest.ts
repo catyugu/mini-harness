@@ -3,13 +3,14 @@ import type { Plugin } from 'mini-harness/cordis';
 import type { PluginInfo } from '@mini-harness/plugin-api/descriptor';
 import { setup } from './server/setup.ts';
 import { Type } from 'typebox';
+import { childLimits } from './shared/limits.ts';
 
 /** One self-contained plugin schema. Changes to child limits are safe during active runs. */
 const Config = defineConfig({
   ...Type.Object(
     {
-      maxDepth: Type.Integer({ title: 'Maximum child depth', minimum: 0, maximum: 8, default: 1 }),
-      maxParallel: Type.Integer({ title: 'Parallel children', minimum: 1, maximum: 16, default: 4 }),
+      maxDepth: Type.Integer(childLimits.maxDepth),
+      maxParallel: Type.Integer(childLimits.maxParallel),
       model: Type.Union(
         [
           Type.Null(),
@@ -21,7 +22,7 @@ const Config = defineConfig({
             { additionalProperties: false },
           ),
         ],
-        { title: 'Child model', default: null, 'x-modelChoice': true },
+        { default: null },
       ),
     },
     { additionalProperties: false },
@@ -34,10 +35,6 @@ export const metadata: PluginInfo = {
   icon: 'delegate',
   browser: 'packages/subagents/src/browser/setup.js',
   browserStyles: ['packages/subagents/src/browser/style.css'],
-  configGroups: [
-    { title: 'Run limits', fields: ['maxDepth', 'maxParallel'] },
-    { title: 'Model selection', fields: ['model'] },
-  ],
 };
 
 const plugin: Plugin.Object = {

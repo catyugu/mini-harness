@@ -6,10 +6,9 @@ import type { PluginMetadata } from '../shared/metadata.ts';
 import { RemoteStore } from '@mini-harness/ui-runtime/remote-store';
 import { icon } from '@mini-harness/ui-primitives/icons';
 import { button, fromMarkup, saveToggle, toggle, required } from '@mini-harness/ui-primitives/primitives';
-import { readPluginValues, schemaFields } from './fields.ts';
+import { schemaForm } from './fields.ts';
 
 type CatalogPlugin = Omit<PluginMetadata, 'instances'>;
-const configurable = ['subagents', 'core:agent', 'shell'];
 const optional = (plugin: CatalogPlugin) => !plugin.id.startsWith('core:');
 
 const setup = async (ctx: Context) => {
@@ -112,6 +111,7 @@ function pluginCatalog(
     header.hidden = true;
     detailLifetime?.abort();
     detailLifetime = new AbortController();
+    const { signal } = detailLifetime;
     const section = fromMarkup(`<section class="catalog-detail settings-scroll">
       <header class="catalog-detail-header"><div class="plugin-symbol"></div><h1></h1><p class="hint"></p></header>
     </section>`);
@@ -130,63 +130,29 @@ function pluginCatalog(
     diagnostics.className = 'hint';
     diagnostics.textContent = plugin.error ?? '';
     section.append(diagnostics);
-    const schema = plugin.configSchema;
-    if (schema) {
-      const form = fromMarkup<HTMLFormElement>(
-        '<form><div class="detail-fields"></div><p class="hint" role="status"></p></form>',
-      );
-      const save = button('Save configuration', 'primary');
-      save.type = 'submit';
-      form.append(save);
-      const fields = required(form.querySelector<HTMLElement>('.detail-fields'));
-      const outcome = required(form.querySelector<HTMLElement>('[role="status"]'));
+    if (plugin.configForm && plugin.configSchema) {
       const values = snapshot().settings.entries[plugin.id]?.config ?? {};
-      if (plugin.configHint) {
-        const note = document.createElement('p');
-        note.className = 'hint';
-        note.textContent = plugin.configHint;
-        fields.append(note);
-      }
-      if (plugin.configGroups) {
-        for (const group of plugin.configGroups) {
-          const block = fromMarkup('<section class="ui-section"><h3></h3></section>');
-          required(block.querySelector('h3')).textContent = group.title;
-          const properties = Object.fromEntries(
-            group.fields.filter((id) => schema.properties?.[id]).map((id) => [id, schema.properties[id]]),
-          );
-          block.append(schemaFields(ctx, plugin.id, { ...schema, properties }, values));
-          fields.append(block);
-        }
-      } else fields.append(schemaFields(ctx, plugin.id, schema, values));
-      form.onsubmit = async (event) => {
-        event.preventDefault();
-        save.disabled = true;
-        outcome.textContent = '';
-        try {
-          const config = readPluginValues(fields);
+      section.append(
+        schemaForm(plugin.id, plugin.configSchema, values, plugin.configForm.description, async (config) => {
+          let failure = '';
           const saved = await mutate(
             () =>
               browserRequest(ctx, '/settings', payload('PATCH', { entries: { [plugin.id]: { config } } })),
             (error) => {
-              outcome.textContent = error.message;
+              failure = error.message;
             },
           );
-          if (saved && !outcome.textContent) {
-            const latest = snapshot().plugins.find(({ id }) => id === plugin.id);
-            diagnostics.textContent = latest?.error ?? '';
-            outcome.textContent = latest?.error
-              ? 'Configuration saved. Plugin failed to start: ' + latest.error
-              : 'Saved.';
-          }
-        } catch (error) {
-          outcome.textContent = error instanceof Error ? error.message : String(error);
-        } finally {
-          save.disabled = false;
-        }
-      };
-      section.append(form);
+          if (!saved || failure) return failure;
+          const latest = snapshot().plugins.find(({ id }) => id === plugin.id);
+          diagnostics.textContent = latest?.error ?? '';
+          return latest?.error ? 'Configuration saved. Plugin failed to start: ' + latest.error : 'Saved.';
+        }),
+      );
+    } else {
+      const configuration = document.createElement('div');
+      section.append(configuration);
+      registry.mountPlugin(plugin.id, configuration, signal);
     }
-    registry.mountPlugin(plugin.id, section, detailLifetime.signal);
     content.replaceChildren(section);
     back.focus();
   }
@@ -271,8 +237,8 @@ function pluginCatalog(
     const groups = [
       {
         title: 'Built-in configuration',
-        plugins: configurable.flatMap((id) =>
-          plugins.filter((plugin) => !plugin.external && plugin.id === id),
+        plugins: plugins.filter(
+          (plugin) => !plugin.external && (plugin.configForm || registry.hasPlugin(plugin.id)),
         ),
       },
       { title: 'Local plugins', plugins: plugins.filter((plugin) => plugin.external) },
@@ -315,6 +281,9 @@ function pluginCatalog(
     render();
     pages.open('plugins');
   };
+  registry.onPluginChange(() => {
+    if (!detailLifetime) render();
+  }, ctx.fiber.signal);
   render();
   renderBuiltins();
   return {
