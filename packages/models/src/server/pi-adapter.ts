@@ -2,7 +2,6 @@ import {
   createModels,
   createProvider,
   defaultProviderAuthContext,
-  getSupportedThinkingLevels,
   isContextOverflow,
   lazyApi,
   type Api,
@@ -58,9 +57,9 @@ export class PiLlm implements LlmAdapter {
           api,
           baseUrl: provider.baseUrl ?? '',
           canSetKey: Boolean(provider.auth.apiKey?.login),
-          models: models.map((model) => ({ ...model, thinkingLevels: getSupportedThinkingLevels(model) })),
-          async authStatus() {
-            const auth = await runtime.checkAuth(provider.id);
+          models,
+          async authStatus(signal: AbortSignal) {
+            const auth = await runtime.checkAuth(provider.id, { signal });
             return auth?.source || Boolean(auth);
           },
           async discoveryKey(credential, signal) {
@@ -118,7 +117,7 @@ export class PiLlm implements LlmAdapter {
     const selected = store.requestModel(request.model);
     if (!selected) throw new Error('Model is unavailable through the Pi adapter');
     const { provider } = selected;
-    const { thinkingLevels: _levels, ...model } = selected.model;
+    const { model } = selected;
     const native = this.builtin.getProvider(provider.id);
     let runtime = this.builtin;
     if (native && provider.endpointOverride) {

@@ -10,19 +10,13 @@ import { mountModelControls } from './composer.ts';
 
 const setup = async (ctx: Context) => {
   const { miniSettings: settings } = ctx;
-  const state = new RemoteStore(async () => {
-    const [{ models, recent, canManageProviders, protocols }, providers] = await Promise.all([
-      browserRequest<
-        Pick<ModelCatalog, 'models'> & {
-          recent: ModelChoice;
-          canManageProviders: boolean;
-          protocols: ProtocolInfo[];
-        }
-      >(ctx, '/models'),
-      browserRequest<ModelCatalog['providers']>(ctx, '/providers'),
-    ]);
-    return { models, providers, recent, canManageProviders, protocols };
-  });
+  const state = new RemoteStore(() =>
+    browserRequest<ModelCatalog & {
+      recent: ModelChoice;
+      canManageProviders: boolean;
+      protocols: ProtocolInfo[];
+    }>(ctx, '/models'),
+  );
   ctx.effect(() => ctx.miniProjections.register('models', state));
   await state.refresh();
   ctx.provide('miniModels', {

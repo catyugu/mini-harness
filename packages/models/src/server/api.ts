@@ -33,7 +33,7 @@ declare module 'mini-harness/cordis' {
     harnessModels: ModelCatalogPort;
   }
   interface Events {
-    'models/source-changed'(): void | Promise<void>;
+    'models/source-changed'(kind: 'catalog' | 'auth'): void | Promise<void>;
     'models/catalog-changed'(): void | Promise<void>;
   }
 }

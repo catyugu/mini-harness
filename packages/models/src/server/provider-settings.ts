@@ -1,5 +1,7 @@
 import { DomainError } from '@mini-harness/platform/errors';
-import { thinkingLevels } from '@mini-harness/llm/vocabulary';
+import { Check } from 'typebox/value';
+import { ThinkingLevelMapSchema, ModelCostSchema } from '@earendil-works/pi-ai/providers/model-schema';
+import { CompatSchemasByApi, ProviderCompatSchema } from '@earendil-works/pi-ai/providers/compat-schema';
 import { modelCapacity, providerIdPattern, type ProviderModelDefinition } from '../shared/catalog.ts';
 import type { CatalogModel } from './store-api.ts';
 import { protocols } from './protocols.ts';
@@ -71,7 +73,7 @@ function modelName(value: unknown, id: string) {
 
 /** HTTP edits and persisted definitions share one complete metadata contract. */
 function parseModel(entry: RecordValue): ModelConfig {
-  const { id: rawId, name, input, reasoning, contextWindow, maxTokens, ...extra } = entry;
+  const { id: rawId, name, input, reasoning, contextWindow, maxTokens, thinkingLevelMap, compat, cost, ...extra } = entry;
   const id = modelId(rawId);
   if (Object.keys(extra).length) throw invalid('Unsupported model fields for ' + id);
   if (typeof name !== 'string' || !name.trim()) throw invalid('Missing model display name for ' + id);
@@ -85,7 +87,18 @@ function parseModel(entry: RecordValue): ModelConfig {
   )
     throw invalid('Invalid model input modalities for ' + id);
   if (typeof reasoning !== 'boolean') throw invalid('Invalid reasoning capability for ' + id);
-  return { id, name: modelName(name, id), input, reasoning, contextWindow, maxTokens };
+  if (thinkingLevelMap !== undefined && !Check(ThinkingLevelMapSchema, thinkingLevelMap))
+    throw invalid('Invalid thinking level map for ' + id);
+  if (compat !== undefined && !Check({ ...ProviderCompatSchema, additionalProperties: false }, compat))
+    throw invalid('Invalid compatibility settings for ' + id);
+  if (cost !== undefined && !Check(ModelCostSchema, cost))
+    throw invalid('Invalid model cost for ' + id);
+  return {
+    id, name: modelName(name, id), input, reasoning, contextWindow, maxTokens,
+    ...(thinkingLevelMap === undefined ? {} : { thinkingLevelMap: thinkingLevelMap as ModelConfig['thinkingLevelMap'] }),
+    ...(compat === undefined ? {} : { compat: compat as ModelConfig['compat'] }),
+    ...(cost === undefined ? {} : { cost: cost as ModelConfig['cost'] }),
+  };
 }
 
 function parseModels<T extends ModelConfig>(value: unknown, parse: (entry: RecordValue) => T): T[] {
@@ -159,6 +172,14 @@ export function resolveModel(
   { id: provider, api, baseUrl }: ProviderConnection & { id: string },
   baseline?: CatalogModel,
 ): CatalogModel {
+  const protocol = baseline?.api ?? api;
+  if (model.compat !== undefined) {
+    const schema = Object.hasOwn(CompatSchemasByApi, protocol)
+      ? CompatSchemasByApi[protocol as keyof typeof CompatSchemasByApi]
+      : undefined;
+    if (!schema || !Check({ ...schema, additionalProperties: false }, model.compat))
+      throw invalid('Unsupported compatibility settings for ' + protocol + '/' + model.id);
+  }
   return {
     api,
     baseUrl,
@@ -167,10 +188,5 @@ export function resolveModel(
     ...model,
     provider,
     input: [...model.input],
-    thinkingLevels: model.reasoning
-      ? baseline?.reasoning
-        ? baseline.thinkingLevels
-        : thinkingLevels.filter((level) => level !== 'xhigh' && level !== 'max')
-      : ['off'],
   };
 }

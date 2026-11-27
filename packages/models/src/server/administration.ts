@@ -13,7 +13,12 @@ export function setupAdministration(ctx: Context) {
   };
   const add = (method: string, path: string, handler: Parameters<typeof ctx.harnessRoutes.register>[2]) =>
     ctx.effect(() => ctx.harnessRoutes.register(method, path, handler));
-  add('GET', '/api/providers', () => providerAdministration()?.providers() ?? []);
+  add('GET', '/api/providers', async () => {
+    const store = providerAdministration();
+    if (!store) return [];
+    await store.available();
+    return store.providers();
+  });
   add('GET', '/api/providers/:id/default-models', ({ params }) =>
     admin().defaultModels(providerId(params.id)),
   );
@@ -34,6 +39,7 @@ export function setupAdministration(ctx: Context) {
     const providerAdmin = providerAdministration();
     return {
       models,
+      providers: providerAdmin?.providers() ?? [],
       recent: recent(),
       canManageProviders: Boolean(providerAdmin),
       protocols: providerAdmin?.protocols() ?? [],

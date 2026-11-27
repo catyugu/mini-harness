@@ -1,4 +1,5 @@
 import type { ThinkingLevel, ModelChoice } from '@mini-harness/llm/vocabulary';
+import type { Api, Model } from '@earendil-works/pi-ai';
 
 export const providerIdPattern = /^[a-z0-9][a-z0-9-]{0,63}$/;
 
@@ -32,7 +33,8 @@ export interface ProviderModel {
 }
 
 /** Editable metadata with an explicit native template; absent means an independent definition. */
-export type ProviderModelDefinition = Omit<ProviderModel, 'thinkingLevels'> & { templateId?: string };
+export type ProviderModelDefinition = Omit<ProviderModel, 'thinkingLevels'> &
+  Partial<Pick<Model<Api>, 'thinkingLevelMap' | 'compat' | 'cost'>> & { templateId?: string };
 
 export interface ProviderInfo {
   id: string;

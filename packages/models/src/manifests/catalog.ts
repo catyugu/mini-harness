@@ -27,14 +27,24 @@ const plugin: Plugin.Object = {
       scope.effect(() => scope.harnessChanges.register('models'));
     });
     const project = () => ctx.get('harnessChanges')?.invalidate('models');
-    const publish = () => {
-      if (ctx.get('harnessProfileConfig')?.stable === false) return;
-      void ctx.parallel('models/catalog-changed').catch((error) => ctx.logger.warn(String(error)));
+    let dirty: 'catalog' | 'auth' | undefined;
+    let pairing = 0;
+    const flush = () => {
+      if (!dirty || pairing || ctx.get('harnessProfileConfig')?.stable === false) return;
+      const kind = dirty;
+      dirty = undefined;
+      if (kind === 'catalog')
+        void ctx.parallel('models/catalog-changed').catch((error) => ctx.logger.warn(String(error)));
+      else project();
+    };
+    const changed = (kind: 'catalog' | 'auth') => {
+      if (dirty !== 'catalog') dirty = kind;
+      flush();
     };
     ctx.on('models/catalog-changed', project);
-    ctx.on('models/source-changed', publish);
-    ctx.on('llm/adapters-changed', publish);
-    ctx.on('profile/graph-settled', publish);
+    ctx.on('models/source-changed', changed);
+    ctx.on('llm/adapters-changed', () => changed('catalog'));
+    ctx.on('profile/graph-settled', flush);
     function visible(caller: Context) {
       return rankScoped(scopeOf(caller), sources).filter(({ owner }) => !owner.aborted);
     }
@@ -72,6 +82,7 @@ const plugin: Plugin.Object = {
           const entry = { source, adapter, priority, owner: caller.fiber.signal, scope: scopeOf(caller) };
           const llm = caller.get('harnessLlm');
           if (!llm) throw new Error('Model transport is unavailable in this scope');
+          pairing++;
           sources.add(entry);
           let release: () => void;
           try {
@@ -79,14 +90,18 @@ const plugin: Plugin.Object = {
           } catch (error) {
             sources.delete(entry);
             throw error;
+          } finally {
+            pairing--;
+            changed('catalog');
           }
-          publish();
           return () => {
             if (!sources.delete(entry)) return;
+            pairing++;
             try {
               release();
             } finally {
-              publish();
+              pairing--;
+              changed('catalog');
             }
           };
         },

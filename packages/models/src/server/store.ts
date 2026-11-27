@@ -1,4 +1,5 @@
 import { join } from 'node:path';
+import { getSupportedThinkingLevels } from '@earendil-works/pi-ai';
 import { DomainError } from '@mini-harness/platform/errors';
 import { readJson, writeJson } from '@mini-harness/platform/json';
 import type { ModelChoice } from '@mini-harness/llm/vocabulary';
@@ -28,10 +29,13 @@ class FileCredentials {
       throw new Error('Invalid credential store');
     return values;
   }
-  async read(id: string) {
-    await this.writes;
+  snapshot(id: string) {
     const values = this.values();
     return Object.hasOwn(values, id) ? values[id] : undefined;
+  }
+  async read(id: string) {
+    await this.writes;
+    return this.snapshot(id);
   }
   async list() {
     await this.writes;
@@ -80,13 +84,15 @@ export class ModelStore implements ModelStorePort {
   private readonly file: string;
   private readonly defaults = new Set<readonly CatalogProvider[]>();
   private configuration: ProviderConfiguration = { providers: {}, builtins: {} };
-  private readonly status = new Map<string, { value: AuthStatus; checking: boolean }>();
+  private readonly status = new Map<string, AuthStatus>();
+  private readonly checks = new Map<string, { controller: AbortController; work: Promise<void> }>();
+  private readonly lifetime = new AbortController();
   private effective = new Map<string, CatalogProvider>();
   private writes: Promise<unknown> = Promise.resolve();
 
   constructor(
     home: string,
-    private readonly changed = () => {},
+    private readonly changed: (kind: 'catalog' | 'auth') => void = () => {},
     private readonly report: (error: unknown) => void = console.warn,
   ) {
     this.file = join(home, 'models.json');
@@ -104,11 +110,15 @@ export class ModelStore implements ModelStorePort {
       const ids = providers.map(({ id }) => id);
       this.defaults.add(providers);
       this.publishCatalog(this.configuration, ids);
-      return () =>
-        this.enqueue(() => {
+      return async () => {
+        const retired = await this.enqueue(() => {
+          const checks = ids.map((id) => this.checks.get(id)?.work);
           this.defaults.delete(providers);
           this.publishCatalog(this.configuration, ids);
+          return checks;
         });
+        await Promise.all(retired);
+      };
     });
   }
 
@@ -177,44 +187,73 @@ export class ModelStore implements ModelStorePort {
     this.effective = new Map(providers.map((provider) => [provider.id, provider]));
     this.configuration = configuration;
     for (const id of this.status.keys()) {
-      if (!this.effective.has(id)) this.status.delete(id);
+      if (!this.effective.has(id)) {
+        this.checks.get(id)?.controller.abort();
+        this.status.delete(id);
+      }
     }
-    for (const id of ids ?? this.effective.keys()) void this.refreshStatus(id, true);
-    this.notify();
+    for (const id of ids ?? this.effective.keys()) this.refreshStatus(id, true);
+    this.notify('catalog');
   }
 
-  /** A check owns its result only until the next edit, removal or refresh of that provider. */
-  private async refreshStatus(id: string, replace = false) {
+  private setStatus(id: string, value: AuthStatus, publish: boolean) {
+    const previous = this.status.get(id);
+    this.status.set(id, value);
+    if (publish && (previous?.configured !== value.configured || previous.source !== value.source))
+      this.notify('auth');
+  }
+
+  /** Join existing checks; replacements abort and drain their predecessor before starting. */
+  private refreshStatus(id: string, replace = false): Promise<void> | undefined {
     const provider = this.effective.get(id);
-    const current = this.status.get(id);
-    if (!provider || (!replace && current?.checking)) return;
-    const entry = { value: current?.value ?? { configured: false }, checking: true };
-    this.status.set(id, entry);
-    let stored = false;
-    let auth: boolean | string = false;
+    if (!provider || this.lifetime.signal.aborted) return;
+    const previous = this.checks.get(id);
+    if (previous && !replace && !previous.controller.signal.aborted) return previous.work;
+    previous?.controller.abort();
+    let credential: Credential | undefined;
     try {
-      const credential = await this.credentials.read(id);
-      stored = Boolean(credential);
-      auth = provider.authStatus ? await provider.authStatus() : Boolean(resolveKey(provider, credential));
+      credential = this.credentials.snapshot(id);
     } catch (error) {
-      if (this.status.get(id) === entry)
-        this.report(new Error('Could not determine authentication status for ' + id, { cause: error }));
+      this.report(new Error('Could not read authentication configuration for ' + id, { cause: error }));
+      this.setStatus(id, { configured: false }, !replace);
+      return;
     }
-    if (this.status.get(id) !== entry) return;
-    entry.checking = false;
-    const value: AuthStatus = {
-      configured: Boolean(auth),
-      source: stored ? 'stored' : auth ? (typeof auth === 'string' ? auth : 'configured') : undefined,
-    };
-    if (entry.value.configured !== value.configured || entry.value.source !== value.source) {
-      entry.value = value;
-      this.notify();
+    const stored = credential ? 'stored' : undefined;
+    const check = provider.authStatus;
+    if (!check) {
+      const configured = Boolean(resolveKey(provider, credential));
+      this.setStatus(id, { configured, source: stored ?? (configured ? 'configured' : undefined) }, !replace);
+      return;
     }
+    if (replace || !this.status.has(id))
+      this.setStatus(id, { configured: false, source: stored }, false);
+    const controller = new AbortController();
+    const signal = AbortSignal.any([controller.signal, this.lifetime.signal]);
+    const work = Promise.resolve().then(async () => {
+      await previous?.work;
+      if (signal.aborted) return;
+      let auth: boolean | string = false;
+      try {
+        auth = await check(signal);
+      } catch (error) {
+        if (!signal.aborted)
+          this.report(new Error('Could not determine authentication status for ' + id, { cause: error }));
+      }
+      if (!signal.aborted)
+        this.setStatus(id, {
+          configured: Boolean(auth),
+          source: stored ?? (auth ? (typeof auth === 'string' ? auth : 'configured') : undefined),
+        }, true);
+    }).finally(() => {
+      if (this.checks.get(id)?.controller === controller) this.checks.delete(id);
+    });
+    this.checks.set(id, { controller, work });
+    return work;
   }
 
-  private notify() {
+  private notify(kind: 'catalog' | 'auth') {
     try {
-      this.changed();
+      this.changed(kind);
     } catch (error) {
       this.report(error);
     }
@@ -228,13 +267,17 @@ export class ModelStore implements ModelStorePort {
         name: model.name,
         input: model.input,
         configured: this.authStatus(provider).configured,
-        thinkingLevels: model.thinkingLevels,
+        thinkingLevels: getSupportedThinkingLevels(model),
       })),
     );
   }
 
   async available() {
-    for (const id of this.effective.keys()) void this.refreshStatus(id);
+    let catalog: typeof this.effective;
+    do {
+      catalog = this.effective;
+      await Promise.all([...catalog.keys()].map((id) => this.refreshStatus(id)));
+    } while (catalog !== this.effective && !this.lifetime.signal.aborted);
     return this.list();
   }
 
@@ -277,14 +320,11 @@ export class ModelStore implements ModelStorePort {
         custom: !builtin,
         baseUrl,
         api,
-        models: models.map((model) => {
-          const templateId = builtin
-            ? override?.models
-              ? override.models.find(({ id }) => id === model.id)?.templateId
-              : model.id
-            : undefined;
-          return { ...definition(model), ...(templateId === undefined ? {} : { templateId }) };
-        }),
+        models: structuredClone(
+          builtin
+            ? override?.models ?? models.map((model) => ({ ...definition(model), templateId: model.id }))
+            : this.configuration.providers[id].models,
+        ),
         defaultBaseUrl: builtin?.baseUrl ?? '',
         endpointCustomized: override?.baseUrl !== undefined,
         modelsCustomized: override?.models !== undefined,
@@ -299,7 +339,7 @@ export class ModelStore implements ModelStorePort {
   }
 
   authStatus(id: string) {
-    return this.status.get(id)?.value ?? { configured: false };
+    return this.status.get(id) ?? { configured: false };
   }
 
   private async commit(id: string, configuration: ProviderConfiguration, key?: string | null) {
@@ -316,11 +356,6 @@ export class ModelStore implements ModelStorePort {
       }
       throw error;
     }
-    if (key !== undefined)
-      this.status.set(id, {
-        value: { configured: false, source: key === null ? undefined : 'stored' },
-        checking: false,
-      });
     this.publishCatalog(configuration, [id], providers);
   }
 
@@ -373,8 +408,9 @@ export class ModelStore implements ModelStorePort {
   }
 
   async close() {
+    this.lifetime.abort();
     await this.writes;
-    this.status.clear();
+    await Promise.all([...this.checks.values()].map(({ work }) => work));
     await this.credentials.settle();
   }
 
@@ -405,7 +441,7 @@ function definition({ id, name, input, contextWindow, maxTokens, reasoning }: Ca
 }
 
 function capabilities(model: CatalogModel) {
-  return { ...definition(model), thinkingLevels: model.thinkingLevels };
+  return { ...definition(model), thinkingLevels: getSupportedThinkingLevels(model) };
 }
 
 function resolveKey(provider: CatalogProvider, stored: Credential | undefined) {

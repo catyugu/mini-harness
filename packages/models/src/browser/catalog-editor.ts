@@ -62,7 +62,7 @@ export function catalogEditor() {
     image.checked = model?.input.includes('image') ?? false;
     reasoning.checked = model?.reasoning ?? false;
     const read = (): ProviderModelDefinition => ({
-      templateId: model?.templateId,
+      ...model,
       id: id.value.trim(),
       name: name.value.trim() || id.value.trim(),
       contextWindow: context.valueAsNumber,

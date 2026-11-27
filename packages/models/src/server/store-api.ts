@@ -1,7 +1,7 @@
 import type { Api, Model } from '@earendil-works/pi-ai';
-import type { ModelChoice, ThinkingLevel } from '@mini-harness/llm/vocabulary';
+import type { ModelChoice } from '@mini-harness/llm/vocabulary';
 import type { ModelSource } from './api.ts';
-import type { ProtocolInfo, ProviderInfo, ProviderModelDefinition } from '../shared/catalog.ts';
+import type { ModelSummary, ProtocolInfo, ProviderInfo, ProviderModelDefinition } from '../shared/catalog.ts';
 import type { ModelStore } from './store.ts';
 import type { ProviderConnection } from './provider-settings.ts';
 
@@ -10,7 +10,7 @@ export type Credential =
   | { type: 'oauth'; refresh: string; access: string; expires: number; [key: string]: unknown };
 
 export type AuthStatus = { configured: boolean; source?: string };
-export type CatalogModel = Model<Api> & { thinkingLevels: ThinkingLevel[] };
+export type CatalogModel = Model<Api>;
 export interface CatalogProvider extends ProviderConnection {
   id: string;
   name: string;
@@ -18,13 +18,14 @@ export interface CatalogProvider extends ProviderConnection {
   models: readonly CatalogModel[];
   key?: string;
   headers?: Record<string, string | null>;
-  authStatus?(): Promise<boolean | string>;
+  authStatus?(signal: AbortSignal): Promise<boolean | string>;
   endpointOverride?: string;
   discoveryKey?(credential: Credential | undefined, signal: AbortSignal): Promise<string | undefined>;
 }
 
 /** Administration is available only while its adapter provides this capability. */
 export interface ProviderAdministrationPort {
+  available(): Promise<ModelSummary[]>;
   protocols(): ProtocolInfo[];
   providers(): ProviderInfo[];
   defaultModels(id: string): ProviderModelDefinition[];
