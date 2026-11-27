@@ -124,7 +124,15 @@ export function apply(ctx, config) {
       } }, browserPluginSettings(ctx)));
     }
     ctx.effect(() => ctx.miniComposer.command({ name: 'example', description: 'Add a plugin note', run: () => miniComposer.insert('Plugin note') }));
-    ctx.effect(() => ctx.miniMessages.registerTool('ls', () => { const node = document.createElement('p'); node.textContent = 'Custom listing result'; return node; }));
+    ctx.effect(() => ctx.miniMessages.registerTool('ls', () => { const node = document.createElement('p'); node.textContent = 'Custom listing result'; return node; }, 'body', 1));
+    ctx.effect(() => ctx.miniMessages.registerTool('ls', () => {
+      const node = document.createElement('span');
+      node.className = 'ui-truncate';
+      const label = document.createElement('strong');
+      label.textContent = 'Custom directory';
+      node.append(label, ' ' + 'long-path/'.repeat(30));
+      return node;
+    }, 'summary', 1));
   }
 `,
   );
@@ -204,8 +212,22 @@ export function apply(ctx) {
       await expect(page.getByLabel('Latest run')).toHaveAttribute('data-state', 'cancelled');
       release();
     });
-    await page.locator('.tool-card summary').click();
-    await expect(page.getByText('Custom listing result')).toBeVisible();
+    const toolHeader = page.locator('.tool-card summary');
+    await expect(toolHeader).toHaveAccessibleName(/ls.*Custom directory.*long-path\/.*Done/);
+    for (const width of [320, 1440]) {
+      await page.setViewportSize({ width, height: 900 });
+      await expect.poll(() => toolHeader.evaluate((node) => {
+        const row = node.getBoundingClientRect();
+        const status = node.querySelector('.tool-state')!.getBoundingClientRect();
+        const duration = node.querySelector('.tool-duration')!.getBoundingClientRect();
+        const summary = node.querySelector<HTMLElement>('.ui-truncate:last-child') ?? node.querySelector<HTMLElement>('.tool-summary-slot > *');
+        return status.right <= row.right + 1 && duration.right <= status.left + 1 &&
+          Math.abs((duration.top + duration.height / 2) - (status.top + status.height / 2)) < 2 &&
+          !!summary && summary.scrollWidth > summary.clientWidth;
+      })).toBe(true);
+    }
+    await toolHeader.click();
+    await expect(page.locator('.tool-card .tool-content')).toHaveText('Custom listing result');
     await page.getByRole('button', { name: 'Plugin inspector', exact: true }).click();
     await expect(page.getByText('Plugin preview', { exact: true })).toBeVisible();
     await page.getByRole('button', { name: 'Plugin inspector', exact: true }).click();
@@ -272,6 +294,7 @@ export function apply(ctx) {
     await expect(suggestions(page).getByRole('option', { name: /Add a plugin note/ })).toHaveCount(0);
     await expect(page.locator('.tool-card')).toHaveAttribute('open', '');
     await expect(page.getByText('Custom listing result')).toHaveCount(0);
+    await expect(toolHeader).toHaveAccessibleName(/ls.*\..*Done/);
     await expect(page.locator('.tool-content pre').first()).toBeVisible();
   } finally {
     release();

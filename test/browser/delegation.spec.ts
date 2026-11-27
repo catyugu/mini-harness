@@ -97,6 +97,11 @@ test('plugin schema controls, recursive tree navigation, batch export and perman
     await page.getByRole('textbox', { name: 'Message' }).fill('Parent task');
     await page.getByRole('button', { name: 'Send', exact: true }).click();
     await expect(page.getByText('Delegation complete', { exact: true })).toBeVisible();
+    const call = page.locator('.tool-card summary');
+    await expect(call).toHaveAccessibleName(/delegate.*Child task.*Accepted/);
+    await call.click();
+    await expect(page.getByRole('button', { name: 'Open child conversation' })).toBeVisible();
+    await call.click();
     await expect(page.getByText('Child report received', { exact: true }).first()).toBeVisible();
     const notification = page
       .locator('details.async-message')

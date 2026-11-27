@@ -23,9 +23,11 @@ Use `ui-row`, `ui-stack`, `ui-fill`, `ui-fixed`, `ui-truncate`, `ui-scroll` and 
 
 Use `bindPopover(trigger, panel, signal, options)` for a native popover. The returned positioning function can be called immediately after opening; the binding tracks viewport changes and updates the trigger's expanded state. `positionFloating` also works with an already visible non-popover surface.
 
+The internal `textOutput` and `rasterImage` helpers create bounded plain-text and raster-image views. Their callers own the content, composition and any additional styling.
+
 ## Markdown and lifecycle
 
-The internal [`renderMarkdown`](src/browser/markdown.ts) helper parses with the pinned Marked distribution and sanitizes the result with DOMPurify. It allows a defined subset of elements and attributes, removes arbitrary classes, gives external links safe new-window attributes, and wraps tables for horizontal scrolling. Interactive rendering adds copy controls to code blocks. This helper is used by native views; it is not a method of the public `miniPrimitives` service or a separate SDK export.
+The internal [`renderMarkdown`](src/browser/markdown.ts) helper parses with the pinned Marked distribution and sanitizes the result with DOMPurify. It allows a defined subset of elements and attributes, removes arbitrary classes, gives external links safe new-window attributes, and wraps tables for horizontal scrolling. Interactive rendering adds copy controls to code blocks. Streaming and completed Markdown use the same parser, sanitization and layout. Callers supply the original accumulated text without repairing incomplete syntax; `markdownSource` associates the rendered node with that unmodified source. This helper is used by native views; it is not a method of the public `miniPrimitives` service or a separate SDK export.
 
 The `core:primitives` browser Entry is enabled by the [web Profile](../../profiles/web.yml). Its MutationObserver hydrates icons in newly contributed DOM and disconnects on unload. Its stylesheet follows the browser Entry lifetime. It has no configuration or server service, and does not require Settings to render controls.
 

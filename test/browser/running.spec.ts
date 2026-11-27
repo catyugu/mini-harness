@@ -214,16 +214,11 @@ test('running messages can queue follow-ups and run shell commands from the GUI'
     await expect(page.getByRole('button', { name: 'Send', exact: true })).toBeVisible();
     await expect(page.locator('.approval-card')).toHaveCount(0);
     const tool = page.locator('.tool-card');
+    await expect(tool.locator('summary')).toHaveAccessibleName(/shell.*echo approved.*Exit 0/);
     await tool.locator('summary').click();
-    await expect(page.locator('.tool-arguments')).toContainText('echo approved');
-    await expect(page.locator('.tool-content')).toContainText('Exit 0');
-    expect(
-      await page
-        .locator('.tool-content')
-        .evaluate((node) =>
-          [...node.children].findIndex((child) => child.classList.contains('tool-arguments')),
-        ),
-    ).toBe(0);
+    await expect(tool.locator('.tool-content').getByLabel('Command')).toHaveText('echo approved');
+    await expect(tool.locator('.tool-content')).toContainText('Exit 0');
+    await expect(tool.locator('.tool-content')).not.toContainText('"command":');
     await expect(page.locator('.tool-duration')).toHaveText(/\d+ (ms|s)/);
     await expect(page.locator('.tool-exit-code')).toHaveText('Exit 0');
     await expect(page.locator('#runSummary')).toContainText('Completed');
@@ -481,6 +476,7 @@ export const apply = (ctx) => {
     await page.getByRole('textbox', { name: 'Message', exact: true }).fill('Start independent job');
     await page.getByRole('button', { name: 'Send', exact: true }).click();
     await expect(page.locator('.tool-card .tool-state')).toHaveText('Accepted');
+    await expect(page.locator('.tool-card summary')).toHaveAccessibleName(/start background.*fixture_background.*Accepted/);
     await expect(page.getByRole('button', { name: 'Send', exact: true })).toBeVisible();
     await expect(page.getByRole('combobox', { name: 'Message sending mode' })).toBeHidden();
     const tasks = page.locator('.background-tasks');
@@ -528,6 +524,7 @@ export const apply = (ctx) => {
     await page.getByRole('button', { name: 'Send', exact: true }).click();
     await expect(agentToggle).toHaveText('1 subagent');
     await expect(toggle).toHaveText('1 task');
+    await expect(page.locator('.tool-card summary').last()).toHaveAccessibleName(/delegate.*Child fixture.*Accepted/);
 
     await page.setViewportSize({ width: 280, height: 844 });
     const more = page.getByRole('button', { name: 'More conversation controls', exact: true });

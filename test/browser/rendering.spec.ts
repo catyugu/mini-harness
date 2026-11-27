@@ -100,7 +100,7 @@ export const apply = (ctx) => {
           document.body.dataset.activeFailedRenderers = String(Number(document.body.dataset.activeFailedRenderers) - 1);
         }, { once: true });
         throw new Error('broken fixture tool renderer');
-      }));
+      }, 'body', 1));
     };
 `,
   );
@@ -158,8 +158,7 @@ export const apply = (ctx) => {
     expect(copied).toMatch(/```text[ \t]*\nExample[ \t]*\n```/);
     await expect(page.locator('.message img, .message .overlay')).toHaveCount(0);
     await expect(page.getByText('A tool note')).toBeVisible();
-    await expect(page.locator('.tool-card summary')).toContainText('ls');
-    await expect(page.locator('.tool-card summary')).toContainText('Done');
+    await expect(page.locator('.tool-card summary')).toHaveAccessibleName(/ls.*\..*Done/);
     const reasoning = turn.locator('.assistant-reasoning');
     const reasonHeader = reasoning.locator('summary');
     const toolHeader = turn.locator('.tool-card summary');
@@ -257,10 +256,11 @@ export const apply = (ctx) => {
     await expect(finishedTools.last()).not.toHaveAttribute('open', '');
     await page.reload();
     await expect(finishedTools.locator('summary strong')).toHaveText(['ls', 'read']);
+    await expect(finishedTools.last().locator('summary')).toHaveAccessibleName(/read.*sample\.txt.*Done/);
 
     await prompt.fill('Stop this tool');
     await page.getByRole('button', { name: 'Send', exact: true }).click();
-    await expect(page.locator('.tool-card[data-state=running]')).toContainText('wait for stop');
+    await expect(page.locator('.tool-card[data-state=running] summary')).toHaveAccessibleName(/wait for stop.*Running/);
     await page.getByRole('button', { name: 'Stop response' }).click();
     const cancelled = page.locator('.tool-card[data-state=cancelled]');
     await expect(cancelled.locator('.tool-state')).toHaveText('Cancelled');
@@ -280,21 +280,59 @@ test('a long response updates only its view and restores from current state when
   page,
 }) => {
   let releaseMore = () => {},
+    releaseMarkdown = () => {},
+    releaseTail = () => {},
     finish = () => {};
   const more = new Promise<void>((resolve) => {
     releaseMore = resolve;
+  });
+  const markdown = new Promise<void>((resolve) => {
+    releaseMarkdown = resolve;
+  });
+  const tail = new Promise<void>((resolve) => {
+    releaseTail = resolve;
   });
   const end = new Promise<void>((resolve) => {
     finish = resolve;
   });
   const paragraphs = Array.from({ length: 48 }, (_, index) => 'Paragraph ' + (index + 1)).join('\n\n');
+  const section = (index: number) =>
+    [
+      '## Report section ' + index,
+      '',
+      'A structured report describes observations, evidence and implementation decisions. '.repeat(6),
+      '',
+      '- Inspect the source',
+      '- Verify the outcome',
+      '',
+      '```text',
+      'Example output',
+      '```',
+      '',
+      '| Name | Value |',
+      '| --- | --- |',
+      '| Result | Accepted |',
+      '',
+    ].join('\n');
+  const report = Array.from({ length: 90 }, (_, index) => section(index + 1)).join('\n');
+  expect(Buffer.byteLength(report)).toBeGreaterThan(50 * 1024);
   const mock = await createMockProvider(async function* () {
     yield 'Beginning ';
     await more;
     for (let count = 0; count < 2300; count++) yield 'x';
     yield ' through the window\n\n' + paragraphs;
-    await end;
+    await markdown;
+    yield '\n\n### Streamed heading\n\n**bo';
+    yield 'ld** and `inline`\n\n1. First step\n2. Second step\n\n';
+    yield '```text\nStreaming code\n```\n\n| Key | Value |\n| --- | --- |\n| One | Two |\n\n';
+    yield '<img src=x onerror="alert(1)">\n\n<p class="overlay">Safe text</p>\n\n';
+    for (let offset = 0; offset < report.length; offset += 83) {
+      yield report.slice(offset, offset + 83);
+      if (offset % (83 * 16) === 0) await new Promise<void>((resolve) => setImmediate(resolve));
+    }
+    await tail;
     yield '\n\nFinal paragraph';
+    await end;
   });
   const { root, paths } = createFixturePaths(mock.url);
   const folder = join(paths.plugins, 'stream-observer');
@@ -378,11 +416,46 @@ export const apply = (ctx) => {
     await expect(page.locator('#replacement-stream')).toContainText('Paragraph 48');
     await page.evaluate(() => window.dispatchEvent(new Event('restore-history')));
     await expect.poll(distanceFromEnd).toBeLessThan(8);
+    const previous = await page.locator('.message.user').elementHandle();
+    const preview = history.locator('.message.assistant');
+    const cdp = await page.context().newCDPSession(page);
+    await cdp.send('Performance.enable');
+    const before = await cdp.send('Performance.getMetrics');
+    releaseMarkdown();
+    await expect(preview.getByRole('heading', { name: 'Streamed heading' })).toBeAttached();
+    await expect(preview.locator('strong').first()).toHaveText('bold');
+    await expect(preview.locator('p > code')).toHaveText('inline');
+    await expect(preview.locator('ol > li')).toHaveText(['First step', 'Second step']);
+    await expect(preview.locator('pre > code').first()).toHaveText('Streaming code');
+    await expect(preview.getByRole('table').first()).toContainText('One');
+    await expect(preview.getByRole('heading', { name: 'Report section 90' })).toBeAttached();
+    await expect(preview.locator('img, .overlay')).toHaveCount(0);
+    await expect(preview.getByText('Safe text')).toBeAttached();
+    await expect(page.getByRole('button', { name: 'Stop response' })).toBeEnabled();
+    await expect.poll(distanceFromEnd).toBeLessThan(8);
+    expect(await previous.evaluate((node) => node.isConnected)).toBe(true);
+    const after = await cdp.send('Performance.getMetrics');
+    const metrics = ['TaskDuration', 'ScriptDuration', 'LayoutDuration'].map((name) => {
+      const value = (sample: typeof before) => sample.metrics.find((metric) => metric.name === name)!.value;
+      return name + '=' + (value(after) - value(before)).toFixed(3) + 's';
+    });
+    console.log('50 KB native Markdown stream: ' + metrics.join(', '));
+    await cdp.detach();
+    const prompt = page.getByRole('textbox', { name: 'Message' });
+    await prompt.fill('Draft during streaming');
+    await expect(prompt).toHaveText('Draft during streaming');
+    await prompt.fill('');
     await history.hover();
-    await page.mouse.wheel(0, -3000);
+    await page.mouse.wheel(0, -100000);
     await expect.poll(() => history.evaluate((node) => node.scrollTop)).toBeLessThan(8);
+    releaseTail();
+    await expect(preview.getByText('Final paragraph', { exact: true })).toBeAttached();
+    await expect(page.getByRole('button', { name: 'Stop response' })).toBeEnabled();
+    expect(await history.evaluate((node) => node.scrollTop)).toBeLessThan(8);
+    const liveHtml = await preview.innerHTML();
     finish();
     await expect(page.getByLabel('Latest run')).toHaveAttribute('data-state', 'completed');
+    await expect(preview).toHaveJSProperty('innerHTML', liveHtml);
     await expect(page.locator('.message.assistant')).toHaveCount(1);
     await expect(page.locator('.message.user')).toHaveCount(1);
     await expect(history.getByText('Final paragraph', { exact: true })).toBeAttached();
@@ -394,6 +467,8 @@ export const apply = (ctx) => {
     await expect.poll(distanceFromEnd).toBeLessThan(8);
   } finally {
     releaseMore();
+    releaseMarkdown();
+    releaseTail();
     finish();
     await page.close();
     await service.stop();

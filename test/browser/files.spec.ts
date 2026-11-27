@@ -207,6 +207,7 @@ test('an open file preview and diff refresh after an agent write', async ({ page
     await page.getByRole('textbox', { name: 'Message', exact: true }).fill('Update the file @"update.js"');
     await page.getByRole('button', { name: 'Send', exact: true }).click();
     await expect(panel.locator('.file-preview')).toContainText('const updated = 2;');
+    await expect(page.locator('.tool-card summary')).toHaveAccessibleName(/write.*update\.js.*Done/);
     await panel.getByRole('tab', { name: 'Diff: update.js', exact: true }).click();
     await expect(panel.locator('.diff .added')).toContainText(['+const updated = 1;', '+const updated = 2;']);
     const preview = panel.getByRole('tab', { name: 'update.js', exact: true });
