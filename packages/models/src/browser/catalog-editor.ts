@@ -7,6 +7,7 @@ import {
   required,
   toggle,
 } from '@mini-harness/ui-primitives/primitives';
+import { icon } from '@mini-harness/ui-primitives/icons';
 import { maxModelTokens, modelDefaults, type ProviderModelDefinition } from '../shared/pi-provider.ts';
 import type { ProviderModel } from '../shared/catalog.ts';
 
@@ -68,26 +69,43 @@ export function catalogEditor() {
     }));
     const expand = iconButton('Advanced model settings', 'chevron');
     const remove = iconButton('Remove model', 'trash');
-    function move(up: boolean) {
-      const neighbor = up ? node.previousElementSibling : node.nextElementSibling;
-      if (!neighbor) return;
-      if (up) neighbor.before(node);
-      else neighbor.after(node);
-      customized = true;
+    const handle = fromMarkup('<span class="catalog-drag" title="Drag to reorder" aria-label="Drag to reorder"></span>');
+    handle.append(icon({ path: 'M9 5h.01M15 5h.01M9 12h.01M15 12h.01M9 19h.01M15 19h.01' }));
+    let target: HTMLElement | undefined;
+    function clearTarget() {
+      if (target) delete target.dataset.drop;
+      target = undefined;
     }
-    const up = iconButton('Move model up', 'chevron', 'catalog-up');
-    const down = iconButton('Move model down', 'chevron', 'catalog-down');
-    up.onclick = () => {
-      move(true);
-      up.focus();
+    handle.onpointerdown = (event) => {
+      if (!event.isPrimary || event.button !== 0) return;
+      event.preventDefault();
+      handle.setPointerCapture(event.pointerId);
+      node.dataset.dragging = '';
     };
-    down.onclick = () => {
-      move(false);
-      down.focus();
+    handle.onpointermove = (event) => {
+      if (!handle.hasPointerCapture(event.pointerId)) return;
+      clearTarget();
+      const candidate = document.elementFromPoint(event.clientX, event.clientY)?.closest<HTMLElement>('.catalog-model');
+      if (!candidate || candidate === node || candidate.parentElement !== list) return;
+      target = candidate;
+      const rect = candidate.getBoundingClientRect();
+      target.dataset.drop = event.clientY < rect.top + rect.height / 2 ? 'before' : 'after';
     };
-    const order = fromMarkup('<div class="ui-actions catalog-order"></div>');
-    order.append(up, down);
-    advanced.append(order);
+    handle.onpointerup = () => {
+      if (!target) return;
+      const destination = target;
+      const before = destination.dataset.drop === 'before';
+      clearTarget();
+      delete node.dataset.dragging;
+      if (before) destination.before(node);
+      else destination.after(node);
+      customized = true;
+    };
+    handle.onlostpointercapture = () => {
+      clearTarget();
+      delete node.dataset.dragging;
+    };
+    row.prepend(handle);
     expand.setAttribute('aria-expanded', 'false');
     expand.onclick = () => {
       advanced.hidden = !advanced.hidden;

@@ -49,12 +49,9 @@ export function providerEditor(
   function renderDraft(selected: ProviderInfo | undefined, custom: boolean) {
     error.textContent = '';
     fields.replaceChildren();
-    if (!selected && !custom) {
-      form.onsubmit = (event) => {
-        event.preventDefault();
-        report('Choose a provider');
-        required(form.querySelector('select')).focus();
-      };
+    save.disabled = !selected && !custom;
+    if (save.disabled) {
+      form.onsubmit = (event) => event.preventDefault();
       return;
     }
 

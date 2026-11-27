@@ -11,13 +11,9 @@ import { icon } from '@mini-harness/ui-primitives/icons';
 import type { ProviderInfo, ProtocolInfo } from '../shared/pi-provider.ts';
 import { providerEditor } from './provider-editor.ts';
 
-const listed = ({
-  configured,
-  storedCredential,
-  custom,
-  endpointCustomized,
-  modelsCustomized,
-}: ProviderInfo) => configured || storedCredential || custom || endpointCustomized || modelsCustomized;
+const removable = (provider: ProviderInfo) =>
+  provider.custom || provider.storedCredential || provider.endpointCustomized || provider.modelsCustomized;
+const listed = (provider: ProviderInfo) => provider.configured || removable(provider);
 
 export function providerManager(
   ctx: Context,
@@ -111,12 +107,7 @@ export function providerManager(
           editButton.dataset.provider = provider.id;
           editButton.onclick = () => edit(card, provider);
           actions.append(editButton);
-          if (
-            provider.custom ||
-            provider.storedCredential ||
-            provider.endpointCustomized ||
-            provider.modelsCustomized
-          ) {
+          if (removable(provider)) {
             const remove = iconButton('Remove ' + provider.name, 'trash');
             remove.onclick = async () => {
               if (
