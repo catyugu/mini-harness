@@ -16,7 +16,7 @@ interface Tab {
 }
 
 interface WorkspaceTabs {
-  open: boolean;
+  rememberedOpen: boolean;
   tabs: Tab[];
   active?: Tab;
 }
@@ -42,7 +42,7 @@ export function createRightTabs(
   const state = (id: string) => {
     let workspace = states.get(id);
     if (!workspace) {
-      workspace = { open: false, tabs: [] };
+      workspace = { rememberedOpen: false, tabs: [] };
       states.set(id, workspace);
     }
     return workspace;
@@ -150,7 +150,7 @@ export function createRightTabs(
     const workspace = current();
     const open = layout.panelOpen();
     if (workspace) {
-      workspace.open = open;
+      workspace.rememberedOpen = open;
       for (const tab of workspace.tabs) {
         if (!tab.view) continue;
         const { node } = tab.view;
@@ -160,9 +160,9 @@ export function createRightTabs(
     }
     const openedBeforeSelection = !scope && open;
     scope = workspaceId ? { workspaceId } : undefined;
-    if (workspaceId && openedBeforeSelection) state(workspaceId).open = true;
+    const restoreOpen = workspaceId ? openedBeforeSelection || state(workspaceId).rememberedOpen : false;
     workspaceChanges.dispatchEvent(new Event('change'));
-    layout.setPanel(current()?.open ?? false);
+    layout.setPanel(restoreOpen);
     render();
   }
 
@@ -220,7 +220,7 @@ export function createRightTabs(
       render(true);
     } else {
       target.active = tab;
-      target.open = true;
+      target.rememberedOpen = true;
     }
   }
 

@@ -136,3 +136,39 @@ test('desktop navigation resizes within bounds and remembers its width', async (
   await page.setViewportSize({ width: 1440, height: 900 });
   await expect(sidebar).toHaveCSS('width', '380px');
 });
+
+test('first frame already uses the correct layout at the mobile boundary', async ({ page, launch }) => {
+  const { host } = await launch();
+  await page.addInitScript(() => {
+    const observer = new MutationObserver(() => {
+      const root = document.getElementById('app');
+      if (!root) return;
+      observer.disconnect();
+      requestAnimationFrame(() => {
+        const sidebar = document.getElementById('sidebar')!;
+        const resize = document.getElementById('sidebarResize')!;
+        document.documentElement.dataset.firstLayout = [
+          getComputedStyle(sidebar).position,
+          resize.hidden,
+          sidebar.inert,
+          getComputedStyle(sidebar).width,
+        ].join(':');
+      });
+    });
+    observer.observe(document, { childList: true, subtree: true });
+  });
+  for (const width of [860, 861]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto(host.url + '/#token=' + host.token);
+    await expect(page.locator('html')).toHaveAttribute('data-first-layout',
+      width === 860 ? 'fixed:true:true:300px' : 'relative:false:false:340px');
+  }
+  await page.setViewportSize({ width: 860, height: 900 });
+  await expect(page.locator('#sidebarResize')).toBeHidden();
+  await page.getByRole('button', { name: 'Toggle navigation' }).click();
+  await expect(page.getByRole('dialog', { name: 'Conversations' })).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('button', { name: 'Toggle navigation' })).toBeFocused();
+  await page.setViewportSize({ width: 861, height: 900 });
+  await expect(page.getByRole('separator', { name: 'Resize navigation sidebar' })).toBeVisible();
+});

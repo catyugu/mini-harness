@@ -44,7 +44,7 @@ Tabs survive conversation switches. Switching workspaces detaches their views an
 
 On desktop, the navigation sidebar starts at 340 CSS pixels and can be resized from 280 to 380 pixels by dragging its inner edge or using the arrow keys on the focused separator. The browser remembers the selected width, including across reloads and collapse/expand. The sidebar width and collapse state are controlled by the user. Layout reduces the workspace panel's displayed width to reserve space for the main area, then switches it to a modal drawer if the three regions no longer fit. The panel retains its selected width and mounted tabs as space returns. On mobile the navigation remains an overlay drawer without a resize handle.
 
-Layout has no plugin configuration. Its responsive behavior and resize state are implemented in [`layout.ts`](src/browser/layout.ts); typed tab ownership is implemented in [`right-tabs.ts`](src/browser/right-tabs.ts).
+Layout has no plugin configuration. [`layout-state.ts`](src/browser/layout-state.ts) owns desktop geometry and resolves the pure layout projection; the 520px budget applies only to right-panel docking. [`layout.ts`](src/browser/layout.ts) owns preferences and interaction state, projects the initial frame before insertion, and manages DOM and focus effects. Resizing the window never writes back to preferences. [`right-tabs.ts`](src/browser/right-tabs.ts) remembers the panel's visibility only at workspace boundaries; the active panel is controlled by Layout.
 
 ## Verification
 

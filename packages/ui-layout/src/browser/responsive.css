@@ -1,40 +1,36 @@
 @layer layout {
-  @media (max-width: 860px) {
-    .sidebar {
-      position: fixed;
-      z-index: 3;
-      inset: 0 auto auto 0;
-      height: var(--app-height, 100dvh);
-      width: min(300px, 88vw);
-      padding-top: max(14px, env(safe-area-inset-top));
-      padding-bottom: max(10px, env(safe-area-inset-bottom));
-      transform: translateX(-100%);
-      transition: transform var(--motion-sidebar) ease-out;
-    }
-    .sidebar.open {
-      transform: translateX(0);
-    }
-    .mobile-only {
-      display: block;
-    }
-    .topbar {
-      padding-inline: 10px;
-      gap: 7px;
-    }
-    .sidebar {
-      overflow: hidden;
-    }
-    #sidebarExtensions {
-      flex-shrink: 0;
-    }
-    .nav-action {
-      min-height: 44px;
-    }
+  .mobile-layout .sidebar {
+    position: fixed;
+    z-index: 3;
+    inset: 0 auto auto 0;
+    height: var(--app-height, 100dvh);
+    width: min(300px, 88vw);
+    padding-top: max(14px, env(safe-area-inset-top));
+    padding-bottom: max(10px, env(safe-area-inset-bottom));
+    transform: translateX(-100%);
+    transition: transform var(--motion-sidebar) ease-out;
+  }
+  .mobile-layout .sidebar.open {
+    transform: translateX(0);
+  }
+  .mobile-layout .mobile-only {
+    display: block;
+  }
+  .mobile-layout .topbar {
+    padding-inline: 10px;
+    gap: 7px;
+  }
+  .mobile-layout .sidebar {
+    overflow: hidden;
+  }
+  .mobile-layout #sidebarExtensions {
+    flex-shrink: 0;
+  }
+  .mobile-layout .nav-action {
+    min-height: 44px;
   }
   .sidebar-collapsed .sidebar {
     display: flex;
-    width: 56px;
-    flex-basis: 56px;
     padding-inline: 8px;
   }
   .sidebar-collapsed .sidebar :is(.brand span, .nav-label) {
@@ -52,10 +48,8 @@
   .sidebar-collapsed .sidebar-top {
     padding-inline: 6px;
   }
-  @media (min-width: 861px) {
-    .mobile-only {
-      display: none;
-    }
+  .app:not(.mobile-layout) .mobile-only {
+    display: none;
   }
   #sidebarExtensions:not(:empty) {
     margin-top: 8px;
@@ -117,8 +111,8 @@
     min-height: 0;
     overflow: auto;
   }
-  @media (max-width: 860px) and (max-height: 650px) {
-    .sidebar-top {
+  @media (max-height: 650px) {
+    .mobile-layout .sidebar-top {
       padding-block: 0 5px;
     }
   }

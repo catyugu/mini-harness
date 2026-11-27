@@ -78,7 +78,6 @@ function createAppFrame(
   </aside>
   <div id="dialogSlot"></div>
 </div>`);
-  document.body.append(root);
   signal.addEventListener('abort', () => root.remove(), { once: true });
   const { element } = scopedElements(root);
   const placeHeader = createHeaderOutlet(
@@ -106,6 +105,8 @@ function createAppFrame(
     },
     signal,
   );
+  // The frame's initial geometry and modal attributes are projected before it can paint.
+  document.body.append(root);
   const tabs = createRightTabs(
     {
       root: element('inspector'),
