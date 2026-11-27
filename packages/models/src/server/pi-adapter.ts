@@ -154,9 +154,7 @@ export class PiLlm implements LlmAdapter {
       );
     }
     if (
-      request.messages.some(
-        (message) => message.content.some((part) => part.type === 'image'),
-      ) &&
+      request.messages.some((message) => message.content.some((part) => part.type === 'image')) &&
       !model.input.includes('image')
     )
       throw new Error(

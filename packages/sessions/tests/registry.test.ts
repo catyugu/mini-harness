@@ -152,12 +152,10 @@ test('a corrupt log is isolated, remains deletable and never creates a log for a
   const unopened = registry.create();
   registry.log(damaged.id);
   const invalid = nativeFile(paths, damaged);
-  registry
-    .log(healthy.id)
-    .append({
-      type: 'message',
-      message: { role: 'user', content: [{ type: 'text', text: 'intact' }], timestamp: Date.now() },
-    });
+  registry.log(healthy.id).append({
+    type: 'message',
+    message: { role: 'user', content: [{ type: 'text', text: 'intact' }], timestamp: Date.now() },
+  });
   registry.dispose();
   appendFileSync(invalid, '{"checksum":"bad"}\n');
   const restored = new SessionRegistry(paths);

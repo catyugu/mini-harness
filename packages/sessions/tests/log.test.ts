@@ -240,7 +240,9 @@ test('compaction and context edits change model context without deleting convers
   );
   assert.deepEqual(
     log.projection().contextMessages.map(({ content }) => content),
-    ['Summary of earlier conversation:\nSummary', 'redacted recent context', 'new question'].map((text) => [{ type: 'text', text }]),
+    ['Summary of earlier conversation:\nSummary', 'redacted recent context', 'new question'].map((text) => [
+      { type: 'text', text },
+    ]),
   );
   assert.equal(log.projection().contextEntryIds[1], keep.id);
   assert.equal(log.projection().contextEntryIds.length, log.projection().contextMessages.length);
@@ -263,7 +265,10 @@ test('attachments retain full model input while display keeps the submitted text
   const state = log.projection();
   assert.deepEqual(state.timeline.filter(isViewMessage)[0].content, [{ type: 'text', text: 'read this' }]);
   assert.equal(
-    expectPresent(state.timeline.filter(isViewMessage).find((entry) => entry.role === 'user')?.attachments[0], 'session attachment').name,
+    expectPresent(
+      state.timeline.filter(isViewMessage).find((entry) => entry.role === 'user')?.attachments[0],
+      'session attachment',
+    ).name,
     'secret.txt',
   );
   assert.match(JSON.stringify(state.contextMessages[0].content), /contents/);

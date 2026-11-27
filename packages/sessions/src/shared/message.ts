@@ -1,7 +1,13 @@
 import type { SessionDisplayRecord } from './display-record.ts';
 import type { MessageOrigin } from './queue.ts';
 import type { RunTermination } from './run-state.ts';
-import type { NativeAssistantMessage, NativeContent, NativeToolMessage, TextPart, ToolResultState } from '@mini-harness/llm/api';
+import type {
+  NativeAssistantMessage,
+  NativeContent,
+  NativeToolMessage,
+  TextPart,
+  ToolResultState,
+} from '@mini-harness/llm/api';
 import type { InputAttachment } from '@mini-harness/input/message';
 
 export type MessageContent = NativeContent[];

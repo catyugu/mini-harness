@@ -194,9 +194,7 @@ test('automatic compaction preserves the pending multimodal input and accepts a 
   assert.equal(normal.length, 2);
   const prepared = log.requestSnapshot(normal[1].id);
   assert.deepEqual(prepared.messages.at(-1), submitted.message);
-  assert.ok(
-    submitted.message.content.some((part) => part.type === 'image'),
-  );
+  assert.ok(submitted.message.content.some((part) => part.type === 'image'));
   const counts = prepared.inputMeasurement;
   assert.ok(counts && totalTokens(counts) > counts.budget * targetRatio);
   assert.ok(totalTokens(counts) <= counts.budget);
@@ -376,9 +374,7 @@ test('image rejection offloads all historical images and an irreducible overflow
   assert.equal(imageRequests, 2);
   const log = ctx.harnessSessions.log(session.id);
   const images = (content: ReturnType<typeof log.context>['contextMessages']) =>
-    content.flatMap((message) =>
-      message.content.filter((part) => part.type === 'image'),
-    );
+    content.flatMap((message) => message.content.filter((part) => part.type === 'image'));
   assert.equal(images(log.context().contextMessages).length, 1);
   const requests = log.entries().filter(({ type }) => type === 'model-request');
   const rejected = log.requestSnapshot(requests.at(-2)!.id);

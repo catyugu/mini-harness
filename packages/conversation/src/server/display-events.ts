@@ -26,10 +26,14 @@ export function projectTool(ctx: Context, projection: ToolProjection) {
     try {
       const result = callback(structuredClone({ ...projection, content }));
       if (result === undefined) continue;
-      if (!Array.isArray(result) || !result.every((block) =>
-        block?.type === 'text' ? typeof block.text === 'string' :
-        block?.type === 'image' && typeof block.data === 'string' && typeof block.mimeType === 'string'
-      ))
+      if (
+        !Array.isArray(result) ||
+        !result.every((block) =>
+          block?.type === 'text'
+            ? typeof block.text === 'string'
+            : block?.type === 'image' && typeof block.data === 'string' && typeof block.mimeType === 'string',
+        )
+      )
         throw new Error('Invalid tool projection');
       content = structuredClone(result);
     } catch (error) {

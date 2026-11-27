@@ -22,9 +22,9 @@ test('conversation edits branch the native session instead of appending and enfo
   const before = (await request('/sessions/' + session.id)).body;
   const textOf = (message: any) =>
     message.content
-          .filter((block: any) => block.type === 'text')
-          .map((block: any) => block.text)
-          .join('\n');
+      .filter((block: any) => block.type === 'text')
+      .map((block: any) => block.text)
+      .join('\n');
   const first = before.timeline.find(
     (message: { role: string; content: unknown; id?: string }) =>
       message.role === 'user' && textOf(message) === 'Original first',

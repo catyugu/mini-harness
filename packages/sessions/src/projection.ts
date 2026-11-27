@@ -77,9 +77,12 @@ export function displayMessage(
         toolState: message.state,
         arguments: toolArguments,
         elapsedMs: (entry.type === 'message' ? entry.elapsedMs : undefined) ?? message.elapsedMs,
-        details: details && detailKeys
-          ? Object.fromEntries(detailKeys.filter((key) => Object.hasOwn(details, key)).map((key) => [key, details[key]]))
-          : undefined,
+        details:
+          details && detailKeys
+            ? Object.fromEntries(
+                detailKeys.filter((key) => Object.hasOwn(details, key)).map((key) => [key, details[key]]),
+              )
+            : undefined,
       };
     }
   }

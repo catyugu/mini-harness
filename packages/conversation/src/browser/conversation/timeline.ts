@@ -3,7 +3,10 @@ import type { LiveRecord, ToolProgress } from '@mini-harness/runs/stream';
 import type { MessageActionTarget } from '../history-api.ts';
 
 export const textOf = (content: MessageContent = []) =>
-  content.filter((part) => part.type === 'text').map(({ text }) => text).join('\n');
+  content
+    .filter((part) => part.type === 'text')
+    .map(({ text }) => text)
+    .join('\n');
 
 export function hasContent(entry: HistoryEntry) {
   if (entry.type !== 'message' || entry.role === 'toolResult') return true;

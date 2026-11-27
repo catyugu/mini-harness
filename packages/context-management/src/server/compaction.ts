@@ -40,19 +40,19 @@ function transcript(messages: NativeMessage[]) {
         role +
         ': ' +
         content
-              .map((part) => {
-                switch (part.type) {
-                  case 'text':
-                    return part.text;
-                  case 'thinking':
-                    return part.thinking;
-                  case 'image':
-                    return '[Image in original conversation]';
-                  case 'toolCall':
-                    return part.name + ' ' + JSON.stringify(part.arguments);
-                }
-              })
-              .join('\n'),
+          .map((part) => {
+            switch (part.type) {
+              case 'text':
+                return part.text;
+              case 'thinking':
+                return part.thinking;
+              case 'image':
+                return '[Image in original conversation]';
+              case 'toolCall':
+                return part.name + ' ' + JSON.stringify(part.arguments);
+            }
+          })
+          .join('\n'),
     )
     .join('\n\n');
 }

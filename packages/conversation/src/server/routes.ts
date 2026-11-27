@@ -86,9 +86,9 @@ export function registerSessionRoutes(ctx: Context, read: (id: string) => Conver
         for (const message of messages.reverse()) {
           if (message.role === 'toolResult') continue;
           const content = message.content
-                  .filter((part) => part.type === 'text')
-                  .map((part) => part.text)
-                  .join(' ');
+            .filter((part) => part.type === 'text')
+            .map((part) => part.text)
+            .join(' ');
           hit = find(id, 'message', content.slice(0, 32768));
           if (hit) break;
         }
