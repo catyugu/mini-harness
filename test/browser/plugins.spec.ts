@@ -175,7 +175,10 @@ export function apply(ctx) {
       await chooseModel(page, 'responsive-model');
       const thinking = page.locator('#thinkingLevel');
       await thinking.click();
-      await page.getByRole('listbox', { name: 'Thinking levels' }).getByRole('option', { name: 'High', exact: true }).click();
+      await page
+        .getByRole('listbox', { name: 'Thinking levels' })
+        .getByRole('option', { name: 'High', exact: true })
+        .click();
       await expect.poll(controlsFit).toBe(true);
 
       await page.getByRole('button', { name: 'Open workspace panel' }).click();
