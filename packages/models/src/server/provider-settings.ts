@@ -83,11 +83,13 @@ function modelName(value: unknown, id: string) {
 /** Parse independent model fields, inheriting only from an explicitly selected native template. */
 function parseModel(entry: RecordValue, baseline?: ProviderModel): ModelConfig {
   const id = modelId(entry.id);
-  const name = modelName(entry.name ?? baseline?.name, id);
-  const input = entry.input ?? baseline?.input ?? ['text'];
-  const reasoning = entry.reasoning ?? baseline?.reasoning ?? false;
-  const contextWindow = entry.contextWindow ?? baseline?.contextWindow ?? modelDefaults.contextWindow;
-  const maxTokens = entry.maxTokens ?? baseline?.maxTokens ?? modelDefaults.maxTokens;
+  const {
+    name = baseline?.name,
+    input = baseline?.input ?? ['text'],
+    reasoning = baseline?.reasoning ?? false,
+    contextWindow = baseline?.contextWindow ?? modelDefaults.contextWindow,
+    maxTokens = baseline?.maxTokens ?? modelDefaults.maxTokens,
+  } = entry;
   if (!modelCapacity(contextWindow) || !modelCapacity(maxTokens))
     throw invalid('Invalid model token limits for ' + id);
   if (
@@ -98,7 +100,7 @@ function parseModel(entry: RecordValue, baseline?: ProviderModel): ModelConfig {
   )
     throw invalid('Invalid model input modalities for ' + id);
   if (typeof reasoning !== 'boolean') throw invalid('Invalid reasoning capability for ' + id);
-  return { id, name, input, reasoning, contextWindow, maxTokens };
+  return { id, name: modelName(name, id), input, reasoning, contextWindow, maxTokens };
 }
 
 function parseModels<T extends ModelConfig>(value: unknown, parse: (entry: RecordValue) => T): T[] {

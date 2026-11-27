@@ -21,7 +21,7 @@ When adding both a model and its transport, use [Models' paired registration](..
 
 ## Selection and lifetime
 
-Selection searches the caller's scope ancestry. The nearest matching scope wins, followed by the highest priority in that scope. `select` returns the adapter, `undefined` when absent, or `null` for an equal-ranked ambiguity. `stream` rejects absent and ambiguous selections.
+The LLM service publishes `llm/adapters-changed` after changing registrations; the model catalog owns the resulting availability notification. Selection searches the caller's scope ancestry. The nearest matching scope wins, followed by the highest priority in that scope. `select` returns the adapter, `undefined` when absent, or `null` for an equal-ranked ambiguity. `stream` rejects absent and ambiguous selections.
 
 `accepts` must be a pure predicate on the model choice. It must not re-enter aggregate model or adapter selection, which would recurse. Use provider/model identifiers or the adapter's own source.
 

@@ -73,6 +73,17 @@ test('model adapter streams native messages, tool calls and metadata through the
   const configured = adapter.list().find(({ provider }) => provider === 'local-mock');
   assert.ok(configured);
   assert.equal(configured.configured, true);
+
+  await adapter.saveProvider({
+    id: choice.provider,
+    name: 'Updated provider',
+    api: 'openai-responses',
+    baseUrl: mock.url + '/new',
+    models: [{ id: choice.id, api: 'openai-completions', baseUrl: mock.url }],
+  });
+  const selected = adapter.requestModel(choice)?.model;
+  assert.equal(selected?.api, 'openai-responses');
+  assert.equal(selected?.baseUrl, mock.url + '/new');
 });
 
 test('credential updates serialize across providers and survive adapter replacement without leaking keys', async (t) => {
@@ -303,6 +314,7 @@ test('authentication and observer failures do not undo provider commits or preve
     JSON.parse(readFileSync(join(paths.home, 'auth.json'), 'utf8'))['other-provider'].key,
     'second-secret',
   );
+  assert.equal(store.providers().find(({ id }) => id === 'other-provider')?.storedCredential, true);
   await unregister();
   assert.equal(
     store.providers().some(({ id }) => id === provider.id),

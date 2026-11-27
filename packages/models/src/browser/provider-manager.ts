@@ -5,8 +5,8 @@ import { icon } from '@mini-harness/ui-primitives/icons';
 import type { ProviderInfo, ProtocolInfo } from '../shared/catalog.ts';
 import { providerEditor } from './provider-editor.ts';
 
-const listed = ({ configured, custom, endpointCustomized, modelsCustomized }: ProviderInfo) =>
-  configured || custom || endpointCustomized || modelsCustomized;
+const listed = ({ configured, storedCredential, custom, endpointCustomized, modelsCustomized }: ProviderInfo) =>
+  configured || storedCredential || custom || endpointCustomized || modelsCustomized;
 
 export function providerManager(
   ctx: Context,

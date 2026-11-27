@@ -1,7 +1,7 @@
 import type { Api, Model } from '@earendil-works/pi-ai';
 import type { ModelChoice } from '@mini-harness/llm/vocabulary';
 import type { ModelSource } from './api.ts';
-import type { ProviderInfo, ProviderModel } from '../shared/catalog.ts';
+import type { ProviderInfo, ProviderModel, ProviderModelDefinition } from '../shared/catalog.ts';
 import type { ModelStore } from './store.ts';
 import type { ProviderConnection } from './provider-settings.ts';
 
@@ -27,7 +27,7 @@ export interface CatalogProvider extends ProviderConnection {
 
 export interface ModelStorePort extends ModelSource {
   providers(): ProviderInfo[];
-  defaultModels(id: string): ProviderModel[];
+  defaultModels(id: string): ProviderModelDefinition[];
   saveProvider(input: unknown): Promise<string>;
   removeProvider(input: unknown): Promise<string>;
   discoverModels(input: unknown, signal: AbortSignal): Promise<ProviderModel[]>;

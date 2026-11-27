@@ -193,19 +193,18 @@ export class ModelStore implements ModelStorePort {
       [...ids].map(async (id) => {
         const provider = this.provider(id);
         if (!provider) return;
+        let stored = false;
+        let auth: boolean | string = false;
         try {
-          const stored = await this.credentials.read(id);
-          const auth = provider.authStatus
-            ? await provider.authStatus()
-            : Boolean(await this.apiKey(provider));
-          this.status.set(id, {
-            configured: Boolean(auth),
-            source: auth ? (stored ? 'stored' : typeof auth === 'string' ? auth : 'configured') : undefined,
-          });
+          stored = Boolean(await this.credentials.read(id));
+          auth = provider.authStatus ? await provider.authStatus() : Boolean(await this.apiKey(provider));
         } catch (error) {
-          this.status.set(id, { configured: false });
           this.report(new Error('Could not determine authentication status for ' + id, { cause: error }));
         }
+        this.status.set(id, {
+          configured: Boolean(auth),
+          source: stored ? 'stored' : auth ? (typeof auth === 'string' ? auth : 'configured') : undefined,
+        });
       }),
     );
   }
@@ -297,17 +296,16 @@ export class ModelStore implements ModelStorePort {
 
   private async commit(id: string, configuration: ProviderConfiguration, keyChange?: { value?: Credential }) {
     const providers = this.buildCatalog(configuration);
-    const previous = keyChange ? await this.credentials.read(id) : undefined;
-    const writeKey = (value: Credential | undefined) =>
-      value ? this.credentials.modify(id, async () => value) : this.credentials.delete(id);
     const changed = configuration !== this.configuration;
     if (changed) writeJson(this.file, configuration);
     try {
-      if (keyChange) await writeKey(keyChange.value);
+      if (keyChange?.value) {
+        const value = keyChange.value;
+        await this.credentials.modify(id, async () => value);
+      } else if (keyChange) await this.credentials.delete(id);
     } catch (error) {
       try {
         if (changed) writeJson(this.file, this.configuration);
-        if (keyChange) await writeKey(previous);
       } catch (rollbackError) {
         throw new AggregateError([error, rollbackError], 'Could not restore provider configuration');
       }

@@ -600,4 +600,18 @@ export function apply(ctx) {
     await sendRun(ctx.harnessRuns, session.id, 'Restore Pi', undefined, { model }),
     'Mock response',
   );
+  const adapter = {
+    accepts: (choice: typeof model) => choice.provider === model.provider,
+    async *stream() { assert.fail('Ambiguous adapter must not stream'); },
+  };
+  const first = ctx.harnessLlm.register(adapter);
+  const second = ctx.harnessLlm.register(adapter);
+  try {
+    assert.equal(ctx.harnessModels.resolve(model), undefined);
+    assert.deepEqual(ctx.harnessModelPreference.recent(), { provider: '', id: '' });
+  } finally {
+    second();
+    first();
+  }
+  assert.deepEqual(ctx.harnessModels.resolve(model), model);
 });
