@@ -45,7 +45,10 @@ function registerConfiguration(ctx: Context) {
         save.disabled = true;
         status.textContent = '';
         try {
-          await configuration.patch({ timeoutMs: timeout.valueAsNumber, maxOutputBytes: output.valueAsNumber });
+          await configuration.patch({
+            timeoutMs: timeout.valueAsNumber,
+            maxOutputBytes: output.valueAsNumber,
+          });
           status.textContent = 'Saved.';
         } catch (error) {
           status.textContent = error instanceof Error ? error.message : String(error);

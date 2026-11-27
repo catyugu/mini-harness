@@ -21,9 +21,7 @@ test('subagent configuration, recursive tree navigation, batch export and perman
     },
     prepare(paths) {
       writeJson(join(paths.home, 'profiles', 'web', 'cordis.patch.yml'), {
-        plugins: [
-          { id: 'subagents', config: { maxDepth: 2, maxParallel: 1, model: null } },
-        ],
+        plugins: [{ id: 'subagents', config: { maxDepth: 2, maxParallel: 1, model: null } }],
       });
     },
   });
