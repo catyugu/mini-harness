@@ -13,7 +13,9 @@ const plugin: Plugin.Object = {
   async apply(ctx) {
     const store = new ModelStore(
       ctx.harnessState.paths.home,
-      () => { void ctx.parallel('models/source-changed').catch((error) => ctx.logger.warn(String(error))); },
+      () => {
+        void ctx.parallel('models/source-changed').catch((error) => ctx.logger.warn(String(error)));
+      },
       (error) => ctx.logger.warn(String(error)),
     );
     ctx.effect(() => () => store.close());

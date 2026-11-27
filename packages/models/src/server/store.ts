@@ -189,23 +189,25 @@ export class ModelStore implements ModelStorePort {
   }
 
   private async refreshStatus(ids: Iterable<string>) {
-    await Promise.all([...ids].map(async (id) => {
-      const provider = this.provider(id);
-      if (!provider) return;
-      try {
-        const stored = await this.credentials.read(id);
-        const auth = provider.authStatus
-          ? await provider.authStatus()
-          : Boolean(await this.apiKey(provider));
-        this.status.set(id, {
-          configured: Boolean(auth),
-          source: auth ? (stored ? 'stored' : typeof auth === 'string' ? auth : 'configured') : undefined,
-        });
-      } catch (error) {
-        this.status.set(id, { configured: false });
-        this.report(new Error('Could not determine authentication status for ' + id, { cause: error }));
-      }
-    }));
+    await Promise.all(
+      [...ids].map(async (id) => {
+        const provider = this.provider(id);
+        if (!provider) return;
+        try {
+          const stored = await this.credentials.read(id);
+          const auth = provider.authStatus
+            ? await provider.authStatus()
+            : Boolean(await this.apiKey(provider));
+          this.status.set(id, {
+            configured: Boolean(auth),
+            source: auth ? (stored ? 'stored' : typeof auth === 'string' ? auth : 'configured') : undefined,
+          });
+        } catch (error) {
+          this.status.set(id, { configured: false });
+          this.report(new Error('Could not determine authentication status for ' + id, { cause: error }));
+        }
+      }),
+    );
   }
 
   private notify() {

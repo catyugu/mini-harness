@@ -259,7 +259,13 @@ test('authentication and observer failures do not undo provider commits or preve
   const mock = await createMockProvider();
   const { root, paths } = createFixturePaths(mock.url);
   const errors: unknown[] = [];
-  const store = new ModelStore(paths.home, () => { throw new Error('Observer failure'); }, (error) => errors.push(error));
+  const store = new ModelStore(
+    paths.home,
+    () => {
+      throw new Error('Observer failure');
+    },
+    (error) => errors.push(error),
+  );
   t.after(async () => {
     await store.close();
     await mock.close();
@@ -275,25 +281,41 @@ test('authentication and observer failures do not undo provider commits or preve
     models: [],
   };
   const unregister = await store.registerDefaults([provider]);
-  const removeFailing = await store.registerDefaults([{
-    ...provider,
-    id: 'other-provider',
-    async authStatus() { throw new Error('Authentication unavailable'); },
-  }]);
+  const removeFailing = await store.registerDefaults([
+    {
+      ...provider,
+      id: 'other-provider',
+      async authStatus() {
+        throw new Error('Authentication unavailable');
+      },
+    },
+  ]);
   await store.storeCredential(provider.id, 'first-secret');
   await store.available();
   assert.equal(store.authStatus(provider.id).configured, true);
   assert.equal(store.authStatus('other-provider').configured, false);
-  assert.equal(JSON.parse(readFileSync(join(paths.home, 'auth.json'), 'utf8'))[provider.id].key, 'first-secret');
+  assert.equal(
+    JSON.parse(readFileSync(join(paths.home, 'auth.json'), 'utf8'))[provider.id].key,
+    'first-secret',
+  );
   await store.storeCredential('other-provider', 'second-secret');
-  assert.equal(JSON.parse(readFileSync(join(paths.home, 'auth.json'), 'utf8'))['other-provider'].key, 'second-secret');
+  assert.equal(
+    JSON.parse(readFileSync(join(paths.home, 'auth.json'), 'utf8'))['other-provider'].key,
+    'second-secret',
+  );
   await unregister();
-  assert.equal(store.providers().some(({ id }) => id === provider.id), false);
+  assert.equal(
+    store.providers().some(({ id }) => id === provider.id),
+    false,
+  );
   assert.deepEqual(store.authStatus(provider.id), { configured: false });
   await store.removeCredential(provider.id);
   assert.equal(JSON.parse(readFileSync(join(paths.home, 'auth.json'), 'utf8'))[provider.id], undefined);
   await removeFailing();
-  assert.equal(store.providers().some(({ id }) => id === 'other-provider'), false);
+  assert.equal(
+    store.providers().some(({ id }) => id === 'other-provider'),
+    false,
+  );
   assert.ok(errors.some((error) => String(error).includes('Observer failure')));
   assert.ok(errors.some((error) => String(error).includes('other-provider')));
 });
