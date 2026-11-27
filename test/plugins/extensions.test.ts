@@ -602,7 +602,9 @@ export function apply(ctx) {
   );
   const adapter = {
     accepts: (choice: typeof model) => choice.provider === model.provider,
-    async *stream() { assert.fail('Ambiguous adapter must not stream'); },
+    async *stream() {
+      assert.fail('Ambiguous adapter must not stream');
+    },
   };
   const first = ctx.harnessLlm.register(adapter);
   const second = ctx.harnessLlm.register(adapter);

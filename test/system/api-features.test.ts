@@ -169,9 +169,13 @@ test('GUI APIs configure providers, persist keys privately, discover Skills and 
   );
   assert.deepEqual((await request('/sessions/search?q=unmatched-phrase')).body, []);
   const ctx = app.runtime.plugins.ctx;
-  const failObserver = ctx.on('models/catalog-changed', () => {
-    throw new Error('Broken catalog observer');
-  }, { prepend: true });
+  const failObserver = ctx.on(
+    'models/catalog-changed',
+    () => {
+      throw new Error('Broken catalog observer');
+    },
+    { prepend: true },
+  );
   try {
     assert.equal((await request('/providers', 'DELETE', { id: 'gui-test' })).status, 200);
   } finally {
