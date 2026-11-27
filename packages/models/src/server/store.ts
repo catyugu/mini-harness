@@ -249,7 +249,9 @@ export class ModelStore implements ModelStorePort {
           if (!signal.aborted)
             this.report(
               new Error(
-                (deadline.aborted ? 'Authentication check timed out for ' : 'Could not determine authentication status for ') + id,
+                (deadline.aborted
+                  ? 'Authentication check timed out for '
+                  : 'Could not determine authentication status for ') + id,
                 { cause: error },
               ),
             );

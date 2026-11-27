@@ -56,7 +56,11 @@ export function providerEditor(
   const api = document.createElement('select');
   const apiField = field('API protocol', api);
   const resetProtocolSettings = fromMarkup<HTMLInputElement>('<input type="checkbox" checked>');
-  const resetProtocolField = field('Reset model compatibility and thinking-level settings', resetProtocolSettings, 'compact');
+  const resetProtocolField = field(
+    'Reset model compatibility and thinking-level settings',
+    resetProtocolSettings,
+    'compact',
+  );
   const changingProtocol = () => provider?.custom === true && provider.api !== api.value;
   const catalog = catalogEditor();
   const restoreEndpoint = button('Use default endpoint', 'quiet');
@@ -210,7 +214,10 @@ export function providerEditor(
   endpoint.oninput = key.oninput = connectionChanged;
   api.onchange = () => {
     resetProtocolField.hidden =
-      !changingProtocol() || !provider?.models.some(({ compat, thinkingLevelMap }) => compat !== undefined || thinkingLevelMap !== undefined);
+      !changingProtocol() ||
+      !provider?.models.some(
+        ({ compat, thinkingLevelMap }) => compat !== undefined || thinkingLevelMap !== undefined,
+      );
     connectionChanged();
   };
   form.onsubmit = async (event) => {

@@ -80,7 +80,9 @@ test('custom provider onboarding and registering a workspace work entirely in th
   await settings.getByRole('button', { name: 'Edit local-mock', exact: true }).click();
   const native = settings.getByRole('form', { name: 'Edit local-mock' });
   const protocol = native.getByLabel('API protocol');
-  const reset = native.getByRole('checkbox', { name: 'Reset model compatibility and thinking-level settings' });
+  const reset = native.getByRole('checkbox', {
+    name: 'Reset model compatibility and thinking-level settings',
+  });
   await protocol.selectOption('google-generative-ai');
   await expect(reset).toBeChecked();
   await protocol.selectOption('openai-completions');
