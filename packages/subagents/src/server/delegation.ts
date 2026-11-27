@@ -63,7 +63,12 @@ export class Delegation {
     const parent = this.sessions.get(parentId);
     if (!parent) throw new Error('Parent conversation not found');
     requireChildDepth(this.sessions.depth(parentId), this.settings().maxDepth);
-    const model = selectChildModel(request, this.settings().model, this.sessions.history(parentId).model, this.models);
+    const model = selectChildModel(
+      request,
+      this.settings().model,
+      this.sessions.history(parentId).model,
+      this.models,
+    );
     const record = this.sessions.create({
       parentId,
       workspaceId: parent.workspaceId,

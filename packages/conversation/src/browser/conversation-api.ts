@@ -56,10 +56,7 @@ export interface ConversationController {
   activate(id: string, revealWorkspace?: boolean): Promise<boolean>;
   clear(): void;
   report(message: string | Error): void;
-  submit(
-    input: ConversationSubmission,
-    created?: (sessionId: string) => void,
-  ): Promise<RunInfo | undefined>;
+  submit(input: ConversationSubmission, created?: (sessionId: string) => void): Promise<RunInfo | undefined>;
   chooseMode(mode: MessageMode): void;
   retryInput(): Promise<RetryInput | null>;
   cancel(): Promise<void>;
