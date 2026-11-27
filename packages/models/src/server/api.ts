@@ -32,4 +32,9 @@ declare module 'mini-harness/cordis' {
   interface Context {
     harnessModels: ModelCatalogPort;
   }
+  interface Events {
+    'models/source-changed'(): void | Promise<void>;
+    'models/catalog-changed'(): void | Promise<void>;
+    'models/preference-changed'(): void | Promise<void>;
+  }
 }

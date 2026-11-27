@@ -16,7 +16,9 @@ const plugin: Plugin.Object = {
       owner: AbortSignal;
       scope?: ScopeKey;
     }>();
-    const changed = () => ctx.get('harnessChanges')?.invalidate('models');
+    const changed = () => {
+      void ctx.parallel('llm/adapters-changed').catch((error) => ctx.logger.warn(String(error)));
+    };
     function matches(
       caller: import('mini-harness/cordis').Context,
       model: import('./vocabulary.ts').ModelChoice,

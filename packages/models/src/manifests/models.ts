@@ -28,7 +28,7 @@ export const metadata: PluginInfo = {
 
 const plugin: Plugin.Object = {
   Config,
-  inject: ['harnessModels', 'harnessChanges', 'harnessPluginSettings', 'harnessProfileConfig'],
+  inject: ['harnessModels', 'harnessPluginSettings'],
   provide: ['harnessModelPreference'],
   apply(ctx) {
     ctx.on('internal/update', (next) => {
@@ -44,7 +44,7 @@ const plugin: Plugin.Object = {
     const select = (model: ModelChoice) => {
       if (same(model, current)) return;
       current = { ...model };
-      ctx.harnessChanges.invalidate('models');
+      void ctx.parallel('models/preference-changed').catch((error) => ctx.logger.warn(String(error)));
     };
     ctx.harnessPluginSettings.subscribe<ModelChoice>('model', (model) => {
       // A completed older write must not overwrite a newer accepted selection.
@@ -75,11 +75,7 @@ const plugin: Plugin.Object = {
           /* The preference owner reports failed writes. */
         });
     };
-    // Profile reconciliation can temporarily remove a contribution before replacing it.
-    // Only committed configuration and stable catalog mutations invalidate a preference.
-    ctx.on('harness/ready', revalidate);
-    ctx.on('models/catalog-committed', revalidate);
-    ctx.effect(() => ctx.harnessProfileConfig.subscribe(revalidate));
+    ctx.on('models/catalog-changed', revalidate);
     ctx.on('harness/observe', (event) => {
       if (
         event.type === 'input-accepted' &&

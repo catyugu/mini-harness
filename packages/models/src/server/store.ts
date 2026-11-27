@@ -87,6 +87,7 @@ export class ModelStore implements ModelStorePort {
   constructor(
     home: string,
     private readonly changed = () => {},
+    private readonly report: (error: unknown) => void = console.warn,
   ) {
     this.file = join(home, 'models.json');
     this.credentials = new FileCredentials(join(home, 'auth.json'));
@@ -100,25 +101,26 @@ export class ModelStore implements ModelStorePort {
 
   registerDefaults(providers: readonly CatalogProvider[]) {
     return this.enqueue(async () => {
+      const ids = providers.map(({ id }) => id);
       this.defaults.add(providers);
-      try {
-        await this.resolveCatalog(this.configuration);
-      } catch (error) {
-        this.defaults.delete(providers);
-        throw error;
-      }
+      this.publishCatalog(this.configuration);
+      await this.refreshStatus(ids);
+      this.notify();
       return () =>
         this.enqueue(async () => {
           this.defaults.delete(providers);
-          await this.resolveCatalog(this.configuration);
+          this.publishCatalog(this.configuration);
+          await this.refreshStatus(ids);
+          this.notify();
         });
     });
   }
 
   refresh() {
     return this.enqueue(async () => {
-      const configuration = parseConfiguration(readJson(this.file, { providers: {} }));
-      await this.resolveCatalog(configuration);
+      this.publishCatalog(parseConfiguration(readJson(this.file, { providers: {} })));
+      await this.refreshStatus(this.effective.keys());
+      this.notify();
     });
   }
 
@@ -178,38 +180,40 @@ export class ModelStore implements ModelStorePort {
     return this.effective.get(id);
   }
 
-  private async resolveCatalog(configuration: ProviderConfiguration) {
-    const providers = this.buildCatalog(configuration);
-    const status = await this.readStatus(providers);
+  private publishCatalog(configuration: ProviderConfiguration, providers = this.buildCatalog(configuration)) {
     this.effective = new Map(providers.map((provider) => [provider.id, provider]));
     this.configuration = configuration;
-    this.status = status;
+    for (const id of this.status.keys()) {
+      if (!this.effective.has(id)) this.status.delete(id);
+    }
   }
 
-  private async readStatus(providers: Iterable<CatalogProvider> = this.effective.values()) {
-    const stored = new Set((await this.credentials.list()).map(({ providerId }) => providerId));
-    return new Map(
-      await Promise.all(
-        [...providers].map(async (provider) => {
-          const auth = provider.authStatus
-            ? await provider.authStatus()
-            : (await this.apiKey(provider)) !== undefined;
-          return [
-            provider.id,
-            {
-              configured: Boolean(auth),
-              source: auth
-                ? stored.has(provider.id)
-                  ? 'stored'
-                  : typeof auth === 'string'
-                    ? auth
-                    : 'configured'
-                : undefined,
-            },
-          ] as const;
-        }),
-      ),
-    );
+  private async refreshStatus(ids: Iterable<string>) {
+    await Promise.all([...ids].map(async (id) => {
+      const provider = this.provider(id);
+      if (!provider) return;
+      try {
+        const stored = await this.credentials.read(id);
+        const auth = provider.authStatus
+          ? await provider.authStatus()
+          : Boolean(await this.apiKey(provider));
+        this.status.set(id, {
+          configured: Boolean(auth),
+          source: auth ? (stored ? 'stored' : typeof auth === 'string' ? auth : 'configured') : undefined,
+        });
+      } catch (error) {
+        this.status.set(id, { configured: false });
+        this.report(new Error('Could not determine authentication status for ' + id, { cause: error }));
+      }
+    }));
+  }
+
+  private notify() {
+    try {
+      this.changed();
+    } catch (error) {
+      this.report(error);
+    }
   }
 
   list() {
@@ -227,7 +231,7 @@ export class ModelStore implements ModelStorePort {
 
   available() {
     return this.enqueue(async () => {
-      this.status = await this.readStatus();
+      await this.refreshStatus(this.effective.keys());
       return this.list();
     });
   }
@@ -290,6 +294,7 @@ export class ModelStore implements ModelStorePort {
   }
 
   private async commit(id: string, configuration: ProviderConfiguration, keyChange?: { value?: Credential }) {
+    const providers = this.buildCatalog(configuration);
     const previous = keyChange ? await this.credentials.read(id) : undefined;
     const writeKey = (value: Credential | undefined) =>
       value ? this.credentials.modify(id, async () => value) : this.credentials.delete(id);
@@ -297,7 +302,6 @@ export class ModelStore implements ModelStorePort {
     if (changed) writeJson(this.file, configuration);
     try {
       if (keyChange) await writeKey(keyChange.value);
-      await this.resolveCatalog(configuration);
     } catch (error) {
       try {
         if (changed) writeJson(this.file, this.configuration);
@@ -307,7 +311,9 @@ export class ModelStore implements ModelStorePort {
       }
       throw error;
     }
-    this.changed();
+    this.publishCatalog(configuration, providers);
+    await this.refreshStatus([id]);
+    this.notify();
   }
 
   saveProvider(input: unknown) {

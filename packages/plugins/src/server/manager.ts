@@ -36,6 +36,7 @@ export class PluginHost implements ProfileScopes, ProfileConfigurationPort {
   private pending = Promise.resolve();
   private readonly listeners = new Set<() => void>();
   private closing = false;
+  private started = false;
 
   constructor(
     readonly ctx: Context,
@@ -86,6 +87,10 @@ export class PluginHost implements ProfileScopes, ProfileConfigurationPort {
 
   get settings() {
     return this.profile.read();
+  }
+
+  get stable() {
+    return this.started && !this.applying && !this.closing;
   }
 
   subscribe(listener: () => void) {
@@ -330,6 +335,8 @@ export class PluginHost implements ProfileScopes, ProfileConfigurationPort {
     await this.apply({ ...this.settings, scopes: {} }, true);
     await this.ctx.parallel('harness/ready');
     await this.apply(this.settings, true);
+    this.started = true;
+    this.publish();
   }
 
   private apply(settings: ProfileConfiguration, starting: boolean, released?: ReadonlySet<ScopeAddress>) {

@@ -1,4 +1,4 @@
-import { FiberState, Service, type Context, type Plugin } from 'mini-harness/cordis';
+import { Service, type Context, type Plugin } from 'mini-harness/cordis';
 import { rankScoped, sameRank, scopeOf, type ScopeKey } from '@mini-harness/plugin-api/scopes';
 import type { LlmAdapter } from '@mini-harness/llm/api';
 import type { ModelChoice } from '@mini-harness/llm/vocabulary';
@@ -26,7 +26,18 @@ const plugin: Plugin.Object = {
     ctx.inject(['harnessChanges'], (scope) => {
       scope.effect(() => scope.harnessChanges.register('models'));
     });
-    const changed = () => ctx.get('harnessChanges')?.invalidate('models');
+    const project = () => ctx.get('harnessChanges')?.invalidate('models');
+    const publish = () => {
+      if (ctx.get('harnessProfileConfig')?.stable === false) return;
+      void ctx.parallel('models/catalog-changed').catch((error) => ctx.logger.warn(String(error)));
+    };
+    ctx.on('models/catalog-changed', project);
+    ctx.on('models/preference-changed', project);
+    ctx.on('models/source-changed', publish);
+    ctx.on('llm/adapters-changed', publish);
+    ctx.inject(['harnessProfileConfig'], (scope) => {
+      scope.effect(() => scope.harnessProfileConfig.subscribe(publish));
+    });
     function visible(caller: Context) {
       return rankScoped(scopeOf(caller), sources).filter(({ owner }) => !owner.aborted);
     }
@@ -64,18 +75,16 @@ const plugin: Plugin.Object = {
           const entry = { source, adapter, priority, owner: caller.fiber.signal, scope: scopeOf(caller) };
           const llm = caller.get('harnessLlm');
           if (!llm) throw new Error('Model transport is unavailable in this scope');
-          const release = llm.register(adapter, priority);
-          const notify = () => {
-            changed();
-            // Activation/disposal is reconciled by the committed Profile subscription.
-            if (caller.fiber.state === FiberState.ACTIVE) ctx.emit('models/catalog-committed');
-          };
           sources.add(entry);
-          notify();
+          let release: () => void;
+          try {
+            release = llm.register(adapter, priority);
+          } catch (error) {
+            sources.delete(entry);
+            throw error;
+          }
           return () => {
-            if (!sources.delete(entry)) return;
-            release();
-            notify();
+            if (sources.delete(entry)) release();
           };
         },
         list() {

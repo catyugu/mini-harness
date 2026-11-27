@@ -18,7 +18,7 @@ export function registerProvider(ctx: Context, source: ModelSource, adapter: Llm
 }
 ```
 
-The catalog registers both parts with the same scope, priority and activation lifetime. The nearest scope wins, then higher priority; equal-ranked contributions are ambiguous and omitted from discovery. Catalog metadata and a paired adapter must agree. A transport-only override through `harnessLlm.register` deliberately reuses the selected source's capabilities.
+The catalog registers both parts with the same scope, priority and activation lifetime. The nearest scope wins, then higher priority; equal-ranked contributions are ambiguous and omitted from discovery. Catalog metadata and a paired adapter must agree. A transport-only override through `harnessLlm.register` deliberately reuses the selected source's capabilities. The LLM service publishes `llm/adapters-changed` after registration changes. A mutable model source publishes `models/source-changed` after changing its own catalog.
 
 A source may resolve a dynamic model ID that it does not enumerate. Its adapter's `accepts` predicate must not call the aggregate catalog. See [adding a model provider](../../docs/cookbook/adding-a-model-provider.md) for a complete extension workflow.
 
@@ -32,7 +32,7 @@ The built-in [store](src/server/store.ts) reads `models.json` under the applicat
 
 **Fetch available models** works from the draft when the server-advertised protocol supports discovery. The default adapter defines protocol labels, loaders and discovery together. The server queries the configured endpoint; discovery makes no configuration changes. Use an API key entered in the draft when testing a different endpoint. The picker deduplicates Model IDs and keeps existing model settings. Listing metadata supplies capabilities where available, otherwise the shared defaults apply.
 
-Saved keys belong to the `auth.json` credential store and are never returned to the editor. A blank key field keeps the saved credential. Removing a built-in provider clears its saved settings and credential, returning it to its adapter defaults. Removing a custom provider deletes its definition and credential. Writes are serialized and failed updates retain the previous working store.
+Saved keys belong to the `auth.json` credential store and are never returned to the editor. A blank key field keeps the saved credential. Removing a built-in provider clears its saved settings and credential, returning it to its adapter defaults. Removing a custom provider deletes its definition and credential. Writes are serialized. Persistence failures retain the previous working store; after a successful write the effective catalog is published independently of authentication status. A failed authentication check is reported and leaves that provider unconfigured until the next refresh.
 
 `harnessModelStore` is an internal capability of the default provider implementation, not an installed SDK export. Third-party providers use the public source/adapter contract and their own persistence.
 
@@ -40,7 +40,7 @@ Saved keys belong to the `auth.json` credential store and are never returned to 
 
 [`mini-harness/models/selection`](src/server/selection.ts) provides model, thinking-level and image-capability selection helpers. An explicit unknown model is an error. An inherited thinking level is retained only when supported; explicit `null` clears it. New images require an image-capable model, while historical images can be presented as text placeholders.
 
-The optional `harnessModelPreference` tracks the recent application choice. Accepted user input from a root user run updates it; child and plugin runs do not overwrite it. The browser sees the selection immediately while persistence writes are ordered and drained. The preference owner revalidates the current choice after committed catalog and profile changes, not transient plugin activation states. Persistence failure is reported by that owner without failing an accepted run or provider edit.
+The optional `harnessModelPreference` tracks the recent application choice. Accepted user input from a root user run updates it; child and plugin runs do not overwrite it. The browser sees the selection immediately while persistence writes are ordered and drained. The catalog observes source and adapter changes and publishes availability only against a settled Profile graph. The preference owner subscribes only to catalog changes. Observation failures are logged without failing the committed operation. Persistence failure is reported by that owner without failing an accepted run or provider edit.
 
 The `core:models` [configuration schema](src/manifests/models.ts) contains the recent `model`, initially empty. Its entry is live in the base Profile. Profile configuration owns persistence; the Settings UI presents it. Provider endpoint and credential administration is a separate surface.
 

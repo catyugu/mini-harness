@@ -15,6 +15,8 @@ export interface ProfileRuntime {
 
 export interface ProfileConfigurationPort {
   readonly settings: ProfileConfiguration;
+  /** Whether the initial or updated plugin graph has settled. */
+  readonly stable: boolean;
   update(patch: unknown, signal?: AbortSignal): Promise<ProfileConfiguration>;
   forgetScopes(keys: ScopeAddress[]): Promise<void>;
   subscribe(listener: () => void): () => void;
