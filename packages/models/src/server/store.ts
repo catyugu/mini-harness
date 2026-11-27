@@ -3,7 +3,7 @@ import { DomainError } from '@mini-harness/platform/errors';
 import { readJson, writeJson } from '@mini-harness/platform/json';
 import type { ModelChoice } from '@mini-harness/llm/vocabulary';
 import {
-  configuredModel,
+  resolveModel,
   credential,
   editModels,
   endpoint,
@@ -82,6 +82,7 @@ export class ModelStore implements ModelStorePort {
   private readonly defaults = new Set<readonly CatalogProvider[]>();
   private configuration: ProviderConfiguration = { providers: {}, builtins: {} };
   private status = new Map<string, AuthStatus>();
+  private effective = new Map<string, CatalogProvider>();
   private writes: Promise<unknown> = Promise.resolve();
 
   constructor(home: string) {
@@ -99,7 +100,7 @@ export class ModelStore implements ModelStorePort {
     return this.enqueue(async () => {
       this.defaults.add(providers);
       try {
-        this.status = await this.readStatus();
+        await this.resolveCatalog(this.configuration);
       } catch (error) {
         this.defaults.delete(providers);
         throw error;
@@ -107,7 +108,7 @@ export class ModelStore implements ModelStorePort {
       return () =>
         this.enqueue(async () => {
           this.defaults.delete(providers);
-          this.status = await this.readStatus();
+          await this.resolveCatalog(this.configuration);
         });
     });
   }
@@ -115,8 +116,7 @@ export class ModelStore implements ModelStorePort {
   refresh() {
     return this.enqueue(async () => {
       const configuration = parseConfiguration(readJson(this.file, { providers: {} }));
-      this.status = await this.readStatus(configuration);
-      this.configuration = configuration;
+      await this.resolveCatalog(configuration);
     });
   }
 
@@ -133,7 +133,7 @@ export class ModelStore implements ModelStorePort {
     const baseline = new Map(provider.models.map((model) => [model.id, model]));
     const models =
       override.models?.map((model) =>
-        configuredModel(model, provider, baseline.get(model.templateId ?? model.id), override.baseUrl),
+        resolveModel(model, provider, model.templateId ? baseline.get(model.templateId) : undefined, override.baseUrl),
       ) ?? (override.baseUrl ? provider.models.map((model) => ({ ...model, baseUrl })) : provider.models);
     return { ...provider, baseUrl, models, endpointOverride: override.baseUrl };
   }
@@ -149,11 +149,11 @@ export class ModelStore implements ModelStorePort {
       ...connection,
       headers,
       key,
-      models: models.map((model) => configuredModel(model, connection)),
+      models: models.map((model) => resolveModel(model, connection)),
     };
   }
 
-  private catalog(configuration = this.configuration) {
+  private buildCatalog(configuration: ProviderConfiguration) {
     const defaults = this.defaultProviders();
     return [
       ...[...defaults.values()].map((provider) => this.builtin(provider, configuration)),
@@ -164,15 +164,22 @@ export class ModelStore implements ModelStorePort {
   }
 
   private provider(id: string) {
-    const builtin = this.defaultProviders().get(id);
-    return builtin ? this.builtin(builtin, this.configuration) : this.custom(id, this.configuration);
+    return this.effective.get(id);
   }
 
-  private async readStatus(configuration = this.configuration) {
+  private async resolveCatalog(configuration: ProviderConfiguration) {
+    const providers = this.buildCatalog(configuration);
+    const status = await this.readStatus(providers);
+    this.effective = new Map(providers.map((provider) => [provider.id, provider]));
+    this.configuration = configuration;
+    this.status = status;
+  }
+
+  private async readStatus(providers: Iterable<CatalogProvider> = this.effective.values()) {
     const stored = new Set((await this.credentials.list()).map(({ providerId }) => providerId));
     return new Map(
       await Promise.all(
-        this.catalog(configuration).map(async (provider) => {
+        [...providers].map(async (provider) => {
           const auth = provider.authStatus
             ? await provider.authStatus()
             : (await this.apiKey(provider)) !== undefined;
@@ -195,7 +202,7 @@ export class ModelStore implements ModelStorePort {
   }
 
   list() {
-    return this.catalog().flatMap(({ id: provider, models }) =>
+    return [...this.effective.values()].flatMap(({ id: provider, models }) =>
       models.map((model) => ({
         provider,
         id: model.id,
@@ -233,7 +240,7 @@ export class ModelStore implements ModelStorePort {
 
   providers() {
     const defaults = this.defaultProviders();
-    return this.catalog().map(({ id, name, canSetKey, models, baseUrl, api }) => {
+    return [...this.effective.values()].map(({ id, name, canSetKey, models, baseUrl, api }) => {
       const override = Object.hasOwn(this.configuration.builtins, id)
         ? this.configuration.builtins[id]
         : undefined;
@@ -272,8 +279,7 @@ export class ModelStore implements ModelStorePort {
     if (changed) writeJson(this.file, configuration);
     try {
       if (keyChange) await writeKey(keyChange.value);
-      this.status = await this.readStatus(configuration);
-      this.configuration = configuration;
+      await this.resolveCatalog(configuration);
     } catch (error) {
       try {
         if (changed) writeJson(this.file, this.configuration);
@@ -302,7 +308,7 @@ export class ModelStore implements ModelStorePort {
         if (
           override.models?.some(
             (model) =>
-              !builtin.api && !builtin.models.some(({ id }) => id === (model.templateId ?? model.id)),
+              !builtin.api && !builtin.models.some(({ id }) => id === model.templateId),
           )
         )
           throw invalid('This built-in provider has no protocol for new models');
