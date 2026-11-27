@@ -518,7 +518,10 @@ export function apply(ctx) {
   assert.deepEqual(models.body.protocols, []);
   assert.deepEqual((await request('/providers')).body, []);
   assert.equal((await request('/providers', 'PUT', {})).status, 503);
-  assert.equal((await request('/settings', 'PATCH', { entries: { 'core:model-store': { disabled: true } } })).status, 200);
+  assert.equal(
+    (await request('/settings', 'PATCH', { entries: { 'core:model-store': { disabled: true } } })).status,
+    200,
+  );
   assert.equal(app.runtime.plugins.ctx.get('harnessModelStore'), undefined);
   assert.ok(models.body.models.some((model: { provider: string }) => model.provider === 'local-fixture'));
   const session = app.runtime.plugins.ctx.harnessSessions.create({ workspaceId: null });
@@ -624,13 +627,18 @@ export function apply(ctx) {
 
   // A source edit is committed while a candidate Profile graph is being activated.
   // The rejected Profile change must not discard the independent source notification.
-  writePlugin(paths.plugins, 'reject-model-update', {}, `
+  writePlugin(
+    paths.plugins,
+    'reject-model-update',
+    {},
+    `
 export const inject = ['harnessModelStore'];
 export async function apply(ctx) {
   await ctx.harnessModelStore.removeProvider({ id: 'local-mock' });
   throw new Error('Rejected graph');
 }
-`);
+`,
+  );
   const rejected = await request('/settings', 'PATCH', {
     entries: { 'reject-model-update': { name: '../../plugins/reject-model-update', disabled: false } },
   });

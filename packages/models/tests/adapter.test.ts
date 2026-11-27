@@ -84,7 +84,10 @@ test('model adapter streams native messages, tool calls and metadata through the
     baseUrl: mock.url + '/new',
     models,
   };
-  await assert.rejects(adapter.saveProvider({ ...edit, api: 'unsupported-protocol' }), /Unsupported API protocol/);
+  await assert.rejects(
+    adapter.saveProvider({ ...edit, api: 'unsupported-protocol' }),
+    /Unsupported API protocol/,
+  );
   await assert.rejects(
     adapter.saveProvider({ ...edit, models: [{ ...models[0], thinkingLevelMap: { high: 'low' } }] }),
     /Unsupported model fields/,
@@ -121,7 +124,10 @@ test('credential updates serialize across providers and survive adapter replacem
   const replacement = new ModelStore(paths.home);
   await replacement.refresh();
   await new PiLlm(replacement).registerModels();
-  await waitUntil(() => replacement.authStatus('openai'), ({ configured }) => configured);
+  await waitUntil(
+    () => replacement.authStatus('openai'),
+    ({ configured }) => configured,
+  );
   assert.deepEqual(replacement.authStatus('openai'), { configured: true, source: 'stored' });
   await replacement.removeCredential('openai');
   assert.equal(JSON.parse(readFileSync(join(paths.home, 'auth.json'), 'utf8')).openai, undefined);
@@ -286,53 +292,79 @@ test('abort reaches the model transport and yields a native terminal message wit
   release();
 });
 
-test('slow and failed authentication checks cannot delay edits, overwrite newer results or revive removed providers', { timeout: 10000 }, async (t) => {
-  const mock = await createMockProvider();
-  const { root, paths } = createFixturePaths(mock.url);
-  const errors: unknown[] = [];
-  const store = new ModelStore(paths.home, () => { throw new Error('Observer failure'); }, (error) => errors.push(error));
-  let entered!: () => void;
-  let release!: () => void;
-  const started = new Promise<void>((resolve) => { entered = resolve; });
-  const hold = new Promise<void>((resolve) => { release = resolve; });
-  t.after(async () => {
+test(
+  'slow and failed authentication checks cannot delay edits, overwrite newer results or revive removed providers',
+  { timeout: 10000 },
+  async (t) => {
+    const mock = await createMockProvider();
+    const { root, paths } = createFixturePaths(mock.url);
+    const errors: unknown[] = [];
+    const store = new ModelStore(
+      paths.home,
+      () => {
+        throw new Error('Observer failure');
+      },
+      (error) => errors.push(error),
+    );
+    let entered!: () => void;
+    let release!: () => void;
+    const started = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    const hold = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    t.after(async () => {
+      release();
+      await store.close();
+      await mock.close();
+      rmSync(root, { recursive: true, force: true });
+    });
+    await store.refresh();
+    const provider = {
+      id: 'ordinary',
+      name: 'Auth fixture',
+      api: 'openai-completions',
+      baseUrl: mock.url,
+      canSetKey: true,
+      models: [],
+    };
+    const unregister = await store.registerDefaults([provider]);
+    let calls = 0;
+    const removeSlow = await store.registerDefaults([
+      {
+        ...provider,
+        id: 'slow-auth',
+        async authStatus() {
+          if (++calls === 1) {
+            entered();
+            await hold;
+            return true;
+          }
+          throw new Error('Authentication unavailable');
+        },
+      },
+    ]);
+    await started;
+    await store.storeCredential(provider.id, 'first-secret');
+    await store.storeCredential('slow-auth', 'second-secret');
+    await store.available();
+    await waitUntil(() => errors.some((error) => String(error).includes('slow-auth')), Boolean);
+    const saved = JSON.parse(readFileSync(join(paths.home, 'auth.json'), 'utf8'));
+    assert.equal(saved[provider.id].key, 'first-secret');
+    assert.equal(saved['slow-auth'].key, 'second-secret');
+    assert.deepEqual(store.authStatus('slow-auth'), { configured: false, source: 'stored' });
+    await unregister();
+    await removeSlow();
     release();
-    await store.close();
-    await mock.close();
-    rmSync(root, { recursive: true, force: true });
-  });
-  await store.refresh();
-  const provider = { id: 'ordinary', name: 'Auth fixture', api: 'openai-completions', baseUrl: mock.url, canSetKey: true, models: [] };
-  const unregister = await store.registerDefaults([provider]);
-  let calls = 0;
-  const removeSlow = await store.registerDefaults([{
-    ...provider,
-    id: 'slow-auth',
-    async authStatus() {
-      if (++calls === 1) {
-        entered();
-        await hold;
-        return true;
-      }
-      throw new Error('Authentication unavailable');
-    },
-  }]);
-  await started;
-  await store.storeCredential(provider.id, 'first-secret');
-  await store.storeCredential('slow-auth', 'second-secret');
-  await store.available();
-  await waitUntil(() => errors.some((error) => String(error).includes('slow-auth')), Boolean);
-  const saved = JSON.parse(readFileSync(join(paths.home, 'auth.json'), 'utf8'));
-  assert.equal(saved[provider.id].key, 'first-secret');
-  assert.equal(saved['slow-auth'].key, 'second-secret');
-  assert.deepEqual(store.authStatus('slow-auth'), { configured: false, source: 'stored' });
-  await unregister();
-  await removeSlow();
-  release();
-  await setImmediate();
-  for (const id of [provider.id, 'slow-auth']) {
-    assert.equal(store.providers().some((item) => item.id === id), false);
-    assert.deepEqual(store.authStatus(id), { configured: false });
-  }
-  assert.ok(errors.some((error) => String(error).includes('Observer failure')));
-});
+    await setImmediate();
+    for (const id of [provider.id, 'slow-auth']) {
+      assert.equal(
+        store.providers().some((item) => item.id === id),
+        false,
+      );
+      assert.deepEqual(store.authStatus(id), { configured: false });
+    }
+    assert.ok(errors.some((error) => String(error).includes('Observer failure')));
+  },
+);
