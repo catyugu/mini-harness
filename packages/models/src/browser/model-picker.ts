@@ -1,17 +1,26 @@
 import type { ModelChoice } from '@mini-harness/llm/vocabulary';
 import { bindPopover, fromMarkup, required } from '@mini-harness/ui-primitives/primitives';
 import { icon } from '@mini-harness/ui-primitives/icons';
+import type { Context } from 'mini-harness/cordis';
+import type { ModelPicker, ModelPickerOptions } from './api.ts';
 import type { ModelSummary } from '../shared/catalog.ts';
 
 let nextPicker = 0;
 
 export function createModelPicker(
-  button: HTMLButtonElement,
+  catalog: Pick<Context['miniModels'], 'get' | 'subscribe'>,
   onSelect: (model: ModelChoice) => void,
   signal: AbortSignal,
-  emptyLabel = 'Choose model',
-  selectEmpty?: () => void,
-) {
+  { emptyLabel = 'Choose model', selectEmpty, label: accessibleLabel }: ModelPickerOptions = {},
+): ModelPicker {
+  const node = document.createElement('div');
+  node.className = 'model-picker-control';
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = 'model-select';
+  const caption = document.createElement('span');
+  caption.className = 'ui-truncate';
+  button.append(caption, icon('chevron'));
   const id = 'model-options-' + ++nextPicker;
   const popup = fromMarkup(`<div class="ui-popover model-picker" popover="auto">
       <input class="model-search" type="search" role="combobox" aria-label="Search models"
@@ -19,10 +28,11 @@ export function createModelPicker(
       <div id="${id}" class="model-results" role="listbox" aria-label="Configured models"></div>
       <p class="model-empty hint" role="status" hidden></p>
     </div>`);
-  button.after(popup);
+  node.append(button, popup);
   button.setAttribute('aria-haspopup', 'listbox');
   button.setAttribute('aria-expanded', 'false');
-  button.setAttribute('aria-controls', id);
+  popup.id = id + '-picker';
+  button.setAttribute('aria-controls', popup.id);
   const search = required(popup.querySelector<HTMLInputElement>('.model-search'));
   const results = required(popup.querySelector<HTMLElement>('.model-results'));
   const empty = required(popup.querySelector<HTMLElement>('.model-empty'));
@@ -36,7 +46,7 @@ export function createModelPicker(
     return providers.get(id) ?? id;
   }
 
-  const position = bindPopover(button, popup, signal, {
+  const show = bindPopover(button, popup, signal, {
     width: 300,
     maxHeight: 420,
     align: 'end',
@@ -70,7 +80,7 @@ export function createModelPicker(
     const option = document.createElement('button');
     option.type = 'button';
     option.tabIndex = -1;
-    option.className = 'suggestion model-option';
+    option.className = 'ui-option model-option';
     option.id = id + '-' + options.length;
     option.setAttribute('role', 'option');
     option.setAttribute('aria-selected', String(active));
@@ -139,11 +149,16 @@ export function createModelPicker(
   }
 
   function open() {
-    if (button.disabled || popup.matches(':popover-open')) return;
+    if (
+      !button.getClientRects().length ||
+      getComputedStyle(button).visibility === 'hidden' ||
+      button.matches(':disabled') ||
+      popup.matches(':popover-open')
+    )
+      return;
     search.value = '';
     render();
-    popup.showPopover();
-    position();
+    show();
     search.focus();
     options[cursor]?.scrollIntoView({ block: 'nearest' });
   }
@@ -155,12 +170,7 @@ export function createModelPicker(
   search.oninput = render;
   search.onkeydown = (event) => {
     if (event.isComposing) return;
-    if (event.key === 'Escape') {
-      event.preventDefault();
-      event.stopPropagation();
-      popup.hidePopover();
-      button.focus();
-    } else if (event.key === 'Enter') {
+    if (event.key === 'Enter') {
       event.preventDefault();
       options[cursor]?.click();
     } else if (options.length && (event.key === 'ArrowDown' || event.key === 'ArrowUp')) {
@@ -168,31 +178,40 @@ export function createModelPicker(
       highlight((cursor + (event.key === 'ArrowDown' ? 1 : -1) + options.length) % options.length);
     }
   };
+  let current: ModelChoice | null = null;
+  function refresh() {
+    const choice = current;
+    const { models: available, providers: names } = catalog.get();
+    providers = new Map(names.map(({ id, name }) => [id, name]));
+    models = available
+      .filter((model) => model.configured)
+      .sort(
+        (a, b) =>
+          providerName(a.provider).localeCompare(providerName(b.provider)) ||
+          a.provider.localeCompare(b.provider) ||
+          a.name.localeCompare(b.name),
+      );
+    selected =
+      choice === null
+        ? null
+        : models.find(
+            (model) => model.provider === choice.provider && (!choice.id || model.id === choice.id),
+          );
+    caption.textContent = selected?.name ?? (choice?.id || emptyLabel);
+    button.title = selected ? providerName(selected.provider) + ' / ' + selected.id : '';
+    button.setAttribute('aria-label', accessibleLabel ?? (selected ? 'Model: ' + selected.name : emptyLabel));
+    if (popup.matches(':popover-open')) render();
+  }
+
+  catalog.subscribe(refresh, signal);
+  refresh();
   return {
+    node,
     open,
     selected: () => selected ?? undefined,
-    update(catalog: ModelSummary[], names: { id: string; name: string }[], choice: ModelChoice | null) {
-      providers = new Map(names.map(({ id, name }) => [id, name]));
-      models = catalog
-        .filter((model) => model.configured)
-        .sort(
-          (a, b) =>
-            providerName(a.provider).localeCompare(providerName(b.provider)) ||
-            a.provider.localeCompare(b.provider) ||
-            a.name.localeCompare(b.name),
-        );
-      selected =
-        choice === null
-          ? null
-          : models.find(
-              (model) => model.provider === choice.provider && (!choice.id || model.id === choice.id),
-            );
-      const label = document.createElement('span');
-      label.textContent = selected?.name ?? (choice?.id || emptyLabel);
-      button.replaceChildren(label, icon('chevron'));
-      button.title = selected ? providerName(selected.provider) + ' / ' + selected.id : '';
-      button.setAttribute('aria-label', selected ? 'Model: ' + selected.name : emptyLabel);
-      if (popup.matches(':popover-open')) render();
+    update(next) {
+      current = next;
+      refresh();
       return selected ?? undefined;
     },
   };

@@ -39,24 +39,79 @@ export function bindPopover(
   signal: AbortSignal,
   options: FloatingOptions = {},
 ) {
+  let frame = 0;
+  let geometry = '';
   const position = () => {
-    if (panel.matches(':popover-open')) {
-      if (!trigger.getClientRects().length) panel.hidePopover();
-      else positionFloating(trigger, panel, options);
+    if (!panel.matches(':popover-open')) return;
+    if (
+      !trigger.getClientRects().length ||
+      trigger.closest('[inert]') ||
+      getComputedStyle(trigger).visibility === 'hidden'
+    ) {
+      panel.hidePopover();
+      return;
     }
+    positionFloating(trigger, panel, options);
   };
-  panel.addEventListener(
-    'toggle',
-    () => {
-      trigger.setAttribute('aria-expanded', String(panel.matches(':popover-open')));
+  // ResizeObserver alone misses translations caused by scroll, siblings or a reflow.
+  function follow() {
+    if (!panel.matches(':popover-open')) return;
+    const { x, y, width, height } = trigger.getBoundingClientRect();
+    const viewport = window.visualViewport;
+    const next = [
+      x,
+      y,
+      width,
+      height,
+      viewport?.width,
+      viewport?.height,
+      viewport?.offsetLeft,
+      viewport?.offsetTop,
+    ].join();
+    if (geometry !== next) {
+      geometry = next;
       position();
+    }
+    frame = requestAnimationFrame(follow);
+  }
+  panel.addEventListener(
+    'keydown',
+    (event) => {
+      if (event.key !== 'Escape' || event.defaultPrevented || event.isComposing) return;
+      event.preventDefault();
+      panel.hidePopover();
+      trigger.focus({ preventScroll: true });
     },
     { signal },
   );
-  window.addEventListener('resize', position, { signal });
-  window.visualViewport?.addEventListener('resize', position, { signal });
-  window.visualViewport?.addEventListener('scroll', position, { signal });
-  return position;
+  panel.addEventListener(
+    'toggle',
+    () => {
+      cancelAnimationFrame(frame);
+      const open = panel.matches(':popover-open');
+      trigger.setAttribute('aria-expanded', String(open));
+      if (open) {
+        geometry = '';
+        follow();
+      }
+    },
+    { signal },
+  );
+  signal.addEventListener(
+    'abort',
+    () => {
+      cancelAnimationFrame(frame);
+      if (panel.matches(':popover-open')) panel.hidePopover();
+      trigger.setAttribute('aria-expanded', 'false');
+    },
+    { once: true },
+  );
+  return () => {
+    // TS 5.9 predates the source option used for native popover nesting and focus.
+    const surface = panel as HTMLElement & { showPopover(options: { source: HTMLElement }): void };
+    surface.showPopover({ source: trigger });
+    position();
+  };
 }
 
 export function closeOnBackdrop(dialog: HTMLDialogElement) {
@@ -98,11 +153,17 @@ export function iconButton(label: string, name: Parameters<typeof icon>[0], clas
   return node;
 }
 
-export function field(label: string, control: HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement) {
-  const node = document.createElement('label');
-  node.className = 'ui-field';
-  const caption = document.createElement('span');
-  caption.textContent = label;
+export function field(label: string | HTMLElement, control: HTMLElement, layout?: 'compact' | 'wide') {
+  const node = document.createElement(
+    control instanceof HTMLInputElement ||
+      control instanceof HTMLSelectElement ||
+      control instanceof HTMLTextAreaElement
+      ? 'label'
+      : 'div',
+  );
+  node.className = layout ? 'ui-field ui-field-' + layout : 'ui-field';
+  const caption = typeof label === 'string' ? document.createElement('span') : label;
+  if (typeof label === 'string') caption.textContent = label;
   node.append(caption, control);
   return node;
 }

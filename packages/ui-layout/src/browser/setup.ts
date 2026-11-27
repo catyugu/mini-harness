@@ -4,7 +4,6 @@ import type { PageContribution } from './api.ts';
 import type { Context } from 'mini-harness/cordis';
 import { createLayout } from './layout.ts';
 import { createRightTabs } from './right-tabs.ts';
-import { createHeaderOutlet } from './header-overflow.ts';
 
 /** App frame owns geometry and slot declarations, never feature navigation controls. */
 const slots = {
@@ -12,7 +11,7 @@ const slots = {
   'sidebar.actions': 'sidebarExtensions',
   'sidebar.navigation': 'navigationSlot',
   'sidebar.footer': 'sidebarFooter',
-  'header.actions': 'headerInline',
+  'header.actions': 'headerActions',
   'header.context': 'headerContext',
   'conversation.body': 'conversationSlot',
   'dialog.root': 'dialogSlot',
@@ -51,7 +50,7 @@ function createAppFrame(
     <div id="sidebarResize" class="panel-resize" role="separator" aria-label="Resize navigation sidebar" aria-orientation="vertical" aria-controls="sidebar" tabindex="0"></div>
     <div class="sidebar-top">
       <div class="brand"><img src="/logo.svg" width="28" height="28" alt=""><span>mini-harness</span></div>
-      <button id="sidebarClose" class="icon-button mobile-only" type="button" aria-label="Close navigation" data-icon="close"></button>
+      <button id="sidebarClose" class="icon-button" hidden type="button" aria-label="Close navigation" data-icon="close"></button>
     </div>
     <div id="sidebarPrimary"></div>
     <div id="sidebarExtensions"></div>
@@ -62,7 +61,7 @@ function createAppFrame(
   <main class="main" id="main">
     <header class="topbar">
       <button id="sidebarOpen" class="icon-button" type="button" aria-label="Toggle navigation" aria-controls="sidebar" data-icon="menu"></button>
-      <div class="title-block" id="titleBlock"><strong id="conversationTitle">New conversation</strong><div class="header-meta" id="headerMeta"><div class="header-context" id="headerContext"></div><div id="headerActions" hidden><div id="headerInline"></div><button id="headerMore" type="button" class="link-button" aria-label="More conversation controls" aria-expanded="false" aria-controls="headerOverflow" popovertarget="headerOverflow" data-icon="ellipsis" hidden></button><div id="headerOverflow" class="ui-popover" popover="auto" role="region" aria-label="More conversation controls"></div></div></div></div>
+      <div class="title-block" id="titleBlock"><strong id="conversationTitle">New conversation</strong><div class="header-meta" id="headerMeta"><div class="header-context" id="headerContext"></div><div id="headerActions"></div></div></div>
       <button id="inspectorOpen" class="icon-button" type="button" aria-label="Open workspace panel" aria-controls="inspector" data-icon="panel-right"></button>
     </header>
     <div id="conversationSlot"></div>
@@ -81,14 +80,18 @@ function createAppFrame(
   document.body.append(root);
   signal.addEventListener('abort', () => root.remove(), { once: true });
   const { element } = scopedElements(root);
-  const placeHeader = createHeaderOutlet(
-    element('headerMeta'),
-    element('headerContext'),
+  const meta = element('headerMeta');
+  const context = element('headerContext');
+  const placeHeader = primitives.overflowActions(
     element('headerActions'),
-    element('headerInline'),
-    element<'button'>('headerMore'),
-    element('headerOverflow'),
+    'More conversation controls',
     signal,
+    meta,
+    () =>
+      meta.clientWidth -
+      (context.querySelector(':scope > :not([hidden])')
+        ? Math.min(64, meta.clientWidth * 0.3) + (parseFloat(getComputedStyle(meta).gap) || 0)
+        : 0),
   );
   const layout = createLayout(
     {
@@ -117,7 +120,7 @@ function createAppFrame(
     signal,
   );
 
-  const pageViews = new Map<string, HTMLElement>();
+  const pageViews = new Map<string, { view: HTMLElement; trigger?: HTMLButtonElement }>();
   let selectedPage: string | undefined;
   function selectPage(id?: string) {
     if (id && !pageViews.has(id)) throw new Error('Unknown page: ' + id);
@@ -125,22 +128,22 @@ function createAppFrame(
     element('conversationSlot').hidden = Boolean(id);
     element('titleBlock').hidden = Boolean(id);
     element('mainSlot').hidden = !id;
-    for (const [key, view] of pageViews) view.hidden = key !== id;
-    for (const entry of root.querySelectorAll<HTMLElement>('[data-page-link]')) {
-      if (entry.dataset.pageLink === id) entry.setAttribute('aria-current', 'page');
-      else entry.removeAttribute('aria-current');
+    for (const [key, { view, trigger }] of pageViews) {
+      view.hidden = key !== id;
+      if (key === id) trigger?.setAttribute('aria-current', 'page');
+      else trigger?.removeAttribute('aria-current');
     }
     if (id) {
       layout.setPanel(false);
       layout.closeDrawer(false);
-      pageViews.get(id)?.focus();
+      pageViews.get(id)?.view.focus();
     }
   }
   const pages = {
     open: selectPage,
-    register(id: string, node: HTMLElement) {
+    register(id: string, node: HTMLElement, trigger?: HTMLButtonElement) {
       if (pageViews.has(id)) throw new Error('Duplicate page: ' + id);
-      pageViews.set(id, node);
+      pageViews.set(id, { view: node, trigger });
       element('mainSlot').append(node);
       node.hidden = true;
       return () => {
@@ -151,15 +154,15 @@ function createAppFrame(
     },
     contribute(id: string, { title, content, order }: PageContribution, lifetime: AbortSignal) {
       const entry = primitives.button(title, 'quiet');
-      entry.classList.add('nav-action');
-      entry.dataset.pageLink = id;
+      entry.classList.add('ui-nav-action', 'ui-truncate');
+      entry.title = title;
       entry.addEventListener('click', () => selectPage(id), { signal: lifetime });
       const frame = fromMarkup(
         '<section class="plugin-page" tabindex="-1"><header><h1></h1></header><div class="plugin-page-body"></div></section>',
       );
       required(frame.querySelector('h1')).textContent = title;
       required(frame.querySelector('.plugin-page-body')).append(content);
-      const unregister = pages.register(id, frame);
+      const unregister = pages.register(id, frame, entry);
       try {
         const release = slotRegistry.register('sidebar.actions', entry, { order });
         return () => {

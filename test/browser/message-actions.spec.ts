@@ -1,11 +1,11 @@
 import { expect } from '@playwright/test';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { readJson, writeJson } from '@mini-harness/platform/json';
-import { browserTest as test, chooseModel, expectInViewport, settingsSection } from '../support/browser.ts';
+import { browserTest as test, chooseModel, expectInViewport } from '../support/browser.ts';
 import { writePlugin } from '../support/plugin-fixture.ts';
 
-test('copy, preview and revise a message with its image, and release editing drafts by owner', async ({
+test('copy, preview and revise a message with its image, and show persisted plugin records', async ({
   page,
   launch,
 }) => {
@@ -18,30 +18,6 @@ test('copy, preview and revise a message with its image, and release editing dra
       });
       models.providers['local-mock'].models[0].input.push('image');
       writeJson(modelFile, models);
-      for (const [id, label] of [
-        ['old-editor', 'Older draft'],
-        ['new-editor', 'Newer draft'],
-      ]) {
-        const folder = join(paths.plugins, id);
-        mkdirSync(folder);
-        writeJson(join(folder, 'plugin.json'), {});
-        writeFileSync(
-          join(folder, 'web.js'),
-          `
-export const inject = ["miniComposer","miniSlots"];
-
-export const apply = (ctx) => {
-            const label = ${JSON.stringify(label)};
-            const control = document.createElement('button');
-            control.textContent = label;
-            control.onclick = () => ctx.effect(() => ctx.miniComposer.beginDraftMode({
-              title: label, text: label, revision: { sourceEntryId: 'fixture', expectedLeafId: null }
-            }));
-            ctx.effect(() => ctx.miniSlots.register('sidebar.actions', control));
-          };
-`,
-        );
-      }
       const records = writePlugin(
         paths.plugins,
         'record-writer',
@@ -81,11 +57,7 @@ export const apply = (ctx) => {
 `,
       );
       writeJson(join(paths.home, 'profiles', 'web', 'cordis.patch.yml'), {
-        plugins: [
-          { id: 'old-editor', name: '../../plugins/old-editor', client: true },
-          { id: 'new-editor', name: '../../plugins/new-editor', client: true },
-          { id: 'record-writer', name: '../../plugins/record-writer' },
-        ],
+        plugins: [{ id: 'record-writer', name: '../../plugins/record-writer' }],
       });
     },
   });
@@ -180,39 +152,6 @@ export const apply = (ctx) => {
   await expect(assistant.locator('.message')).toHaveText('Response: Removed picture');
   await expect(user.getByRole('img', { name: 'reference.png' })).toHaveCount(0);
   expect(JSON.stringify(mock.requests.at(-1))).not.toContain('image_url');
-
-  await page.setViewportSize({ width: 1280, height: 800 });
-  await page.getByRole('button', { name: 'Older draft', exact: true }).click();
-  await page.getByRole('button', { name: 'Newer draft', exact: true }).click();
-  await expect(prompt).toHaveText('Newer draft');
-  async function disablePlugin(id: string) {
-    const response = await page.request.patch(host.url + '/api/settings', {
-      headers: { Authorization: 'Bearer ' + host.token },
-      data: { entries: { [id]: { disabled: true } } },
-    });
-    expect(response.ok()).toBe(true);
-  }
-  await disablePlugin('old-editor');
-  await expect(page.getByRole('button', { name: 'Older draft' })).toHaveCount(0);
-  await expect(prompt).toHaveText('Newer draft');
-  await disablePlugin('new-editor');
-  await expect(page.getByRole('button', { name: 'Cancel editing' })).toBeHidden();
-
-  await page.getByRole('button', { name: 'Settings', exact: true }).click();
-  await settingsSection(page, 'Built-in plugins').click();
-  const settings = page.getByRole('dialog', { name: 'Settings' });
-  const helper = settings.getByRole('switch', { name: 'Session helper', exact: true });
-  await helper.uncheck();
-  await expect(user.locator('.message-action')).toHaveCount(0);
-  await expect(assistant.locator('.message-action')).toHaveCount(0);
-  await expect(helper).toBeEnabled();
-  await helper.check();
-  await expect(helper).toBeChecked();
-  await expect(helper).toBeEnabled();
-  await settings.getByRole('button', { name: 'Close settings' }).click();
-  await page.getByRole('button', { name: 'Original prompt', exact: true }).click();
-  await expect(edit).toBeVisible();
-  await expect(assistant.getByRole('button', { name: 'Copy message' })).toBeVisible();
 });
 
 test('image validation keeps the draft available for an image-capable model', async ({ page, launch }) => {

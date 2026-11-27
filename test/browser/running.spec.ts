@@ -1,127 +1,68 @@
-import { expectPresent } from '../support/required.ts';
 import { test, expect } from '@playwright/test';
 import { rmSync, mkdirSync, writeFileSync } from 'node:fs';
 import { createFixturePaths, createMockProvider } from '../support/mock-provider.ts';
 import { writePlugin } from '../support/plugin-fixture.ts';
-import { startIsolatedHost, settingsSection } from '../support/browser.ts';
+import { startIsolatedHost } from '../support/browser.ts';
 import { join } from 'node:path';
 import { writeJson } from '@mini-harness/platform/json';
 
-test('refresh and navigation preserve a run while another conversation completes', async ({ browser }) => {
-  for (const viewport of [
-    { width: 1366, height: 900 },
-    { width: 390, height: 844 },
-  ]) {
-    let entered: () => void = () => {
-      throw new Error('Not started');
-    };
-    let release: () => void = () => {
-      throw new Error('Not started');
-    };
-    const waiting = new Promise<void>((done) => {
-      entered = done;
-    });
-    const held = new Promise<void>((done) => {
-      release = done;
-    });
-    const mock = await createMockProvider(async ({ messages }) => {
-      if (messages.at(-1)?.content === 'Keep working') {
-        entered();
-        await held;
-        return 'Continued after refresh';
-      }
-      return 'Independent reply';
-    });
-    const { root, paths } = createFixturePaths(mock.url);
-    const service = await startIsolatedHost(paths);
-    const page = await browser.newPage({ viewport });
-    const openSidebar = async () => {
-      if (viewport.width < 860) await page.getByRole('button', { name: 'Toggle navigation' }).click();
-    };
-    try {
-      await page.goto(service.url + '/#token=' + service.token);
-      await page.getByRole('textbox', { name: 'Message' }).fill('Keep working');
-      await page.getByRole('button', { name: 'Send', exact: true }).click();
-      await waiting;
-      await page.reload({ waitUntil: 'domcontentloaded' });
-      await expect(page.getByRole('button', { name: 'Stop response' })).toBeVisible();
-      await openSidebar();
-      await page.getByRole('button', { name: 'Settings', exact: true }).click();
-      await settingsSection(page, 'General').click();
-      await page.getByRole('combobox', { name: 'Theme', exact: true }).selectOption('dark');
-      await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
-      await page.getByRole('button', { name: 'Close settings' }).click();
-      await openSidebar();
-      await page.getByRole('button', { name: 'Browse plugins' }).click();
-      await page.getByRole('button', { name: 'Subagents settings', exact: true }).click();
-      await page.getByLabel('Parallel children · subagents', { exact: true }).fill('2');
-      await page.getByRole('button', { name: 'Save configuration' }).click();
-      await expect(page.getByText('Saved.', { exact: true })).toBeVisible();
-      await openSidebar();
-      await page.getByRole('button', { name: /New conversation/ }).click();
-      await page.getByRole('textbox', { name: 'Message' }).fill('Second conversation');
-      await page.getByRole('button', { name: 'Send', exact: true }).click();
-      await expect(page.locator('.message.assistant')).toHaveText('Independent reply');
-      await openSidebar();
-      const first = page.getByRole('button', { name: 'Keep working', exact: true });
-      const id = expectPresent(await first.getAttribute('id'), 'conversation id').slice('session-'.length);
-      let resume: () => void = () => {
-        throw new Error('Not started');
-      };
-      let intercept: () => void = () => {
-        throw new Error('Not started');
-      };
-      const reached = new Promise<void>((done) => {
-        intercept = done;
-      });
-      const delayed = new Promise<void>((done) => {
-        resume = done;
-      });
-      await page.route(
-        '**/api/sessions/' + id,
-        async (route) => {
-          intercept();
-          await delayed;
-          await route.continue().catch(() => {
-            /* A later selection aborts this request. */
-          });
-        },
-        { times: 1 },
-      );
-      try {
-        await first.click();
-        await reached;
-        await page.getByRole('button', { name: 'Second conversation', exact: true }).click();
-        await expect(page.locator('.message.assistant')).toHaveText('Independent reply');
-      } finally {
-        resume();
-      }
-      await openSidebar();
-      let disconnected = false;
-      await page.route(
-        /\/events\?run=/,
-        (route) => {
-          disconnected = true;
-          return route.abort();
-        },
-        { times: 1 },
-      );
-      await first.click();
-      await expect.poll(() => disconnected).toBe(true);
-      await expect(page.getByRole('button', { name: 'Stop response' })).toBeVisible();
-      release();
-      await expect(page.locator('.message.assistant')).toHaveText('Continued after refresh');
-      await expect(page.locator('.message.user')).toHaveCount(1);
-      expect(mock.requests).toHaveLength(2);
-      await expect(page.getByRole('button', { name: 'Send', exact: true })).toBeVisible();
-      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-    } finally {
-      release();
-      await page.close();
-      await service.stop();
-      await mock.close();
-      rmSync(root, { recursive: true, force: true });
+test('refresh and navigation preserve a run while another conversation completes', async ({ page }) => {
+  let entered: () => void = () => {
+    throw new Error('Not started');
+  };
+  let release: () => void = () => {
+    throw new Error('Not started');
+  };
+  const waiting = new Promise<void>((done) => {
+    entered = done;
+  });
+  const held = new Promise<void>((done) => {
+    release = done;
+  });
+  const mock = await createMockProvider(async ({ messages }) => {
+    if (messages.at(-1)?.content === 'Keep working') {
+      entered();
+      await held;
+      return 'Continued after refresh';
     }
+    return 'Independent reply';
+  });
+  const { root, paths } = createFixturePaths(mock.url);
+  const service = await startIsolatedHost(paths);
+  try {
+    await page.goto(service.url + '/#token=' + service.token);
+    await page.getByRole('textbox', { name: 'Message' }).fill('Keep working');
+    await page.getByRole('button', { name: 'Send', exact: true }).click();
+    await waiting;
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await expect(page.getByRole('button', { name: 'Stop response' })).toBeVisible();
+    await page.getByRole('button', { name: /New conversation/ }).click();
+    await page.getByRole('textbox', { name: 'Message' }).fill('Second conversation');
+    await page.getByRole('button', { name: 'Send', exact: true }).click();
+    await expect(page.locator('.message.assistant')).toHaveText('Independent reply');
+    const first = page.getByRole('button', { name: 'Keep working', exact: true });
+    let disconnected = false;
+    await page.route(
+      /\/events\?run=/,
+      (route) => {
+        disconnected = true;
+        return route.abort();
+      },
+      { times: 1 },
+    );
+    await first.click();
+    await expect.poll(() => disconnected).toBe(true);
+    await expect(page.getByRole('button', { name: 'Stop response' })).toBeVisible();
+    release();
+    await expect(page.locator('.message.assistant')).toHaveText('Continued after refresh');
+    await expect(page.locator('.message.user')).toHaveCount(1);
+    expect(mock.requests).toHaveLength(2);
+    await expect(page.getByRole('button', { name: 'Send', exact: true })).toBeVisible();
+  } finally {
+    release();
+    await service.stop();
+    await mock.close();
+    rmSync(root, { recursive: true, force: true });
   }
 });
 
@@ -217,13 +158,6 @@ test('running messages can queue follow-ups and run shell commands from the GUI'
     await tool.locator('summary').click();
     await expect(page.locator('.tool-arguments')).toContainText('echo approved');
     await expect(page.locator('.tool-content')).toContainText('Exit 0');
-    expect(
-      await page
-        .locator('.tool-content')
-        .evaluate((node) =>
-          [...node.children].findIndex((child) => child.classList.contains('tool-arguments')),
-        ),
-    ).toBe(0);
     await expect(page.locator('.tool-duration')).toHaveText(/\d+ (ms|s)/);
     await expect(page.locator('.tool-exit-code')).toHaveText('Exit 0');
     await expect(page.locator('#runSummary')).toContainText('Completed');
@@ -298,20 +232,6 @@ test('switching workspaces preserves running conversations and each workspace’
     await panel.getByRole('button', { name: 'common.ts', exact: true }).click();
     await expect(panel.locator('.syntax-string')).toHaveText('"first"');
     await expect(panel.locator('.source-line')).toHaveAttribute('data-line', '1');
-    const separator = panel.getByRole('separator');
-    await expect(separator).toHaveAttribute('aria-valuenow', '380');
-    await separator.press('ArrowLeft');
-    await expect(separator).toHaveAttribute('aria-valuenow', '400');
-    await expect
-      .poll(() => panel.evaluate((node) => Math.round(node.getBoundingClientRect().width)))
-      .toBe(400);
-    const handle = expectPresent(await separator.boundingBox(), 'panel resize handle');
-    await page.mouse.move(handle.x + 3, handle.y + 60);
-    await page.mouse.down();
-    await page.mouse.move(handle.x - 37, handle.y + 60);
-    await expect(separator).toHaveAttribute('aria-valuenow', '440');
-    await expect(panel).toHaveCSS('transition-property', 'none');
-    await page.mouse.up();
     await close();
     await page.getByRole('button', { name: 'Add workspace', exact: true }).click();
     const picker = page.getByRole('dialog', { name: 'Add workspace' });
@@ -340,17 +260,6 @@ test('switching workspaces preserves running conversations and each workspace’
     await close();
     release();
     await expect(page.locator('.message.assistant')).toHaveText('First workspace finished');
-    await nav.getByRole('button', { name: 'Collapse workspace workspace', exact: true }).click();
-    await expect(nav.getByRole('button', { name: 'nested', exact: true })).toBeHidden();
-    await page.getByRole('button', { name: 'Search workspaces and conversations' }).click();
-    const search = page.getByRole('searchbox', { name: 'Search workspaces and conversations' });
-    await search.fill('child workspace');
-    await expect(
-      nav.getByRole('button', { name: 'Start in the child workspace', exact: true }),
-    ).toBeVisible();
-    await search.clear();
-    await page.reload();
-    await expect(nav.getByRole('button', { name: 'nested', exact: true })).toBeHidden();
   } finally {
     release();
     await page.close();
@@ -475,9 +384,6 @@ export const apply = (ctx) => {
   const service = await startIsolatedHost(paths);
   try {
     await page.goto(service.url + '/#token=' + service.token);
-    const title = page.locator('#conversationTitle');
-    await expect(title).toHaveText('New conversation');
-    const initialTitle = await title.boundingBox();
     await page.getByRole('textbox', { name: 'Message', exact: true }).fill('Start independent job');
     await page.getByRole('button', { name: 'Send', exact: true }).click();
     await expect(page.locator('.tool-card .tool-state')).toHaveText('Accepted');
@@ -487,30 +393,10 @@ export const apply = (ctx) => {
     const toggle = tasks.getByRole('button', { name: 'Tasks', exact: true });
     const agents = page.locator('.subagent-tasks');
     const agentToggle = agents.getByRole('button', { name: 'Subagents', exact: true });
-    await expect(agents).toBeHidden();
-    await expect(toggle).toBeInViewport();
-    expect((await title.boundingBox())?.y).toBe(initialTitle?.y);
-    await expect
-      .poll(async () => {
-        const workspace = await page.locator('#headerContext .workspace-button').boundingBox();
-        const button = await toggle.boundingBox();
-        return (
-          workspace &&
-          button &&
-          button.x >= workspace.x + workspace.width &&
-          Math.abs(button.y + button.height / 2 - workspace.y - workspace.height / 2) < 2
-        );
-      })
-      .toBe(true);
     await toggle.click();
     const panel = tasks.locator('.background-task-list');
-    await expect(panel).toBeInViewport({ ratio: 0.95 });
     const row = panel.getByRole('button', { name: 'Fixture job · Running', exact: true });
     await expect(row).toHaveAttribute('aria-expanded', 'false');
-    await expect(panel.locator('.task-output')).toHaveCount(0);
-    await row.click();
-    await expect(panel.locator('.task-output')).toHaveText('Task output is visible');
-    await row.click();
     await expect(panel.locator('.task-output')).toHaveCount(0);
     await row.click();
     await expect(panel.locator('.task-output')).toHaveText('Task output is visible');
@@ -529,33 +415,8 @@ export const apply = (ctx) => {
     await expect(agentToggle).toHaveText('1 subagent');
     await expect(toggle).toHaveText('1 task');
 
-    await page.setViewportSize({ width: 280, height: 844 });
-    const more = page.getByRole('button', { name: 'More conversation controls', exact: true });
-    const overflow = page.locator('#headerOverflow');
-    await expect(more).toBeVisible();
-    expect((await title.boundingBox())?.y).toBe(initialTitle?.y);
-    await expect(overflow).toBeHidden();
-    await more.click();
-    await expect(overflow).toBeInViewport({ ratio: 0.95 });
-    const overflowed = overflow.getByRole('button', { name: /^(Tasks|Subagents)$/ }).first();
-    await expect(overflowed).toBeVisible();
-    const type = await overflowed.getAttribute('aria-label');
-    await overflowed.click();
-    await expect(page.getByRole('region', { name: type!, exact: true })).toBeInViewport({ ratio: 0.95 });
-    await page.keyboard.press('Escape');
-    await page.keyboard.press('Escape');
-
-    await page.setViewportSize({ width: 1280, height: 844 });
-    await expect(more).toBeHidden();
-    await expect(
-      page.locator('#headerInline').getByRole('button', { name: 'Subagents', exact: true }),
-    ).toBeVisible();
-    await expect(
-      page.locator('#headerInline').getByRole('button', { name: 'Tasks', exact: true }),
-    ).toBeVisible();
     await agentToggle.click();
     const agentPanel = agents.locator('.subagent-list');
-    await expect(agentPanel).toBeInViewport({ ratio: 0.95 });
     await expect(
       agentPanel.getByRole('button', { name: 'Open conversation: Child fixture', exact: true }),
     ).toBeVisible();

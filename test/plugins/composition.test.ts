@@ -183,6 +183,11 @@ export const apply = (ctx, config) => {
   };
   const enabled = await request('/settings', 'PATCH', { scopes });
   assert.equal(enabled.status, 200, JSON.stringify(enabled.body));
+  const catalog = await request('/plugins', 'GET');
+  assert.equal(catalog.status, 200);
+  assert.ok(
+    !catalog.body.some(({ id }: { id: string }) => id === 'workspace-greeting' || id === 'scoped-tool'),
+  );
   assert.equal(existsSync(cleaned), false);
   const operation = (key: string, action = 'greet') =>
     '/workspace-greeting/' + key.slice('workspace:'.length) + '/' + action;

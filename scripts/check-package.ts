@@ -272,7 +272,7 @@ async function checkPackage() {
         // @ts-expect-error The draft snapshot cannot be edited directly.
         model.draft().text = 'Replace this';
         conversation.subscribe(['partial'], () => conversation.get().partial, signal);
-        ctx.effect(() => ctx.miniSettingsRegistry.register('example', { id: 'example', section: 'General', render: ({ configuration }) =>
+        ctx.effect(() => ctx.miniSettingsRegistry.register('example', { id: 'example', sectionId: 'general', render: ({ configuration }) =>
           primitives.status(String(configuration.get<boolean>('showDetails')))
         } satisfies SettingsContribution, browserPluginSettings(ctx)));
       }

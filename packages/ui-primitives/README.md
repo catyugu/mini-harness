@@ -19,9 +19,13 @@ Mount the returned nodes through a page, dialog or slot contribution and attach 
 
 ## Optional layout and styling
 
-Use `ui-row`, `ui-stack`, `ui-fill`, `ui-fixed`, `ui-truncate`, `ui-scroll` and `ui-content-width` on any native elements. Row and stack spacing is configurable with `--gap`; list rows also accept `--row-size`. `ui-meta`, `ui-status-dot` (with semantic `data-tone`), `ui-disclosure` and `ui-popover` provide shared presentation without prescribing content or business state. Custom components and unlayered plugin styles remain supported.
+Use `ui-row` with optional `ui-wrap`, `ui-stack`, `ui-fill`, `ui-fixed`, `ui-truncate`, `ui-scroll` and `ui-content-width` on any native elements. Row and stack spacing is configurable with `--gap`; list rows also accept `--row-size`. `ui-meta`, `ui-status-dot` (with semantic `data-tone`), `ui-disclosure` and `ui-popover` provide shared presentation without prescribing content or business state. Custom components and unlayered plugin styles remain supported.
 
-Use `bindPopover(trigger, panel, signal, options)` for a native popover. The returned positioning function can be called immediately after opening; the binding tracks viewport changes and updates the trigger's expanded state. `positionFloating` also works with an already visible non-popover surface.
+Use a standard, `compact` or `wide` field layout. Rows can wrap when the enclosing inline-size container becomes narrow. `ui-option` styles native listbox options, and `ui-nav-action` works with a compactable `ui-nav-label` inside a navigation container.
+
+Use `overflowActions(host, label, signal)` for a constrained row with a native overflow popover. Pass the ordered elements to the returned placement function. An owner with fixed sibling controls can supply a bounding element and the available width. The same elements move between the row and the menu as room changes.
+
+Use `bindPopover(trigger, panel, signal, options)` for native popovers. The returned function opens the panel with the trigger as its source. The binding tracks the trigger's position while open and reflects native visibility in `aria-expanded`.
 
 ## Markdown and lifecycle
 
@@ -31,4 +35,4 @@ The `core:primitives` browser Entry is enabled by the [web Profile](../../profil
 
 ## Verification
 
-[Rendering tests](../../test/browser/rendering.spec.ts) exercise Markdown, unsafe input and tool output. [File-view tests](../../test/browser/files.spec.ts) cover the shared controls in responsive panels. See [UI Theme](../ui-theme/README.md), [UI Layout](../ui-layout/README.md), and the [UI component cookbook](../../docs/cookbook/adding-a-ui-component.md).
+[Rendering tests](../../test/browser/rendering.spec.ts) exercise Markdown, unsafe input and tool output. [Primitive browser tests](../../test/browser/ui-primitives.spec.ts) cover overflow, focus and popover positioning. See [UI Theme](../ui-theme/README.md), [UI Layout](../ui-layout/README.md), and the [UI component cookbook](../../docs/cookbook/adding-a-ui-component.md).

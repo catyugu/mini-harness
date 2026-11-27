@@ -13,6 +13,10 @@ The Web interface is a separate Cordis graph. Server services publish a bootstra
 
 A feature contributes a page, renderer or command rather than replacing the application shell. A keyed renderer can replace presentation while keeping the underlying controller state. Mounting and disposal belong to the appropriate activation or view lifetime; do not retain a removed view's signal or listeners. Shared primitives and tokens are optional building blocks; features can supply arbitrary native DOM and their own styles. The startup stylesheet declares the reset, theme, primitives and layout layers. Unlayered feature styles override these defaults regardless of activation order. Verify narrow and wide layouts.
 
+## Ownership in the browser
+
+Layout owns desktop width preferences and open panels. It derives the docking and drawer modes from available space, projects them to CSS and ARIA, and keeps the active tab mounted across transitions. Header and Composer place their mounted slot contributions through the shared action primitive. Each feature retains its own controls, state and styling. Settings navigation uses stable section IDs and metadata owned by the defining Entry.
+
 ## Workspace resources
 
 Files owns browsing, search and path completion. Git Diff contributes change views. File Preview renders workspace files, session-owned attachments and draft resources. The server selects the scoped File Access provider; the browser opens typed resources in workspace-owned tabs or media dialogs. Sessions retains original attachment bytes. The raw user text and history preserve the resource reference; presentation is a projection.

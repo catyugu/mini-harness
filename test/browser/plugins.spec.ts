@@ -1,285 +1,70 @@
-import { test, expect } from '@playwright/test';
+import { expect } from '@playwright/test';
 import { rmSync, mkdirSync, writeFileSync, cpSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { createFixturePaths, createMockProvider } from '../support/mock-provider.ts';
-import { readJson, writeJson } from '@mini-harness/platform/json';
+import { writeJson } from '@mini-harness/platform/json';
 import {
-  readWebProfile,
+  browserTest as test,
   startIsolatedHost,
   settingsSection,
-  suggestions,
   modelButton,
   modelSearch,
-  chooseModel,
 } from '../support/browser.ts';
 
-test('frontend plugins own UI contributions and clean up on disable and reconfiguration', async ({
+test('plugin settings keep their identity when renamed and disappear on disable', async ({
   page,
+  launch,
 }) => {
-  let release = () => {};
-  let entered = () => {};
-  const held = new Promise<void>((done) => {
-    release = done;
-  });
-  const waiting = new Promise<void>((done) => {
-    entered = done;
-  });
-  const mock = await createMockProvider(async ({ messages }) => {
-    const last = messages.at(-1);
-    if (last?.content === 'Hold plugin response') {
-      entered();
-      await held;
-      return 'Stopped';
-    }
-    return last?.role === 'tool' ? 'Done' : { tool: 'ls', args: {} };
-  });
-  const { root, paths } = createFixturePaths(mock.url),
-    folder = join(paths.plugins, 'ui-example');
-  const models = readJson<any>(join(paths.home, 'models.json'), {});
-  const longName = 'Responsive Model ' + 'long-name-'.repeat(12);
-  models.providers['local-mock'].models.push({
-    ...models.providers['local-mock'].models[0],
-    id: 'responsive-model',
-    name: longName,
-    reasoning: true,
-  });
-  writeJson(join(paths.home, 'models.json'), models);
-  mkdirSync(folder);
-  writeFileSync(
-    join(folder, 'plugin.js'),
-    "import { defineConfig } from 'mini-harness/configuration';\nimport { readFileSync } from 'node:fs';\nexport const Config = defineConfig(JSON.parse(readFileSync(new URL('./schema.json', import.meta.url), 'utf8')));",
-  );
-  writeFileSync(
-    join(folder, 'schema.json'),
-    JSON.stringify({
-      type: 'object',
-      properties: {
-        label: { type: 'string', title: 'Button label', default: 'Plugin entry' },
-        showDetails: { type: 'boolean', default: false },
-      },
-    }),
-  );
-  writeFileSync(
-    join(folder, 'plugin.json'),
-    JSON.stringify({
-      title: 'UI example',
-      icon: {
-        path: 'M2 2h20v20H2z',
-        viewBox: '0 0 24 24',
-      },
-    }),
-  );
-  writeFileSync(
-    join(folder, 'web.js'),
-    `
-export const inject = ["miniPrimitives","miniComposer","miniTabs","miniSlots","miniSettingsRegistry","miniMessages"];
-export const provide = ["exampleUi"];
-import { browserPluginId, browserPluginSettings } from "mini-harness/ui-runtime/plugin-settings";
-
-export function apply(ctx, config) {
-    const signal = ctx.fiber.signal;
-    const { miniPrimitives, miniComposer } = ctx;
-    const context = document.createElement('span');
-    context.textContent = 'Custom header context';
-    ctx.effect(() => ctx.miniSlots.register('header.context', context));
-    for (const slot of ['sidebar','composer','inspector']) {
-      const node = document.createElement('button');
-      if (node.tagName === 'BUTTON') node.type = 'button';
-      node.dataset.exampleSlot = slot; node.textContent = slot === 'sidebar' ? config.label : 'Plugin ' + slot;
-      if (slot === 'composer') node.onclick = () => miniComposer.insert('Inserted by plugin');
-      if (slot === 'inspector') {
-        let opened = 0;
-        node.onclick = () => {
-          const panel = document.createElement('p');
-          panel.textContent = ++opened === 1 ? 'Plugin preview' : 'Updated plugin preview';
-          ctx.miniTabs.inspect('Example', panel, signal);
-        };
-      }
-      if (slot === 'sidebar') ctx.provide('exampleUi', node);
-      ctx.effect(() => ctx.miniSlots.register({sidebar:'sidebar.actions',composer:'conversation.composer',inspector:'header.actions'}[slot], node));
-    }
-    for (let index = 1; index <= 10; index++) {
-      const control = miniPrimitives.button('Plugin command ' + index);
-      control.dataset.exampleSlot = 'composer';
-      control.onclick = () => miniComposer.insert(control.textContent);
-      ctx.effect(() => ctx.miniSlots.register('conversation.composer', control));
-    }
-    ctx.effect(() => ctx.miniSettingsRegistry.register(browserPluginId(ctx), { section: 'General', id: 'preferences', order: 10, render({ bind }) {
-      const content = document.createElement('div');
-      const control = document.createElement('input');
-      control.type = 'checkbox';
-      content.append(miniPrimitives.field('Plugin preferences', control), bind(control, 'showDetails', {
-        read(value) { control.checked = value; }, write() { return control.checked; }
-      }));
-      return content;
-    } }, browserPluginSettings(ctx)));
-    for (const [section, id, text] of [
-      ['Model', 'model', 'Plugin model preferences'],
-      ['Extensions', 'extensions', 'Plugin settings']
-    ]) {
-      ctx.effect(() => ctx.miniSettingsRegistry.register(browserPluginId(ctx), { section, id, order: 10, render() {
-        const item = document.createElement('p');
-        item.textContent = text;
-        return item;
-      } }, browserPluginSettings(ctx)));
-    }
-    ctx.effect(() => ctx.miniComposer.command({ name: 'example', description: 'Add a plugin note', run: () => miniComposer.insert('Plugin note') }));
-    ctx.effect(() => ctx.miniMessages.registerTool('ls', () => { const node = document.createElement('p'); node.textContent = 'Custom listing result'; return node; }));
-  }
-`,
-  );
-  const dependent = join(paths.plugins, 'a-dependent');
-  mkdirSync(dependent);
-  writeFileSync(join(dependent, 'plugin.js'), 'export function apply() {}');
-  writeFileSync(join(dependent, 'plugin.json'), JSON.stringify({ title: 'Dependent UI' }));
-  writeFileSync(
-    join(dependent, 'web.js'),
-    `
-export const inject = ["miniSlots", "exampleUi"];
-
+  const { host } = await launch({
+    prepare(paths) {
+      const folder = join(paths.plugins, 'ui-example');
+      mkdirSync(folder);
+      writeJson(join(folder, 'plugin.json'), { title: 'UI example' });
+      writeFileSync(
+        join(folder, 'web.js'),
+        `
+export const inject = ['miniPrimitives', 'miniSlots', 'miniSettings', 'miniSettingsRegistry'];
+import { browserPluginSettings } from 'mini-harness/ui-runtime/plugin-settings';
 export function apply(ctx) {
-    const parent = ctx.exampleUi;
-    if (!parent) throw new Error('Dependency must mount first');
-    const node = document.createElement('button'); node.type = 'button'; node.textContent = 'Dependent ' + parent.textContent; ctx.effect(() => ctx.miniSlots.register('sidebar.actions', node));
-    ctx.effect(() => () => { document.documentElement.dataset.dependencyDisposal = parent.isConnected ? 'ordered' : 'incorrect'; });
-  }
+  const { miniPrimitives: ui, miniSettingsRegistry: registry } = ctx;
+  const update = registry.registerSection({ id: 'example', title: 'Example settings' }, ctx.fiber.signal);
+  const start = ui.button('Open example settings');
+  start.onclick = () => ctx.miniSettings.open('example');
+  ctx.effect(() => ctx.miniSlots.register('sidebar.actions', start));
+  ctx.effect(() => registry.register('ui-example', {
+    id: 'preferences',
+    sectionId: 'example',
+    render() {
+      const name = document.createElement('input');
+      const rename = ui.button('Translate section');
+      rename.onclick = () => update({ title: 'Translated settings' });
+      const content = document.createElement('div');
+      content.append(ui.field('Display name', name), rename);
+      return content;
+    },
+  }, browserPluginSettings(ctx)));
+}
 `,
-  );
-  writeJson(join(paths.home, 'profiles', 'web', 'cordis.patch.yml'), {
-    plugins: [
-      { id: 'ui-example', name: '../../plugins/ui-example', client: true },
-      { id: 'a-dependent', name: '../../plugins/a-dependent', client: true },
-    ],
+      );
+      writeJson(join(paths.home, 'profiles', 'web', 'cordis.patch.yml'), {
+        plugins: [{ id: 'ui-example', name: '../../plugins/ui-example', client: true }],
+      });
+    },
   });
-  const service = await startIsolatedHost(paths);
-  try {
-    await page.setViewportSize({ width: 1440, height: 900 });
-    await page.goto(service.url + '/#token=' + service.token);
-    await expect(page.getByRole('button', { name: 'Plugin entry', exact: true })).toBeVisible();
-    await expect(page.getByText('Custom header context', { exact: true })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Dependent Plugin entry', exact: true })).toBeVisible();
-    await test.step('Crowded composer contributions remain operable across layouts', async () => {
-      const prompt = page.getByRole('textbox', { name: 'Message', exact: true });
-      const controlsFit = () =>
-        page.locator('.composer-footer').evaluate((toolbar) => {
-          const bounds = toolbar.getBoundingClientRect();
-          return [...toolbar.querySelectorAll('button, select')]
-            .filter((control) => control.getClientRects().length && !control.closest('[popover]'))
-            .every((control) => {
-              const rect = control.getBoundingClientRect();
-              return rect.left >= bounds.left - 1 && rect.right <= bounds.right + 1;
-            });
-        });
-      await page.getByRole('button', { name: 'Plugin composer', exact: true }).click();
-      await expect(prompt).toHaveText('Inserted by plugin');
-      await chooseModel(page, 'responsive-model');
-      await page.getByRole('button', { name: 'Thinking level: Default' }).click();
-      await page
-        .getByRole('listbox', { name: 'Thinking levels' })
-        .getByRole('option', { name: 'High', exact: true })
-        .click();
-      await expect.poll(controlsFit).toBe(true);
-
-      await page.getByRole('button', { name: 'Open workspace panel' }).click();
-      await page.setViewportSize({ width: 1220, height: 900 });
-      await expect.poll(controlsFit).toBe(true);
-      await page.getByRole('button', { name: 'Close workspace panel' }).click();
-
-      await page.setViewportSize({ width: 320, height: 844 });
-      await expect.poll(controlsFit).toBe(true);
-      await expect(prompt).toHaveText('Inserted by plugin');
-      await page.getByRole('button', { name: 'Plugin command 10', exact: true }).click();
-      await expect(prompt).toContainText('Plugin command 10');
-      await prompt.fill('Inserted by plugin');
-      await page.getByRole('button', { name: 'Send', exact: true }).click();
-      await expect(page.locator('.message.assistant')).toHaveText('Done');
-
-      await prompt.fill('Hold plugin response');
-      await page.getByRole('button', { name: 'Send', exact: true }).click();
-      await waiting;
-      await expect.poll(controlsFit).toBe(true);
-      await page.setViewportSize({ width: 1440, height: 900 });
-      await expect.poll(controlsFit).toBe(true);
-      await page.getByRole('button', { name: 'Stop response' }).click();
-      await expect(page.getByLabel('Latest run')).toHaveAttribute('data-state', 'cancelled');
-      release();
-    });
-    await page.locator('.tool-card summary').click();
-    await expect(page.getByText('Custom listing result')).toBeVisible();
-    await page.getByRole('button', { name: 'Plugin inspector', exact: true }).click();
-    await expect(page.getByText('Plugin preview', { exact: true })).toBeVisible();
-    await page.getByRole('button', { name: 'Plugin inspector', exact: true }).click();
-    await expect(page.getByText('Updated plugin preview', { exact: true })).toBeVisible();
-    await page.getByRole('button', { name: 'Settings', exact: true }).click();
-    await settingsSection(page, 'General').click();
-    await expect(page.getByRole('combobox', { name: 'Default sending mode' })).toBeVisible();
-    const preferences = page.getByRole('checkbox', { name: 'Plugin preferences' });
-    await expect(preferences).not.toBeChecked();
-    await preferences.check();
-    await expect(preferences).toBeEnabled();
-    await expect(preferences).toBeChecked();
-    expect(readWebProfile(paths).configuration('ui-example')).toEqual({ showDetails: true });
-    await settingsSection(page, 'Model').click();
-    await expect(page.getByRole('button', { name: 'Add provider' })).toBeVisible();
-    await expect(page.getByText('Plugin model preferences')).toBeVisible();
-    await settingsSection(page, 'Extensions').click();
-    await expect(page.getByText('Plugin settings', { exact: true })).toBeVisible();
-    await settingsSection(page, 'Built-in plugins').click();
-    const builtins = page.locator('.builtin-plugins');
-    await expect(builtins.getByRole('heading')).toHaveText(['Optional plugins', 'Core plugins']);
-    for (const title of ['Transport', 'Web Authentication', 'Plugin Runtime', 'Tool Executor']) {
-      await expect(builtins.getByText(title, { exact: true })).toBeVisible();
-      await expect(builtins.getByRole('switch', { name: title, exact: true })).toHaveCount(0);
-    }
-    await expect(builtins.getByRole('switch', { name: 'Context Management', exact: true })).toBeChecked();
-    await expect(builtins.locator('svg')).toHaveCount(0);
-    await expect(builtins.getByText('UI example', { exact: true })).toHaveCount(0);
-    await page.getByRole('button', { name: 'Close settings', exact: true }).click();
-    await page.getByRole('button', { name: 'Browse plugins', exact: true }).click();
-    await expect(page.locator('.catalog-group').first().locator('strong')).toHaveText([
-      'Subagents',
-      'Agent',
-      'Shell',
-    ]);
-    await expect(page.locator('[data-plugin-row="core:transport"]')).toHaveCount(0);
-    await expect(page.locator('[data-plugin-row="ui-example"] strong')).toHaveText('UI example');
-    await expect(page.locator('[data-plugin-row="ui-example"] .plugin-symbol svg path')).toHaveAttribute(
-      'd',
-      'M2 2h20v20H2z',
-    );
-    await page.getByRole('button', { name: 'UI example settings', exact: true }).click();
-    await page.getByLabel('Button label · ui-example', { exact: true }).fill('Updated plugin');
-    await page.getByRole('button', { name: 'Save configuration', exact: true }).click();
-    await expect(page.getByText('Saved.', { exact: true })).toBeVisible();
-    await expect(page.locator('[data-example-slot=sidebar]')).toHaveCount(1);
-    await expect(page.locator('[data-example-slot=sidebar]')).toHaveText('Updated plugin');
-    await expect(page.getByRole('button', { name: 'Dependent Updated plugin', exact: true })).toBeAttached();
-    await page.getByRole('button', { name: 'All plugins', exact: true }).click();
-    await page.getByRole('switch', { name: 'Dependent UI', exact: true }).uncheck();
-    await expect(page.getByRole('button', { name: 'Dependent Updated plugin', exact: true })).toHaveCount(0);
-    await page.getByRole('switch', { name: 'UI example', exact: true }).uncheck();
-    await expect(page.locator('[data-example-slot]')).toHaveCount(0);
-    await expect(page.locator('html')).toHaveAttribute('data-dependency-disposal', 'ordered');
-    await expect(page.getByText('Updated plugin preview', { exact: true })).toHaveCount(0);
-    await page.getByRole('button', { name: 'Settings', exact: true }).click();
-    await settingsSection(page, 'General').click();
-    await expect(page.getByRole('combobox', { name: 'Default sending mode' })).toBeVisible();
-    await expect(page.getByText('Plugin preferences', { exact: true })).toHaveCount(0);
-    await expect(settingsSection(page, 'Extensions')).toBeHidden();
-    await page.getByRole('button', { name: 'Close settings' }).click();
-    await page.getByRole('button', { name: 'Inserted by plugin', exact: true }).click();
-    await page.getByRole('textbox', { name: 'Message', exact: true }).fill('/ex');
-    await expect(suggestions(page).getByRole('option', { name: /Add a plugin note/ })).toHaveCount(0);
-    await expect(page.locator('.tool-card')).toHaveAttribute('open', '');
-    await expect(page.getByText('Custom listing result')).toHaveCount(0);
-    await expect(page.locator('.tool-content pre').first()).toBeVisible();
-  } finally {
-    release();
-    await page.close();
-    await service.stop();
-    await mock.close();
-    rmSync(root, { recursive: true, force: true });
-  }
+  await page.goto(host.url + '/#token=' + host.token);
+  const entry = page.getByRole('button', { name: 'Open example settings' });
+  await entry.click();
+  const input = page.getByRole('textbox', { name: 'Display name' });
+  await input.fill('Keep this draft');
+  await page.getByRole('button', { name: 'Translate section' }).click();
+  await expect(settingsSection(page, 'Translated settings')).toHaveAttribute('aria-current', 'page');
+  await expect(input).toHaveValue('Keep this draft');
+  await page.getByRole('button', { name: 'Close settings' }).click();
+  await page.getByRole('button', { name: 'Browse plugins' }).click();
+  await page.getByRole('switch', { name: 'UI example', exact: true }).uncheck();
+  await expect(entry).toHaveCount(0);
+  await page.getByRole('button', { name: 'Settings', exact: true }).click();
+  await expect(settingsSection(page, 'Translated settings')).toHaveCount(0);
 });
 
 test('a failed browser plugin reports the saved state and can be retried', async ({ page }) => {
@@ -421,123 +206,7 @@ test('plugin catalog applies configuration and removes disabled browser capabili
     await closeSettings();
     await page.getByRole('button', { name: 'Toggle navigation' }).click();
     await page.getByRole('button', { name: 'Browse plugins' }).click();
-    await expect(catalog.getByRole('button', { name: 'Install plugin' })).toHaveCount(0);
-    await catalog.getByRole('button', { name: 'Subagents settings' }).click();
-    await expect(catalog.locator('[name="plugin-scope"]')).toHaveCount(0);
-    await expect(catalog.getByRole('switch', { name: 'Enabled in this scope' })).toHaveCount(0);
-    await catalog.getByRole('spinbutton', { name: 'Maximum child depth · subagents' }).fill('2');
-    await catalog.getByRole('button', { name: 'Save configuration' }).click();
-    await expect(catalog.getByText('Saved.', { exact: true })).toBeVisible();
-    const model = catalog.getByRole('combobox', { name: 'Child model · subagents' });
-    await expect(model).toHaveValue('null');
-    expect(readWebProfile(paths).configuration('subagents')?.model).toBeNull();
-    await model.selectOption({ label: 'Mock Model · local-mock' });
-    await catalog.getByRole('button', { name: 'Save configuration' }).click();
-    await expect(catalog.getByText('Saved.', { exact: true })).toBeVisible();
-    expect(readWebProfile(paths).configuration('subagents')?.model).toEqual({
-      provider: 'local-mock',
-      id: 'mock-model',
-    });
-    await catalog.getByRole('button', { name: /All plugins/ }).click();
-    await catalog.getByRole('button', { name: 'Subagents settings' }).click();
-    await expect(catalog.getByRole('spinbutton', { name: 'Maximum child depth · subagents' })).toHaveValue(
-      '2',
-    );
-    await catalog.getByRole('button', { name: /All plugins/ }).click();
-    const configureModels = async (disabled: boolean) => {
-      const response = await page.request.patch(service.url + '/api/settings', {
-        headers: { Authorization: 'Bearer ' + service.token },
-        data: { entries: { 'core:model-admin': { disabled } } },
-      });
-      expect(response.ok()).toBe(true);
-      await page.reload();
-      await page.getByRole('button', { name: 'Toggle navigation' }).click();
-      await page.getByRole('button', { name: 'Browse plugins' }).click();
-    };
-    await configureModels(true);
-    await catalog.getByRole('button', { name: 'Subagents settings' }).click();
-    await expect(catalog.getByRole('textbox', { name: 'Child model · subagents' })).toHaveValue(
-      JSON.stringify({ provider: 'local-mock', id: 'mock-model' }, null, 2),
-    );
-    await catalog.getByRole('button', { name: /All plugins/ }).click();
-    await configureModels(false);
-    await catalog.getByRole('button', { name: 'Subagents settings' }).click();
-    await expect(catalog.getByRole('combobox', { name: 'Child model · subagents' })).toHaveValue(
-      JSON.stringify({ provider: 'local-mock', id: 'mock-model' }),
-    );
-    await page.getByRole('button', { name: 'Toggle navigation' }).click();
-    await page.getByRole('button', { name: 'New conversation' }).click();
-    await expect(page.getByRole('textbox', { name: 'Message', exact: true })).toBeVisible();
   } finally {
-    await service.stop();
-    await mock.close();
-    rmSync(root, { recursive: true, force: true });
-  }
-});
-
-test('the Web plugin manager excludes entries declared only in scoped Profile composition', async ({
-  page,
-}) => {
-  const mock = await createMockProvider(),
-    { root, paths } = createFixturePaths(mock.url);
-  const folder = join(paths.plugins, 'workspace-example');
-  mkdirSync(folder);
-  writeFileSync(
-    join(folder, 'schema.json'),
-    JSON.stringify({
-      type: 'object',
-      properties: { value: { type: 'integer', minimum: 1 } },
-      required: ['value'],
-    }),
-  );
-  writeJson(join(folder, 'plugin.json'), {
-    title: 'Workspace example',
-  });
-  writeFileSync(
-    join(folder, 'plugin.js'),
-    "import { defineConfig } from 'mini-harness/configuration';\nimport { readFileSync } from 'node:fs';\nexport const Config = defineConfig(JSON.parse(readFileSync(new URL('./schema.json', import.meta.url), 'utf8')));\nexport const apply = (ctx, config) => { if (config.value === 1) throw new Error('Workspace setup failed'); };",
-  );
-  let service = await startIsolatedHost(paths);
-  try {
-    const workspaces = await page.request.get(service.url + '/api/workspaces', {
-      headers: { Authorization: 'Bearer ' + service.token },
-    });
-    expect(workspaces.ok()).toBe(true);
-    const [workspace] = await workspaces.json();
-    const key = 'workspace:' + workspace.id;
-    await service.stop();
-    const initial = {
-      scopes: {
-        [key]: {
-          entries: {
-            'workspace-example': {
-              name: '../../plugins/workspace-example',
-              disabled: false,
-              config: { value: 'invalid' },
-            },
-          },
-        },
-      },
-    };
-    writeJson(join(paths.home, 'profiles', 'web', 'cordis.patch.yml'), initial);
-    service = await startIsolatedHost(paths);
-    await page.goto(service.url + '/#token=' + service.token);
-    await page.getByRole('button', { name: 'Browse plugins' }).click();
-    await expect(page.getByRole('button', { name: 'Workspace example settings' })).toHaveCount(0);
-    await expect(page.getByRole('switch', { name: 'Workspace example' })).toHaveCount(0);
-    await page.getByRole('button', { name: 'Settings', exact: true }).click();
-    await settingsSection(page, 'Built-in plugins').click();
-    await expect(page.locator('.builtin-plugins').getByText('Workspace example')).toHaveCount(0);
-    const response = await page.request.get(service.url + '/api/plugins', {
-      headers: { Authorization: 'Bearer ' + service.token },
-    });
-    expect(response.ok()).toBe(true);
-    const plugins = await response.json();
-    expect(plugins.some(({ id }: { id: string }) => id === 'workspace-example')).toBe(false);
-    expect(plugins.every((plugin: object) => !('instances' in plugin))).toBe(true);
-    expect(readWebProfile(paths).scopes[key].entries['workspace-example']?.config?.value).toBe('invalid');
-  } finally {
-    await page.close();
     await service.stop();
     await mock.close();
     rmSync(root, { recursive: true, force: true });

@@ -43,12 +43,13 @@ export function apply(ctx: Context, config: { replaceComposer: boolean }) {
       signal,
     ),
   );
+  ctx.miniSettingsRegistry.registerSection({ id: 'browser-panel', title: 'Extensions' }, ctx.fiber.signal);
   ctx.effect(() =>
     ctx.miniSettingsRegistry.register(
       id,
       {
         id: 'example-info',
-        section: 'Extensions',
+        sectionId: 'browser-panel',
         render: () => ui.status('The example panel can also replace the conversation composer.'),
       } satisfies SettingsContribution,
       browserPluginSettings(ctx),

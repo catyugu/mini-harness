@@ -42,7 +42,7 @@ declare module 'mini-harness/cordis' {
     miniHeader: { setTitle(title: string): void };
     miniPages: {
       open(id?: string): void;
-      register(id: string, node: HTMLElement): () => void;
+      register(id: string, node: HTMLElement, trigger?: HTMLButtonElement): () => void;
       contribute(id: string, entry: PageContribution, signal: AbortSignal): () => void;
     };
     miniTabs: RightTabsPort & {

@@ -13,7 +13,7 @@ import {
   fromMarkup,
   iconButton,
   confirmAction,
-  positionFloating,
+  bindPopover,
 } from '@mini-harness/ui-primitives/primitives';
 import { payload } from '@mini-harness/ui-runtime/http';
 import { workspaceTree } from './navigation-tree.ts';
@@ -70,10 +70,10 @@ export function sessionNavigation(ctx: Context, options: NavigationServices) {
   const collapsed = new Set<string>(JSON.parse(localStorage.getItem(storageKey) ?? '[]'));
 
   const menu = document.createElement('div');
-  menu.className = 'workspace-menu';
+  menu.className = 'ui-popover workspace-menu';
+  menu.popover = 'auto';
   menu.setAttribute('role', 'menu');
   menu.setAttribute('aria-label', 'Workspace actions');
-  menu.hidden = true;
   const renameAction = button('Rename', 'quiet');
   renameAction.setAttribute('role', 'menuitem');
   renameAction.prepend(icon('edit'));
@@ -83,19 +83,16 @@ export function sessionNavigation(ctx: Context, options: NavigationServices) {
   removeAction.prepend(icon('trash'));
   menu.append(renameAction, removeAction);
   ctx.effect(() => ctx.miniSlots.register('dialog.root', menu));
-  let menuTrigger: HTMLElement | undefined;
+  let activeMenu: { trigger: HTMLElement; lifetime: AbortController } | undefined;
 
-  function closeMenu(restoreFocus = false) {
-    if (menu.hidden) return;
-    menu.hidden = true;
-    menuTrigger?.setAttribute('aria-expanded', 'false');
-    if (restoreFocus && menuTrigger?.isConnected) menuTrigger.focus({ preventScroll: true });
-    menuTrigger = undefined;
+  function closeMenu() {
+    activeMenu?.lifetime.abort();
+    activeMenu = undefined;
   }
   function openMenu(record: WorkspaceRecord, trigger: HTMLElement) {
     closeMenu();
-    menuTrigger = trigger;
-    trigger.setAttribute('aria-expanded', 'true');
+    const lifetime = new AbortController();
+    activeMenu = { trigger, lifetime };
     renameAction.onclick = () => {
       closeMenu();
       options.renameWorkspace(record);
@@ -104,35 +101,18 @@ export function sessionNavigation(ctx: Context, options: NavigationServices) {
       closeMenu();
       void options.removeWorkspace(record).catch(options.report);
     };
-    menu.hidden = false;
-    positionFloating(trigger, menu);
+    const show = bindPopover(trigger, menu, lifetime.signal);
+    show();
     renameAction.focus({ preventScroll: true });
   }
-  document.addEventListener(
-    'pointerdown',
-    (event) => {
-      if (
-        !menu.hidden &&
-        event.target instanceof Node &&
-        !menu.contains(event.target) &&
-        !menuTrigger?.contains(event.target)
-      )
-        closeMenu();
+  menu.addEventListener(
+    'toggle',
+    () => {
+      if (!menu.matches(':popover-open')) closeMenu();
     },
     { signal },
   );
-  document.addEventListener(
-    'keydown',
-    (event) => {
-      if (event.key === 'Escape' && !menu.hidden) {
-        event.preventDefault();
-        closeMenu(true);
-      }
-    },
-    { signal },
-  );
-  window.addEventListener('resize', () => closeMenu(), { signal });
-  element('sessions').addEventListener('scroll', () => closeMenu(), { signal });
+  signal.addEventListener('abort', closeMenu, { once: true });
 
   let draggingWorkspace: string | undefined;
   function clearDrag() {
@@ -370,7 +350,7 @@ export function sessionNavigation(ctx: Context, options: NavigationServices) {
         more.setAttribute('aria-haspopup', 'menu');
         more.setAttribute('aria-expanded', 'false');
         more.onclick = () => {
-          if (menuTrigger === more && !menu.hidden) closeMenu(true);
+          if (activeMenu?.trigger === more && menu.matches(':popover-open')) closeMenu();
           else openMenu(record, more);
         };
         const create = iconButton('New in ' + name, 'new-chat');

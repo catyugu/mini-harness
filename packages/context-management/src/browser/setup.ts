@@ -47,12 +47,11 @@ function detail(label: string, signal: AbortSignal) {
   panel.setAttribute('role', 'dialog');
   panel.setAttribute('aria-label', label);
   node.append(trigger, panel);
-  const position = bindPopover(trigger, panel, signal, { width: 340, prefer: 'above', maxHeight: 510 });
+  const show = bindPopover(trigger, panel, signal, { width: 340, prefer: 'above', maxHeight: 510 });
   trigger.onclick = () => {
     if (panel.matches(':popover-open')) panel.hidePopover();
     else {
-      panel.showPopover();
-      position();
+      show();
     }
   };
   return { node, trigger, panel };
@@ -304,7 +303,7 @@ function mountStats(ctx: Context) {
       panel.setAttribute('role', 'dialog');
       panel.setAttribute('aria-label', 'Context settings');
       node.append(trigger, panel);
-      const position = bindPopover(trigger, panel, signal, { width: 300, prefer: 'above' });
+      const show = bindPopover(trigger, panel, signal, { width: 300, prefer: 'above' });
       const draft = () => {
         const key = workspace();
         return key ? drafts.get(key) : undefined;
@@ -314,8 +313,7 @@ function mountStats(ctx: Context) {
         if (panel.matches(':popover-open')) panel.hidePopover();
         else {
           form.update(currentSettings());
-          panel.showPopover();
-          position();
+          show();
         }
       };
       const form = settingsForm(ctx, signal, write, async () => {
@@ -390,12 +388,16 @@ function setup(ctx: Context) {
   );
   ctx.inject(['miniSettingsRegistry', 'miniModels'], (settings) => {
     const { configuration, read } = profileSettings(ctx);
+    settings.miniSettingsRegistry.registerSection(
+      { id: 'context', title: 'Context', icon: 'file-text', order: 40 },
+      settings.fiber.signal,
+    );
     settings.effect(() =>
       settings.miniSettingsRegistry.register(
         browserPluginId(ctx),
         {
           id: 'context-management',
-          section: { title: 'Context', icon: 'file-text', order: 40 },
+          sectionId: 'context',
           order: 10,
           render({ signal }) {
             const form = settingsForm(

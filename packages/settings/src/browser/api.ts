@@ -4,6 +4,7 @@ import type { PluginConfiguration } from '@mini-harness/plugin-api/plugin-config
 import type { PluginIcon } from '@mini-harness/plugin-api/descriptor';
 
 export interface SettingsSection {
+  id: string;
   title: string;
   icon?: PluginIcon;
   order?: number;
@@ -25,7 +26,7 @@ export interface SettingsContext {
 
 export interface SettingsContribution {
   id: string;
-  section: string | SettingsSection;
+  sectionId: string;
   order?: number;
   render(context: SettingsContext): HTMLElement;
 }
@@ -44,11 +45,16 @@ declare module 'mini-harness/cordis' {
   }
   interface Context {
     miniSettings: {
-      open(title?: string): void;
+      open(sectionId?: string): void;
       onClose(listener: () => void, signal: AbortSignal): void;
     };
     miniSettingsData: RemoteStore<ProfileConfiguration>;
     miniSettingsRegistry: {
+      /** Define a section for this lifetime and return its metadata updater. */
+      registerSection(
+        section: SettingsSection,
+        signal: AbortSignal,
+      ): (metadata: Omit<SettingsSection, 'id'>) => void;
       register(
         owner: string,
         contribution: SettingsContribution,

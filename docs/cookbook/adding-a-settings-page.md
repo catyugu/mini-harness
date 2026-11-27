@@ -12,7 +12,7 @@ For a non-live plugin, read the validated `config` argument in `apply`. For a li
 
 The [Task notes browser entry](../examples/task-notes/web.ts) injects `miniSettingsRegistry` and `miniPrimitives`. It obtains its identity with `browserPluginId(ctx)` and its Entry configuration with `browserPluginSettings(ctx)` from `mini-harness/ui-runtime/plugin-settings`.
 
-Register a `SettingsContribution` with that configuration, inside `ctx.effect`. The contribution's `render({ bind })` creates a labeled input and binds it to `label`. The returned error element displays failed validation, and the supplied lifecycle keeps the control synchronized until the view is removed. Use primitives for controls and field layout, and the render context's signal for additional listeners.
+Define a section with `registerSection` for your browser Entry lifetime or use an existing section ID such as `general`. Register a `SettingsContribution` with that `sectionId` and the Entry configuration inside `ctx.effect`. The contribution's `render({ bind })` creates a labeled input and binds it to `label`. The returned error element displays failed validation, and the supplied lifecycle keeps the control synchronized until the view is removed. Use primitives for controls and field layout, and the render context's signal for additional listeners.
 
 ## 3. Enable and verify the example
 

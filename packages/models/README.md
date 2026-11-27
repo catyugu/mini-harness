@@ -41,3 +41,5 @@ The `core:models` [configuration schema](src/manifests/models.ts) contains the r
 ## Verification
 
 [Adapter tests](tests/adapter.test.ts) cover native protocol conversion, credentials, refresh failures and cancellation. [Preference tests](../../test/system/model-persistence.test.ts) cover scoped runs, restarts and failed writes. See [scoped providers](../../docs/scoped-providers.md), [configuration](../../docs/configuration.md) and the [package index](../../docs/packages.md).
+
+The browser `miniModels` service supplies a complete Model Picker for Composer and Context settings. Models owns its catalog subscription, trigger, search, options and popover. Callers place the returned node, set their current choice and handle selection.

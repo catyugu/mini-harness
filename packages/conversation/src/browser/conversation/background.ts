@@ -381,7 +381,7 @@ function setup(ctx: Context) {
     signal,
   );
   signal.addEventListener('abort', closeOutput, { once: true });
-  bindPopover(toggle, panel, signal);
+  const show = bindPopover(toggle, panel, signal);
   panel.addEventListener(
     'toggle',
     () => {
@@ -411,7 +411,7 @@ function setup(ctx: Context) {
       dismissed.delete(taskId);
       if (!live(task)) finishedOpen = true;
       render();
-      if (!open()) panel.showPopover();
+      if (!open()) show();
       if (expanded?.id !== taskId) showOutput(task);
     };
     node.append(view);

@@ -219,7 +219,7 @@ export function createComposer(
       const button = document.createElement('button');
       button.type = 'button';
       button.tabIndex = -1;
-      button.className = 'suggestion';
+      button.className = 'ui-option';
       button.id = 'input-option-' + position;
       button.setAttribute('role', 'option');
       button.setAttribute('aria-selected', 'false');

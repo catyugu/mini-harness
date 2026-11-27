@@ -1,4 +1,5 @@
 import type { Context } from 'mini-harness/cordis';
+import { overflowActions } from './actions.ts';
 import type { BrowserPrimitives } from './api.ts';
 import { button, field, dialog, iconButton, positionFloating, bindPopover, recordRow } from './primitives.ts';
 import { hydrateIcons, icon } from './icons.ts';
@@ -14,6 +15,7 @@ const setup = (ctx: Context) => {
     positionFloating,
     bindPopover,
     recordRow,
+    overflowActions,
     status(text, kind = 'status') {
       const node = document.createElement('p');
       node.className = 'hint';

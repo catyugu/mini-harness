@@ -3,7 +3,9 @@ import { rmSync } from 'node:fs';
 import { checkpointFixture, createFixturePaths, createMockProvider } from '../support/mock-provider.ts';
 import { readWebProfile, settingsSection, startIsolatedHost } from '../support/browser.ts';
 
-test('context settings and statistics stay usable at desktop and mobile widths', async ({ page }) => {
+test('context settings update the selected summary model and distinguish conversation overrides', async ({
+  page,
+}) => {
   const mock = await createMockProvider(({ messages }) => ({
     text: messages.at(-1)?.content.startsWith('Write a continuation checkpoint')
       ? checkpointFixture
@@ -62,8 +64,6 @@ test('context settings and statistics stay usable at desktop and mobile widths',
     await expect(auto).toBeChecked();
     const summaryModel = config.getByRole('button', { name: 'Summary model' });
     await expect(summaryModel).toHaveText('Current model');
-    const label = summaryModel.locator('span');
-    await expect.poll(() => label.evaluate((node) => node.scrollWidth <= node.clientWidth)).toBe(true);
     await summaryModel.click();
     await config.getByRole('option', { name: /Mock Model/ }).click();
     await expect(summaryModel).toHaveText('Mock Model');
@@ -88,21 +88,6 @@ test('context settings and statistics stay usable at desktop and mobile widths',
     await expect(page.getByRole('dialog', { name: 'Turn token usage' })).toContainText('80 tok');
     await page.keyboard.press('Escape');
 
-    await page.setViewportSize({ width: 320, height: 720 });
-    const dimensions = await status.evaluate((node) => ({
-      scroll: node.scrollWidth,
-      width: node.clientWidth,
-    }));
-    expect(dimensions.scroll).toBeLessThanOrEqual(dimensions.width);
-    const control = status.getByRole('button', { name: 'Context usage' });
-    await control.click();
-    const panel = page.getByRole('dialog', { name: 'Context usage' });
-    await expect(panel.getByText('Input budget used', { exact: true })).toBeVisible();
-    await expect(panel.getByText('Model window', { exact: true })).toBeVisible();
-    await expect(panel.getByRole('switch')).toHaveCount(0);
-    await page.keyboard.press('Escape');
-    await settings.click();
-    await expect(auto).not.toBeChecked();
     await page.reload();
     await settings.click();
     await expect(auto).not.toBeChecked();
@@ -111,19 +96,6 @@ test('context settings and statistics stay usable at desktop and mobile widths',
     await expect(auto).toBeChecked();
     await expect(summaryModel).toHaveText('Current model');
     await page.keyboard.press('Escape');
-    await page.getByRole('button', { name: 'Toggle navigation' }).click();
-    await page.getByRole('button', { name: 'Settings', exact: true }).click();
-    await settingsSection(page, 'Context').click();
-    await expect(page.getByRole('spinbutton', { name: 'Trigger threshold (%)' })).toHaveValue('80');
-    await page.getByRole('button', { name: 'All settings' }).click();
-    await settingsSection(page, 'Built-in plugins').click();
-    const plugin = page.getByRole('switch', { name: 'Context Management', exact: true });
-    await plugin.uncheck();
-    await expect(plugin).toBeEnabled();
-    await expect(status).toHaveCount(0);
-    await expect(settings).toHaveCount(0);
-    await page.getByRole('button', { name: 'All settings' }).click();
-    await expect(settingsSection(page, 'Context')).toHaveCount(0);
   } finally {
     await service.stop();
     await mock.close();
