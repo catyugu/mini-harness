@@ -128,7 +128,13 @@ test('model adapter streams native messages, tool calls and metadata through the
   assert.deepEqual(restored.thinkingLevelMap, advanced.thinkingLevelMap);
   assert.deepEqual(restored.cost, advanced.cost);
   assert.deepEqual(restored.compat, { supportsDeveloperRole: false });
-  assert.deepEqual(adapter.resolve(choice)?.capabilities?.thinkingLevels, ['off', 'low', 'medium', 'high', 'xhigh']);
+  assert.deepEqual(adapter.resolve(choice)?.capabilities?.thinkingLevels, [
+    'off',
+    'low',
+    'medium',
+    'high',
+    'xhigh',
+  ]);
   const selected = adapter.requestModel(choice)?.model;
   assert.equal(selected?.api, 'openai-responses');
   assert.equal(selected?.baseUrl, mock.url + '/new');

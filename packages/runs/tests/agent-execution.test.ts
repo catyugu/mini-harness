@@ -71,13 +71,13 @@ async function fixture(
     resolve: (choice) => ({
       model: choice,
       capabilities: {
-      id: model.id,
-      name: 'Fixture',
-      input: choice.id === 'text-only' ? ['text'] : ['text', 'image'],
-      contextWindow: 32000,
-      maxTokens: 1024,
-      reasoning: true,
-      thinkingLevels: thinkingLevels(choice.id),
+        id: model.id,
+        name: 'Fixture',
+        input: choice.id === 'text-only' ? ['text'] : ['text', 'image'],
+        contextWindow: 32000,
+        maxTokens: 1024,
+        reasoning: true,
+        thinkingLevels: thinkingLevels(choice.id),
       },
     }),
   });

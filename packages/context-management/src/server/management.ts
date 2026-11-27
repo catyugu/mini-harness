@@ -105,7 +105,9 @@ export class ContextManagement {
     if (available <= 0) return;
     const desired = target - fixed - retained;
     const checkpointTarget = desired > 0 ? Math.min(desired, available) : available;
-    const { model, capabilities: capability } = selectModel(this.models, [settings.summaryModel ?? request.model]);
+    const { model, capabilities: capability } = selectModel(this.models, [
+      settings.summaryModel ?? request.model,
+    ]);
     let scale: number | undefined;
     const summaryRequest: LlmRequest = {
       model,

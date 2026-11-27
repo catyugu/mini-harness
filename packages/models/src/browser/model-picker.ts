@@ -201,9 +201,7 @@ export function createModelPicker(
     selected =
       choice === null
         ? undefined
-        : models.find(
-            (model) => model.provider === choice.provider && model.id === choice.id,
-          );
+        : models.find((model) => model.provider === choice.provider && model.id === choice.id);
     caption.textContent = selected?.name ?? (choice?.id || emptyLabel);
     button.title = selected ? providerName(selected.provider) + ' / ' + selected.id : '';
     button.setAttribute('aria-label', accessibleLabel ?? (selected ? 'Model: ' + selected.name : emptyLabel));

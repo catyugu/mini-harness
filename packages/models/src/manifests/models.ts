@@ -46,7 +46,8 @@ const plugin: Plugin.Object = {
     let current = ctx.harnessPluginSettings.get<ModelChoice | null>('model');
     let saving: ModelChoice | null | undefined;
     const same = (left: ModelChoice | null, right: ModelChoice | null | undefined) =>
-      left === right || (left !== null && right != null && left.provider === right.provider && left.id === right.id);
+      left === right ||
+      (left !== null && right != null && left.provider === right.provider && left.id === right.id);
     const select = (model: ModelChoice | null) => {
       if (same(model, current)) return;
       current = model && { ...model };

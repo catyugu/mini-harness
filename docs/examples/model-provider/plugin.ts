@@ -31,8 +31,7 @@ const adapter: LlmAdapter = {
     request.signal.throwIfAborted();
     const input = [...request.messages].reverse().find((message) => message.role === 'user')?.content;
     const text =
-      'Echo: ' +
-      (input ?? []).flatMap((part) => (part.type === 'text' ? [part.text] : [])).join('\n');
+      'Echo: ' + (input ?? []).flatMap((part) => (part.type === 'text' ? [part.text] : [])).join('\n');
     yield { type: 'text-delta', text };
     request.signal.throwIfAborted();
     yield {

@@ -320,10 +320,12 @@ export class ModelStore implements ModelStorePort {
 
   resolve(choice: ModelChoice) {
     const selected = this.requestModel(choice);
-    return selected && {
-      model: { provider: choice.provider, id: selected.model.id },
-      capabilities: capabilities(selected.model),
-    };
+    return (
+      selected && {
+        model: { provider: choice.provider, id: selected.model.id },
+        capabilities: capabilities(selected.model),
+      }
+    );
   }
 
   providers(): ProviderInfo[] {

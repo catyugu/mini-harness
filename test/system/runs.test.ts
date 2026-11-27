@@ -517,7 +517,7 @@ test('retry looks up the failed delivery by its native entry identity', async (t
       .projection()
       .timeline.filter(isViewMessage)
       .filter((message) => message.role === 'user')
-    .find(({ submissionId }) => submissionId === acceptedId)?.inboxId,
+      .find(({ submissionId }) => submissionId === acceptedId)?.inboxId,
     accepted.messageId,
   );
   assert.deepEqual(runs.retryInput(session.id, acceptedId)?.missing, []);

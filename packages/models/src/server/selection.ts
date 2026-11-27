@@ -52,14 +52,13 @@ export function assertImageInput(capabilities: ProviderModel, count: number) {
     );
 }
 
-export function prepareModelMessages(capabilities: ProviderModel, messages: NativeMessage[]): NativeMessage[] {
+export function prepareModelMessages(
+  capabilities: ProviderModel,
+  messages: NativeMessage[],
+): NativeMessage[] {
   if (capabilities.input.includes('image')) return messages;
   return messages.map((message) => {
-    if (
-      message.role === 'assistant' ||
-      !message.content.some(({ type }) => type === 'image')
-    )
-      return message;
+    if (message.role === 'assistant' || !message.content.some(({ type }) => type === 'image')) return message;
     return {
       ...message,
       content: message.content.map((part) =>

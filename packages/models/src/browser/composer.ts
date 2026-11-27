@@ -40,7 +40,8 @@ export function mountModelControls(ctx: Context, signal: AbortSignal) {
     const sending = running() || state.interaction.operation === 'submit';
     const catalog = ctx.miniModels.get();
     const choice = current.model ?? (sending ? state.session?.model : undefined) ?? catalog.recent;
-    const same = choice && choice.provider === state.session?.model?.provider && choice.id === state.session.model.id;
+    const same =
+      choice && choice.provider === state.session?.model?.provider && choice.id === state.session.model.id;
     const thinking =
       current.thinkingLevel === undefined
         ? same
