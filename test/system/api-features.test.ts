@@ -169,8 +169,7 @@ test('GUI APIs configure providers, persist keys privately, discover Skills and 
   );
   assert.deepEqual((await request('/sessions/search?q=unmatched-phrase')).body, []);
   assert.equal((await request('/providers', 'DELETE', { id: 'gui-test' })).status, 200);
-  const afterRemoval = (await request('/settings')).body;
-  assert.deepEqual(afterRemoval.entries['core:models']?.config?.model, { provider: '', id: '' });
+  assert.deepEqual((await request('/models')).body.recent, { provider: '', id: '' });
   assert.equal(
     (await request('/providers')).body.some((provider: { id: string }) => provider.id === 'gui-test'),
     false,

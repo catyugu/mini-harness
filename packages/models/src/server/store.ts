@@ -85,7 +85,7 @@ export class ModelStore implements ModelStorePort {
   private effective = new Map<string, CatalogProvider>();
   private writes: Promise<unknown> = Promise.resolve();
 
-  constructor(home: string) {
+  constructor(home: string, private readonly changed = () => {}) {
     this.file = join(home, 'models.json');
     this.credentials = new FileCredentials(join(home, 'auth.json'));
   }
@@ -117,6 +117,7 @@ export class ModelStore implements ModelStorePort {
     return this.enqueue(async () => {
       const configuration = parseConfiguration(readJson(this.file, { providers: {} }));
       await this.resolveCatalog(configuration);
+      this.changed();
     });
   }
 
@@ -289,6 +290,7 @@ export class ModelStore implements ModelStorePort {
       }
       throw error;
     }
+    this.changed();
   }
 
   saveProvider(input: unknown) {

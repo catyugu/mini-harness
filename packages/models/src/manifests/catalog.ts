@@ -23,6 +23,9 @@ const plugin: Plugin.Object = {
   provide: ['harnessModels'],
   apply(ctx) {
     const sources = new Set<Contribution>();
+    ctx.inject(['harnessChanges'], (scope) => {
+      scope.effect(() => scope.harnessChanges.register('models'));
+    });
     const changed = () => ctx.get('harnessChanges')?.invalidate('models');
     function visible(caller: Context) {
       return rankScoped(scopeOf(caller), sources).filter(({ owner }) => !owner.aborted);

@@ -11,7 +11,7 @@ const plugin: Plugin.Object = {
   inject: ['harnessState'],
   provide: ['harnessModelStore'],
   async apply(ctx) {
-    const store = new ModelStore(ctx.harnessState.paths.home);
+    const store = new ModelStore(ctx.harnessState.paths.home, () => ctx.get('harnessChanges')?.invalidate('models'));
     ctx.effect(() => () => store.close());
     await store.refresh();
     ctx.provide('harnessModelStore', store);
