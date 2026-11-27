@@ -121,9 +121,8 @@ test('a failed recent-model write does not delay accepted input or terminate exe
     });
     assert.equal(context.harnessModels.resolve({ provider: 'local-mock', id: 'second-model' }), undefined);
     assert.deepEqual(context.harnessModelPreference.recent(), { provider: '', id: '' });
-    await assert.rejects(
-      context.harnessModelPreference.remember({ provider: 'local-mock', id: 'mock-model' }),
-    );
+    // The original persisted model is still valid; selecting it requires no write.
+    await context.harnessModelPreference.remember({ provider: 'local-mock', id: 'mock-model' });
     assert.equal(context.harnessModelPreference.recent().id, 'mock-model');
     await runtime.stop();
     assert.ok(context.logger.buffer.some(({ args }) => args[0] === 'Could not save recent model: %s'));
