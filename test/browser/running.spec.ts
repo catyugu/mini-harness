@@ -162,8 +162,6 @@ test('running messages can queue follow-ups and run shell commands from the GUI'
     await page.getByRole('textbox', { name: 'Message', exact: true }).fill('Wait');
     await page.getByRole('button', { name: 'Send', exact: true }).click();
     await waiting;
-    await page.setViewportSize({ width: 1220, height: 900 });
-    await page.getByRole('button', { name: 'Open workspace panel' }).click();
     await page.getByRole('button', { name: 'Permissions: Standard' }).click();
     await expect(
       page.getByRole('listbox', { name: 'Conversation permissions' }).getByRole('option'),
@@ -180,17 +178,8 @@ test('running messages can queue follow-ups and run shell commands from the GUI'
     await page.getByRole('button', { name: 'Send with Steer', exact: true }).click();
     await page.getByRole('button', { name: 'Cancel queued message: First instruction' }).click();
     await expect(page.locator('#queuedMessages')).toBeHidden();
-    const prompt = page.getByRole('textbox', { name: 'Message', exact: true });
-    await prompt.fill('Additional instruction');
-    await page.getByRole('button', { name: 'Close workspace panel' }).click();
-    await page.setViewportSize({ width: 320, height: 720 });
-    await expect(prompt).toHaveText('Additional instruction');
-    await expect(mode).toHaveValue('steer');
-    const steer = page.getByRole('button', { name: 'Send with Steer', exact: true });
-    await expect(steer).toBeInViewport({ ratio: 0.99 });
-    await expect(page.getByRole('button', { name: 'Stop response' })).toBeInViewport({ ratio: 0.99 });
-    await steer.click();
-    await page.setViewportSize({ width: 1220, height: 900 });
+    await page.getByRole('textbox', { name: 'Message', exact: true }).fill('Additional instruction');
+    await page.getByRole('button', { name: 'Send with Steer', exact: true }).click();
     await expect(page.locator('#queuedMessages .queue-item > span')).toHaveText(
       'Steer · Additional instruction',
     );

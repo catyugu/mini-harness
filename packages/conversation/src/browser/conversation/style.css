@@ -199,6 +199,7 @@
   min-width: 0;
 }
 .composer-footer {
+  flex-wrap: wrap;
   min-height: var(--control);
   padding-left: 4px;
 }
@@ -206,7 +207,8 @@
   flex-wrap: wrap;
 }
 .composer-secondary {
-  flex: 1;
+  flex: 1 1 auto;
+  flex-wrap: wrap;
   justify-content: flex-end;
 }
 .composer-actions {
@@ -217,9 +219,6 @@
   .composer-footer {
     flex-direction: column;
     align-items: stretch;
-  }
-  .composer-secondary {
-    flex-wrap: wrap;
   }
 }
 #send,

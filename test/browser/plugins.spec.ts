@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 import { rmSync, mkdirSync, writeFileSync, cpSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { createFixturePaths, createMockProvider } from '../support/mock-provider.ts';
-import { writeJson } from '@mini-harness/platform/json';
+import { readJson, writeJson } from '@mini-harness/platform/json';
 import {
   readWebProfile,
   startIsolatedHost,
@@ -10,16 +10,40 @@ import {
   suggestions,
   modelButton,
   modelSearch,
+  chooseModel,
 } from '../support/browser.ts';
 
 test('frontend plugins own UI contributions and clean up on disable and reconfiguration', async ({
   page,
 }) => {
-  const mock = await createMockProvider(({ messages }) =>
-    messages.at(-1)?.role === 'tool' ? 'Done' : { tool: 'ls', args: {} },
-  );
+  let release = () => {};
+  let entered = () => {};
+  const held = new Promise<void>((done) => {
+    release = done;
+  });
+  const waiting = new Promise<void>((done) => {
+    entered = done;
+  });
+  const mock = await createMockProvider(async ({ messages }) => {
+    const last = messages.at(-1);
+    if (last?.content === 'Hold plugin response') {
+      entered();
+      await held;
+      return 'Stopped';
+    }
+    return last?.role === 'tool' ? 'Done' : { tool: 'ls', args: {} };
+  });
   const { root, paths } = createFixturePaths(mock.url),
     folder = join(paths.plugins, 'ui-example');
+  const models = readJson<any>(join(paths.home, 'models.json'), {});
+  const longName = 'Responsive Model ' + 'long-name-'.repeat(12);
+  models.providers['local-mock'].models.push({
+    ...models.providers['local-mock'].models[0],
+    id: 'responsive-model',
+    name: longName,
+    reasoning: true,
+  });
+  writeJson(join(paths.home, 'models.json'), models);
   mkdirSync(folder);
   writeFileSync(
     join(folder, 'plugin.js'),
@@ -74,6 +98,12 @@ export function apply(ctx, config) {
       if (slot === 'sidebar') ctx.provide('exampleUi', node);
       ctx.effect(() => ctx.miniSlots.register({sidebar:'sidebar.actions',composer:'conversation.composer',inspector:'header.actions'}[slot], node));
     }
+    for (let index = 1; index <= 10; index++) {
+      const control = miniPrimitives.button('Plugin command ' + index);
+      control.dataset.exampleSlot = 'composer';
+      control.onclick = () => miniComposer.insert(control.textContent);
+      ctx.effect(() => ctx.miniSlots.register('conversation.composer', control));
+    }
     ctx.effect(() => ctx.miniSettingsRegistry.register(browserPluginId(ctx), { section: 'General', id: 'preferences', order: 10, render({ bind }) {
       const content = document.createElement('div');
       const control = document.createElement('input');
@@ -123,17 +153,71 @@ export function apply(ctx) {
   });
   const service = await startIsolatedHost(paths);
   try {
+    await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto(service.url + '/#token=' + service.token);
     await expect(page.getByRole('button', { name: 'Plugin entry', exact: true })).toBeVisible();
     await expect(page.getByText('Custom header context', { exact: true })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Dependent Plugin entry', exact: true })).toBeVisible();
-    await page.getByRole('button', { name: 'Plugin composer', exact: true }).click();
-    await expect(page.getByRole('textbox', { name: 'Message', exact: true })).toHaveText(
-      'Inserted by plugin',
-    );
-    await page.getByRole('button', { name: 'Send', exact: true }).click();
-    await expect(page.getByText('Custom listing result')).toBeHidden();
-    await expect(page.locator('.message.assistant')).toHaveText('Done');
+    await test.step('Crowded composer contributions remain operable across layouts', async () => {
+      const prompt = page.getByRole('textbox', { name: 'Message', exact: true });
+      const controlsFit = () =>
+        page.locator('.composer-footer').evaluate((toolbar) => {
+          const bounds = toolbar.getBoundingClientRect();
+          return [...toolbar.querySelectorAll('button, select')]
+            .filter((control) => control.getClientRects().length && !control.closest('[popover]'))
+            .every((control) => {
+              const rect = control.getBoundingClientRect();
+              return rect.left >= bounds.left - 1 && rect.right <= bounds.right + 1;
+            });
+        });
+      await page.getByRole('button', { name: 'Plugin composer', exact: true }).click();
+      await expect(prompt).toHaveText('Inserted by plugin');
+      await chooseModel(page, 'responsive-model');
+      const thinking = page.locator('#thinkingLevel');
+      await thinking.click();
+      await page.getByRole('listbox', { name: 'Thinking levels' }).getByRole('option', { name: 'High', exact: true }).click();
+      await expect.poll(controlsFit).toBe(true);
+
+      await page.getByRole('button', { name: 'Open workspace panel' }).click();
+      await page.setViewportSize({ width: 1220, height: 900 });
+      await expect.poll(controlsFit).toBe(true);
+      await expect(prompt).toHaveText('Inserted by plugin');
+      await expect(modelButton(page)).toHaveText(longName);
+      await expect(thinking).toHaveAttribute('aria-label', 'Thinking level: High');
+      await page.getByRole('button', { name: 'Close workspace panel' }).click();
+
+      await page.setViewportSize({ width: 320, height: 844 });
+      await expect.poll(controlsFit).toBe(true);
+      await page.getByRole('button', { name: 'Plugin command 10', exact: true }).click();
+      await expect(prompt).toContainText('Plugin command 10');
+      await prompt.fill('Inserted by plugin');
+      await chooseModel(page, 'responsive-model');
+      await expect(thinking).toHaveAttribute('aria-label', 'Thinking level: High');
+
+      await page.setViewportSize({ width: 1440, height: 900 });
+      await page.getByRole('button', { name: 'Send', exact: true }).click();
+      await expect(page.getByText('Custom listing result')).toBeHidden();
+      await expect(page.locator('.message.assistant')).toHaveText('Done');
+
+      await prompt.fill('Hold plugin response');
+      await page.getByRole('button', { name: 'Send', exact: true }).click();
+      await waiting;
+      await expect.poll(controlsFit).toBe(true);
+      await page.setViewportSize({ width: 320, height: 844 });
+      const mode = page.getByRole('combobox', { name: 'Message sending mode' });
+      await mode.selectOption('queue');
+      await prompt.fill('Queued from crowded composer');
+      await expect.poll(controlsFit).toBe(true);
+      await page.getByRole('button', { name: 'Send with Queue', exact: true }).click();
+      await page.getByRole('button', { name: 'Cancel queued message: Queued from crowded composer' }).click();
+
+      await page.setViewportSize({ width: 1440, height: 900 });
+      await expect(mode).toHaveValue('queue');
+      await expect.poll(controlsFit).toBe(true);
+      await page.getByRole('button', { name: 'Stop response' }).click();
+      await expect(page.getByLabel('Latest run')).toHaveAttribute('data-state', 'cancelled');
+      release();
+    });
     await page.locator('.tool-card summary').click();
     await expect(page.getByText('Custom listing result')).toBeVisible();
     await page.getByRole('button', { name: 'Plugin inspector', exact: true }).click();
@@ -204,6 +288,7 @@ export function apply(ctx) {
     await expect(page.getByText('Custom listing result')).toHaveCount(0);
     await expect(page.locator('.tool-content pre').first()).toBeVisible();
   } finally {
+    release();
     await page.close();
     await service.stop();
     await mock.close();
