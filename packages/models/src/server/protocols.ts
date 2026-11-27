@@ -1,6 +1,6 @@
 import type { ProviderStreams } from '@earendil-works/pi-ai';
 import { DomainError } from '@mini-harness/platform/errors';
-import { modelCapacity, modelDefaults, type ProviderModelDefinition } from '../shared/catalog.ts';
+import { modelCapacity, modelDefaults, type ProviderModelDefinition } from '../shared/pi-provider.ts';
 import type { ProviderConnection } from './provider-settings.ts';
 
 function record(value: unknown) {

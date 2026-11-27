@@ -2,9 +2,9 @@ import { button, dialog, field, fromMarkup, required } from '@mini-harness/ui-pr
 import {
   maxModelTokens,
   modelDefaults,
-  type ProviderModel,
   type ProviderModelDefinition,
-} from '../shared/catalog.ts';
+} from '../shared/pi-provider.ts';
+import type { ProviderModel } from '../shared/catalog.ts';
 
 type ModelRow = {
   node: HTMLDetailsElement;

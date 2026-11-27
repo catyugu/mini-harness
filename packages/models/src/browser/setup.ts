@@ -3,7 +3,8 @@ import { browserRequest } from '@mini-harness/ui-runtime/http';
 import { providerManager } from './provider-manager.ts';
 import type { Context } from 'mini-harness/cordis';
 import type { ModelChoice } from '@mini-harness/llm/vocabulary';
-import type { ModelCatalog, ProtocolInfo } from '../shared/catalog.ts';
+import type { ModelSummary } from '../shared/catalog.ts';
+import type { ProviderInfo, ProtocolInfo } from '../shared/pi-provider.ts';
 import { RemoteStore } from '@mini-harness/ui-runtime/remote-store';
 import { createModelPicker } from './model-picker.ts';
 import { mountModelControls } from './composer.ts';
@@ -12,7 +13,9 @@ const setup = async (ctx: Context) => {
   const { miniSettings: settings } = ctx;
   const state = new RemoteStore(() =>
     browserRequest<
-      ModelCatalog & {
+      {
+        models: ModelSummary[];
+        providers: ProviderInfo[];
         recent: ModelChoice;
         canManageProviders: boolean;
         protocols: ProtocolInfo[];

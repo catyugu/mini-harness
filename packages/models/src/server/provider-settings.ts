@@ -2,7 +2,7 @@ import { DomainError } from '@mini-harness/platform/errors';
 import { Check } from 'typebox/value';
 import { ThinkingLevelMapSchema, ModelCostSchema } from '@earendil-works/pi-ai/providers/model-schema';
 import { CompatSchemasByApi, ProviderCompatSchema } from '@earendil-works/pi-ai/providers/compat-schema';
-import { modelCapacity, providerIdPattern, type ProviderModelDefinition } from '../shared/catalog.ts';
+import { modelCapacity, providerIdPattern, type ProviderModelDefinition } from '../shared/pi-provider.ts';
 import type { CatalogModel } from './store-api.ts';
 import { protocols } from './protocols.ts';
 

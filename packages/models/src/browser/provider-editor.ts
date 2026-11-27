@@ -4,9 +4,9 @@ import { button, field, fromMarkup, required } from '@mini-harness/ui-primitives
 import type {
   ProtocolInfo,
   ProviderInfo,
-  ProviderModel,
   ProviderModelDefinition,
-} from '../shared/catalog.ts';
+} from '../shared/pi-provider.ts';
+import type { ProviderModel } from '../shared/catalog.ts';
 import { catalogEditor, selectDiscovered } from './catalog-editor.ts';
 
 export function providerEditor(

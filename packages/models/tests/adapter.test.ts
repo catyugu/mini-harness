@@ -351,6 +351,7 @@ test(
       await hold;
       return true;
     };
+    let calls = 0;
     const remove = await store.registerDefaults([
       {
         id: 'slow-auth',
@@ -359,7 +360,10 @@ test(
         baseUrl: mock.url,
         canSetKey: true,
         models: [model],
-        authStatus: (signal) => check(signal),
+        authStatus(signal) {
+          calls++;
+          return check(signal);
+        },
       },
     ]);
     await started;
@@ -372,15 +376,20 @@ test(
     assert.equal(settled, false);
     release();
     assert.equal((await firstQuery).find(({ provider }) => provider === 'slow-auth')?.configured, true);
+    await Promise.all([store.available(), store.available()]);
+    assert.equal(calls, 1);
 
     check = async (signal) => {
       await new Promise<void>((resolve) => signal.addEventListener('abort', () => resolve(), { once: true }));
       return true;
     };
+    await store.saveProvider({ id: 'slow-auth', key: 'timeout-key' });
     const timed = await store.available();
     assert.equal(timed.find(({ provider }) => provider === 'slow-auth')?.configured, false);
     assert.equal(timed.find(({ provider }) => provider === 'local-mock')?.configured, true);
     assert.ok(errors.some((error) => String(error).includes('Authentication check timed out for slow-auth')));
+    await store.available();
+    assert.equal(calls, 2);
 
     let checking!: () => void;
     const pending = new Promise<void>((resolve) => {
@@ -401,6 +410,7 @@ test(
       );
       return true;
     };
+    await store.saveProvider({ id: 'slow-auth', key: 'pending-key' });
     const query = store.available();
     await pending;
     check = async () => {
@@ -436,6 +446,7 @@ test(
       );
       return true;
     };
+    await store.saveProvider({ id: 'slow-auth', key: 'remove-key' });
     const lastQuery = store.available();
     await startedRemoval;
     await remove();
