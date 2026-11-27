@@ -1,4 +1,4 @@
-import { explicitFileReader } from '@mini-harness/file-access/api';
+import { explicitFileReader, rootedFileAccess } from '@mini-harness/file-access/api';
 import { runTool } from '@mini-harness/tools/execution';
 import { containsPath } from '@mini-harness/platform/paths';
 import { expectPresent } from '../../../test/support/required.ts';
@@ -24,7 +24,7 @@ test('explicit reads use native paths while searches and writes use the workspac
   writeFileSync(join(cwd, '.gitignore'), 'hidden.txt\n');
   writeFileSync(join(cwd, 'hidden.txt'), 'marked text');
   const access = app.runtime.plugins.ctx.harnessFileAccess;
-  const workspace = access.open(cwd, {
+  const workspace = rootedFileAccess(access, cwd, {
     exclude: (path) => containsPath(state, path),
   });
   const execute = async (name: string, value: object) =>
@@ -33,7 +33,7 @@ test('explicit reads use native paths while searches and writes use the workspac
         fileTools(
           cwd,
           () => workspace,
-          () => explicitFileReader(access.native, cwd),
+          () => explicitFileReader(access, cwd),
         ).find((tool) => tool.name === name),
         'file tool ' + name,
       ),

@@ -1,11 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
-import { open } from 'node:fs/promises';
+import * as fs from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { containsPath } from '@mini-harness/platform/paths';
-import { RootedFiles } from '../src/root.ts';
+import { rootedFileAccess } from '../src/api.ts';
 
 test('failed or superseded atomic writes preserve the existing file and remove the temporary file', async (t) => {
   const root = realpathSync.native(mkdtempSync(join(tmpdir(), 'mini-harness-atomic-')));
@@ -14,14 +14,14 @@ test('failed or superseded atomic writes preserve the existing file and remove t
   mkdirSync(state);
   const file = join(root, 'edit.txt');
   writeFileSync(file, 'original');
-  const workspace = new RootedFiles(root, (path) => containsPath(state, path));
+  const workspace = rootedFileAccess(fs, root, { exclude: (path) => containsPath(state, path) });
   const cancelled = new AbortController();
   cancelled.abort();
   await assert.rejects(workspace.writeFile('edit.txt', 'replacement', false, cancelled.signal), {
     name: 'AbortError',
   });
   assert.equal((await workspace.readFile('edit.txt')).toString(), 'original');
-  const probe = await open(file);
+  const probe = await fs.open(file);
   const handles: { writeFile: typeof probe.writeFile } = Object.getPrototypeOf(probe);
   await probe.close();
   const realWrite = handles.writeFile;
@@ -49,7 +49,7 @@ test('failed or superseded atomic writes preserve the existing file and remove t
 test('confined file views write binary data and stream past workspace preview limits', async (t) => {
   const root = realpathSync.native(mkdtempSync(join(tmpdir(), 'mini-harness-binary-')));
   t.after(() => rmSync(root, { recursive: true, force: true }));
-  const view = new RootedFiles(root);
+  const view = rootedFileAccess(fs, root);
   const content = Buffer.alloc(16 * 1024 * 1024 + 8, 0xff);
   await view.writeFile('data.bin', content);
   assert.deepEqual(await view.readFile('data.bin'), content);

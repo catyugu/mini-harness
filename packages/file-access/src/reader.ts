@@ -1,6 +1,6 @@
 import { DomainError } from '@mini-harness/platform/errors';
 import { constants, type BigIntStats, type Dir, type Stats } from 'node:fs';
-import type * as fs from 'node:fs/promises';
+import type { FileAccessPort } from './api.ts';
 import type { FileHandle } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 
@@ -22,41 +22,40 @@ export interface FileReader {
   entries(path?: string, signal?: AbortSignal): Promise<{ name: string; directory: boolean }[]>;
 }
 
-/** Resolve explicit paths relative to cwd through the caller's native file provider. */
-export function explicitFileReader(
-  native: Pick<typeof fs, 'open' | 'stat' | 'opendir'>,
-  cwd: string,
-): FileReader {
-  async function statPath(target: string): Promise<Stats> {
-    try {
-      return await native.stat(target);
-    } catch (error) {
-      const { code } = error as NodeJS.ErrnoException;
-      if (code === 'ENOTDIR') throw new FileTypeError('not-directory');
-      const parent = dirname(target);
-      // Windows reports a non-directory ancestor as ENOENT rather than ENOTDIR.
-      if (process.platform === 'win32' && code === 'ENOENT' && parent !== target) {
-        const info = await statPath(parent).catch((cause: unknown) => {
-          if ((cause as NodeJS.ErrnoException).code !== 'ENOENT') throw cause;
-          return undefined;
-        });
-        if (info && !info.isDirectory()) throw new FileTypeError('not-directory');
-      }
-      throw error;
+export async function statPath(native: FileAccessPort, target: string): Promise<Stats> {
+  try {
+    return await native.stat(target);
+  } catch (error) {
+    const { code } = error as NodeJS.ErrnoException;
+    if (code === 'ENOTDIR') throw new FileTypeError('not-directory');
+    const parent = dirname(target);
+    // Windows reports a non-directory ancestor as ENOENT rather than ENOTDIR.
+    if (process.platform === 'win32' && code === 'ENOENT' && parent !== target) {
+      const info = await statPath(native, parent).catch((cause: unknown) => {
+        if ((cause as NodeJS.ErrnoException).code !== 'ENOENT') throw cause;
+        return undefined;
+      });
+      if (info && !info.isDirectory()) throw new FileTypeError('not-directory');
     }
+    throw error;
   }
+}
 
-  async function openFile(path: string) {
-    const target = resolve(cwd, path);
-    checkType(await statPath(target));
-    return native.open(target, constants.O_RDONLY);
-  }
+export async function openRegularFile(native: FileAccessPort, target: string) {
+  checkType(await statPath(native, target));
+  return native.open(target, constants.O_RDONLY);
+}
+
+/** Resolve explicit paths relative to cwd through the selected filesystem provider. */
+export function explicitFileReader(native: FileAccessPort, cwd: string): FileReader {
   return {
     chunks(path, signal) {
-      return fileChunks(() => openFile(path), signal);
+      return fileChunks(() => openRegularFile(native, resolve(cwd, path)), signal);
     },
     async entries(path = '.', signal) {
-      return directoryEntries(await native.opendir(resolve(cwd, path)), undefined, signal);
+      const target = resolve(cwd, path);
+      if (!(await statPath(native, target)).isDirectory()) throw new FileTypeError('not-directory');
+      return directoryEntries(await native.opendir(target), undefined, signal);
     },
   };
 }

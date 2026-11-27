@@ -11,35 +11,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { fixture } from '../support/api-fixture.ts';
 
-// Both views of a substituted File Access service read the provider's data.
-function virtualFileAccess(content: string) {
-  return `
-      const data = Buffer.from(${JSON.stringify(content)});
-      const stat = async () => ({ size: data.length, isDirectory: () => false, isFile: () => true });
-      ctx.provide('harnessFileAccess', {
-        native: {
-          stat,
-          async open() {
-            let offset = 0;
-            return {
-              async read(buffer) {
-                const bytesRead = data.copy(buffer, 0, offset);
-                offset += bytesRead;
-                return { bytesRead, buffer };
-              },
-              async close() {}
-            };
-          }
-        },
-        open: () => ({
-          access: async () => {},
-          readFile: async () => data,
-          stat,
-          async *chunks() { yield data; }
-        })
-      });
-  `;
-}
+const providerFixture = new URL('../support/scoped-providers.js', import.meta.url).href;
 
 const examples = fileURLToPath(new URL('../../docs/examples/', import.meta.url));
 function copyExample(directory: string, id: string) {
@@ -431,12 +403,14 @@ test('file tools and HTTP preview consume the same selected File Access provider
     'virtual-files',
     {},
     `
+import { fileProvider } from ${JSON.stringify(providerFixture)};
 export const provide = ["harnessFileAccess"];
 export function apply(ctx) {
-      ${virtualFileAccess('Provided file content')}
-    }
+  ctx.provide('harnessFileAccess', fileProvider('virtual.txt', ${JSON.stringify(join(paths.home, 'provided.txt'))}));
+}
 `,
   );
+  writeFileSync(join(paths.home, 'provided.txt'), 'Provided file content');
   const selection = {
     entries: {
       'core:file-access': { disabled: true },
@@ -533,23 +507,15 @@ test('native file and shell tools use scoped file and process services without c
         : { tool: 'shell', args: { command: 'requested command' } };
   });
   writeFileSync(join(paths.cwd, 'note.txt'), 'application file');
-  const processProvider = (output: string) => `({ start(request) {
-    if (!request.file) throw new Error('Missing executable');
-    return {
-      stdin: new PassThrough(),
-      stdout: Readable.from([Buffer.from(${JSON.stringify(output)})]),
-      stderr: Readable.from([]),
-      finished: Promise.resolve({ code: 0, signal: null }),
-    };
-  } })`;
+  writeFileSync(join(paths.home, 'scoped.txt'), 'scoped file');
   writePlugin(
     paths.plugins,
     'application-process',
     {},
     `
-import { PassThrough, Readable } from "node:stream";
+import { processProvider } from ${JSON.stringify(providerFixture)};
 export const provide = ["harnessProcess"];
-export const apply = (ctx) => { ctx.provide('harnessProcess', ${processProvider('application process')}); };
+export const apply = (ctx) => { ctx.provide('harnessProcess', processProvider('application process')); };
 `,
   );
   writePlugin(
@@ -557,12 +523,12 @@ export const apply = (ctx) => { ctx.provide('harnessProcess', ${processProvider(
     'scoped-environment',
     {},
     `
-import { PassThrough, Readable } from "node:stream";
+import { fileProvider, processProvider } from ${JSON.stringify(providerFixture)};
 export const provide = ["harnessFileAccess","harnessProcess"];
 export const apply = (ctx) => {
-      ${virtualFileAccess('scoped file')}
-      ctx.provide('harnessProcess', ${processProvider('parent process')});
-    };
+  ctx.provide('harnessFileAccess', fileProvider('note.txt', ${JSON.stringify(join(paths.home, 'scoped.txt'))}));
+  ctx.provide('harnessProcess', processProvider('parent process'));
+};
 `,
   );
   writePlugin(
@@ -570,19 +536,9 @@ export const apply = (ctx) => {
     'scoped-process',
     {},
     `
-import { PassThrough, Readable } from "node:stream";
+import { processProvider } from ${JSON.stringify(providerFixture)};
 export const provide = ["harnessProcess"];
-export const apply = (ctx) => { ctx.provide('harnessProcess', {
-      start(request) {
-        if (!request.file) throw new Error('Missing executable');
-        return {
-          stdin: new PassThrough(),
-          stdout: Readable.from([Buffer.from('scoped process')]),
-          stderr: Readable.from([]),
-          finished: Promise.resolve({ code: 0, signal: null }),
-        };
-      }
-    }); };
+export const apply = (ctx) => { ctx.provide('harnessProcess', processProvider('scoped process')); };
 `,
   );
   const parent = app.runtime.plugins.ctx.harnessSessions.create();
