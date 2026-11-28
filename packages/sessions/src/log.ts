@@ -170,9 +170,14 @@ export class SessionLog extends RecordLog<SessionEvent> implements SessionLogPor
     }
     const run = runFromEntry(this.sessionId, entry);
     if (advancesBranch(entry)) {
-      if (entry.type !== 'context-replace' && this.cachedContext?.state.leafId === entry.parentId)
-        projectContextEntry(this.cachedContext.state, entry, projectMessage(entry, this.execution));
-      else this.cachedContext = undefined;
+      const view = this.cachedContext;
+      if (view?.state.leafId === entry.parentId) {
+        projectContextEntry(view.state, entry, projectMessage(entry, this.execution));
+        if (entry.type === 'context-replace') {
+          view.checker = new RequestMessages();
+          view.checked = 0;
+        }
+      } else this.cachedContext = undefined;
     }
     if (advancesBranch(entry) || run) this.cachedProjection = undefined;
     if (entry.type === 'session-setting') {
