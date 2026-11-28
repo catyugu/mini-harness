@@ -224,11 +224,13 @@ export const apply = (ctx) => {
     `
 export const inject = ["harnessTools"];
 export const apply = (ctx) => {
-    ctx.on("agent/model-request", (request) => ({ ...request, systemPrompt: request.systemPrompt + '[second]' }));
-    ctx.on("agent/model-request", (request, { turn }) => turn === 1 ? ({
-      ...request, systemPrompt: request.systemPrompt + '[first]',
-      messages: [...request.messages, { role: 'user', content: [{ type: 'text', text: 'Temporary context' }], timestamp: Date.now() }]
+    ctx.on("agent/prepare-request", (request) => ({ ...request, systemPrompt: request.systemPrompt + '[second]', inputMeasurement: undefined }));
+    ctx.on("agent/prepare-request", (request, { turn }) => turn === 1 ? ({
+      ...request, systemPrompt: request.systemPrompt + '[first]', inputMeasurement: undefined
     }) : undefined, { prepend: true });
+    ctx.on("agent/project-messages", (messages, { turn }) => turn === 1 ? [
+      ...messages, { role: 'user', content: [{ type: 'text', text: 'Temporary context' }], timestamp: Date.now() }
+    ] : undefined);
     ctx.on("agent/model-retry", ({ error, attempt }) => error === 'transient transport failure' && attempt === 1 ? {} : undefined);
     ctx.effect(() => ctx.harnessTools.register({ name: 'check', description: 'Check mode', parameters: { type: 'object' },
       async execute({ mode }) {
@@ -378,8 +380,8 @@ test('an invalid transformed request fails before the provider is invoked', asyn
     {},
     `
 export const apply = (ctx) => {
-    ctx.on("agent/model-request", (request) => ({ ...request, messages: [{ role: 'toolResult', toolCallId: 'missing',
-      toolName: 'example', timestamp: Date.now(), state: 'finished', content: [] }] }));
+    ctx.on("agent/project-messages", () => [{ role: 'toolResult', toolCallId: 'missing',
+      toolName: 'example', timestamp: Date.now(), state: 'finished', content: [] }]);
   };
 `,
   );
@@ -441,7 +443,7 @@ test('unloading a request hook signals cancellation and waits for cleanup', { ti
     `
 export const apply = (ctx) => {
     const state = globalThis[Symbol.for('mini-harness-test-hook-drain')];
-    ctx.on("agent/model-request", async (_request, { signal }) => {
+    ctx.on("agent/project-messages", async (_messages, { signal }) => {
       signal.addEventListener('abort', state.cancelled, { once: true });
       state.entered();
       await state.hold;

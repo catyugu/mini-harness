@@ -37,7 +37,7 @@ function setup(ctx: Context) {
     return createManager(step.context, step.sessionId).prepare(
       log,
       { ...request, signal: step.signal },
-      (request, messages) => step.rebuild(request, messages, step.signal),
+      step.projectMessages,
       configuration(log.setting(owner), defaults()).settings,
       step.runId,
       reason,
@@ -95,24 +95,26 @@ function setup(ctx: Context) {
                   maxTokens,
                 } = log.requestDefinition(latest.id);
                 const { model, capabilities } = selectModel(models, [choice]);
-                const rebuild = async (
-                  request: LlmRequest,
-                  messages: LlmRequest['messages'],
-                ): Promise<LlmRequest> => ({
-                  ...request,
-                  messages: prepareModelMessages(capabilities, messages),
-                  inputMeasurement: undefined,
-                });
+                const projectMessages = async (messages: LlmRequest['messages']) =>
+                  prepareModelMessages(capabilities, messages);
                 const manager = createManager(scoped, params.id);
-                const initial = await rebuild(
-                  { model, systemPrompt, tools, thinkingLevel, maxTokens, messages: [], signal },
-                  projection.contextMessages,
+                const request = await manager.prune(
+                  log,
+                  {
+                    model,
+                    systemPrompt,
+                    tools,
+                    thinkingLevel,
+                    maxTokens,
+                    messages: await projectMessages(projection.contextMessages),
+                    signal,
+                  },
+                  projectMessages,
                 );
-                const request = await manager.prune(log, initial, rebuild);
                 const compacted = await manager.compact(
                   log,
                   request,
-                  rebuild,
+                  projectMessages,
                   configuration(log.setting(owner), defaults()).settings,
                   taskId,
                 );

@@ -33,20 +33,20 @@ The executor presents tool schemas, interprets the assistant response and delive
 
 [`mini-harness/agent/events`](src/events.ts) declares the hooks used by Runs:
 
-| Hook                    | Purpose                                                                       |
-| ----------------------- | ----------------------------------------------------------------------------- |
-| `agent/setup`           | Register scoped capabilities before execution.                                |
-| `agent/records`         | Observe native events and contribute assistant record presentations.          |
-| `agent/prepare-input`   | Transform prepared user content before acceptance.                            |
-| `agent/model-request`   | Repeatable model-visible content projection.                                  |
-| `agent/prepare-request` | Prepare the final request once per turn.                                      |
-| `agent/recover-request` | Repair the last attempted request; the first handler to accept recovery wins. |
-| `agent/model-retry`     | Choose whether to retry a failed request before output has streamed.          |
-| `agent/tool-result`     | Transform accepted tool content after raw execution is persisted.             |
+| Hook                     | Purpose                                                                       |
+| ------------------------ | ----------------------------------------------------------------------------- |
+| `agent/setup`            | Register scoped capabilities before execution.                                |
+| `agent/records`          | Observe native events and contribute assistant record presentations.          |
+| `agent/prepare-input`    | Transform prepared user content before acceptance.                            |
+| `agent/project-messages` | Repeatable model-visible message projection.                                  |
+| `agent/prepare-request`  | Prepare the final request once per turn.                                      |
+| `agent/recover-request`  | Repair the last attempted request; the first handler to accept recovery wins. |
+| `agent/model-retry`      | Choose whether to retry a failed request before output has streamed.          |
+| `agent/tool-result`      | Transform accepted tool content after raw execution is persisted.             |
 
 These hooks are dispatched by conversation orchestration in Runs; a direct `harnessAgent.run` call uses its supplied callbacks. The native execution API and model request loop do not import session contracts. The conversation integration in `events.ts` owns scoped policy dispatch and record contributions. `agent/setup` receives the target Run Context. Resolve the target tool or prompt service from that Context and pass the contributing Context as the registration provider. Return the registration disposer (or an effect disposer for multiple registrations). Runs binds it to both the contributing Fiber and the Run, so either lifetime ending releases the contribution. Synchronous record observers own any per-run state they need. Return transformed values instead of mutating inputs. The [execution reference](../../docs/subsystems/execution.md) describes their position in the persistence flow.
 
-Request recovery uses the last attempted request and the same turn's executor and tool capabilities. Preparation hooks are not rerun. Both preparation and recovery handlers can call `step.rebuild(request, messages, signal)` with the current prepared request and replacement conversation messages: this reprojects model-visible messages through `agent/model-request` and the executor, retains the current request's other parameters and invalidates its input measurement. Put repeatable, nonpersistent message contributions in `agent/model-request` (it may run multiple times); use `agent/prepare-request` for once-per-turn effects and final request parameters. Rebuild replaces the message sequence, so direct message edits in final preparation are not replayed. A handler changing measured request parameters must invalidate or update the measurement.
+Request recovery uses the last attempted request and the same turn's executor and tool capabilities. Preparation hooks and executor presentation run once per logical turn. Both preparation and recovery handlers can call `step.projectMessages(messages, signal)` to project replacement conversation messages through `agent/project-messages` and the selected model's input capabilities. This operation neither accepts nor produces a request. Put repeatable, nonpersistent message contributions in `agent/project-messages`; use `agent/prepare-request` for once-per-turn effects and final request parameters. A handler replacing projected messages or changing measured parameters must invalidate or update the input measurement.
 
 ## Configuration, lifetime and failures
 

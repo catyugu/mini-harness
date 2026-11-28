@@ -165,9 +165,8 @@ test('an alternative executor owns the model protocol and executes without the r
     undefined,
     {
       ...nativeExecutor,
-      present: (content, tools) => ({
-        ...content,
-        systemPrompt: content.systemPrompt + ' custom protocol: ' + tools.map((tool) => tool.name).join(', '),
+      present: (systemPrompt, tools) => ({
+        systemPrompt: systemPrompt + ' custom protocol: ' + tools.map((tool) => tool.name).join(', '),
       }),
       interpret: (message) =>
         message.content.some((part) => part.type === 'text' && part.text === 'call change')
@@ -737,43 +736,57 @@ test('request recovery composes with prepared parameters and repeatable message 
   let requests = 0;
   let preparations = 0;
   let recoveries = 0;
-  const { agent, ctx, record } = await fixture(t, {
-    async *stream(request) {
-      requests++;
-      assert.equal(request.maxTokens, 512);
-      assert.equal(
-        request.systemPrompt,
-        requests === 1 ? 'Fixture [prepared]' : 'Fixture [prepared] [repair]',
-      );
-      assert.deepEqual(
-        request.messages.flatMap((message) =>
-          message.content.filter((part) => part.type === 'text').map((part) => part.text),
-        ),
-        requests === 3 ? ['Rebuilt', 'Temporary context'] : ['Recover', 'Temporary context'],
-      );
-      if (requests < 3) {
-        yield {
-          type: 'done',
-          message: {
-            ...answer(),
-            content: [],
-            stopReason: 'error',
-            errorMessage: 'Context limit',
-            errorKind: 'context-overflow',
-          },
-        };
-      } else {
-        yield { type: 'done', message: answer() };
-      }
+  let presentations = 0;
+  let projections = 0;
+  const { agent, ctx, record } = await fixture(
+    t,
+    {
+      async *stream(request) {
+        requests++;
+        assert.equal(request.maxTokens, 512);
+        assert.equal(
+          request.systemPrompt,
+          requests === 1 ? 'Fixture [presented] [prepared]' : 'Fixture [presented] [prepared] [repair]',
+        );
+        assert.deepEqual(
+          request.messages.flatMap((message) =>
+            message.content.filter((part) => part.type === 'text').map((part) => part.text),
+          ),
+          requests === 3 ? ['Rebuilt', 'Temporary context'] : ['Recover', 'Temporary context'],
+        );
+        if (requests < 3) {
+          yield {
+            type: 'done',
+            message: {
+              ...answer(),
+              content: [],
+              stopReason: 'error',
+              errorMessage: 'Context limit',
+              errorKind: 'context-overflow',
+            },
+          };
+        } else {
+          yield { type: 'done', message: answer() };
+        }
+      },
     },
-  });
-  ctx.on('agent/model-request', (request) => ({
-    ...request,
-    messages: [
-      ...request.messages,
+    undefined,
+    undefined,
+    {
+      ...nativeExecutor,
+      present(systemPrompt, tools, step) {
+        presentations++;
+        return nativeExecutor.present(systemPrompt + ' [presented]', tools, step);
+      },
+    },
+  );
+  ctx.on('agent/project-messages', (messages) => {
+    projections++;
+    return [
+      ...messages,
       { role: 'user', timestamp: 0, content: [{ type: 'text', text: 'Temporary context' }] },
-    ],
-  }));
+    ];
+  });
   ctx.on('agent/prepare-request', (request) => {
     preparations++;
     return { ...request, maxTokens: 512, systemPrompt: request.systemPrompt + ' [prepared]' };
@@ -782,11 +795,14 @@ test('request recovery composes with prepared parameters and repeatable message 
     assert.equal(step.failure.kind, 'context-overflow');
     recoveries++;
     if (recoveries === 1) return { ...request, systemPrompt: request.systemPrompt + ' [repair]' };
-    return step.rebuild(
-      request,
-      [{ role: 'user', timestamp: 0, content: [{ type: 'text', text: 'Rebuilt' }] }],
-      step.signal,
-    );
+    return {
+      ...request,
+      messages: await step.projectMessages(
+        [{ role: 'user', timestamp: 0, content: [{ type: 'text', text: 'Rebuilt' }] }],
+        step.signal,
+      ),
+      inputMeasurement: undefined,
+    };
   });
   assert.equal(
     await agent.prompt(ctx, record, 'Recover', () => {}, {
@@ -795,7 +811,10 @@ test('request recovery composes with prepared parameters and repeatable message 
     }),
     'Done',
   );
-  assert.deepEqual({ requests, preparations, recoveries }, { requests: 3, preparations: 1, recoveries: 2 });
+  assert.deepEqual(
+    { requests, preparations, recoveries, presentations, projections },
+    { requests: 3, preparations: 1, recoveries: 2, presentations: 1, projections: 2 },
+  );
 });
 
 test('a queued follow-up can preselect the next model and thinking level', async (t) => {

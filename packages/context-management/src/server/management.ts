@@ -7,6 +7,7 @@ import {
 } from '@mini-harness/llm/api';
 import type { ModelCatalogPort } from '@mini-harness/models/api';
 import type { ModelFailure, ModelRetry } from '@mini-harness/agent/api';
+import type { RequestPreparation } from '@mini-harness/agent/events';
 import { requestModel } from '@mini-harness/agent/model-request';
 import { selectModel } from '@mini-harness/models/selection';
 import { DomainError } from '@mini-harness/platform/errors';
@@ -23,7 +24,7 @@ export function configuration(stored: unknown, defaults: ContextSettings) {
   return { settings: stored == null ? defaults : validateSettings(stored), customized: stored != null };
 }
 
-type Rebuild = (request: LlmRequest, messages: NativeMessage[]) => Promise<LlmRequest>;
+type ProjectMessages = RequestPreparation['projectMessages'];
 
 function pendingInputStart(log: SessionLogPort, projection: SessionContext) {
   const pending = new Set<string>();
@@ -55,25 +56,38 @@ export class ContextManagement {
     return measure(request, this.model(request.model), this.llm, () => calibration(log, request.model));
   }
 
+  private async measureContext(
+    log: SessionLogPort,
+    request: LlmRequest,
+    messages: NativeMessage[],
+    projectMessages: ProjectMessages,
+  ) {
+    return this.measure(log, {
+      ...request,
+      messages: await projectMessages(messages, request.signal),
+      inputMeasurement: undefined,
+    });
+  }
+
   private async replace(
     log: SessionLogPort,
     request: LlmRequest,
-    rebuild: Rebuild,
+    projectMessages: ProjectMessages,
     replacements: ContextReplacement[],
   ) {
-    if (!replacements.length) return request;
+    if (!replacements.length) return this.measure(log, request);
     log.append({ type: 'context-replace', replacements }, log.context().leafId);
-    return rebuild(request, log.context().contextMessages);
+    return this.measureContext(log, request, log.context().contextMessages, projectMessages);
   }
 
-  async prune(log: SessionLogPort, request: LlmRequest, rebuild: Rebuild) {
-    return this.measure(log, await this.replace(log, request, rebuild, prune(log.context())));
+  prune(log: SessionLogPort, request: LlmRequest, projectMessages: ProjectMessages) {
+    return this.replace(log, request, projectMessages, prune(log.context()));
   }
 
   async compact(
     log: SessionLogPort,
     request: MeasuredRequest,
-    rebuild: Rebuild,
+    projectMessages: ProjectMessages,
     settings: ContextSettings,
     taskId: string,
   ) {
@@ -132,7 +146,7 @@ export class ContextManagement {
       },
       () => (scale ??= calibration(log, model)),
     );
-    const next = await this.measure(log, await rebuild(request, [summary, ...kept]));
+    const next = await this.measureContext(log, request, [summary, ...kept], projectMessages);
     validateRequestSnapshot(next);
     request.signal.throwIfAborted();
     if (totalTokens(next.inputMeasurement) >= totalTokens(counts)) return;
@@ -163,14 +177,14 @@ export class ContextManagement {
   async prepare(
     log: SessionLogPort,
     request: LlmRequest,
-    rebuild: Rebuild,
+    projectMessages: ProjectMessages,
     settings: ContextSettings,
     taskId: string,
     reason: 'normal' | 'context-overflow' | 'image-limit',
   ) {
     const replacements = prune(log.context());
     let changed = replacements.length > 0;
-    let current = await this.measure(log, await this.replace(log, request, rebuild, replacements));
+    let current = await this.replace(log, request, projectMessages, replacements);
     const pressure = () =>
       totalTokens(current.inputMeasurement) >= current.inputMeasurement.budget * settings.triggerRatio;
     if (pressure() || reason !== 'normal') {
@@ -178,7 +192,7 @@ export class ContextManagement {
       const images = offloadImages(projection, pendingInputStart(log, projection));
       if (images.length) {
         changed = true;
-        current = await this.measure(log, await this.replace(log, current, rebuild, images));
+        current = await this.replace(log, current, projectMessages, images);
       }
       if (reason === 'image-limit' && !images.length)
         throw new DomainError(
@@ -188,7 +202,7 @@ export class ContextManagement {
     }
     const overflow = reason === 'context-overflow';
     if (settings.autoCompact && (overflow || pressure())) {
-      const next = await this.compact(log, current, rebuild, settings, taskId);
+      const next = await this.compact(log, current, projectMessages, settings, taskId);
       if (next) return next;
     }
     if (totalTokens(current.inputMeasurement) > current.inputMeasurement.budget)
