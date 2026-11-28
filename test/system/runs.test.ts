@@ -231,25 +231,15 @@ test('startup durably interrupts runs and delivers pending inbox messages', asyn
       cancellationRequested: false,
       outputCursor: 0,
     },
-    run: { sequence: 1, inputEntryId: null },
+    run: { sequence: 1 },
   });
   registry.log(child.id).append({
     type: 'inbox-enqueued',
-    item: {
-      id: 'steer',
-      mode: 'steer',
-      origin: { source: 'user' },
-      ...registry.prepareInput(child.id, 'Old instruction'),
-    },
+    item: { id: 'steer', mode: 'steer', text: 'Old instruction', images: [] },
   });
   registry.log(child.id).append({
     type: 'inbox-enqueued',
-    item: {
-      id: 'follow',
-      mode: 'queue',
-      origin: { source: 'user' },
-      ...registry.prepareInput(child.id, 'Recovered follow-up'),
-    },
+    item: { id: 'follow', mode: 'queue', text: 'Recovered follow-up', images: [] },
   });
   await initial.close();
   const restarted = await createMiniHarnessServer(paths);
@@ -487,12 +477,7 @@ test('retry looks up the failed delivery by its native entry identity', async (t
   const log = registry.log(session.id);
   log.append({
     type: 'inbox-enqueued',
-    item: {
-      id: 'recover-this',
-      mode: 'queue',
-      origin: { source: 'user' },
-      ...registry.prepareInput(session.id, 'fail this queued input'),
-    },
+    item: { id: 'recover-this', mode: 'queue', text: 'fail this queued input', images: [] },
   });
   const failed = runs.send(session.id, { message: 'Manual input waiting for delivery', mode: 'queue' });
   runs.cancelQueue(session.id, failed.messageId);

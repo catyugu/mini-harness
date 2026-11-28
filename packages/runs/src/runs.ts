@@ -17,6 +17,7 @@ import { assertImageInput } from '@mini-harness/models/selection';
 import { selectInputModel, SessionRun } from './session-run.ts';
 import { recordPublisher, type StreamEvent, type RunEvent } from './shared/stream.ts';
 import { isRunning, projectRun, type RunDetails, type RunInfo } from '@mini-harness/sessions/run-state';
+import { runFromEntry } from '@mini-harness/sessions/log-api';
 import { RunEvents } from './events.ts';
 import type { RunInput, RunPolicy, RunPort, RunSubmission } from './api.ts';
 import type { SessionStore } from '@mini-harness/sessions/records';
@@ -24,12 +25,6 @@ import type { SessionStore } from '@mini-harness/sessions/records';
 interface Revision extends RunInput {
   parentId: string | null;
   expectedLeafId: string | null;
-}
-
-class RunInterrupted extends DOMException {
-  constructor() {
-    super('Interrupted by a new message', 'AbortError');
-  }
 }
 
 interface Activity {
@@ -159,8 +154,6 @@ export class Runs implements RunPort {
     if (!record) throw new DomainError('not_found', 'Conversation not found');
     const prepared = revision && {
       ...this.registry.prepareInput(id, revision.message, revision.attachments),
-      mode: 'revision' as const,
-      origin: { source: 'user' as const },
       model: revision.model,
       thinkingLevel: revision.thinkingLevel,
       parentId: revision.parentId,
@@ -225,7 +218,13 @@ export class Runs implements RunPort {
       );
       void task.result.then(
         () => this.wake(id),
-        () => this.wake(id, task.signal.reason instanceof RunInterrupted ? undefined : pending),
+        () =>
+          this.wake(
+            id,
+            pending,
+            task.signal.reason instanceof DOMException &&
+              task.signal.reason.message === 'Interrupted by a new message',
+          ),
       );
       this.changed(id);
       return { info: activity.events!.info, task };
@@ -282,11 +281,12 @@ export class Runs implements RunPort {
         id: messageId,
         ...selection,
         ...this.registry.prepareInput(id, input.message, input.attachments),
+        ...(origin.source === 'user' && { resume: true }),
       },
     });
     const active = this.current(id);
     if (active && this.streams.has(id) && mode === 'interrupt' && !log.inboxPaused())
-      active.cancel(new RunInterrupted());
+      active.cancel(new DOMException('Interrupted by a new message', 'AbortError'));
     const task = active ?? this.wake(id);
     return { messageId, taskId: task?.id, run: this.info(id), queue: log.queue() };
   }
@@ -302,7 +302,7 @@ export class Runs implements RunPort {
     return current?.cancel(new DOMException('Stopped by the user', 'AbortError')) ?? false;
   }
 
-  private wake(id: string, previous?: ReadonlySet<string>) {
+  private wake(id: string, previous?: ReadonlySet<string>, interrupted = false) {
     if (this.tasks.sealed || this.current(id)) return;
     try {
       this.registry.assertAvailable(id);
@@ -310,7 +310,13 @@ export class Runs implements RunPort {
       const pending = log.inbox();
       if (log.inboxPaused() || !pending.length) return;
       // Retry only when the previous executor advanced the inbox or new work arrived.
-      if (previous && pending.length === previous.size && pending.every(({ id }) => previous.has(id))) return;
+      if (
+        !interrupted &&
+        previous &&
+        pending.length === previous.size &&
+        pending.every(({ id }) => previous.has(id))
+      )
+        return;
       return this.launch(id).task;
     } catch (error) {
       if (error instanceof DomainError && (error.code === 'not_found' || error.code === 'conflict')) return;
@@ -371,11 +377,25 @@ export class Runs implements RunPort {
     const run = this.info(id);
     if (run?.id !== runId || run.state !== 'failed')
       throw new DomainError('conflict', 'This run is no longer the failed conversation run');
-    if (run.inputEntryId === null) return;
     return this.registry.inspectLog(id, (log) => {
-      const input = log.entries().find(({ id }) => id === run.inputEntryId);
-      if (input?.type !== 'message' || input.message.role !== 'user' || input.submissionId !== runId)
-        throw new Error('Missing accepted run input');
+      const entries = log.entries();
+      const matches = (entry: (typeof entries)[number], state: RunInfo['state']) => {
+        const item = runFromEntry(id, entry);
+        return item?.id === runId && item.state === state;
+      };
+      const start = entries.findIndex((entry) => matches(entry, 'queued'));
+      const end = entries.findIndex((entry, index) => index > start && matches(entry, 'failed'));
+      if (start < 0 || end < 0) return;
+      const delivered = entries
+        .slice(start + 1, end)
+        .filter((entry) => entry.type === 'message' && entry.message.role === 'user');
+      const input =
+        run.inputEntryId === undefined
+          ? delivered.length === 1 && delivered[0].type === 'message' && delivered[0].submissionId === runId
+            ? delivered[0]
+            : undefined
+          : delivered.find(({ id }) => id === run.inputEntryId);
+      if (input?.type !== 'message' || input.message.role !== 'user') return;
       const { message, presentation, selection } = input;
       const attachments: Attachment[] = [],
         missing: string[] = [];

@@ -76,7 +76,7 @@ test('conversation edits branch the native session instead of appending and enfo
       cancellationRequested: true,
       outputCursor: 0,
     },
-    run: { sequence: priorRun.sequence, inputEntryId: null },
+    run: { sequence: priorRun.sequence },
   });
   assert.equal(log.projection(before.leafId).timeline.at(-1)?.id, 'discarded-run');
   const revision = await request('/sessions/' + session.id + '/revise', 'POST', {

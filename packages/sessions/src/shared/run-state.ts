@@ -2,7 +2,7 @@ import type { TaskSnapshot, TaskState } from '@mini-harness/tasks/api';
 
 /** Only conversation-specific facts; lifecycle state belongs to the task. */
 export interface RunDetails {
-  inputEntryId: string | null;
+  inputEntryId?: string | null;
   sequence: number;
   changedFiles?: string[];
 }

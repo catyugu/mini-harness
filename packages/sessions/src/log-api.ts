@@ -21,10 +21,11 @@ import { projectRun, type RunDetails, type RunInfo } from './shared/run-state.ts
 export interface InboxItem {
   id: string;
   mode: MessageMode;
-  origin: MessageOrigin;
+  origin?: MessageOrigin;
+  resume?: true;
   text: string;
   images: ImageInput[];
-  input: PreparedMessage;
+  input?: PreparedMessage;
   model?: ModelSelection;
   thinkingLevel?: ThinkingLevel | null;
 }

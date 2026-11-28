@@ -57,7 +57,6 @@ test('recent main model survives child overrides and a restart through the nativ
       mode: 'queue',
       text: 'Recovered user follow-up',
       origin: { source: 'plugin' },
-      input: { userText: 'Recovered user follow-up', attachments: [] },
       images: [],
       model: { provider: 'local-mock', id: 'mock-model' },
     },

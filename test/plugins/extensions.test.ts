@@ -138,21 +138,11 @@ export const apply = (ctx) => {
   const log = registry.log(session.id);
   log.append({
     type: 'inbox-enqueued',
-    item: {
-      id: 'blocked',
-      mode: 'queue',
-      origin: { source: 'user' },
-      ...registry.prepareInput(session.id, 'Blocked'),
-    },
+    item: { id: 'blocked', mode: 'queue', text: 'Blocked', images: [] },
   });
   log.append({
     type: 'inbox-enqueued',
-    item: {
-      id: 'recovered',
-      mode: 'queue',
-      origin: { source: 'user' },
-      ...registry.prepareInput(session.id, 'Recovered'),
-    },
+    item: { id: 'recovered', mode: 'queue', text: 'Recovered', images: [] },
   });
   await sendRun(plugins.ctx.harnessRuns, session.id, 'Manual', undefined, { mode: 'queue' });
   await plugins.ctx.harnessRuns.current(session.id)?.result;

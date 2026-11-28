@@ -186,7 +186,7 @@ export class SessionLog extends RecordLog<SessionEvent> implements SessionLogPor
     if (entry.type === 'tool-schema') this.schemas.set(entry.hash, entry.tools);
     if (entry.type === 'inbox-paused') this.paused = true;
     if (entry.type === 'inbox-enqueued') {
-      if (entry.item.origin.source === 'user') this.paused = false;
+      if (entry.item.resume) this.paused = false;
       this.index.inboxIds.add(entry.item.id);
       this.pendingInbox.set(entry.item.id, entry.item);
     }
@@ -371,7 +371,7 @@ function queueEntry(item: InboxItem): QueueEntry {
     mode: item.mode,
     origin: item.origin,
     state: 'pending',
-    summary: (item.input.userText || item.input.attachments[0]?.name || item.text).slice(0, 180),
+    summary: (item.input?.userText || item.input?.attachments[0]?.name || item.text).slice(0, 180),
   };
 }
 
@@ -468,10 +468,7 @@ function validateEvent(event: SessionEvent) {
         !event.item.id ||
         !messageModes.includes(event.item.mode) ||
         typeof event.item.text !== 'string' ||
-        !Array.isArray(event.item.images) ||
-        !['user', 'agent', 'plugin', 'task'].includes(event.item.origin?.source) ||
-        typeof event.item.input?.userText !== 'string' ||
-        !Array.isArray(event.item.input.attachments)
+        !Array.isArray(event.item.images)
       )
         throw new Error('Invalid session inbox item');
       return;
@@ -506,8 +503,7 @@ function validateEvent(event: SessionEvent) {
           (!event.run ||
             !Number.isSafeInteger(event.run.sequence) ||
             event.run.sequence < 0 ||
-            (event.run.inputEntryId !== null &&
-              (typeof event.run.inputEntryId !== 'string' || !entryId.test(event.run.inputEntryId))) ||
+            (event.run.inputEntryId != null && !entryId.test(event.run.inputEntryId)) ||
             (event.run.changedFiles !== undefined &&
               (!Array.isArray(event.run.changedFiles) ||
                 event.run.changedFiles.some((path) => typeof path !== 'string')))))

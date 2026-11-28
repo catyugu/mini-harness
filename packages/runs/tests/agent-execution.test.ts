@@ -117,8 +117,6 @@ async function fixture(
           mode: 'queue',
           text,
           images: options.images ?? [],
-          origin: { source: 'user' },
-          input: { userText: text, attachments: [] },
           model: options.choice,
           thinkingLevel: options.thinkingLevel,
         },
@@ -146,14 +144,7 @@ function queueInput(
   const model = options?.model ?? log.projection().model;
   log.append({
     type: 'inbox-enqueued',
-    item: {
-      id: randomUUID(),
-      mode,
-      origin: { source: 'user' },
-      ...sessions.prepareInput(id, text, attachments),
-      ...options,
-      model,
-    },
+    item: { id: randomUUID(), mode, ...sessions.prepareInput(id, text, attachments), ...options, model },
   });
   return log.queue();
 }
@@ -577,8 +568,6 @@ test('steering accepts off, skips deterministic failures and resets incompatible
       mode: 'steer',
       text: 'Stale instruction',
       images: [],
-      origin: { source: 'user' },
-      input: { userText: 'Stale instruction', attachments: [] },
       model: { provider: model.provider, id: 'new-model' },
       thinkingLevel: 'high',
     },
