@@ -4,12 +4,7 @@ import type { AgentEvent, ModelFailure, ModelRetry } from './api.ts';
 import type { RecordPresentation, RecordPublisher } from '@mini-harness/sessions/display-record';
 import type { ModelChoice } from '@mini-harness/llm/vocabulary';
 import type { InputSource, PreparedMessage } from '@mini-harness/input/message';
-import type {
-  NativeUserMessage,
-  NativeMessage,
-  LlmRequest,
-  ModelRequestContent,
-} from '@mini-harness/llm/api';
+import type { NativeUserMessage, NativeMessage, LlmRequest } from '@mini-harness/llm/api';
 
 import type { ToolTurn } from '@mini-harness/tools/execution';
 import type { ToolResult } from '@mini-harness/tools/api';
@@ -23,13 +18,13 @@ type Transform<Value, Input> = (
   value: Value,
   context: Input,
 ) => Value | undefined | Promise<Value | undefined>;
-export type ModelRequestTransform = Transform<ModelRequestContent, StepContext>;
+export type MessageProjection = Transform<NativeMessage[], StepContext>;
 
 export interface RequestPreparation extends StepContext {
   readonly runId: string;
   readonly context: Context;
-  /** Reproject conversation messages, preserving the supplied request's parameters and clearing its measurement. */
-  rebuild(request: LlmRequest, messages: NativeMessage[], signal: AbortSignal): Promise<LlmRequest>;
+  /** Project conversation messages for this turn's selected model. */
+  projectMessages(messages: NativeMessage[], signal: AbortSignal): Promise<NativeMessage[]>;
 }
 
 export interface RequestRecovery extends RequestPreparation {
@@ -70,9 +65,9 @@ declare module 'mini-harness/cordis' {
     'agent/records'(event: AgentEvent, sink: RecordPublisher): readonly RecordPresentation[] | void;
     'agent/tool-result': ToolResultTransform;
     'agent/prepare-input': InputPreparation;
-    /** Repeatable content projection; put ephemeral message contributions here. */
-    'agent/model-request': ModelRequestTransform;
-    /** Prepare the final request once per logical turn, including context changes via rebuild. */
+    /** Repeatable message projection, including ephemeral message contributions. */
+    'agent/project-messages': MessageProjection;
+    /** Prepare the final request once per logical turn. */
     'agent/prepare-request': Transform<LlmRequest, RequestPreparation>;
     /** Repair the actual last attempt's prepared request, or return undefined to decline. */
     'agent/recover-request': Transform<LlmRequest, RequestRecovery>;

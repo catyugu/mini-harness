@@ -138,10 +138,6 @@ export interface LlmRequest {
   maxTokens?: number;
   inputMeasurement?: InputMeasurement;
 }
-export type ModelRequestContent = Pick<
-  LlmRequest,
-  'messages' | 'systemPrompt' | 'thinkingLevel' | 'maxTokens'
->;
 
 export type ModelRequestSnapshot = Omit<LlmRequest, 'signal' | 'messages'> & {
   messages?: NativeMessage[];

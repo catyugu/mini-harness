@@ -242,7 +242,7 @@ test('a third-party plugin uses tools, models and subprocesses from a Profile wi
     export const inject = ['harnessTools', 'harnessLlm', 'harnessModels', 'harnessProcess', 'harnessState'];
     export function apply(ctx) {
       ctx.provide('harnessToolExecutor', {
-        present: (content, tools) => ({ ...content, tools: [...tools] }),
+        present: (systemPrompt, tools) => ({ systemPrompt, tools: [...tools] }),
         interpret: (message) => message,
         execute: executeTools,
       });
@@ -331,7 +331,8 @@ test('a third-party plugin uses tools, models and subprocesses from a Profile wi
           return {
             request: {
               model,
-              ...executor.present({ systemPrompt: '', messages }, schemas, { model, signal, turn }),
+              messages,
+              ...executor.present('', schemas, { model, signal, turn }),
             },
             executor,
             tools,

@@ -20,8 +20,7 @@ import type { SessionRecord } from '@mini-harness/sessions/identity';
 import {
   isTextImageContent,
   validateNativeMessage,
-  type LlmRequest,
-  type ModelRequestContent,
+  type NativeMessage,
   type NativeAssistantMessage,
   type NativeUserMessage,
   type ToolCallPart,
@@ -258,21 +257,49 @@ export class SessionRun {
       const cwd = this.sessions.workspacePath(id);
       const step: StepContext = { sessionId: id, turn, cwd, model, signal };
       const executor = requireService(ctx, 'harnessToolExecutor');
-      const { tools: advertisedTools, assemble } = await this.requestBuilder(ctx, step, log);
+      const capabilities = selectModel(requireService(ctx, 'harnessModels'), [model]).capabilities;
+      const projectMessages = async (messages: NativeMessage[], requestSignal: AbortSignal) => {
+        const hooks = ctx.events.listeners('agent/project-messages', target);
+        const projected = await applyTransforms(
+          hooks,
+          hooks.length ? structuredClone(messages) : messages,
+          { ...step, signal: requestSignal },
+        );
+        return prepareModelMessages(capabilities, projected);
+      };
+      const tools = conversationTools(ctx, id);
+      const metadata = tools.map(({ name, description, parameters, label, metadata }) => ({
+        name,
+        description,
+        parameters,
+        label,
+        metadata,
+      }));
+      const systemPrompt =
+        (await ctx.get('harnessPrompt')?.build({ sessionId: id, cwd, tools: metadata, signal })) ?? '';
+      const messages = await projectMessages(log.context().contextMessages, signal);
+      const advertisedTools = new Map(tools.filter(toolAvailable).map((tool) => [tool.name, tool]));
+      const schemas = metadata
+        .filter(({ name }) => advertisedTools.has(name))
+        .map(({ name, description, parameters }) => ({ name, description, parameters }));
       const preparation: RequestPreparation = {
         ...step,
         context: ctx,
         runId: submissionId,
-        async rebuild(request, messages, signal) {
-          const projected = await assemble(messages, signal);
-          return { ...request, messages: projected.messages, inputMeasurement: undefined, signal };
-        },
+        projectMessages,
       };
       const request = await applyTransforms(
         ctx.events.listeners('agent/prepare-request', target),
-        await assemble(log.context().contextMessages),
+        {
+          ...executor.present(systemPrompt, schemas, step),
+          model,
+          messages,
+          thinkingLevel: current.thinkingLevel,
+          signal,
+        },
         preparation,
       );
+      resolveThinking(capabilities, request.thinkingLevel);
       return {
         request,
         recover: (request, failure) =>
@@ -421,58 +448,4 @@ export class SessionRun {
     return text;
   }
 
-  private async prepareRequest(
-    ctx: Context,
-    context: StepContext,
-    requestContent: ModelRequestContent,
-    present?: (content: ModelRequestContent) => ModelRequestContent & { tools?: LlmRequest['tools'] },
-  ): Promise<LlmRequest> {
-    const hooks = ctx.events.listeners('agent/model-request', scopeTarget(ctx));
-    const transformed = await applyTransforms(
-      hooks,
-      hooks.length ? structuredClone(requestContent) : requestContent,
-      context,
-    );
-    const prepared = present ? present(transformed) : transformed;
-    const capabilities = selectModel(requireService(ctx, 'harnessModels'), [context.model]).capabilities;
-    resolveThinking(capabilities, prepared.thinkingLevel);
-    return {
-      ...prepared,
-      messages: prepareModelMessages(capabilities, prepared.messages),
-      model: context.model,
-      signal: context.signal,
-    };
-  }
-
-  private async requestBuilder(ctx: Context, step: StepContext, log: SessionLogPort) {
-    const { sessionId, cwd, model, signal } = step;
-    const executor = requireService(ctx, 'harnessToolExecutor');
-    const tools = conversationTools(ctx, sessionId);
-    const advertised = new Map(tools.map((tool) => [tool.name, tool]));
-    const metadata = tools.map(({ name, description, parameters, label, metadata }) => ({
-      name,
-      description,
-      parameters,
-      label,
-      metadata,
-    }));
-    const systemPrompt =
-      (await ctx.get('harnessPrompt')?.build({ sessionId, cwd, tools: metadata, signal })) ?? '';
-    return {
-      tools: advertised,
-      assemble: (messages: LlmRequest['messages'], requestSignal = signal) =>
-        this.prepareRequest(
-          ctx,
-          { ...step, signal: requestSignal },
-          { systemPrompt, messages, thinkingLevel: log.context().thinkingLevel },
-          (content) => {
-            for (const [name, tool] of advertised) if (!toolAvailable(tool)) advertised.delete(name);
-            const schemas = metadata
-              .filter(({ name }) => advertised.has(name))
-              .map(({ name, description, parameters }) => ({ name, description, parameters }));
-            return executor.present(content, schemas, { model, turn: step.turn, signal: requestSignal });
-          },
-        ),
-    };
-  }
 }

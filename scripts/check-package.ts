@@ -143,7 +143,7 @@ async function checkPackage() {
       join(installed, 'plugin-types.mts'),
       `
       import { Context, type Plugin } from 'mini-harness/cordis';
-      import type { LlmPort, ModelRequestContent } from 'mini-harness/llm';
+      import type { LlmPort } from 'mini-harness/llm';
       import type { ModelSource } from 'mini-harness/models';
       import { createScopeKey, type ScopeKey } from 'mini-harness/scopes';
       import type { ProfileConfiguration, ScopeSettings } from 'mini-harness/configuration';
@@ -206,7 +206,8 @@ async function checkPackage() {
       pluginSecrets.read('credential');
       ctx.on('internal/update', () => {});
       ctx.on('agent/prepare-input', (content, context: InputContext) => context.source === 'agent' ? content : undefined);
-      ctx.on('agent/model-request', (request: ModelRequestContent) => ({ ...request, systemPrompt: request.systemPrompt.trim() }));
+      ctx.on('agent/project-messages', (messages) => messages);
+       ctx.on('agent/prepare-request', (request) => ({ ...request, systemPrompt: request.systemPrompt.trim(), inputMeasurement: undefined }));
       ctx.effect(() => prompt.register({ id: 'status', render: ({ cwd }) => typeof cwd === 'string' ? cwd : undefined }));
       ctx.on('agent/tool-result', (content) => content);
       ctx.on('harness/observe', (event: CapabilityObservation) => {

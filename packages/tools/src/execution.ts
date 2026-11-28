@@ -5,7 +5,6 @@ import { invokeTool, prepareTool } from './invocation.ts';
 export { runTool, toolAvailable } from './invocation.ts';
 import type {
   LlmRequest,
-  ModelRequestContent,
   NativeAssistantMessage,
   NativeToolMessage,
   ToolCallPart,
@@ -32,10 +31,10 @@ export interface ToolExecution {
 
 export interface ToolExecutorPort {
   present(
-    content: ModelRequestContent,
+    systemPrompt: string,
     tools: readonly ToolSchema[],
     context: ToolTurn,
-  ): ModelRequestContent & { tools?: ToolSchema[] };
+  ): Pick<LlmRequest, 'systemPrompt' | 'tools'>;
   interpret(message: NativeAssistantMessage, context: ToolTurn): NativeAssistantMessage;
   /** Interpret, execute and deliver a result for each call. */
   execute(
@@ -151,7 +150,7 @@ declare module 'mini-harness/cordis' {
 }
 
 export const nativeExecutor: ToolExecutorPort = {
-  present: (content, tools) => ({ ...content, tools: [...tools] }),
+  present: (systemPrompt, tools) => ({ systemPrompt, tools: [...tools] }),
   interpret: (message) => message,
   execute: executeTools,
 };

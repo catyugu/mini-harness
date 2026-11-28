@@ -15,6 +15,8 @@ Tool execution uses the providing Cordis Fiber. Registration uses the caller’s
 
 `ToolContext` provides the call ID, cancellation signal, progress updates and an output writer. An execution environment can also supply a whole-task wait function or a background report function. A tool that supports independent execution can declare `background: true` and optionally project a compact result for task history. See [Runs](../runs/README.md#independent-tools) for the built-in background entry.
 
+An executor presents the system prompt and tool schemas once per turn. It does not transform conversation messages; a plugin can contribute message projection through the scoped Agent hook.
+
 The default executor runs concurrency-safe calls in bounded groups, with serial calls acting as barriers. It drains started calls before returning. Tool failures and skipped calls close the model protocol through tool results.
 
 Tool results may select presentation metadata using `detailKeys` from their `details`. The execution layer transports `ToolContext.write(text, channel)` for both foreground and background work; consumers own the output buffers. A tool may report an explicit progress state with `update({ state: 'approval' })` or `update({ state: 'running' })`.
