@@ -26,9 +26,16 @@ test('explicit reads use native paths while searches and writes use the workspac
   const workspace = rootedFileAccess(access, cwd, {
     exclude: (path) => containsPath(state, path),
   });
-  const definitions = fileTools(cwd, () => workspace, () => explicitFileReader(access, cwd));
+  const definitions = fileTools(
+    cwd,
+    () => workspace,
+    () => explicitFileReader(access, cwd),
+  );
   const execute = async (name: string, value: object) =>
-    expectPresent(definitions.find((tool) => tool.name === name), 'file tool ' + name).execute(value as Record<string, unknown>, {
+    expectPresent(
+      definitions.find((tool) => tool.name === name),
+      'file tool ' + name,
+    ).execute(value as Record<string, unknown>, {
       callId: 'test',
       signal: new AbortController().signal,
       update() {},

@@ -54,19 +54,23 @@ export const executeTools: ToolExecutorPort['execute'] = async (calls, tools, ex
       let invoke: (signal: AbortSignal) => Promise<ToolResult>;
       let parallel = false;
       try {
-        if (call.argumentsError) throw new Error('Invalid arguments for ' + call.name + ': ' + call.argumentsError);
+        if (call.argumentsError)
+          throw new Error('Invalid arguments for ' + call.name + ': ' + call.argumentsError);
         if (!tool) throw new Error('Tool is no longer available: ' + call.name);
         const prepared = prepareTool(tool, call.arguments);
         parallel = tool.isConcurrencySafe?.(prepared.args) ?? false;
-        invoke = (signal) => invokeTool(prepared, call.id, {
-          signal,
-          executionId: execution.executionId,
-          waitFor: execution.waitFor,
-          onUpdate: (update) => execution.update?.(call, update),
-          write: (text, channel = 'output') => execution.write?.(call, text, channel),
-        });
+        invoke = (signal) =>
+          invokeTool(prepared, call.id, {
+            signal,
+            executionId: execution.executionId,
+            waitFor: execution.waitFor,
+            onUpdate: (update) => execution.update?.(call, update),
+            write: (text, channel = 'output') => execution.write?.(call, text, channel),
+          });
       } catch (error) {
-        invoke = async () => { throw error; };
+        invoke = async () => {
+          throw error;
+        };
       }
       yield {
         parallel,

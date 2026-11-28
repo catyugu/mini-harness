@@ -1,7 +1,13 @@
 import { ScopedLayers, scopeOf, type ScopeKey } from '@mini-harness/plugin-api/scopes';
 import { toolNamePattern } from '@mini-harness/llm/vocabulary';
 import { Service, type Context } from 'mini-harness/cordis';
-import { type ToolDefinition, type ResolvedTool, type ToolPort, type ToolFactory, type ToolSelection } from './api.ts';
+import {
+  type ToolDefinition,
+  type ResolvedTool,
+  type ToolPort,
+  type ToolFactory,
+  type ToolSelection,
+} from './api.ts';
 interface ToolRegistration {
   name: string;
   resolve(selection: ToolSelection, caller?: Context): ResolvedTool;
