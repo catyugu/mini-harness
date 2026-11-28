@@ -49,9 +49,7 @@ function partTokens(part: NativeContent) {
 export function messageTokens(message: NativeMessage) {
   return (
     4 +
-    (typeof message.content === 'string'
-      ? textTokens(message.content)
-      : message.content.reduce((sum, part) => sum + partTokens(part), 0)) +
+    message.content.reduce((sum, part) => sum + partTokens(part), 0) +
     (message.role === 'toolResult' ? textTokens(message.toolName) + 4 : 0)
   );
 }

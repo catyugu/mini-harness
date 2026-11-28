@@ -248,7 +248,7 @@ test('a third-party plugin uses tools, models and subprocesses from a Profile wi
       });
       for (const id of ['adapter-one', 'adapter-two']) {
         const resolve = (choice) => choice.provider === id
-          ? { provider: id, id: choice.id || 'fixture' }
+          ? { provider: id, id: choice.id }
           : undefined;
         const capabilities = (choice) => ({
           id: choice.id, name: choice.id, input: ['text'],
@@ -256,7 +256,10 @@ test('a third-party plugin uses tools, models and subprocesses from a Profile wi
         });
         ctx.effect(() => ctx.harnessModels.register({
           list: () => [{ provider: id, id: 'fixture', name: 'fixture', configured: true, thinkingLevels: [], input: ['text'] }],
-          resolve, capabilities,
+          resolve: (choice) => {
+            const model = resolve(choice);
+            return model && { model, capabilities: capabilities(model) };
+          },
         }, {
           accepts: (model) => model.provider === id,
           async *stream(request) {
@@ -264,7 +267,7 @@ test('a third-party plugin uses tools, models and subprocesses from a Profile wi
             const content = last?.role === 'toolResult'
               ? [{ type: 'text', text: id + ': ' + last.content[0].text }]
               : [{ type: 'toolCall', id: 'standalone-call', name: 'read_model', arguments: {} }];
-            yield { type: 'done', message: { role: 'assistant', content, timestamp: Date.now() } };
+            yield { type: 'done', message: { role: 'assistant', content, timestamp: Date.now(), stopReason: last?.role === 'toolResult' ? 'stop' : 'toolUse' } };
           },
         }));
       }
@@ -286,7 +289,7 @@ test('a third-party plugin uses tools, models and subprocesses from a Profile wi
             child.finished,
           ]);
           if (status.code !== 0) throw new Error(Buffer.concat(stderr).toString());
-          return { content: [{ type: 'text', text: Buffer.concat(stdout).toString() }] };
+          return { state: 'finished', content: [{ type: 'text', text: Buffer.concat(stdout).toString() }] };
         },
       })));
     }
@@ -304,15 +307,17 @@ test('a third-party plugin uses tools, models and subprocesses from a Profile wi
       false,
     );
     assert.equal(app.ctx.get('harnessModelStore'), undefined);
-    assert.deepEqual(app.ctx.harnessModels.resolve({ provider: 'adapter-one', id: 'dynamic' }), {
+    assert.deepEqual(app.ctx.harnessModels.resolve({ provider: 'adapter-one', id: 'dynamic' })?.model, {
       provider: 'adapter-one',
       id: 'dynamic',
     });
     for (const provider of ['adapter-one', 'adapter-two']) {
       const model = { provider, id: 'fixture' };
-      assert.deepEqual(app.ctx.harnessModels.resolve(model), model);
+      assert.deepEqual(app.ctx.harnessModels.resolve(model)?.model, model);
       const signal = AbortSignal.timeout(10000);
-      const messages: NativeMessage[] = [{ role: 'user', content: 'Use the tool', timestamp: Date.now() }];
+      const messages: NativeMessage[] = [
+        { role: 'user', content: [{ type: 'text', text: 'Use the tool' }], timestamp: Date.now() },
+      ];
       const tools = new Map(app.ctx.harnessTools.list().map((tool) => [tool.name, tool]));
       const executor = app.ctx.harnessToolExecutor;
       const schemas = [...tools.values()].map(({ name, description, parameters }) => ({
@@ -322,8 +327,7 @@ test('a third-party plugin uses tools, models and subprocesses from a Profile wi
       }));
       const result = await app.ctx.harnessAgent.run(app.ctx, {
         signal,
-        prepare(turn, failure) {
-          if (failure) return;
+        prepare(turn) {
           return {
             request: {
               model,

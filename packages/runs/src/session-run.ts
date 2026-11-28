@@ -4,7 +4,13 @@ import { conversationTools } from './tool-selection.ts';
 import type { Context } from 'mini-harness/cordis';
 import type { TaskContext } from '@mini-harness/tasks/api';
 import { scopeTarget } from '@mini-harness/plugin-api/scopes';
-import { modelRetry, type InputContext, type StepContext } from '@mini-harness/agent/events';
+import type { AgentTurn } from '@mini-harness/agent/api';
+import {
+  modelRetry,
+  type InputContext,
+  type StepContext,
+  type RequestPreparation,
+} from '@mini-harness/agent/events';
 import { DomainError } from '@mini-harness/platform/errors';
 import { isDeepStrictEqual } from 'node:util';
 import type { SessionCatalog, SessionLifecycle, SessionStore } from '@mini-harness/sessions/records';
@@ -12,6 +18,7 @@ import type { ModelChoice } from '@mini-harness/llm/vocabulary';
 import type { ModelCatalogPort } from '@mini-harness/models/api';
 import type { SessionRecord } from '@mini-harness/sessions/identity';
 import {
+  isTextImageContent,
   validateNativeMessage,
   type LlmRequest,
   type ModelRequestContent,
@@ -24,8 +31,7 @@ import type { RecordPresentation } from '@mini-harness/sessions/display-record';
 import type { MessageOrigin, MessageMode } from '@mini-harness/sessions/queue';
 import type { SessionLogPort, InboxItem, SessionProjection } from '@mini-harness/sessions/log-api';
 import { Inbox } from './inbox.ts';
-import { isToolContent, toolResultState } from '@mini-harness/tools/api';
-import { applyTransforms } from './transforms.ts';
+import { applyTransforms, recoverRequest } from './transforms.ts';
 import { toolFailure } from '@mini-harness/tools/execution';
 import {
   prepareModelMessages,
@@ -62,14 +68,22 @@ export function selectInputModel(
   fallback: ModelChoice | undefined,
   parentId: string | null,
 ) {
-  return selectModel(models, {
-    explicit: item.model,
-    stored: previous.model,
-    fallback,
-    preferStored: Boolean(parentId || item.mode === 'steer' || item.origin?.source !== 'user'),
-    thinkingLevel: item.thinkingLevel,
-    inherited: previous.thinkingLevel,
-  });
+  const choices = item.model
+    ? [item.model]
+    : parentId || item.mode === 'steer' || item.origin?.source !== 'user'
+      ? [previous.model, fallback]
+      : [fallback, previous.model];
+  const selected = selectModel(
+    models,
+    choices,
+    item.model
+      ? 'Unknown model: ' + item.model.provider + (item.model.id === undefined ? '' : '/' + item.model.id)
+      : undefined,
+  );
+  return {
+    ...selected,
+    thinkingLevel: resolveThinking(selected.capabilities, item.thinkingLevel, previous.thinkingLevel),
+  };
 }
 
 export class SessionRun {
@@ -132,7 +146,7 @@ export class SessionRun {
     const selection = (item: Input, previous = log.context()) => {
       const models = requireService(ctx, 'harnessModels');
       const selected = selectInputModel(models, item, previous, fallback, record.parentId);
-      assertImageInput(models.capabilities(selected.model), item.images.length);
+      assertImageInput(selected.capabilities, item.images.length);
       validateNativeMessage({
         role: 'user',
         content: [{ type: 'text', text: item.text }, ...item.images],
@@ -162,16 +176,12 @@ export class SessionRun {
         context,
       );
       validateNativeMessage({ role: 'user', content, timestamp: 0 });
-      const preparedImages =
-        typeof content === 'string' ? [] : content.filter((part) => part.type === 'image');
-      assertImageInput(
-        requireService(ctx, 'harnessModels').capabilities(selected.model),
-        preparedImages.length,
-      );
+      const preparedImages = content.filter((part) => part.type === 'image');
+      assertImageInput(selected.capabilities, preparedImages.length);
       signal.throwIfAborted();
       this.sessions.assertAvailable(id);
       return {
-        selection: selected,
+        selection: { model: selected.model, thinkingLevel: selected.thinkingLevel },
         presentation: isDeepStrictEqual(item.images, preparedImages)
           ? presentation
           : { ...presentation, images: item.images },
@@ -237,11 +247,116 @@ export class SessionRun {
       }
     }
     let requestId: string | undefined;
-    let attemptsRecorded = false;
     let modelStep = 0;
     const publisher = recordPublisher(emit);
     const target = scopeTarget(ctx);
     const toolTransforms = () => ctx.events.listeners('agent/tool-result', target);
+    const prepareTurn = async (turn: number): Promise<AgentTurn> => {
+      const current = log.context();
+      const model = current.model;
+      if (!model) throw new Error('Configure a model before sending a message');
+      const cwd = this.sessions.workspacePath(id);
+      const step: StepContext = { sessionId: id, turn, cwd, model, signal };
+      const executor = requireService(ctx, 'harnessToolExecutor');
+      const { tools: advertisedTools, assemble } = await this.requestBuilder(ctx, step, log);
+      const preparation: RequestPreparation = {
+        ...step,
+        context: ctx,
+        runId: submissionId,
+        async rebuild(request, messages, signal) {
+          const projected = await assemble(messages, signal);
+          return { ...request, messages: projected.messages, inputMeasurement: undefined, signal };
+        },
+      };
+      const request = await applyTransforms(
+        ctx.events.listeners('agent/prepare-request', target),
+        await assemble(log.context().contextMessages),
+        preparation,
+      );
+      return {
+        request,
+        recover: (request, failure) =>
+          recoverRequest(ctx.events.listeners('agent/recover-request', target), request, {
+            ...preparation,
+            failure,
+          }),
+        executor,
+        tools: advertisedTools,
+        execution: {
+          executionId: task.id,
+          async waitFor(id, signal) {
+            await task.waitFor(id, signal);
+          },
+          start(call) {
+            if (signal.aborted) return { state: 'skipped', reason: 'Agent run cancelled' };
+            if (inbox.hasValid('steer', selection))
+              return { state: 'skipped', reason: 'Skipped because a steering message arrived.' };
+            const tool = advertisedTools.get(call.name);
+            if (tool && ctx.get('harnessToolPolicy')?.(id, tool) === false)
+              return { state: 'denied', reason: 'Tool denied by conversation policy: ' + call.name };
+            emit({
+              type: 'tool',
+              id: call.id,
+              name: call.name,
+              state: 'running',
+              arguments: call.arguments,
+            });
+            return undefined;
+          },
+          update(call, value) {
+            const transform = toolTransforms().length > 0;
+            if (value.state === undefined && transform) return;
+            emit({
+              type: 'tool',
+              id: call.id,
+              name: call.name,
+              state: value.state ?? 'running',
+              arguments: call.arguments,
+              content: transform ? undefined : value.content,
+            });
+          },
+          write(call, text, channel) {
+            emit({ type: 'tool-output', id: call.id, channel, text });
+          },
+        },
+        async deliver(output, toolSignal, call) {
+          const hooks = toolTransforms();
+          let executionId: string | undefined;
+          let transformError: Error | undefined;
+          if (output.state === 'finished' && hooks.length) {
+            executionId = log.append({ type: 'tool-execution', result: output }).id;
+            try {
+              const resultContext = { ...step, signal: toolSignal, tool: call.name, callId: call.id };
+              const content = await applyTransforms(hooks, output.content, resultContext);
+              if (!isTextImageContent(content)) throw new Error('Invalid tool result content');
+              output = { ...output, content };
+            } catch (error) {
+              if (!toolSignal.aborted) {
+                output = {
+                  ...toolFailure(
+                    call,
+                    'Tool execution completed, but the model-visible result transformation failed.',
+                  ),
+                  elapsedMs: output.elapsedMs,
+                };
+                transformError = new Error('Could not transform the result of ' + call.name, {
+                  cause: error,
+                });
+              }
+            }
+          }
+          const entry =
+            executionId && !transformError
+              ? log.acceptToolResult(executionId, output.content)
+              : log.append({ type: 'message', message: output, elapsedMs: output.elapsedMs });
+          emit({
+            type: 'tool-end',
+            message: displayMessage(entry, output, submissionId, call.arguments),
+          });
+          if (transformError) throw transformError;
+        },
+      };
+    };
     const answer = await requireService(ctx, 'harnessAgent')
       .run(ctx, {
         signal,
@@ -263,7 +378,6 @@ export class SessionRun {
           }
           if (event.type === 'request') {
             requestId = log.recordRequest(event.request).id;
-            attemptsRecorded = false;
             return;
           }
           if (event.type === 'model-attempt') {
@@ -275,7 +389,6 @@ export class SessionRun {
               step: modelStep,
               ...event.metrics,
             });
-            attemptsRecorded = true;
             return;
           }
           if (event.type !== 'assistant') {
@@ -287,7 +400,6 @@ export class SessionRun {
           const assistant = log.append({
             type: 'message',
             message: result,
-            attemptsRecorded: attemptsRecorded || undefined,
             ...(displays.length && { displays }),
           });
           emit({
@@ -298,104 +410,7 @@ export class SessionRun {
         afterTurn: async () => {
           if (await deliver(['steer'])) return 'continue';
         },
-        prepare: async (turn, failure) => {
-          const current = log.context();
-          const model = current.model;
-          if (!model) throw new Error('Configure a model before sending a message');
-          const cwd = this.sessions.workspacePath(id);
-          const step: StepContext = { sessionId: id, turn, cwd, model, signal };
-          const executor = requireService(ctx, 'harnessToolExecutor');
-          const { tools: advertisedTools, assemble } = await this.requestBuilder(ctx, step, log);
-          const prepareHooks = ctx.events.listeners('agent/prepare-request', target);
-          if (failure && !prepareHooks.length) return;
-          const initial = await assemble(log.context().contextMessages);
-          const prepared = await applyTransforms(prepareHooks, initial, {
-            ...step,
-            context: ctx,
-            runId: submissionId,
-            failure,
-            rebuild: assemble,
-          });
-          if (failure && prepared === initial) return;
-          return {
-            request: { ...prepared, signal },
-            executor,
-            tools: advertisedTools,
-            execution: {
-              executionId: task.id,
-              async waitFor(id, signal) {
-                await task.waitFor(id, signal);
-              },
-              start(call) {
-                if (signal.aborted) return { outcome: 'skipped', reason: 'Agent run cancelled' };
-                if (inbox.hasValid('steer', selection))
-                  return { outcome: 'skipped', reason: 'Skipped because a steering message arrived.' };
-                const tool = advertisedTools.get(call.name);
-                if (tool && ctx.get('harnessToolPolicy')?.(id, tool) === false)
-                  return { outcome: 'denied', reason: 'Tool denied by conversation policy: ' + call.name };
-                emit({
-                  type: 'tool',
-                  id: call.id,
-                  name: call.name,
-                  state: 'running',
-                  arguments: call.arguments,
-                });
-                return undefined;
-              },
-              update(call, value) {
-                const transform = toolTransforms().length > 0;
-                if (value.state === undefined && transform) return;
-                emit({
-                  type: 'tool',
-                  id: call.id,
-                  name: call.name,
-                  state: value.state ?? 'running',
-                  arguments: call.arguments,
-                  content: transform ? undefined : value.content,
-                });
-              },
-              write(call, text, channel) {
-                emit({ type: 'tool-output', id: call.id, channel, text });
-              },
-            },
-            async deliver(output, toolSignal, call) {
-              const hooks = toolTransforms();
-              let executionId: string | undefined;
-              let transformError: Error | undefined;
-              if (toolResultState(output) === 'finished' && hooks.length) {
-                executionId = log.append({ type: 'tool-execution', result: output }).id;
-                try {
-                  const resultContext = { ...step, signal: toolSignal, tool: call.name, callId: call.id };
-                  const content = await applyTransforms(hooks, output.content, resultContext);
-                  if (!isToolContent(content)) throw new Error('Invalid tool result content');
-                  output = { ...output, content };
-                } catch (error) {
-                  if (!toolSignal.aborted) {
-                    output = {
-                      ...toolFailure(
-                        call,
-                        'Tool execution completed, but the model-visible result transformation failed.',
-                      ),
-                      elapsedMs: output.elapsedMs,
-                    };
-                    transformError = new Error('Could not transform the result of ' + call.name, {
-                      cause: error,
-                    });
-                  }
-                }
-              }
-              const entry =
-                executionId && !transformError
-                  ? log.acceptToolResult(executionId, output.content)
-                  : log.append({ type: 'message', message: output, elapsedMs: output.elapsedMs });
-              emit({
-                type: 'tool-end',
-                message: displayMessage(entry, output, submissionId, call.arguments),
-              });
-              if (transformError) throw transformError;
-            },
-          };
-        },
+        prepare: prepareTurn,
       })
       .catch((error) => {
         if (signal.aborted) this.closeUnfinishedTools(log, true);
@@ -419,7 +434,7 @@ export class SessionRun {
       context,
     );
     const prepared = present ? present(transformed) : transformed;
-    const capabilities = requireService(ctx, 'harnessModels').capabilities(context.model);
+    const capabilities = selectModel(requireService(ctx, 'harnessModels'), [context.model]).capabilities;
     resolveThinking(capabilities, prepared.thinkingLevel);
     return {
       ...prepared,

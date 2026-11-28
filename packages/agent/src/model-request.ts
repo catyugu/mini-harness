@@ -1,4 +1,5 @@
 import { setTimeout as sleep } from 'node:timers/promises';
+import { ModelStreamError, validateNativeMessage } from '@mini-harness/llm/api';
 import type {
   LlmPort,
   LlmRequest,
@@ -22,16 +23,16 @@ function failedMessage(
     model: model.id,
     stopReason: signal.aborted ? 'aborted' : 'error',
     errorMessage: error instanceof Error ? error.message : String(error),
-    errorKind,
+    errorKind: signal.aborted ? undefined : errorKind,
   };
 }
 
 export async function requestModel(
-  llm: Pick<LlmPort, 'stream'> & Partial<Pick<LlmPort, 'select'>>,
+  llm: Pick<LlmPort, 'stream'>,
   request: LlmRequest,
   options: {
     request?(request: LlmRequest): void;
-    recover?(failure: ModelFailure): Promise<LlmRequest | undefined>;
+    recover?(request: LlmRequest, failure: ModelFailure): Promise<LlmRequest | undefined>;
     delta?(text: string): void;
     thinking?(text: string): void;
     attempt?(metrics: ModelAttemptMetrics): void;
@@ -66,9 +67,10 @@ export async function requestModel(
         }
       });
       if (!message) throw new Error('The model stream ended without a final message');
+      validateNativeMessage(message);
     } catch (error) {
       message = {
-        ...failedMessage(request, error, partial, llm.select?.(model)?.classifyError?.(error)),
+        ...failedMessage(request, error, partial, error instanceof ModelStreamError ? error.kind : undefined),
         ...(thinking && {
           content: [
             { type: 'thinking' as const, thinking },
@@ -79,9 +81,7 @@ export async function requestModel(
       };
     }
     options.attempt?.({ elapsedMs: performance.now() - started, firstTokenMs, usage: message.usage });
-    const failed =
-      !!message.errorMessage || message.stopReason === 'error' || message.stopReason === 'aborted';
-    if (!failed || streamed || message.content.length || signal.aborted || message.stopReason === 'aborted')
+    if (message.stopReason !== 'error' || streamed || message.content.length || signal.aborted)
       return message;
     if (attempt >= 3) return message;
     const failure: ModelFailure = {
@@ -92,7 +92,7 @@ export async function requestModel(
       kind: message.errorKind,
     };
     if (failure.kind && failure.kind !== 'transient') {
-      const next = await options.recover?.(failure);
+      const next = await options.recover?.(request, failure);
       if (!next) return message;
       request = next;
       options.request?.(request);

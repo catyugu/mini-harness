@@ -46,7 +46,7 @@ export function setup(ctx: Context) {
               changes.invalidate('files', session.workspaceId ?? undefined);
               const changedPath = relative(root, resolve(root, path)).split(sep).join('/');
               const { executionId } = args[1];
-              if (executionId && !result.isError && !result.outcome)
+              if (executionId && result.state === 'finished')
                 caller.get('harnessRuns')?.recordChange(id, executionId, changedPath);
               return { ...result, details: { ...result.details, changedPath } };
             },

@@ -25,7 +25,7 @@ const hello: ToolDefinition<{ name: string }> = {
   isConcurrencySafe: () => true,
   async execute({ name }, { signal }) {
     signal.throwIfAborted();
-    return { content: [{ type: 'text', text: 'Hello, ' + name }] };
+    return { state: 'finished', content: [{ type: 'text', text: 'Hello, ' + name }] };
   },
 };
 

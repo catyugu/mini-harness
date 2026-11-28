@@ -1,9 +1,8 @@
 import { userContent } from './user-content.ts';
 import type { RecordPresentation, SessionDisplayRecord } from './shared/display-record.ts';
 import { isRunning, type RunInfo } from './shared/run-state.ts';
-import { toolResultState } from '@mini-harness/tools/api';
 import type { NativeMessage, NativeToolMessage } from '@mini-harness/llm/api';
-import type { MessageContent, ViewMessage } from './shared/message.ts';
+import type { ViewMessage } from './shared/message.ts';
 import type {
   ContextReplacement,
   SessionContext,
@@ -46,41 +45,50 @@ export function displayMessage(
     id: entry.id,
     parentId: entry.parentId,
     runId,
-    content: message.content as MessageContent,
     timestamp: message.timestamp,
   };
-  const view: ViewMessage =
-    message.role === 'toolResult'
-      ? {
-          ...fields,
-          role: message.role,
-          toolName: message.toolName,
-          toolCallId: message.toolCallId,
-          toolState: toolResultState(message),
-        }
-      : message.role === 'user'
-        ? { ...fields, role: 'user' }
-        : { ...fields, role: 'assistant' };
-  if (entry.type === 'message') {
-    if (entry.submissionId) view.submissionId = entry.submissionId;
-    if (entry.inboxId) view.inboxId = entry.inboxId;
-    if (entry.origin) view.origin = entry.origin;
+  switch (message.role) {
+    case 'user':
+      return {
+        ...fields,
+        role: 'user',
+        ...userContent(message.content, entry.type === 'message' ? entry.presentation : undefined),
+        ...(entry.type === 'message' && {
+          submissionId: entry.submissionId,
+          inboxId: entry.inboxId,
+          origin: entry.origin,
+        }),
+      };
+    case 'assistant':
+      return {
+        ...fields,
+        role: 'assistant',
+        content: message.content,
+        error:
+          !runId && message.stopReason === 'error'
+            ? (message.errorMessage ?? 'Model request failed')
+            : undefined,
+      };
+    case 'toolResult': {
+      const { details, detailKeys } = message;
+      return {
+        ...fields,
+        role: 'toolResult',
+        content: message.content,
+        toolName: message.toolName,
+        toolCallId: message.toolCallId,
+        toolState: message.state,
+        arguments: toolArguments,
+        elapsedMs: (entry.type === 'message' ? entry.elapsedMs : undefined) ?? message.elapsedMs,
+        details:
+          details && detailKeys
+            ? Object.fromEntries(
+                detailKeys.filter((key) => Object.hasOwn(details, key)).map((key) => [key, details[key]]),
+              )
+            : undefined,
+      };
+    }
   }
-  if (entry.type === 'message' && message.role === 'user')
-    Object.assign(view, userContent(message.content, entry.presentation));
-  if (message.role === 'assistant' && !runId && message.stopReason !== 'aborted')
-    view.error = message.errorMessage;
-  if (message.role === 'toolResult') {
-    view.isError = message.isError;
-    view.arguments = toolArguments;
-    view.elapsedMs = (entry.type === 'message' ? entry.elapsedMs : undefined) ?? message.elapsedMs;
-    const { details, detailKeys } = message;
-    if (details && detailKeys)
-      view.details = Object.fromEntries(
-        detailKeys.filter((key) => Object.hasOwn(details, key)).map((key) => [key, details[key]]),
-      );
-  }
-  return view;
 }
 
 /** Select content explicitly from the event, without interpreting its business meaning. */

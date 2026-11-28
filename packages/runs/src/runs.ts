@@ -265,14 +265,14 @@ export class Runs implements RunPort {
       }
       const models = context?.get('harnessModels');
       if (models) {
-        const { model } = selectInputModel(
+        const { capabilities } = selectInputModel(
           models,
           selection,
           log.projection(),
           this.recent(),
           this.registry.get(id)?.parentId ?? null,
         );
-        assertImageInput(models.capabilities(model), imageCount);
+        assertImageInput(capabilities, imageCount);
       }
     }
     log.append({
@@ -397,7 +397,6 @@ export class Runs implements RunPort {
           : delivered.find(({ id }) => id === run.inputEntryId);
       if (input?.type !== 'message' || input.message.role !== 'user') return;
       const { message, presentation, selection } = input;
-      const parts = typeof message.content === 'string' ? [] : message.content;
       const attachments: Attachment[] = [],
         missing: string[] = [];
       for (const { name, mimeType, id: attachmentId, data } of userContent(message.content, presentation)
@@ -407,10 +406,7 @@ export class Runs implements RunPort {
         else if (data) attachments.push({ name, mimeType, data });
         else missing.push(name);
       }
-      const text =
-        typeof message.content === 'string'
-          ? message.content
-          : parts.flatMap((part) => (part.type === 'text' ? [part.text] : [])).join('\n');
+      const text = message.content.flatMap((part) => (part.type === 'text' ? [part.text] : [])).join('\n');
       return {
         message: presentation?.userText ?? text,
         attachments,

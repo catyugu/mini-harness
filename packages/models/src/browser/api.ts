@@ -18,7 +18,7 @@ export interface ModelPicker {
 declare module 'mini-harness/cordis' {
   interface Context {
     miniModels: {
-      get(): ModelCatalog & { recent: ModelChoice };
+      get(): ModelCatalog & { recent: ModelChoice | null };
       createPicker(
         onSelect: (choice: ModelChoice) => void,
         signal: AbortSignal,

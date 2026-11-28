@@ -20,7 +20,7 @@ test('scoped tools inherit locally and unregistering cancels an active call', as
       description: text,
       parameters: Type.Object({}),
       async execute() {
-        return { content: [{ type: 'text', text }] };
+        return { state: 'finished', content: [{ type: 'text', text }] };
       },
     });
   registry.register(make('root'), { context });
@@ -42,7 +42,7 @@ test('scoped tools inherit locally and unregistering cancels an active call', as
         await new Promise<void>((_resolve, reject) =>
           signal?.addEventListener('abort', () => reject(signal.reason), { once: true }),
         );
-        return { content: [] };
+        return { state: 'finished', content: [] };
       },
     }),
     { context },
@@ -76,7 +76,7 @@ test('a scoped replacement invalidates already selected definitions and removal 
       description: text,
       parameters: Type.Object({}),
       async execute() {
-        return { content: [{ type: 'text', text }] };
+        return { state: 'finished', content: [{ type: 'text', text }] };
       },
     });
   registry.register(make('application'), { context });
@@ -108,7 +108,7 @@ test('Tools activates and registers a definition without Sessions or a policy pr
         description: 'Standalone tool',
         parameters: Type.Object({}),
         async execute() {
-          return { content: [{ type: 'text', text: 'ready' }] };
+          return { state: 'finished', content: [{ type: 'text', text: 'ready' }] };
         },
       }),
     );
@@ -157,7 +157,7 @@ test('unregister cancels immediately and provider disposal drains before resourc
             entered();
             await hold;
             signal.throwIfAborted();
-            return { content: [] };
+            return { state: 'finished', content: [] };
           },
         }),
       );

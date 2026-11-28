@@ -28,8 +28,12 @@ export type ModelRequestTransform = Transform<ModelRequestContent, StepContext>;
 export interface RequestPreparation extends StepContext {
   readonly runId: string;
   readonly context: Context;
-  readonly failure?: ModelFailure;
-  rebuild(messages: NativeMessage[], signal: AbortSignal): Promise<LlmRequest>;
+  /** Reproject conversation messages, preserving the supplied request's parameters and clearing its measurement. */
+  rebuild(request: LlmRequest, messages: NativeMessage[], signal: AbortSignal): Promise<LlmRequest>;
+}
+
+export interface RequestRecovery extends RequestPreparation {
+  readonly failure: ModelFailure;
 }
 
 export type ModelRetryHandler = (
@@ -66,9 +70,12 @@ declare module 'mini-harness/cordis' {
     'agent/records'(event: AgentEvent, sink: RecordPublisher): readonly RecordPresentation[] | void;
     'agent/tool-result': ToolResultTransform;
     'agent/prepare-input': InputPreparation;
+    /** Repeatable content projection; put ephemeral message contributions here. */
     'agent/model-request': ModelRequestTransform;
-    /** Prepare or recover the final model-visible request before execution. */
+    /** Prepare the final request once per logical turn, including context changes via rebuild. */
     'agent/prepare-request': Transform<LlmRequest, RequestPreparation>;
+    /** Repair the actual last attempt's prepared request, or return undefined to decline. */
+    'agent/recover-request': Transform<LlmRequest, RequestRecovery>;
     'agent/model-retry': ModelRetryHandler;
   }
 }

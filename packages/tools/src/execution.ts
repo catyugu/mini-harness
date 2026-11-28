@@ -9,6 +9,7 @@ import type {
   NativeAssistantMessage,
   NativeToolMessage,
   ToolCallPart,
+  ToolResultState,
 } from '@mini-harness/llm/api';
 import type { ToolSchema } from '@mini-harness/llm/vocabulary';
 
@@ -23,7 +24,7 @@ export interface ToolExecution {
   readonly executionId?: string;
   waitFor?: ToolInvocation['waitFor'];
   /** Decides whether to start the call. A rejection still produces a model-visible result. */
-  start?(call: ToolCallPart): { outcome: 'skipped' | 'denied'; reason: string } | undefined;
+  start?(call: ToolCallPart): { state: 'skipped' | 'denied'; reason: string } | undefined;
   update?(call: ToolCallPart, result: ToolUpdate): void;
   write?(call: ToolCallPart, text: string, channel: string): void;
   deliver(result: NativeToolMessage, signal: AbortSignal): Promise<void>;
@@ -73,7 +74,7 @@ export const executeTools: ToolExecutorPort['execute'] = async (calls, tools, ex
         async run(batchSignal: AbortSignal) {
           const rejection = execution.start?.(call);
           const result = rejection
-            ? toolFailure(call, rejection.reason, rejection.outcome)
+            ? toolFailure(call, rejection.reason, rejection.state)
             : await executeTool(call, tool, prepared, execution, batchSignal, invalid);
           await execution.deliver(result, batchSignal);
         },
@@ -86,14 +87,13 @@ export const executeTools: ToolExecutorPort['execute'] = async (calls, tools, ex
 export const toolFailure = (
   call: ToolCallPart,
   reason: string,
-  outcome?: NativeToolMessage['outcome'],
+  state: Exclude<ToolResultState, 'finished'> = 'error',
 ): NativeToolMessage => ({
   role: 'toolResult',
   toolCallId: call.id,
   toolName: call.name,
   content: [{ type: 'text', text: reason }],
-  isError: true,
-  outcome,
+  state,
   timestamp: Date.now(),
 });
 
@@ -127,7 +127,6 @@ async function executeTool(
       role: 'toolResult',
       toolCallId: call.id,
       toolName: call.name,
-      isError: result.outcome ? true : (result.isError ?? false),
       timestamp: Date.now(),
       elapsedMs: result.elapsedMs ?? performance.now() - start,
     };
@@ -138,7 +137,7 @@ async function executeTool(
       ...toolFailure(
         call,
         error instanceof Error ? error.message : String(error),
-        cancelled ? 'cancelled' : undefined,
+        cancelled ? 'cancelled' : 'error',
       ),
       elapsedMs: performance.now() - start,
     };

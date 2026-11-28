@@ -85,7 +85,10 @@ export const apply = (ctx) => {
   );
   const log = app.runtime.plugins.ctx.harnessSessions.log(session.id);
   log.revise(
-    { type: 'message', message: { role: 'user', content: 'New branch', timestamp: Date.now() } },
+    {
+      type: 'message',
+      message: { role: 'user', content: [{ type: 'text', text: 'New branch' }], timestamp: Date.now() },
+    },
     beforePluginRecords,
     log.projection().leafId,
   );

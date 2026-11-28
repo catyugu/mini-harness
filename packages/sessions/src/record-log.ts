@@ -96,7 +96,6 @@ export abstract class RecordLog<Event extends { type: string }> {
   private closed = false;
   private length = 0;
 
-  protected abstract decodeRecord(record: Record<string, unknown>): LogEntry<Event>;
   protected abstract validateRecord(entry: LogEntry<Event>, recovering: boolean): void;
   protected abstract recordAdded(entry: LogEntry<Event>, address: RecordAddress): void;
   protected abstract advancesBranch(entry: LogEntry<Event>): boolean;
@@ -146,7 +145,7 @@ export abstract class RecordLog<Event extends { type: string }> {
     this.header = header;
     for (let offset = first + 1; offset < end; ) {
       const newline = bytes.indexOf(10, offset);
-      const entry = this.decodeRecord(parseRecord(bytes.toString('utf8', offset, newline)));
+      const entry = parseRecord(bytes.toString('utf8', offset, newline)) as LogEntry<Event>;
       this.validateEntry(entry, true);
       this.remember(entry, offset, newline - offset);
       offset = newline + 1;

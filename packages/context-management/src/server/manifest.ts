@@ -1,6 +1,6 @@
 import type { Context, Plugin } from 'mini-harness/cordis';
 import type { PluginInfo } from '@mini-harness/plugin-api/descriptor';
-import { modelRetry } from '@mini-harness/agent/events';
+import { modelRetry, type RequestPreparation } from '@mini-harness/agent/events';
 import type { LlmRequest } from '@mini-harness/llm/api';
 import type {} from '@mini-harness/runs/api';
 import { terminal } from '@mini-harness/tasks/api';
@@ -28,16 +28,25 @@ function setup(ctx: Context) {
   const statistics = new WeakMap<Pick<SessionLogPort, 'entries'>, Statistics>();
   const createManager = (scoped: Context, id: string) =>
     new ContextManagement(scoped.harnessModels, scoped.harnessLlm, modelRetry(scoped, id));
-  ctx.on('agent/prepare-request', (request, step) => {
+  const prepare = (
+    request: LlmRequest,
+    step: RequestPreparation,
+    reason: 'normal' | 'context-overflow' | 'image-limit',
+  ) => {
     const log = sessions.log(step.sessionId);
     return createManager(step.context, step.sessionId).prepare(
       log,
       { ...request, signal: step.signal },
-      (messages) => step.rebuild(messages, step.signal),
+      (request, messages) => step.rebuild(request, messages, step.signal),
       configuration(log.setting(owner), defaults()).settings,
       step.runId,
-      step.failure,
+      reason,
     );
+  };
+  ctx.on('agent/prepare-request', (request, step) => prepare(request, step, 'normal'));
+  ctx.on('agent/recover-request', (request, step) => {
+    const { kind } = step.failure;
+    if (kind === 'context-overflow' || kind === 'image-limit') return prepare(request, step, kind);
   });
   ctx.effect(() => changes.register('context-management'));
   ctx.effect(() => ctx.harnessProfileConfig.subscribe(() => notify()));
@@ -85,18 +94,21 @@ function setup(ctx: Context) {
                   thinkingLevel,
                   maxTokens,
                 } = log.requestDefinition(latest.id);
-                const { model } = selectModel(models, { explicit: choice });
-                const rebuild = async (messages: LlmRequest['messages']): Promise<LlmRequest> => ({
-                  model,
-                  systemPrompt,
-                  tools,
-                  thinkingLevel,
-                  maxTokens,
-                  messages: prepareModelMessages(models.capabilities(model), messages),
-                  signal,
+                const { model, capabilities } = selectModel(models, [choice]);
+                const rebuild = async (
+                  request: LlmRequest,
+                  messages: LlmRequest['messages'],
+                ): Promise<LlmRequest> => ({
+                  ...request,
+                  messages: prepareModelMessages(capabilities, messages),
+                  inputMeasurement: undefined,
                 });
                 const manager = createManager(scoped, params.id);
-                const request = await manager.prune(log, await rebuild(projection.contextMessages), rebuild);
+                const initial = await rebuild(
+                  { model, systemPrompt, tools, thinkingLevel, maxTokens, messages: [], signal },
+                  projection.contextMessages,
+                );
+                const request = await manager.prune(log, initial, rebuild);
                 const compacted = await manager.compact(
                   log,
                   request,
@@ -184,16 +196,13 @@ function setup(ctx: Context) {
           async execute({ entry, offset = 0, limit = 2400, image, raw }) {
             const message = sessions.log(id).originalMessage(entry, raw);
             if (!message)
-              return { isError: true, content: [{ type: 'text', text: 'Original message not found' }] };
-            const parts =
-              typeof message.content === 'string'
-                ? [{ type: 'text' as const, text: message.content }]
-                : message.content;
+              return { state: 'error', content: [{ type: 'text', text: 'Original message not found' }] };
+            const parts = message.content;
             if (image !== undefined) {
               const part = parts[image - 1];
               if (part?.type !== 'image')
-                return { isError: true, content: [{ type: 'text', text: 'Original image not found' }] };
-              return { content: [part] };
+                return { state: 'error', content: [{ type: 'text', text: 'Original image not found' }] };
+              return { state: 'finished', content: [part] };
             }
             const text = parts
               .flatMap((part, index) =>
@@ -206,6 +215,7 @@ function setup(ctx: Context) {
               .join('\n');
             const end = Math.min(offset + limit, text.length);
             return {
+              state: 'finished',
               content: [
                 {
                   type: 'text',

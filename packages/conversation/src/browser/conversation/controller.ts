@@ -33,7 +33,7 @@ export function createConversationController(ctx: Context): ConversationControll
     records: [],
     queue: [],
     mode: modeFor(),
-    interaction: { status: '' },
+    interaction: { status: '', cancelling: false, error: false },
   };
   let visit = new AbortController(),
     queueRevision = 0,
@@ -54,7 +54,7 @@ export function createConversationController(ctx: Context): ConversationControll
   const interact = (patch: Partial<ConversationState['interaction']>) =>
     update({ interaction: { ...state.interaction, ...patch } });
   const status = (text: string, error = false) => {
-    if (state.interaction.status !== text || Boolean(state.interaction.error) !== error)
+    if (state.interaction.status !== text || state.interaction.error !== error)
       interact({ status: text, error });
   };
   const report = (message: string | Error) =>
@@ -260,23 +260,25 @@ export function createConversationController(ctx: Context): ConversationControll
         await ctx.parallel('conversation/initialize', workspace, id);
       }
       const { permission: _permission, revision, ...message } = input;
-      const receipt = revision
-        ? {
-            run: await browserRequest<RunInfo>(
-              ctx,
-              path(id, '/revise'),
-              payload('POST', { ...message, ...revision }),
-            ),
-          }
-        : await browserRequest<SendReceipt>(ctx, path(id, '/runs'), payload('POST', { ...message, mode }));
-      if (!signal.aborted) {
-        if ('queue' in receipt) {
-          queueRevision++;
-          update({ queue: receipt.queue });
-        }
-        if (!isRunning(state.run) || revision) void activate(id);
+      if (revision) {
+        const run = await browserRequest<RunInfo>(
+          ctx,
+          path(id, '/revise'),
+          payload('POST', { ...message, ...revision }),
+        );
+        if (!signal.aborted) void activate(id);
+        return run;
       }
-      return receipt;
+      const receipt = await browserRequest<SendReceipt>(
+        ctx,
+        path(id, '/runs'),
+        payload('POST', { ...message, mode }),
+      );
+      if (!signal.aborted) {
+        queueRevision++;
+        update({ queue: receipt.queue });
+        if (!isRunning(state.run)) void activate(id);
+      }
     } finally {
       if (!signal.aborted) interact({ operation: undefined });
     }
@@ -354,7 +356,7 @@ export function createConversationController(ctx: Context): ConversationControll
     clear() {
       begin();
       select();
-      update({ interaction: { status: '' } });
+      update({ interaction: { status: '', cancelling: false, error: false } });
     },
     async cancel() {
       const id = active(),

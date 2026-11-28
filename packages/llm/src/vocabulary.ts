@@ -1,3 +1,9 @@
+/** Unresolved input selection; omitting the ID selects the provider's first visible model. */
+export interface ModelSelection {
+  provider: string;
+  id?: string;
+}
+
 export interface ModelChoice {
   provider: string;
   id: string;

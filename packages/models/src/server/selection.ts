@@ -1,21 +1,21 @@
-import { isThinkingLevel, type ThinkingLevel, type ModelChoice } from '@mini-harness/llm/vocabulary';
+import { isThinkingLevel, type ThinkingLevel, type ModelSelection } from '@mini-harness/llm/vocabulary';
 import { DomainError } from '@mini-harness/platform/errors';
 import type { ModelCatalogPort } from './api.ts';
 import type { NativeMessage } from '@mini-harness/llm/api';
 
-type Capabilities = ReturnType<ModelCatalogPort['capabilities']>;
+import type { ProviderModel } from '../shared/catalog.ts';
 
-function supportsThinking(level: ThinkingLevel, capabilities: Capabilities) {
+function supportsThinking(level: ThinkingLevel, capabilities: ProviderModel) {
   if (level === 'off') return true;
   return (
     isThinkingLevel(level) &&
-    capabilities?.reasoning &&
+    capabilities.reasoning &&
     (!capabilities.thinkingLevels || capabilities.thinkingLevels.includes(level))
   );
 }
 
 export function resolveThinking(
-  capabilities: Capabilities,
+  capabilities: ProviderModel,
   explicit?: ThinkingLevel | null,
   inherited?: ThinkingLevel,
 ) {
@@ -33,50 +33,37 @@ export function resolveThinking(
 
 export function selectModel(
   catalog: ModelCatalogPort,
-  options: {
-    explicit?: ModelChoice;
-    stored?: ModelChoice;
-    fallback?: ModelChoice;
-    preferStored?: boolean;
-    thinkingLevel?: ThinkingLevel | null;
-    inherited?: ThinkingLevel;
-    unavailable?: string;
-  },
+  choices: readonly (ModelSelection | undefined)[],
+  unavailable = 'Configure a model before sending a message',
 ) {
-  const { explicit, stored, fallback, preferStored, thinkingLevel, inherited, unavailable } = options;
-  const choices = explicit ? [explicit] : preferStored ? [stored, fallback] : [fallback, stored];
   for (const choice of choices) {
-    if (!choice?.provider) continue;
-    const model = catalog.resolve(choice);
-    if (model)
-      return { model, thinkingLevel: resolveThinking(catalog.capabilities(model), thinkingLevel, inherited) };
+    if (!choice) continue;
+    const model =
+      choice.id === undefined
+        ? catalog.list().find(({ provider }) => provider === choice.provider)
+        : { provider: choice.provider, id: choice.id };
+    if (!model) continue;
+    const resolved = catalog.resolve(model);
+    if (resolved) return resolved;
   }
-  throw new DomainError(
-    'invalid_input',
-    unavailable ??
-      (explicit
-        ? 'Unknown model: ' + explicit.provider + '/' + explicit.id
-        : 'Configure a model before sending a message'),
-  );
+  throw new DomainError('invalid_input', unavailable);
 }
 
-export function assertImageInput(capabilities: Capabilities, count: number) {
-  if (count && !capabilities?.input.includes('image'))
+export function assertImageInput(capabilities: ProviderModel, count: number) {
+  if (count && !capabilities.input.includes('image'))
     throw new DomainError(
       'invalid_input',
       'The selected model does not support image input. Choose an image-capable model and retry.',
     );
 }
 
-export function prepareModelMessages(capabilities: Capabilities, messages: NativeMessage[]): NativeMessage[] {
-  if (capabilities?.input.includes('image')) return messages;
+export function prepareModelMessages(
+  capabilities: ProviderModel,
+  messages: NativeMessage[],
+): NativeMessage[] {
+  if (capabilities.input.includes('image')) return messages;
   return messages.map((message) => {
-    if (
-      message.role === 'assistant' ||
-      !Array.isArray(message.content) ||
-      !message.content.some(({ type }) => type === 'image')
-    )
-      return message;
+    if (message.role === 'assistant' || !message.content.some(({ type }) => type === 'image')) return message;
     return {
       ...message,
       content: message.content.map((part) =>

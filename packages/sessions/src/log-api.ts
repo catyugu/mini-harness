@@ -4,7 +4,7 @@ import type { TaskHistoryRecord } from '@mini-harness/tasks/api';
 import type { LogEntry } from './record-log.ts';
 import type { MessageMode, MessageOrigin, QueueEntry } from './shared/queue.ts';
 import type { ContentDelta } from './content-delta.ts';
-import type { ThinkingLevel, ModelChoice, ToolSchema } from '@mini-harness/llm/vocabulary';
+import type { ThinkingLevel, ModelChoice, ModelSelection, ToolSchema } from '@mini-harness/llm/vocabulary';
 import type { ImageInput, PreparedMessage } from '@mini-harness/input/message';
 import type {
   LlmRequest,
@@ -25,7 +25,7 @@ export interface InboxItem {
   text: string;
   images: ImageInput[];
   input?: PreparedMessage;
-  model?: ModelChoice;
+  model?: ModelSelection;
   thinkingLevel?: ThinkingLevel | null;
 }
 
@@ -65,7 +65,6 @@ type SessionOperation<Data = unknown> =
       message: NativeMessage;
       presentation?: PreparedMessage;
       elapsedMs?: number;
-      attemptsRecorded?: true;
       submissionId?: string;
       inboxId?: string;
       origin?: MessageOrigin;
@@ -97,7 +96,6 @@ type SessionOperation<Data = unknown> =
   | { type: 'inbox-paused' }
   | { type: 'inbox-consumed' | 'inbox-cancelled'; ids: string[]; reason?: string }
   | { type: 'inbox-failed'; inboxId: string; reason: string }
-  | { type: 'run'; run: RunInfo }
   | ({ type: 'task'; run?: RunDetails } & TaskHistoryRecord)
   | { type: 'branch' };
 
@@ -107,9 +105,7 @@ export type SessionEvent<Data = unknown> = SessionOperation<Data> & {
 
 export type SessionEntry<Data = unknown> = LogEntry<SessionEvent<Data>>;
 
-/** Historical run envelopes remain readable; new writes have one canonical task lifecycle. */
 export function runFromEntry(sessionId: string, entry: SessionEntry): RunInfo | undefined {
-  if (entry.type === 'run') return entry.run;
   if (entry.type === 'task' && entry.run) return projectRun(sessionId, entry.task, entry.run);
 }
 

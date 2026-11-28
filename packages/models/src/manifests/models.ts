@@ -9,12 +9,18 @@ import { setupAdministration } from '../server/administration.ts';
 const Config = defineConfig(
   Type.Object(
     {
-      model: Type.Object(
-        {
-          provider: Type.String({ maxLength: 160, default: '' }),
-          id: Type.String({ maxLength: 160, default: '' }),
-        },
-        { default: {}, additionalProperties: false },
+      model: Type.Union(
+        [
+          Type.Object(
+            {
+              provider: Type.String({ minLength: 1, maxLength: 160 }),
+              id: Type.String({ minLength: 1, maxLength: 160 }),
+            },
+            { additionalProperties: false },
+          ),
+          Type.Null(),
+        ],
+        { default: null },
       ),
     },
     { additionalProperties: false },
@@ -32,30 +38,31 @@ const plugin: Plugin.Object = {
   provide: ['harnessModelPreference'],
   apply(ctx) {
     ctx.on('internal/update', (next) => {
-      const model = (next as { model: ModelChoice }).model;
-      if ((model.provider || model.id) && !ctx.harnessModels.resolve(model))
+      const model = (next as { model: ModelChoice | null }).model;
+      if (model && !ctx.harnessModels.resolve(model))
         throw new DomainError('invalid_input', 'Unknown model: ' + model.provider + '/' + model.id);
     });
     let pending = Promise.resolve();
-    let current = ctx.harnessPluginSettings.get<ModelChoice>('model');
-    let saving: ModelChoice | undefined;
-    const same = (left: ModelChoice, right?: ModelChoice) =>
-      left.provider === right?.provider && left.id === right.id;
-    const select = (model: ModelChoice) => {
+    let current = ctx.harnessPluginSettings.get<ModelChoice | null>('model');
+    let saving: ModelChoice | null | undefined;
+    const same = (left: ModelChoice | null, right: ModelChoice | null | undefined) =>
+      left === right ||
+      (left !== null && right != null && left.provider === right.provider && left.id === right.id);
+    const select = (model: ModelChoice | null) => {
       if (same(model, current)) return;
-      current = { ...model };
+      current = model && { ...model };
       try {
         ctx.get('harnessChanges')?.invalidate('models');
       } catch (error) {
         ctx.logger.warn(String(error));
       }
     };
-    ctx.harnessPluginSettings.subscribe<ModelChoice>('model', (model) => {
+    ctx.harnessPluginSettings.subscribe<ModelChoice | null>('model', (model) => {
       // A completed older write must not overwrite a newer accepted selection.
       if (!same(model, saving)) select(model);
     });
-    const remember = (model: ModelChoice) => {
-      if ((model.provider || model.id) && !ctx.harnessModels.resolve(model)) return Promise.resolve();
+    const remember = (model: ModelChoice | null) => {
+      if (model && !ctx.harnessModels.resolve(model)) return Promise.resolve();
       select(model);
       const choice = current;
       const write = pending.then(async () => {
@@ -72,10 +79,10 @@ const plugin: Plugin.Object = {
       });
       return write;
     };
-    ctx.provide('harnessModelPreference', { recent: () => ({ ...current }), remember });
+    ctx.provide('harnessModelPreference', { recent: () => current && { ...current }, remember });
     const revalidate = () => {
-      if ((current.provider || current.id) && !ctx.harnessModels.resolve(current))
-        void remember({ provider: '', id: '' }).catch(() => {
+      if (current && !ctx.harnessModels.resolve(current))
+        void remember(null).catch(() => {
           /* The preference owner reports failed writes. */
         });
     };

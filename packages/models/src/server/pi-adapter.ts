@@ -154,9 +154,7 @@ export class PiLlm implements LlmAdapter {
       );
     }
     if (
-      request.messages.some(
-        (message) => Array.isArray(message.content) && message.content.some((part) => part.type === 'image'),
-      ) &&
+      request.messages.some((message) => message.content.some((part) => part.type === 'image')) &&
       !model.input.includes('image')
     )
       throw new Error(
@@ -188,7 +186,7 @@ export class PiLlm implements LlmAdapter {
         finished = true;
         const result = event.type === 'done' ? event.message : event.error;
         const message = fromProviderMessage(result);
-        if (event.type === 'error')
+        if (message.stopReason === 'error')
           message.errorKind = isContextOverflow(result, model.contextWindow)
             ? 'context-overflow'
             : this.classifyError(result.errorMessage);
@@ -209,7 +207,11 @@ const emptyUsage = () => ({
 });
 
 function toProviderMessage(message: NativeMessage, selected: Model<Api>): Message {
-  if (message.role !== 'assistant') return structuredClone(message) as Message;
+  if (message.role === 'toolResult') {
+    const { role, toolCallId, toolName, content, timestamp, state } = structuredClone(message);
+    return { role, toolCallId, toolName, content, timestamp, isError: state !== 'finished' };
+  }
+  if (message.role === 'user') return structuredClone(message);
   const { providerData, ...native } = structuredClone(message);
   return {
     ...providerData,
@@ -218,13 +220,13 @@ function toProviderMessage(message: NativeMessage, selected: Model<Api>): Messag
     provider: native.provider ?? selected.provider,
     model: native.model ?? selected.id,
     usage: { ...emptyUsage(), ...native.usage, cost: native.usage?.cost ?? emptyUsage().cost },
-    stopReason: native.stopReason ?? 'stop',
   } as AssistantMessage;
 }
 
 function fromProviderMessage(message: AssistantMessage): NativeAssistantMessage {
   const { role, content, timestamp, provider, model, usage, stopReason, errorMessage, ...providerData } =
     structuredClone(message);
+  const reason = stopReason === 'deferred' || stopReason === 'pending' ? 'error' : stopReason;
   return {
     role,
     content,
@@ -240,11 +242,13 @@ function fromProviderMessage(message: AssistantMessage): NativeAssistantMessage 
           ? true
           : undefined,
     },
-    stopReason: ['stop', 'length', 'toolUse', 'error', 'aborted'].includes(stopReason)
-      ? (stopReason as NativeAssistantMessage['stopReason'])
-      : 'error',
+    stopReason: reason,
     errorMessage:
-      stopReason === 'deferred' ? 'Deferred responses are not supported by this agent' : errorMessage,
+      stopReason === 'deferred' || stopReason === 'pending'
+        ? 'Nonterminal provider response: ' + stopReason
+        : reason === 'error' || reason === 'aborted'
+          ? errorMessage
+          : undefined,
     providerData,
   };
 }

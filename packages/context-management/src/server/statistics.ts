@@ -6,7 +6,7 @@ type Observation = { id: string; parentId: string | null } & (
   | { type: 'model-request' | 'context-replace'; occupancy?: ContextOccupancy }
   | ({ type: 'model-attempt' } & ModelAttempt)
   | { type: 'user' }
-  | { type: 'assistant'; usage?: NativeUsage; attemptsRecorded?: true }
+  | { type: 'assistant' }
   | { type: 'tool'; elapsedMs: number }
 );
 
@@ -65,8 +65,6 @@ function observe(entry: SessionEntry): Observation | undefined {
         id,
         parentId,
         type: 'assistant',
-        usage: message.usage,
-        attemptsRecorded: entry.attemptsRecorded,
       };
     case 'toolResult': {
       const elapsedMs = message.elapsedMs ?? entry.elapsedMs;
@@ -143,10 +141,7 @@ class BranchStatistics {
           this.assistantRun = this.pendingRun;
         }
         this.assistantId ??= entry.id;
-        const historical = entry.attemptsRecorded ? undefined : knownUsage(entry.usage);
-        if (!entry.attemptsRecorded) stats.steps++;
-        stats.usage = addUsage(stats.usage, historical);
-        this.assistantUsage = addUsage(addUsage(this.assistantUsage, this.pendingUsage), historical);
+        this.assistantUsage = addUsage(this.assistantUsage, this.pendingUsage);
         if (this.assistantUsage) stats.assistantUsage[this.assistantId] = this.assistantUsage;
         this.pendingUsage = undefined;
         break;

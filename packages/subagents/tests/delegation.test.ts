@@ -11,6 +11,7 @@ test('model-chosen provider overrides registered defaults', () => {
     id: 'fast',
   });
   assert.equal(selectChildModel({}, null, parent).provider, 'anthropic');
+  assert.deepEqual(selectChildModel({ provider: 'custom' }, defaults, parent), { provider: 'custom' });
 });
 
 test('child spawning is limited to one level', () => {

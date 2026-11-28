@@ -410,8 +410,8 @@ test('append, torn write and fsync failures evict the writer without acknowledgi
         .log(session.id)
         .projection()
         .timeline.filter(isViewMessage)
-        .filter(({ role }) => role === 'user')
-        .map(({ content }) => (Array.isArray(content) ? content[0]?.text : content)),
+        .filter((message) => message.role === 'user')
+        .map(({ content }) => content[0]?.text),
       ['Accepted retry'],
     );
     assert.equal(app.runtime.plugins.ctx.harnessSessions.logError(session.id), undefined);
@@ -489,6 +489,7 @@ test('retry looks up the failed delivery by its native entry identity', async (t
   const delivered = log
     .projection()
     .timeline.filter(isViewMessage)
+    .filter((message) => message.role === 'user')
     .find(({ submissionId }) => submissionId === failedId);
   assert.equal(delivered?.inboxId, 'recover-this');
   assert.deepEqual(runs.retryInput(session.id, failedId), {
@@ -515,6 +516,7 @@ test('retry looks up the failed delivery by its native entry identity', async (t
     log
       .projection()
       .timeline.filter(isViewMessage)
+      .filter((message) => message.role === 'user')
       .find(({ submissionId }) => submissionId === acceptedId)?.inboxId,
     accepted.messageId,
   );
@@ -549,7 +551,7 @@ test(
         entered.release();
         await cleanup.promise;
         signal.throwIfAborted();
-        return { content: [] };
+        return { state: 'finished', content: [] };
       },
     });
     t.after(async () => {
@@ -584,7 +586,7 @@ test(
     const timeline = sessions.log(id).projection().timeline.filter(isViewMessage);
     assert.equal(timeline.find((entry) => entry.role === 'toolResult')?.toolState, 'cancelled');
     assert.deepEqual(
-      timeline.filter((entry) => entry.role === 'user').map(({ content }) => content),
+      timeline.filter((entry) => entry.role === 'user').map(({ content }) => content[0]?.text),
       ['Hold tool', 'Interrupt one', 'Interrupt two'],
     );
   },
@@ -623,7 +625,7 @@ test('Stop persists the wake pause, preserves pending input and deduplicates not
       .log(id)
       .projection()
       .timeline.filter(isViewMessage)
-      .flatMap((entry) => (entry.origin?.taskId ? [entry.origin.taskId] : [])),
+      .flatMap((entry) => (entry.role === 'user' && entry.origin?.taskId ? [entry.origin.taskId] : [])),
     ['task-123'],
   );
 });

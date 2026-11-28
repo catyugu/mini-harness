@@ -1,6 +1,6 @@
 import type { RunPort } from '@mini-harness/runs/api';
 import type { SessionStore } from '@mini-harness/sessions/records';
-import type { ModelChoice } from '@mini-harness/llm/vocabulary';
+import type { ModelChoice, ModelSelection } from '@mini-harness/llm/vocabulary';
 
 export interface SubagentPolicy {
   maxDepth: number;
@@ -11,11 +11,11 @@ export interface SubagentPolicy {
 export function selectChildModel(
   request: { provider?: string; model?: string },
   defaults: ModelChoice | null,
-  parent?: ModelChoice,
-): ModelChoice {
+  parent: ModelChoice | undefined,
+): ModelSelection {
   const provider = request.provider?.trim();
   const model = request.model?.trim();
-  if (provider) return { provider, id: model ?? '' };
+  if (provider) return model ? { provider, id: model } : { provider };
   const inherited = defaults ?? parent;
   if (!inherited) throw new Error('Configure a model before delegating');
   return { provider: inherited.provider, id: model || inherited.id };

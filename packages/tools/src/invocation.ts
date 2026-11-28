@@ -1,6 +1,7 @@
+import { isTextImageContent, toolResultStates } from '@mini-harness/llm/api';
 import { Check } from 'typebox/value';
 import type { Context } from 'mini-harness/cordis';
-import { isToolContent, type ToolDefinition, type ToolInvocation, type ToolResult } from './api.ts';
+import { type ToolDefinition, type ToolInvocation, type ToolResult } from './api.ts';
 
 const bindingKey = Symbol('tool binding');
 
@@ -46,7 +47,8 @@ export async function executePreparedTool(
     update: onUpdate ?? (() => {}),
     write: write ?? (() => {}),
   });
-  if (!result || !isToolContent(result.content)) throw new Error('Invalid result from tool: ' + tool.name);
+  if (!result || !toolResultStates.includes(result.state) || !isTextImageContent(result.content))
+    throw new Error('Invalid result from tool: ' + tool.name);
   return result;
 }
 

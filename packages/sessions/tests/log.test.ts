@@ -35,7 +35,7 @@ function fixture(t: test.TestContext) {
 }
 const user = (content: string) => ({
   type: 'message' as const,
-  message: { role: 'user' as const, content, timestamp: 1 },
+  message: { role: 'user' as const, content: [{ type: 'text' as const, text: content }], timestamp: 1 },
 });
 
 test('native log retains model semantics and gives defensive read projections', (t) => {
@@ -79,14 +79,16 @@ test('operational entries keep the transcript leaf stable and revision uses comp
   const log = open();
   const first = log.append(user('original'));
   log.append({
-    type: 'run',
-    run: {
+    type: 'task',
+    task: {
       id: 'run',
-      sessionId: 'conversation',
+      owner: 'session:conversation',
       state: 'running',
-      startedAt: new Date().toISOString(),
-      sequence: 1,
+      createdAt: new Date().toISOString(),
+      cancellationRequested: false,
+      outputCursor: 0,
     },
+    run: { sequence: 1 },
   });
   log.append({ type: 'inbox-enqueued', item: { id: 'queued', mode: 'steer', text: 'later', images: [] } });
   assert.equal(log.projection().leafId, first.id);
@@ -97,7 +99,7 @@ test('operational entries keep the transcript leaf stable and revision uses comp
       .projection()
       .timeline.filter(isViewMessage)
       .map(({ content }) => content),
-    ['revised'],
+    ['revised'].map((text) => [{ type: 'text', text }]),
   );
   assert.throws(() => log.revise(user('stale revision'), null, first.id), /Conversation changed/);
   assert.equal(log.projection().leafId, second.id);
@@ -107,7 +109,7 @@ test('operational entries keep the transcript leaf stable and revision uses comp
       .projection(first.id)
       .timeline.filter(isViewMessage)
       .map(({ content }) => content),
-    ['original'],
+    ['original'].map((text) => [{ type: 'text', text }]),
   );
   assert.deepEqual(log.projection(null).timeline.filter(isViewMessage), []);
   assert.equal(log.projection().leafId, second.id);
@@ -121,14 +123,16 @@ test('a durable message acknowledges inbox delivery exactly once and restart ret
   assert.throws(() => log.append({ ...user('duplicate'), inboxId: 'delivered' }), /not pending/);
   log.append({ type: 'inbox-enqueued', item: { id: 'pending', mode: 'queue', text: 'next', images: [] } });
   log.append({
-    type: 'run',
-    run: {
+    type: 'task',
+    task: {
       id: 'run',
-      sessionId: 'conversation',
+      owner: 'session:conversation',
       state: 'running',
-      startedAt: new Date().toISOString(),
-      sequence: 4,
+      createdAt: new Date().toISOString(),
+      cancellationRequested: false,
+      outputCursor: 0,
     },
+    run: { sequence: 4 },
   });
   log.close();
   log = open();
@@ -161,7 +165,7 @@ test('recovery discards only a torn final record and preserves every acknowledge
       .projection()
       .timeline.filter(isViewMessage)
       .map(({ content }) => content),
-    ['durable', 'after recovery'],
+    ['durable', 'after recovery'].map((text) => [{ type: 'text', text }]),
   );
 });
 
@@ -225,18 +229,20 @@ test('compaction and context edits change model context without deleting convers
       { start: 0, deleteCount: 1, insert: [user('Summary of earlier conversation:\nSummary').message] },
     ],
   });
-  assert.equal(log.originalMessage(keep.id)?.content, 'recent context');
+  assert.deepEqual(log.originalMessage(keep.id)?.content, [{ type: 'text', text: 'recent context' }]);
   log.append(user('new question'));
   assert.deepEqual(
     log
       .projection()
       .timeline.filter(isViewMessage)
       .map(({ content }) => content),
-    ['old context', 'recent context', 'new question'],
+    ['old context', 'recent context', 'new question'].map((text) => [{ type: 'text', text }]),
   );
   assert.deepEqual(
     log.projection().contextMessages.map(({ content }) => content),
-    ['Summary of earlier conversation:\nSummary', 'redacted recent context', 'new question'],
+    ['Summary of earlier conversation:\nSummary', 'redacted recent context', 'new question'].map((text) => [
+      { type: 'text', text },
+    ]),
   );
   assert.equal(log.projection().contextEntryIds[1], keep.id);
   assert.equal(log.projection().contextEntryIds.length, log.projection().contextMessages.length);
@@ -244,7 +250,7 @@ test('compaction and context edits change model context without deleting convers
   log.revise(user('new branch'), keep.id, compacted.leafId);
   assert.deepEqual(
     log.context().contextMessages.map(({ content }) => content),
-    ['old context', 'recent context', 'new branch'],
+    ['old context', 'recent context', 'new branch'].map((text) => [{ type: 'text', text }]),
   );
   assert.deepEqual(log.context(compacted.leafId), compacted);
 });
@@ -257,12 +263,15 @@ test('attachments retain full model input while display keeps the submitted text
     presentation: { userText: 'read this', attachments: [{ name: 'secret.txt', mimeType: 'text/plain' }] },
   });
   const state = log.projection();
-  assert.equal(state.timeline.filter(isViewMessage)[0].content, 'read this');
+  assert.deepEqual(state.timeline.filter(isViewMessage)[0].content, [{ type: 'text', text: 'read this' }]);
   assert.equal(
-    expectPresent(state.timeline.filter(isViewMessage)[0]?.attachments?.[0], 'session attachment').name,
+    expectPresent(
+      state.timeline.filter(isViewMessage).find((entry) => entry.role === 'user')?.attachments[0],
+      'session attachment',
+    ).name,
     'secret.txt',
   );
-  assert.match(String(state.contextMessages[0].content), /contents/);
+  assert.match(JSON.stringify(state.contextMessages[0].content), /contents/);
 });
 
 test('tool execution stays auditable while accepted content is stored as a compact reversible delta', (t) => {
@@ -276,7 +285,7 @@ test('tool execution stays auditable while accepted content is stored as a compa
       toolCallId: 'read-1',
       toolName: 'read',
       content: [{ type: 'text', text: content }],
-      isError: false,
+      state: 'finished',
       timestamp: 1,
     },
   });
@@ -322,7 +331,7 @@ test('display records resolve explicitly selected content on the committed branc
   assert.equal(log.projection(first.id).timeline.filter((entry) => entry.type === 'record').length, 0);
   assert.deepEqual(
     log.context().contextMessages.map(({ content }) => content),
-    ['before'],
+    ['before'].map((text) => [{ type: 'text', text }]),
   );
 });
 
@@ -343,5 +352,5 @@ test('recorded requests reuse their tool schema and restore transformed input af
   const third = log.recordRequest(request);
   assert.equal(log.entries().filter(({ type }) => type === 'tool-schema').length, 1);
   for (const { id } of [first, second, third]) assert.deepEqual(log.requestSnapshot(id), request);
-  assert.equal(log.projection().contextMessages[0].content, 'original');
+  assert.deepEqual(log.projection().contextMessages[0].content, [{ type: 'text', text: 'original' }]);
 });

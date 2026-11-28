@@ -313,10 +313,7 @@ export class PluginHost implements ProfileScopes, ProfileConfigurationPort {
         configured,
         this.ancestry(key).filter((item) => item !== key),
         [...new Set(scope.isolate)].sort(),
-        (context) =>
-          plans
-            .filter(({ descriptor }) => descriptor.native?.plugin)
-            .map((plan) => this.catalog.entry(plan, context, key + '/' + plan.id)),
+        (context) => this.catalog.entries(plans, context, key),
         this.scopes,
         this.scopeFailures,
       );
@@ -401,9 +398,7 @@ export class PluginHost implements ProfileScopes, ProfileConfigurationPort {
     };
     const plans = this.catalog.plans(descriptors, undefined, unavailable);
     const mounts = [
-      ...plans
-        .filter(({ id, descriptor }) => descriptor.native?.plugin && !failures.has(id))
-        .map((plan) => this.catalog.entry(plan, this.ctx)),
+      ...this.catalog.entries(plans, this.ctx),
       ...this.scopedEntries(settings, descriptors, unavailable),
     ];
     const owner = this.owner.fiber.entry;

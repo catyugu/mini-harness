@@ -64,6 +64,8 @@ it never retries an unknown tool outcome automatically.
 
 ## Conversation branches and projections
 
+User, assistant and tool messages carry typed content-block arrays. Tool results carry a single terminal state. Assistant messages carry a required stop reason; optional error diagnostics never determine that reason.
+
 The event stream has one append sequence and a selected conversation branch.
 Messages, model choices, thinking settings, plugin records, context replacements and branch selections advance the conversation leaf. Run, inbox, model-attempt and session-setting records
 advance only the sequence. Operational changes therefore cannot invalidate a
@@ -124,4 +126,4 @@ A failed run records the stable entry ID for its active input, including inbox d
 
 File Preview reads stored attachment bytes through the conversation attachment endpoint. Workspace references remain part of the original user text and resolve through File Access when opened.
 
-Independent work submitted with the explicit `harnessSessions.task(sessionId)` binding adds operational `task` records to the same log. The task ID is independent of record identity. State transitions do not move the conversation branch. Terminal records can include a compact result projection and bounded output with absolute byte cursors; ordinary inline tool results remain in the existing tool execution/acceptance records. Runs use the same task record with a small `run` object containing only input identity, replay sequence and changed files. Run lifecycle is projected from the task snapshot, and the final answer remains in the message log. Existing run envelopes are readable for historical conversations. On recovery, an unfinished task is marked `interrupted` and never automatically executed again.
+Independent work submitted with the explicit `harnessSessions.task(sessionId)` binding adds operational `task` records to the same log. The task ID is independent of record identity. State transitions do not move the conversation branch. Terminal records can include a compact result projection and bounded output with absolute byte cursors; ordinary inline tool results remain in the existing tool execution/acceptance records. Runs use the same task record with a small `run` object containing only input identity, replay sequence and changed files. Run lifecycle is projected from the task snapshot, and the final answer remains in the message log. On recovery, an unfinished task is marked `interrupted` and never automatically executed again.

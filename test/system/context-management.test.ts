@@ -93,7 +93,11 @@ test('a single user turn supports repeated token-budget compaction while tools e
         parameters: Type.Object({}),
         async execute() {
           calls++;
-          return { content: [{ type: 'text', text: 'Probe result ' + calls }], elapsedMs: 12 };
+          return {
+            state: 'finished',
+            content: [{ type: 'text', text: 'Probe result ' + calls }],
+            elapsedMs: 12,
+          };
         },
       }),
     ),
@@ -190,10 +194,7 @@ test('automatic compaction preserves the pending multimodal input and accepts a 
   assert.equal(normal.length, 2);
   const prepared = log.requestSnapshot(normal[1].id);
   assert.deepEqual(prepared.messages.at(-1), submitted.message);
-  assert.ok(
-    Array.isArray(submitted.message.content) &&
-      submitted.message.content.some((part) => part.type === 'image'),
-  );
+  assert.ok(submitted.message.content.some((part) => part.type === 'image'));
   const counts = prepared.inputMeasurement;
   assert.ok(counts && totalTokens(counts) > counts.budget * targetRatio);
   assert.ok(totalTokens(counts) <= counts.budget);
@@ -232,7 +233,7 @@ test('context overflow repairs the current request and leaves raw tool results r
         parameters: Type.Object({}),
         async execute() {
           calls++;
-          return { content: [{ type: 'text', text: payload }] };
+          return { state: 'finished', content: [{ type: 'text', text: payload }] };
         },
       }),
     ),
@@ -373,9 +374,7 @@ test('image rejection offloads all historical images and an irreducible overflow
   assert.equal(imageRequests, 2);
   const log = ctx.harnessSessions.log(session.id);
   const images = (content: ReturnType<typeof log.context>['contextMessages']) =>
-    content.flatMap((message) =>
-      typeof message.content === 'string' ? [] : message.content.filter((part) => part.type === 'image'),
-    );
+    content.flatMap((message) => message.content.filter((part) => part.type === 'image'));
   assert.equal(images(log.context().contextMessages).length, 1);
   const requests = log.entries().filter(({ type }) => type === 'model-request');
   const rejected = log.requestSnapshot(requests.at(-2)!.id);
@@ -393,7 +392,7 @@ test('image rejection offloads all historical images and an irreducible overflow
   assert.equal(failed.entries().filter(({ type }) => type === 'model-attempt').length, 1);
 });
 
-test('disabled automatic compaction still retries context overflow after deterministic image offloading', async (t) => {
+test('context overflow offloads images without dropping another plugin’s prepared parameters', async (t) => {
   let attempts = 0;
   const { app, request } = await fixture(
     t,
@@ -413,6 +412,15 @@ test('disabled automatic compaction still retries context overflow after determi
   const { body: session } = await request('/sessions', 'POST', {});
   const endpoint = '/sessions/' + session.id + '/context';
   assert.equal((await request(endpoint, 'PUT', { ...settings, autoCompact: false })).status, 200);
+  let preparations = 0;
+  ctx.on(
+    'agent/prepare-request',
+    (request) => {
+      preparations++;
+      return { ...request, maxTokens: 512, systemPrompt: request.systemPrompt + ' [prepared]' };
+    },
+    { prepend: true },
+  );
   const attachment = { name: 'sample.png', mimeType: 'image/png', data: 'iVBORw0KGgo=' };
   await sendRun(ctx.harnessRuns, session.id, 'Earlier input', undefined, { attachments: [attachment] });
   await sendRun(ctx.harnessRuns, session.id, 'Latest input', undefined, { attachments: [attachment] });
@@ -420,8 +428,13 @@ test('disabled automatic compaction still retries context overflow after determi
   const log = ctx.harnessSessions.log(session.id);
   const records = log.entries().filter((entry) => entry.type === 'model-request');
   assert.equal(records.length, 3);
+  assert.equal(preparations, 2);
   const rejected = log.requestSnapshot(records[1].id);
   const repaired = log.requestSnapshot(records[2].id);
+  assert.equal(rejected.maxTokens, 512);
+  assert.equal(repaired.maxTokens, rejected.maxTokens);
+  assert.match(rejected.systemPrompt, /\[prepared\]$/);
+  assert.equal(repaired.systemPrompt, rejected.systemPrompt);
   assert.deepEqual(repaired.messages.at(-1), rejected.messages.at(-1));
   assert.ok(totalTokens(repaired.inputMeasurement!) < totalTokens(rejected.inputMeasurement!));
 });

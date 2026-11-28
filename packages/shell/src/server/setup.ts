@@ -36,8 +36,6 @@ export function setup(ctx: Context) {
           JSON.stringify({
             details,
             summary: 'Exit ' + details.exitCode,
-            isError: result.isError,
-            outcome: result.outcome,
             elapsedMs: result.elapsedMs,
           }),
         );
@@ -47,7 +45,7 @@ export function setup(ctx: Context) {
         if (!cwd) throw new DomainError('unavailable', 'Shell requires a workspace');
         if (caller.get('harnessToolPolicy')?.(sessionId, { name: 'shell' }) === false)
           throw new Error('Tool denied by conversation policy: shell');
-        signal?.throwIfAborted();
+        signal.throwIfAborted();
         const execution = caller.get('harnessProcess');
         if (!execution) throw new Error('Process execution is unavailable');
         const attachments = ctx.harnessSessions.attachmentDirectory(sessionId);
@@ -72,8 +70,7 @@ export function setup(ctx: Context) {
           const cancelled = output.reason === 'cancelled';
           return {
             content: [{ type: 'text', text: JSON.stringify(output) }],
-            isError: Boolean(output.reason) || output.code !== 0,
-            outcome: cancelled ? 'cancelled' : undefined,
+            state: cancelled ? 'cancelled' : output.reason || output.code !== 0 ? 'error' : 'finished',
             detailKeys: ['exitCode'],
             details: {
               ...output,

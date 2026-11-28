@@ -18,7 +18,7 @@ export function apply(ctx: Context) {
       description: 'Return a greeting for this conversation.',
       parameters: { type: 'object', properties: {} },
       async execute() {
-        return { content: [{ type: 'text', text: greeting.greet(sessionId) }] };
+        return { state: 'finished', content: [{ type: 'text', text: greeting.greet(sessionId) }] };
       },
     }),
   );

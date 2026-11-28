@@ -167,7 +167,7 @@ export const apply = (ctx) => {
     .filter(({ role }) => role === 'user');
   assert.deepEqual(
     messages.map(({ content }) => content),
-    ['Recovered', 'Manual'],
+    ['Recovered', 'Manual'].map((text) => [{ type: 'text', text }]),
   );
 
   const edit = await plugins.ctx.harnessRuns.reviseAndStart(session.id, {
@@ -201,7 +201,7 @@ export const apply = (ctx) => {
       const terminal = (content, stopReason = 'stop') => ({ type: 'done', message: { role: 'assistant', timestamp: Date.now(), content, stopReason } });
       if (++attempts === 1) throw new Error('transient transport failure');
       if (attempts === 2) {
-        if (!request.systemPrompt.endsWith('[first][second]') || request.messages.at(-1).content !== 'Temporary context')
+        if (!request.systemPrompt.endsWith('[first][second]') || request.messages.at(-1).content[0]?.text !== 'Temporary context')
           throw new Error('waterfall did not compose');
         yield terminal([
           { type: 'toolCall', id: 'denied', name: 'check', arguments: { mode: 'denied' } },
@@ -209,7 +209,7 @@ export const apply = (ctx) => {
         ], 'toolUse');
       } else {
         const tools = request.messages.filter(({ role }) => role === 'toolResult');
-        if (tools.length !== 2 || !tools[0].isError || tools[1].content[0].text !== 'Value transformed')
+        if (tools.length !== 2 || tools[0].state === 'finished' || tools[1].content[0].text !== 'Value transformed')
           throw new Error('tool policy or result waterfall failed');
         yield terminal([{ type: 'text', text: 'Alternate response' }]);
       }
@@ -227,19 +227,19 @@ export const apply = (ctx) => {
     ctx.on("agent/model-request", (request) => ({ ...request, systemPrompt: request.systemPrompt + '[second]' }));
     ctx.on("agent/model-request", (request, { turn }) => turn === 1 ? ({
       ...request, systemPrompt: request.systemPrompt + '[first]',
-      messages: [...request.messages, { role: 'user', content: 'Temporary context', timestamp: Date.now() }]
+      messages: [...request.messages, { role: 'user', content: [{ type: 'text', text: 'Temporary context' }], timestamp: Date.now() }]
     }) : undefined, { prepend: true });
     ctx.on("agent/model-retry", ({ error, attempt }) => error === 'transient transport failure' && attempt === 1 ? {} : undefined);
     ctx.effect(() => ctx.harnessTools.register({ name: 'check', description: 'Check mode', parameters: { type: 'object' },
       async execute({ mode }) {
         if (mode !== 'allowed') throw new Error('denied input');
-        return { content: [{ type: 'text', text: 'Value' }] };
+        return { state: 'finished', content: [{ type: 'text', text: 'Value' }] };
       }
     }));
     ctx.on("agent/tool-result", (content, { tool }) => tool === 'check'
       ? [{ type: 'text', text: content[0].text + ' transformed' }] : undefined);
     ctx.on("conversation/tool-projection", ({ content, tool }) =>
-      tool === 'check' && Array.isArray(content) && content[0]?.text === 'Value transformed'
+      tool === 'check' && content[0]?.text === 'Value transformed'
         ? [{ type: 'text', text: 'Display value' }] : undefined);
   };
 `,
@@ -271,17 +271,17 @@ export const apply = (ctx) => {
   const requests = sessionLog.entries().filter((entry) => entry.type === 'model-request');
   assert.equal(requests.length, 2);
   assert.match(requests[0].request.systemPrompt, /\[first\]\[second\]$/);
-  assert.equal(
+  assert.deepEqual(
     expectPresent(
       expectPresent(requests[0].request.messagesPatch, 'transformed message patch').insert.at(-1),
       'transformed message',
     ).content,
-    'Temporary context',
+    [{ type: 'text', text: 'Temporary context' }],
   );
   assert.equal(requests[1].request.messagesPatch, undefined);
-  assert.equal(
+  assert.deepEqual(
     expectPresent(sessionLog.requestSnapshot(requests[0].id).messages.at(-1), 'model input message').content,
-    'Temporary context',
+    [{ type: 'text', text: 'Temporary context' }],
   );
   assert.equal(
     expectPresent(sessionLog.requestSnapshot(requests[1].id).messages.at(-1), 'model tool result').role,
@@ -298,10 +298,10 @@ export const apply = (ctx) => {
   assert.deepEqual(
     log.contextMessages
       .filter((message) => message.role === 'toolResult')
-      .map(({ toolCallId, isError }) => [toolCallId, isError]),
+      .map(({ toolCallId, state }) => [toolCallId, state]),
     [
-      ['denied', true],
-      ['allowed', false],
+      ['denied', 'error'],
+      ['allowed', 'finished'],
     ],
   );
   assert.equal(mock.requests.length, 0);
@@ -335,7 +335,7 @@ export const apply = (ctx) => {
     ctx.effect(() => ctx.harnessTools.register({ name: 'sensitive', description: 'Read value', parameters: { type: 'object' },
       async execute(_args, { update }) {
         update({ content: [{ type: 'text', text: 'private progress' }] });
-        return { content: [{ type: 'text', text: 'private value' }] };
+        return { state: 'finished', content: [{ type: 'text', text: 'private value' }] };
       }
     }));
     ctx.on("agent/tool-result", (content, { tool }) => {
@@ -379,7 +379,7 @@ test('an invalid transformed request fails before the provider is invoked', asyn
     `
 export const apply = (ctx) => {
     ctx.on("agent/model-request", (request) => ({ ...request, messages: [{ role: 'toolResult', toolCallId: 'missing',
-      toolName: 'example', timestamp: Date.now(), isError: false, content: [] }] }));
+      toolName: 'example', timestamp: Date.now(), state: 'finished', content: [] }] }));
   };
 `,
   );
@@ -488,16 +488,18 @@ test('Web runs with an independent model contribution and no Pi model store', as
 export const inject = ['harnessModels', 'harnessLlm'];
 export function apply(ctx) {
   const resolve = (choice) => choice.provider === 'local-fixture'
-    ? { provider: 'local-fixture', id: choice.id || 'one' }
+    ? { provider: 'local-fixture', id: choice.id }
     : undefined;
   ctx.effect(() => ctx.harnessModels.register({
     list: () => [{ provider: 'local-fixture', id: 'one', name: 'One', configured: true, thinkingLevels: [], input: ['text'] }],
-    resolve,
-    capabilities: (choice) => ({ ...choice, name: choice.id, input: ['text'], contextWindow: 32000, maxTokens: 1024, reasoning: false }),
+    resolve: (choice) => {
+      const model = resolve(choice);
+      return model && { model, capabilities: { ...model, name: model.id, input: ['text'], contextWindow: 32000, maxTokens: 1024, reasoning: false } };
+    },
   }, {
     accepts: (choice) => choice.provider === 'local-fixture',
     async *stream() {
-      yield { type: 'done', message: { role: 'assistant', content: [{ type: 'text', text: 'Independent response' }], timestamp: Date.now() } };
+      yield { type: 'done', message: { role: 'assistant', content: [{ type: 'text', text: 'Independent response' }], timestamp: Date.now(), stopReason: 'stop' } };
     },
   }));
 }
@@ -535,7 +537,8 @@ export function apply(ctx) {
 
 test('model contributions select matching capabilities and transport, and reject equal-ranked conflicts', async (t) => {
   const { app, paths, request } = await fixture(t);
-  const model = { provider: 'local-mock', id: app.runtime.plugins.ctx.harnessModelPreference.recent().id };
+  const model = app.runtime.plugins.ctx.harnessModelPreference.recent();
+  assert.ok(model);
   const ctx = app.runtime.plugins.ctx;
   let catalogChanges = 0;
   t.after(
@@ -553,15 +556,14 @@ export const inject = ['harnessModels'];
 export function apply(ctx) {
   const model = ${JSON.stringify(model)};
   const input = ${JSON.stringify(input)};
-  const resolve = (choice) => choice.provider === model.provider && (!choice.id || choice.id === model.id) ? model : undefined;
+  const resolve = (choice) => choice.provider === model.provider && choice.id === model.id ? model : undefined;
   ctx.effect(() => ctx.harnessModels.register({
     list: () => [{ ...model, name: ${JSON.stringify(name)}, configured: true, input, thinkingLevels: [] }],
-    resolve,
-    capabilities: () => ({ id: model.id, name: ${JSON.stringify(name)}, input, contextWindow: 64000, maxTokens: 4096, reasoning: false }),
+    resolve: (choice) => resolve(choice) && { model, capabilities: { id: model.id, name: ${JSON.stringify(name)}, input, contextWindow: 64000, maxTokens: 4096, reasoning: false } },
   }, {
     accepts: (choice) => Boolean(resolve(choice)),
     async *stream() {
-      yield { type: 'done', message: { role: 'assistant', content: [{ type: 'text', text: ${JSON.stringify(name)} }], timestamp: Date.now() } };
+      yield { type: 'done', message: { role: 'assistant', content: [{ type: 'text', text: ${JSON.stringify(name)} }], timestamp: Date.now(), stopReason: 'stop' } };
     },
   }, ${priority}));
 }
@@ -582,11 +584,11 @@ export function apply(ctx) {
   await toggle('model-low', false);
   assert.equal(catalogChanges, 1);
   assert.equal(list()[0]?.name, 'model-low');
-  assert.deepEqual(ctx.harnessModels.capabilities(model)?.input, ['text']);
+  assert.deepEqual(ctx.harnessModels.resolve(model)?.capabilities.input, ['text']);
   assert.equal(await sendRun(ctx.harnessRuns, session.id, 'Low priority', undefined, { model }), 'model-low');
   await toggle('model-high', false);
   assert.equal(list()[0]?.name, 'model-high');
-  assert.deepEqual(ctx.harnessModels.capabilities(model)?.input, ['text', 'image']);
+  assert.deepEqual(ctx.harnessModels.resolve(model)?.capabilities.input, ['text', 'image']);
   assert.equal(
     await sendRun(ctx.harnessRuns, session.id, 'High priority', undefined, { model }),
     'model-high',
@@ -594,7 +596,6 @@ export function apply(ctx) {
   await toggle('model-tie', false);
   assert.deepEqual(list(), []);
   assert.equal(ctx.harnessModels.resolve(model), undefined);
-  assert.equal(ctx.harnessModels.capabilities(model), undefined);
   assert.equal(ctx.harnessLlm.select(model), null);
   await assert.rejects(
     ctx.harnessLlm.stream(
@@ -627,24 +628,23 @@ export function apply(ctx) {
   const second = ctx.harnessLlm.register(adapter);
   try {
     assert.equal(ctx.harnessModels.resolve(model), undefined);
-    assert.deepEqual(ctx.harnessModelPreference.recent(), { provider: '', id: '' });
+    assert.deepEqual(ctx.harnessModelPreference.recent(), null);
   } finally {
     second();
     first();
   }
-  assert.deepEqual(ctx.harnessModels.resolve(model), model);
+  assert.deepEqual(ctx.harnessModels.resolve(model)?.model, model);
   const before = catalogChanges;
   await ctx.harnessModelPreference.remember(model);
   await ctx.parallel('models/source-changed', 'auth');
   assert.equal(catalogChanges, before);
 
-  const metadata = ctx.harnessModels.capabilities(model)!;
+  const metadata = ctx.harnessModels.resolve(model)!.capabilities;
   const entries = list();
   const dispose = ctx.harnessModels.register(
     {
       list: () => entries,
-      resolve: (choice) => (adapter.accepts(choice) ? model : undefined),
-      capabilities: () => metadata,
+      resolve: (choice) => (adapter.accepts(choice) ? { model, capabilities: metadata } : undefined),
     },
     adapter,
     10,
@@ -674,7 +674,7 @@ export async function apply(ctx) {
   assert.equal(rejected.status, 400);
   assert.match(JSON.stringify(rejected.body), /Rejected graph/);
   assert.equal(ctx.harnessModels.resolve(model), undefined);
-  assert.deepEqual(ctx.harnessModelPreference.recent(), { provider: '', id: '' });
+  assert.deepEqual(ctx.harnessModelPreference.recent(), null);
 });
 
 test(

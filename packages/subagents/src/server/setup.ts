@@ -31,7 +31,7 @@ export function setup(ctx: Context) {
       name: 'delegate',
       label: 'Delegate',
       description:
-        'Start a child agent asynchronously. Returns its session ID and task ID immediately; the child continues independently. Use task_control to inspect, await or cancel it. Set provider/model to override the default.',
+        'Start a child agent asynchronously. Returns its session ID and task ID immediately; the child continues independently. Use task_control to inspect, await or cancel it. Set provider/model to override the default; specifying only a provider selects its first model.',
       parameters: Type.Object({
         task: Type.String({ minLength: 1, maxLength: 12000 }),
         provider: Type.Optional(Type.String({ maxLength: 160 })),
@@ -41,6 +41,7 @@ export function setup(ctx: Context) {
       execute: async (args, { signal, executionId }) => {
         const child = delegation.delegate(id, args, signal, executionId);
         return {
+          state: 'finished',
           content: [{ type: 'text', text: JSON.stringify(child) }],
           details: child,
           detailKeys: ['sessionId', 'state'],
@@ -83,7 +84,11 @@ export function setup(ctx: Context) {
               origin: { source: 'agent', senderSessionId: id, taskId: executionId },
             });
             const receipt = { messageId, taskId };
-            return { content: [{ type: 'text', text: JSON.stringify(receipt) }], details: receipt };
+            return {
+              state: 'finished',
+              content: [{ type: 'text', text: JSON.stringify(receipt) }],
+              details: receipt,
+            };
           },
         }),
     }),

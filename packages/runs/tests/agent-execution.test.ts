@@ -68,15 +68,17 @@ async function fixture(
     list: () => [],
     register: () => () => {},
     available: async () => [],
-    resolve: (choice) => choice,
-    capabilities: (choice) => ({
-      id: model.id,
-      name: 'Fixture',
-      input: choice.id === 'text-only' ? ['text'] : ['text', 'image'],
-      contextWindow: 32000,
-      maxTokens: 1024,
-      reasoning: true,
-      thinkingLevels: thinkingLevels(choice.id),
+    resolve: (choice) => ({
+      model: choice,
+      capabilities: {
+        id: model.id,
+        name: 'Fixture',
+        input: choice.id === 'text-only' ? ['text'] : ['text', 'image'],
+        contextWindow: 32000,
+        maxTokens: 1024,
+        reasoning: true,
+        thinkingLevels: thinkingLevels(choice.id),
+      },
     }),
   });
   ctx.provide('harnessLlm', {
@@ -180,7 +182,7 @@ test('an alternative executor owns the model protocol and executes without the r
               toolName: call.name,
               content: [{ type: 'text', text: 'changed externally' }],
               timestamp: Date.now(),
-              isError: false,
+              state: 'finished',
             },
             execution.signal,
           );
@@ -195,7 +197,7 @@ test('an alternative executor owns the model protocol and executes without the r
       parameters: Type.Object({}),
       async execute() {
         executions++;
-        return { content: [{ type: 'text', text: 'changed' }] };
+        return { state: 'finished', content: [{ type: 'text', text: 'changed' }] };
       },
     }),
   );
@@ -234,7 +236,7 @@ test('duplicate tool call identities fail before executing any side effect', asy
       parameters: Type.Object({}),
       async execute() {
         executions++;
-        return { content: [{ type: 'text', text: 'changed' }] };
+        return { state: 'finished', content: [{ type: 'text', text: 'changed' }] };
       },
     }),
   );
@@ -267,7 +269,7 @@ test('tool execution uses the advertised registration and does not execute a hot
       parameters: Type.Object({}),
       async execute() {
         executions++;
-        return { content: [{ type: 'text', text: 'original' }] };
+        return { state: 'finished', content: [{ type: 'text', text: 'original' }] };
       },
     }),
   );
@@ -280,7 +282,7 @@ test('tool execution uses the advertised registration and does not execute a hot
         parameters: Type.Object({}),
         async execute() {
           executions++;
-          return { content: [{ type: 'text', text: 'replacement' }] };
+          return { state: 'finished', content: [{ type: 'text', text: 'replacement' }] };
         },
       }),
     );
@@ -295,8 +297,8 @@ test('tool execution uses the advertised registration and does not execute a hot
       .log(record.id)
       .projection()
       .timeline.filter(isViewMessage)
-      .find((message) => message.role === 'toolResult')?.isError,
-    true,
+      .find((message) => message.role === 'toolResult')?.toolState,
+    'error',
   );
 });
 
@@ -309,7 +311,9 @@ test('malformed tool arguments become durable error results without invoking the
         yield { type: 'done', message: toolsAnswer(call('invalid-call', 'inspect', { path: 42 })) };
       else {
         assert.equal(request.messages.at(-1)?.role, 'toolResult');
-        assert.equal((request.messages.at(-1) as { isError: boolean }).isError, true);
+        const result = request.messages.at(-1);
+        assert.ok(result?.role === 'toolResult');
+        assert.equal(result.state, 'error');
         yield { type: 'done', message: answer('Recovered') };
       }
     },
@@ -321,7 +325,7 @@ test('malformed tool arguments become durable error results without invoking the
       parameters: Type.Object({ path: Type.String() }),
       async execute() {
         executions++;
-        return { content: [] };
+        return { state: 'finished', content: [] };
       },
     }),
   );
@@ -361,7 +365,7 @@ test('cancellation closes the whole tool batch durably and never executes later 
         ranFirst++;
         controller.abort(new Error('Stopped by test'));
         signal?.throwIfAborted();
-        return { content: [] };
+        return { state: 'finished', content: [] };
       },
     }),
   );
@@ -372,7 +376,7 @@ test('cancellation closes the whole tool batch durably and never executes later 
       parameters: Type.Object({}),
       async execute() {
         ranSecond++;
-        return { content: [] };
+        return { state: 'finished', content: [] };
       },
     }),
   );
@@ -397,10 +401,10 @@ test('cancellation closes the whole tool batch durably and never executes later 
   assert.equal(ranFirst, 1);
   assert.equal(ranSecond, 0);
   assert.deepEqual(
-    results.map(({ toolCallId, isError, toolState }) => [toolCallId, isError, toolState]),
+    results.map(({ toolCallId, toolState }) => [toolCallId, toolState]),
     [
-      ['one', true, 'cancelled'],
-      ['two', true, 'skipped'],
+      ['one', 'cancelled'],
+      ['two', 'skipped'],
     ],
   );
   assert.deepEqual(
@@ -415,7 +419,7 @@ test('interrupted calls receive an error record before the next prompt and are n
     async *stream(request) {
       const results = request.messages.filter((message) => message.role === 'toolResult');
       assert.equal(results.length, 1);
-      assert.equal(results[0].isError, true);
+      assert.equal(results[0].state, 'cancelled');
       yield { type: 'done', message: answer() };
     },
   });
@@ -426,7 +430,7 @@ test('interrupted calls receive an error record before the next prompt and are n
       parameters: Type.Object({}),
       async execute() {
         executed++;
-        return { content: [] };
+        return { state: 'finished', content: [] };
       },
     }),
   );
@@ -522,7 +526,7 @@ test('steering accepts off, skips deterministic failures and resets incompatible
         } else {
           if (levels.length === 2) {
             const result = request.messages.find((message) => message.role === 'toolResult');
-            assert.equal(result?.isError, true);
+            assert.equal(result?.state, 'skipped');
             assert.match(JSON.stringify(result?.content), /steering message arrived/);
           }
           yield { type: 'done', message: answer() };
@@ -539,7 +543,7 @@ test('steering accepts off, skips deterministic failures and resets incompatible
       parameters: Type.Object({}),
       async execute() {
         events.push({ type: 'error', error: 'The skipped tool was executed' });
-        return { content: [] };
+        return { state: 'finished', content: [] };
       },
     }),
   );
@@ -596,6 +600,7 @@ test('steering accepts off, skips deterministic failures and resets incompatible
     log
       .projection()
       .timeline.filter(isViewMessage)
+      .filter((message) => message.role === 'toolResult')
       .find(({ toolCallId }) => toolCallId === 'steered-call')?.toolState,
     'skipped',
   );
@@ -657,7 +662,7 @@ test(
               ),
             ]);
           }
-          return { content: [{ type: 'text', text: id }] };
+          return { state: 'finished', content: [{ type: 'text', text: id }] };
         },
       }),
     );
@@ -668,7 +673,7 @@ test(
         parameters: Type.Object({}),
         async execute(_args, { callId: id }) {
           started.push(id);
-          return { content: [] };
+          return { state: 'finished', content: [] };
         },
       }),
     );
@@ -726,6 +731,71 @@ test('the retry policy cannot replay a model attempt after output has streamed',
     /Transport closed after output/,
   );
   assert.deepEqual({ requests, retries, deltas }, { requests: 1, retries: 0, deltas: ['Partial'] });
+});
+
+test('request recovery composes with prepared parameters and repeatable message projection', async (t) => {
+  let requests = 0;
+  let preparations = 0;
+  let recoveries = 0;
+  const { agent, ctx, record } = await fixture(t, {
+    async *stream(request) {
+      requests++;
+      assert.equal(request.maxTokens, 512);
+      assert.equal(
+        request.systemPrompt,
+        requests === 1 ? 'Fixture [prepared]' : 'Fixture [prepared] [repair]',
+      );
+      assert.deepEqual(
+        request.messages.flatMap((message) =>
+          message.content.filter((part) => part.type === 'text').map((part) => part.text),
+        ),
+        requests === 3 ? ['Rebuilt', 'Temporary context'] : ['Recover', 'Temporary context'],
+      );
+      if (requests < 3) {
+        yield {
+          type: 'done',
+          message: {
+            ...answer(),
+            content: [],
+            stopReason: 'error',
+            errorMessage: 'Context limit',
+            errorKind: 'context-overflow',
+          },
+        };
+      } else {
+        yield { type: 'done', message: answer() };
+      }
+    },
+  });
+  ctx.on('agent/model-request', (request) => ({
+    ...request,
+    messages: [
+      ...request.messages,
+      { role: 'user', timestamp: 0, content: [{ type: 'text', text: 'Temporary context' }] },
+    ],
+  }));
+  ctx.on('agent/prepare-request', (request) => {
+    preparations++;
+    return { ...request, maxTokens: 512, systemPrompt: request.systemPrompt + ' [prepared]' };
+  });
+  ctx.on('agent/recover-request', async (request, step) => {
+    assert.equal(step.failure.kind, 'context-overflow');
+    recoveries++;
+    if (recoveries === 1) return { ...request, systemPrompt: request.systemPrompt + ' [repair]' };
+    return step.rebuild(
+      request,
+      [{ role: 'user', timestamp: 0, content: [{ type: 'text', text: 'Rebuilt' }] }],
+      step.signal,
+    );
+  });
+  assert.equal(
+    await agent.prompt(ctx, record, 'Recover', () => {}, {
+      fallback: model,
+      signal: new AbortController().signal,
+    }),
+    'Done',
+  );
+  assert.deepEqual({ requests, preparations, recoveries }, { requests: 3, preparations: 1, recoveries: 2 });
 });
 
 test('a queued follow-up can preselect the next model and thinking level', async (t) => {

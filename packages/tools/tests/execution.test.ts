@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { Type } from 'typebox';
-import { defineTool, toolResultState } from '../src/api.ts';
+import { defineTool } from '../src/api.ts';
 import { nativeExecutor } from '../src/execution.ts';
 
 const call = (id: string, name: string) => ({ type: 'toolCall' as const, id, name, arguments: {} });
@@ -21,7 +21,7 @@ test('a concurrent cancellation does not hide a genuine tool failure', async () 
   await nativeExecutor.execute([call('one', 'fail'), call('two', 'fail')], new Map([[tool.name, tool]]), {
     signal: controller.signal,
     async deliver(result) {
-      states.push(toolResultState(result));
+      states.push(result.state);
     },
   });
   assert.deepEqual(states, ['error', 'skipped']);
@@ -34,7 +34,7 @@ test('a fatal pipeline failure stops dispatch and drains active calls', async ()
     parameters: Type.Object({}),
     isConcurrencySafe: () => true,
     async execute() {
-      return { content: [] };
+      return { state: 'finished', content: [] };
     },
   });
   const tools = new Map([[tool.name, tool]]);

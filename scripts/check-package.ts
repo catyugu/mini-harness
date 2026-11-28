@@ -169,7 +169,7 @@ async function checkPackage() {
       const scopedSettings: ProfileConfiguration['scopes'] = { 'session:example': scope };
       void scopedSettings;
       const llm: LlmPort | undefined = ctx.harnessLlm;
-      const source: ModelSource = { list: () => [], resolve: () => undefined, capabilities: () => undefined };
+      const source: ModelSource = { list: () => [], resolve: () => undefined };
       ctx.effect(() => ctx.harnessModels.register(source, { accepts: () => false, async *stream() {} }));
       const scopeContext: Context = ctx.harnessProfileScopes.context('session:example');
       const releaseScope = ctx.harnessProfileScopes.register(ctx, 'example', id => id === 'resource' ? { key: scopeKey } : undefined);

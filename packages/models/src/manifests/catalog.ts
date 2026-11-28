@@ -51,12 +51,12 @@ const plugin: Plugin.Object = {
     function match(caller: Context, entries: Contribution[], choice: ModelChoice) {
       const matches = entries.flatMap((entry) => {
         if (entry.owner.aborted || !sources.has(entry)) return [];
-        const model = entry.source.resolve(choice);
-        return model ? [{ entry, model }] : [];
+        const resolved = entry.source.resolve(choice);
+        return resolved ? [{ entry, resolved }] : [];
       });
       const [winner, next] = matches;
       if (!winner || sameRank(winner.entry, next?.entry)) return;
-      const adapter = caller.get('harnessLlm')?.select(winner.model);
+      const adapter = caller.get('harnessLlm')?.select(winner.resolved.model);
       if (!adapter) return;
       // An adapter-only override intentionally reuses the selected catalog's metadata.
       // A paired adapter must instead agree with its own model contribution.
@@ -125,12 +125,7 @@ const plugin: Plugin.Object = {
         },
         resolve(choice) {
           const caller = Service.caller(this);
-          return match(caller, visible(caller), choice)?.model;
-        },
-        capabilities(choice) {
-          const caller = Service.caller(this);
-          const selected = match(caller, visible(caller), choice);
-          return selected?.entry.source.capabilities(selected.model);
+          return match(caller, visible(caller), choice)?.resolved;
         },
       }),
     );

@@ -21,8 +21,7 @@ const accepts = (candidate: Readonly<ModelChoice>) =>
 
 const source: ModelSource = {
   list: () => [{ ...choice, name: model.name, configured: true, thinkingLevels: ['off'], input: ['text'] }],
-  resolve: (candidate) => (accepts(candidate) ? { ...choice } : undefined),
-  capabilities: (candidate) => (accepts(candidate) ? model : undefined),
+  resolve: (candidate) => (accepts(candidate) ? { model: choice, capabilities: model } : undefined),
 };
 
 // A deterministic local adapter makes the complete registration example runnable without credentials.
@@ -32,10 +31,7 @@ const adapter: LlmAdapter = {
     request.signal.throwIfAborted();
     const input = [...request.messages].reverse().find((message) => message.role === 'user')?.content;
     const text =
-      'Echo: ' +
-      (typeof input === 'string'
-        ? input
-        : (input ?? []).flatMap((part) => (part.type === 'text' ? [part.text] : [])).join('\n'));
+      'Echo: ' + (input ?? []).flatMap((part) => (part.type === 'text' ? [part.text] : [])).join('\n');
     yield { type: 'text-delta', text };
     request.signal.throwIfAborted();
     yield {

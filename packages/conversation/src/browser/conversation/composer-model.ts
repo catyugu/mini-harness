@@ -22,7 +22,12 @@ interface DraftOwner {
   input: Draft;
   edit?: Draft;
   permission?: ConversationPermission;
-  submission?: { draft: Draft; version: number; runId?: string; retryable: boolean };
+  submission?: {
+    draft: Draft;
+    version: number;
+    input: { text: string; attachments: Draft['attachments'] };
+    runId?: string;
+  };
 }
 
 export function createComposerModel(ctx: Context): ComposerModel {
@@ -47,13 +52,13 @@ export function createComposerModel(ctx: Context): ComposerModel {
   const draft = () => entry().edit ?? entry().input;
   let snapshot: { owner: Draft; version: number; value: ComposerDraft } | undefined;
   const change = (focus = false) => changes.dispatchEvent(new CustomEvent('change', { detail: focus }));
-  function edited(current: Draft, focus = false, inputChanged = true, owner = entry()) {
+  function changed(current: Draft, focus = false) {
     current.version++;
-    if (inputChanged) {
-      delete current.failedRun;
-      if (owner.submission?.draft === current) owner.submission.retryable = false;
-    }
     if (current === draft()) change(focus);
+  }
+  function edited(current: Draft, focus = false) {
+    delete current.failedRun;
+    changed(current, focus);
   }
   let selected = key();
   selection.subscribe(() => {
@@ -87,7 +92,12 @@ export function createComposerModel(ctx: Context): ComposerModel {
     delete owner.submission;
     if (accepted) clearAccepted(owner, submission.draft, submission.version);
     else {
-      if (submission.retryable && run?.id === submission.runId && run.state === 'failed')
+      if (
+        submission.draft.text === submission.input.text &&
+        submission.draft.attachments === submission.input.attachments &&
+        run?.id === submission.runId &&
+        run.state === 'failed'
+      )
         submission.draft.failedRun = run.id;
       change();
     }
@@ -119,11 +129,15 @@ export function createComposerModel(ctx: Context): ComposerModel {
     if (!text.trim() && !attachments.length && (revision?.images?.length ?? 0) === removedImages.length)
       return;
     const input = { message: text, attachments, model: current.model, thinkingLevel: current.thinkingLevel };
-    const submission: NonNullable<DraftOwner['submission']> = { draft: current, version, retryable: true };
+    const submission: NonNullable<DraftOwner['submission']> = {
+      draft: current,
+      version,
+      input: { text, attachments: current.attachments },
+    };
     owner.submission = submission;
     change();
     try {
-      const receipt = await control.submit(
+      const run = await control.submit(
         {
           ...input,
           permission: owner.permission,
@@ -134,8 +148,8 @@ export function createComposerModel(ctx: Context): ComposerModel {
           if (drafts.get(origin) === owner) drafts.delete(origin);
         },
       );
-      if (revision && receipt.run) {
-        submission.runId = receipt.run.id;
+      if (run) {
+        submission.runId = run.id;
         reconcileSubmission();
       } else {
         delete owner.submission;
@@ -194,13 +208,13 @@ export function createComposerModel(ctx: Context): ComposerModel {
       if (current.model?.provider === model?.provider && current.model?.id === model?.id) return;
       current.model = model && { ...model };
       current.thinkingLevel = undefined;
-      edited(current, false, false);
+      changed(current);
     },
     chooseThinking(level) {
       const current = draft();
       if (current.thinkingLevel !== level) {
         current.thinkingLevel = level;
-        edited(current, false, false);
+        changed(current);
       }
     },
     setText(text, start = text.length, end = start) {
@@ -252,16 +266,16 @@ export function createComposerModel(ctx: Context): ComposerModel {
           12 * 1024 * 1024
         )
           throw new Error('Attachments exceed 12 MiB per message');
-        current.attachments.push(...added);
+        current.attachments = [...current.attachments, ...added];
       } finally {
         current.loading -= incoming.length;
-        if (!signal.aborted) edited(current, false, true, owner);
+        if (!signal.aborted) edited(current);
       }
     },
     removeAttachment(index) {
       const current = draft();
       if (Number.isInteger(index) && index >= 0 && index < current.attachments.length) {
-        current.attachments.splice(index, 1);
+        current.attachments = current.attachments.filter((_, i) => i !== index);
         edited(current);
       }
     },

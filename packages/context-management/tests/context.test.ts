@@ -4,9 +4,10 @@ import { splitPoint } from '../src/server/compaction.ts';
 
 test('retention includes the complete latest exchange even when it exceeds the minimum', () => {
   const messages = [
-    { role: 'user', content: 'History', timestamp: 0 },
+    { role: 'user', content: [{ type: 'text', text: 'History' }], timestamp: 0 },
     {
       role: 'assistant',
+      stopReason: 'toolUse',
       content: [{ type: 'toolCall', id: 'probe', name: 'probe', arguments: {} }],
       timestamp: 0,
     },
@@ -15,7 +16,7 @@ test('retention includes the complete latest exchange even when it exceeds the m
       toolCallId: 'probe',
       toolName: 'probe',
       content: [{ type: 'text', text: 'diagnostics '.repeat(1000) }],
-      isError: false,
+      state: 'finished',
       timestamp: 0,
     },
   ] satisfies import('@mini-harness/llm/api').NativeMessage[];

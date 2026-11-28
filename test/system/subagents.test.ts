@@ -107,7 +107,7 @@ test(
       .timeline.filter(isViewMessage)
       .find((message) => message.role === 'toolResult');
     assert.ok(result);
-    assert.equal(result.isError, false);
+    assert.equal(result.toolState, 'finished');
     assert.match(JSON.stringify(result.content), /private fixture/);
     await waitUntil(
       () => activeRunCount(app.runtime.plugins.ctx),
@@ -310,7 +310,7 @@ test(
       .log(childId)
       .projection()
       .timeline.filter(isViewMessage)
-      .filter(({ role }) => role === 'user');
+      .filter((message) => message.role === 'user');
     assert.equal(childInputs.length, 2);
     assert.ok(
       childInputs.every(
@@ -321,14 +321,14 @@ test(
       .log(parent.id)
       .projection()
       .timeline.filter(isViewMessage)
-      .filter(({ role }) => role === 'user');
+      .filter((message) => message.role === 'user');
     assert.equal(parentInputs.length, 2);
     assert.ok(
       parentInputs.every(
         ({ origin }) => origin?.senderSessionId === childId && origin.taskId === childRun.id,
       ),
     );
-    assert.equal(parentInputs[0].content, 'Work started');
+    assert.deepEqual(parentInputs[0].content, [{ type: 'text', text: 'Work started' }]);
     assert.match(JSON.stringify(parentInputs[1].content), /Child run completed/);
   },
 );

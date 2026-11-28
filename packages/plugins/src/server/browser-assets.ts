@@ -107,8 +107,7 @@ export function publishBrowser(
   const entries: BrowserEntry[] = [];
   const assets = new Map<string, Asset>();
   const configurable = new Set<string>();
-  for (const { id, descriptor, config, live } of plans) {
-    const resources = descriptor.resources;
+  for (const { id, resources, config, live, configurable: canConfigure } of plans) {
     if (!resources || !mounted(id)) continue;
     entries.push({
       id,
@@ -118,7 +117,7 @@ export function publishBrowser(
       live,
     });
     for (const [url, asset] of resources.urls) assets.set(url, asset);
-    if (descriptor.native?.Config || descriptor.info.configSchema) configurable.add(id);
+    if (canConfigure) configurable.add(id);
   }
   return { entries, assets, configurable };
 }

@@ -325,7 +325,7 @@ export const inject = ["harnessTools"];
 export const apply = (ctx) => {
       for (const name of ['read', 'custom', 'write_like']) ctx.effect(() => ctx.harnessTools.register({
         name, tags: name === 'write_like' ? [] : ['readOnly'], description: 'replacement', parameters: { type: 'object' },
-        async execute() { return { content: [{ type: 'text', text: 'Authorized local read' }] }; }
+        async execute() { return { state: 'finished', content: [{ type: 'text', text: 'Authorized local read' }] }; }
       }));
     };
 `,
@@ -605,7 +605,7 @@ export const apply = (ctx) => { ctx.provide('harnessProcess', processProvider('s
         .log(id)
         .projection()
         .timeline.filter(isViewMessage)
-        .filter(({ role }) => role === 'toolResult')
+        .filter((message) => message.role === 'toolResult')
         .at(-1),
       'tool result',
     );
@@ -620,7 +620,7 @@ export const apply = (ctx) => { ctx.provide('harnessProcess', processProvider('s
   ]) {
     await sendRun(app.runtime.plugins.ctx.harnessRuns, id, 'shell execution');
     assert.deepEqual((await request('/approvals')).body, []);
-    assert.equal(lastTool(id).isError, false);
+    assert.equal(lastTool(id).toolState, 'finished');
     assert.match(JSON.stringify(lastTool(id).content), new RegExp(expected));
   }
 });
@@ -635,18 +635,18 @@ test('scoped model catalogs govern explicit runs and inherited or model-selected
 export const provide = ["harnessModels","harnessLlm"];
 export const apply = (ctx) => {
       const provider = 'scoped-only';
-      const ids = ['parent-model', 'child-model'];
+      const ids = ['child-model', 'parent-model'];
       const resolve = (choice) => {
-        const id = choice?.id || ids[0];
+        const id = choice.id;
         if (choice?.provider !== provider || !ids.includes(id)) return undefined;
         return { provider, id };
       };
       const list = () => ids.map(id => ({ provider, id, name: id, configured: true, thinkingLevels: ['off'] }));
       ctx.provide('harnessModels', {
-        list, available: async () => list(), resolve,
-        capabilities(choice) {
+        list, available: async () => list(),
+        resolve(choice) {
           const model = resolve(choice);
-          return { id: model.id, name: model.id, input: ['text'], contextWindow: 32000, maxTokens: 1024, reasoning: false };
+          return model && { model, capabilities: { id: model.id, name: model.id, input: ['text'], contextWindow: 32000, maxTokens: 1024, reasoning: false } };
         }
       });
       const adapter = {
@@ -655,13 +655,14 @@ export const apply = (ctx) => {
           request.signal.throwIfAborted();
           const model = resolve(request.model);
           const last = request.messages.at(-1);
-          const text = typeof last.content === 'string' ? last.content : last.content.filter(part => part.type === 'text').map(part => part.text).join('');
-          if (last.role === 'user' && (text === 'Delegate inherited' || text === 'Delegate explicit')) {
+          const text = last.content.filter(part => part.type === 'text').map(part => part.text).join('');
+          if (last.role === 'user' && (text === 'Delegate inherited' || text === 'Delegate explicit' || text === 'Delegate provider')) {
             if (!request.tools.some(tool => tool.name === 'delegate')) throw new Error('Delegation tool unavailable');
             const explicit = text === 'Delegate explicit';
+            const providerOnly = text === 'Delegate provider';
             yield { type: 'done', message: { role: 'assistant', provider, model: model.id, timestamp: Date.now(), stopReason: 'toolUse',
-              content: [{ type: 'toolCall', id: explicit ? 'delegate-explicit' : 'delegate-inherited', name: 'delegate',
-                arguments: { task: explicit ? 'Explicit child task' : 'Inherited child task', ...(explicit ? { provider, model: 'child-model' } : {}) } }] } };
+              content: [{ type: 'toolCall', id: providerOnly ? 'delegate-provider' : explicit ? 'delegate-explicit' : 'delegate-inherited', name: 'delegate',
+                arguments: { task: providerOnly ? 'Provider child task' : explicit ? 'Explicit child task' : 'Inherited child task', ...(providerOnly ? { provider } : explicit ? { provider, model: 'child-model' } : {}) } }] } };
           } else {
             const answer = 'Scoped ' + model.id;
             yield { type: 'text-delta', text: answer };
@@ -677,7 +678,7 @@ export const apply = (ctx) => {
   const parent = app.runtime.plugins.ctx.harnessSessions.create();
   const sibling = app.runtime.plugins.ctx.harnessSessions.create();
   const scopedChoice = { provider: 'scoped-only', id: 'parent-model' };
-  const applicationChoice = { ...app.runtime.plugins.ctx.harnessModelPreference.recent() };
+  const applicationChoice = app.runtime.plugins.ctx.harnessModelPreference.recent();
   assert.equal(app.runtime.plugins.ctx.harnessModels.resolve(scopedChoice), undefined);
   const configured = await request('/settings', 'PATCH', {
     scopes: {
@@ -703,6 +704,12 @@ export const apply = (ctx) => {
     'Scoped parent-model',
   );
   assert.equal(
+    await sendRun(app.runtime.plugins.ctx.harnessRuns, parent.id, 'Delegate provider', undefined, {
+      model: scopedChoice,
+    }),
+    'Scoped parent-model',
+  );
+  assert.equal(
     await sendRun(app.runtime.plugins.ctx.harnessRuns, parent.id, 'Continue without an explicit model'),
     'Scoped parent-model',
   );
@@ -710,7 +717,14 @@ export const apply = (ctx) => {
     .list()
     .filter(({ parentId }) => parentId === parent.id);
   await Promise.all(children.map(({ id }) => app.runtime.plugins.ctx.harnessRuns.current(id)?.result));
-  assert.equal(children.length, 2);
+  assert.equal(children.length, 3);
+  const providerChild = children.find(({ title }) => title === 'Provider child task');
+  assert.ok(providerChild);
+  assert.deepEqual(app.runtime.plugins.ctx.harnessSessions.log(providerChild.id).projection().model, {
+    provider: 'scoped-only',
+    id: 'child-model',
+  });
+  assert.equal(app.runtime.plugins.ctx.harnessRuns.info(providerChild.id)?.state, 'completed');
   const inherited = children.find(({ title }) => title === 'Inherited child task');
   const explicit = children.find(({ title }) => title === 'Explicit child task');
   assert.ok(inherited);
@@ -730,8 +744,8 @@ export const apply = (ctx) => {
       .log(parent.id)
       .projection()
       .timeline.filter(isViewMessage)
-      .filter(({ role }) => role === 'toolResult')
-      .every(({ isError }) => !isError),
+      .filter((message) => message.role === 'toolResult')
+      .every(({ toolState }) => toolState === 'finished'),
   );
   assert.deepEqual(app.runtime.plugins.ctx.harnessModelPreference.recent(), applicationChoice);
   assert.equal(
@@ -763,10 +777,10 @@ export function apply(ctx) {
         throw new Error('Missing isolated run context');
       const turn = await input.prepare(1);
       const content = turn.request.messages.at(-1).content;
-      const text = typeof content === 'string' ? content : content[0].text;
+      const text = content[0].text;
       run.effect(() => () => appendFileSync(${JSON.stringify(file)}, text + '\\n'));
       if (text === 'fail') throw new Error('Expected custom agent failure');
-      return { role: 'assistant', content: [{ type: 'text', text: 'Custom answer' }], timestamp: Date.now() };
+      return { role: 'assistant', content: [{ type: 'text', text: 'Custom answer' }], timestamp: Date.now(), stopReason: 'stop' };
     },
   });
 }
@@ -806,7 +820,7 @@ export function apply(ctx) {
       name: 'run_marker',
       description: 'A run-local tool',
       parameters: { type: 'object', properties: {} },
-      async execute() { return { content: [{ type: 'text', text: id }] }; }
+      async execute() { return { state: 'finished', content: [{ type: 'text', text: id }] }; }
     }, ctx);
     yield prompt.register({ id: 'run-marker', render: () => 'Run marker ' + id }, ctx);
   }));
@@ -858,7 +872,7 @@ export function apply(ctx) {
   ctx.effect(() => ctx.harnessPrompt.register({ id: 'workspace-reload', order: 500, render: () => '[Workspace contribution]' }));
   ctx.effect(() => ctx.harnessTools.register({
     name: 'workspace_contribution', description: 'Workspace contribution', parameters: { type: 'object' },
-    async execute() { return { content: [{ type: 'text', text: 'Workspace contribution' }] }; }
+    async execute() { return { state: 'finished', content: [{ type: 'text', text: 'Workspace contribution' }] }; }
   }));
 }
 `,

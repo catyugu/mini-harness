@@ -1,4 +1,5 @@
 import {
+  assistantFailed,
   validateRequestSnapshot,
   type LlmPort,
   type LlmRequest,
@@ -22,20 +23,14 @@ export function configuration(stored: unknown, defaults: ContextSettings) {
   return { settings: stored == null ? defaults : validateSettings(stored), customized: stored != null };
 }
 
-type Rebuild = (messages: NativeMessage[]) => Promise<LlmRequest>;
+type Rebuild = (request: LlmRequest, messages: NativeMessage[]) => Promise<LlmRequest>;
 
 function pendingInputStart(log: SessionLogPort, projection: SessionContext) {
   const pending = new Set<string>();
   for (const entry of log.branch().reverse()) {
     if (entry.type !== 'message') continue;
     const message = entry.message;
-    if (
-      message.role === 'assistant' &&
-      !message.errorMessage &&
-      message.stopReason !== 'error' &&
-      message.stopReason !== 'aborted'
-    )
-      break;
+    if (message.role === 'assistant' && !assistantFailed(message)) break;
     if (message.role === 'user') pending.add(entry.id);
   }
   const first = projection.contextEntryIds.findIndex((id) => pending.has(id));
@@ -50,8 +45,8 @@ export class ContextManagement {
   ) {}
 
   private model(choice: LlmRequest['model']) {
-    const capability = this.models.capabilities(choice);
-    if (!capability || !this.llm.select(choice))
+    const capability = this.models.resolve(choice)?.capabilities;
+    if (!capability)
       throw new DomainError('invalid_input', 'Model capability or adapter unavailable: ' + choice.id);
     return capability;
   }
@@ -68,7 +63,7 @@ export class ContextManagement {
   ) {
     if (!replacements.length) return request;
     log.append({ type: 'context-replace', replacements }, log.context().leafId);
-    return rebuild(log.context().contextMessages);
+    return rebuild(request, log.context().contextMessages);
   }
 
   async prune(log: SessionLogPort, request: LlmRequest, rebuild: Rebuild) {
@@ -105,8 +100,9 @@ export class ContextManagement {
     if (available <= 0) return;
     const desired = target - fixed - retained;
     const checkpointTarget = desired > 0 ? Math.min(desired, available) : available;
-    const { model } = selectModel(this.models, { explicit: settings.summaryModel ?? request.model });
-    const capability = this.model(model);
+    const { model, capabilities: capability } = selectModel(this.models, [
+      settings.summaryModel ?? request.model,
+    ]);
     let scale: number | undefined;
     const summaryRequest: LlmRequest = {
       model,
@@ -136,7 +132,7 @@ export class ContextManagement {
       },
       () => (scale ??= calibration(log, model)),
     );
-    const next = await this.measure(log, await rebuild([summary, ...kept]));
+    const next = await this.measure(log, await rebuild(request, [summary, ...kept]));
     validateRequestSnapshot(next);
     request.signal.throwIfAborted();
     if (totalTokens(next.inputMeasurement) >= totalTokens(counts)) return;
@@ -155,7 +151,7 @@ export class ContextManagement {
             owner: { pluginId: owner, instanceId: owner },
             kind: 'checkpoint',
             title: 'Context compacted',
-            source: ['replacements', 0, 'insert', 0, 'content'],
+            source: ['replacements', 0, 'insert', 0, 'content', 0, 'text'],
           },
         ],
       },
@@ -170,28 +166,27 @@ export class ContextManagement {
     rebuild: Rebuild,
     settings: ContextSettings,
     taskId: string,
-    failure?: ModelFailure,
+    reason: 'normal' | 'context-overflow' | 'image-limit',
   ) {
-    if (failure && failure.kind !== 'context-overflow' && failure.kind !== 'image-limit') return;
     const replacements = prune(log.context());
     let changed = replacements.length > 0;
     let current = await this.measure(log, await this.replace(log, request, rebuild, replacements));
     const pressure = () =>
       totalTokens(current.inputMeasurement) >= current.inputMeasurement.budget * settings.triggerRatio;
-    if (pressure() || failure) {
+    if (pressure() || reason !== 'normal') {
       const projection = log.context();
       const images = offloadImages(projection, pendingInputStart(log, projection));
       if (images.length) {
         changed = true;
         current = await this.measure(log, await this.replace(log, current, rebuild, images));
       }
-      if (failure?.kind === 'image-limit' && !images.length)
+      if (reason === 'image-limit' && !images.length)
         throw new DomainError(
           'unavailable',
           'No historical images can be offloaded without changing pending user input',
         );
     }
-    const overflow = failure?.kind === 'context-overflow';
+    const overflow = reason === 'context-overflow';
     if (settings.autoCompact && (overflow || pressure())) {
       const next = await this.compact(log, current, rebuild, settings, taskId);
       if (next) return next;

@@ -27,6 +27,17 @@ export interface ToolCallPart {
   argumentsError?: string;
 }
 export type NativeContent = TextPart | ImagePart | ThinkingPart | ToolCallPart;
+
+export function isTextImageContent(value: unknown): value is (TextPart | ImagePart)[] {
+  return (
+    Array.isArray(value) &&
+    value.every((part) =>
+      part?.type === 'text'
+        ? typeof part.text === 'string'
+        : part?.type === 'image' && typeof part.data === 'string' && typeof part.mimeType === 'string',
+    )
+  );
+}
 export interface NativeUsage {
   input: number;
   output: number;
@@ -47,10 +58,19 @@ export interface NativeUsage {
 }
 export interface NativeUserMessage {
   role: 'user';
-  content: string | (TextPart | ImagePart)[];
+  content: (TextPart | ImagePart)[];
   timestamp: number;
 }
 export type ModelErrorKind = 'context-overflow' | 'image-limit' | 'transient' | 'permanent';
+
+export class ModelStreamError extends Error {
+  constructor(
+    cause: unknown,
+    readonly kind: ModelErrorKind,
+  ) {
+    super(cause instanceof Error ? cause.message : String(cause), { cause });
+  }
+}
 
 export interface InputTokenCounts {
   system: number;
@@ -71,6 +91,8 @@ export interface ModelAttemptMetrics {
   usage?: NativeUsage;
 }
 
+const assistantStopReasons = ['stop', 'length', 'toolUse', 'error', 'aborted'] as const;
+
 export interface NativeAssistantMessage {
   role: 'assistant';
   content: (TextPart | ThinkingPart | ToolCallPart)[];
@@ -78,21 +100,28 @@ export interface NativeAssistantMessage {
   provider?: string;
   model?: string;
   usage?: NativeUsage;
-  stopReason?: 'stop' | 'length' | 'toolUse' | 'error' | 'aborted';
+  stopReason: (typeof assistantStopReasons)[number];
+  /** Optional diagnostic for error or aborted responses; never determines the terminal state. */
   errorMessage?: string;
+  /** Classification of an error response, when the adapter knows it. */
   errorKind?: ModelErrorKind;
   /** JSON-only continuation/signature metadata interpreted exclusively by the LLM adapter. */
   providerData?: Record<string, unknown>;
 }
+export function assistantFailed(message: NativeAssistantMessage) {
+  return message.stopReason === 'error' || message.stopReason === 'aborted';
+}
+
+export const toolResultStates = ['finished', 'error', 'skipped', 'denied', 'cancelled'] as const;
+export type ToolResultState = (typeof toolResultStates)[number];
+
 export interface NativeToolMessage {
   role: 'toolResult';
   toolCallId: string;
   toolName: string;
   content: (TextPart | ImagePart)[];
   timestamp: number;
-  isError: boolean;
-  /** Non-success disposition distinct from an execution failure. */
-  outcome?: 'skipped' | 'denied' | 'cancelled';
+  state: ToolResultState;
   details?: Record<string, unknown>;
   /** Fields of details selected by the producing tool for its consumers' presentation. */
   detailKeys?: readonly string[];
@@ -215,54 +244,50 @@ export function validateNativeMessage(message: NativeMessage) {
     !Number.isFinite(message.timestamp)
   )
     throw new Error('Invalid session message');
-  if (message.role === 'user' && typeof message.content === 'string') return;
-  if (!Array.isArray(message.content)) throw new Error('Invalid session message content');
-  for (const block of message.content) {
-    if (!block || typeof block !== 'object') throw new Error('Invalid session message content');
-    switch (block.type) {
-      case 'text':
-        if (typeof block.text !== 'string') throw new Error('Invalid text content');
-        break;
-      case 'image':
-        if (
-          message.role === 'assistant' ||
-          typeof block.data !== 'string' ||
-          typeof block.mimeType !== 'string'
-        )
-          throw new Error('Invalid image content');
-        break;
-      case 'thinking':
-        if (message.role !== 'assistant' || typeof block.thinking !== 'string')
-          throw new Error('Invalid reasoning content');
-        break;
-      case 'toolCall':
-        if (
-          message.role !== 'assistant' ||
-          typeof block.id !== 'string' ||
-          typeof block.name !== 'string' ||
-          !block.arguments ||
-          typeof block.arguments !== 'object' ||
-          Array.isArray(block.arguments)
-        )
-          throw new Error('Invalid tool call');
-        break;
-      default:
-        throw new Error('Unknown session content type');
+  if (message.role !== 'assistant') {
+    if (!isTextImageContent(message.content)) throw new Error('Invalid session message content');
+  } else {
+    if (
+      !assistantStopReasons.includes(message.stopReason) ||
+      (message.errorMessage !== undefined &&
+        (!assistantFailed(message) || typeof message.errorMessage !== 'string')) ||
+      (message.errorKind !== undefined &&
+        (message.stopReason !== 'error' ||
+          !['context-overflow', 'image-limit', 'transient', 'permanent'].includes(message.errorKind)))
+    )
+      throw new Error('Invalid assistant termination');
+    if (!Array.isArray(message.content)) throw new Error('Invalid session message content');
+    for (const block of message.content) {
+      if (!block || typeof block !== 'object') throw new Error('Invalid session message content');
+      switch (block.type) {
+        case 'text':
+          if (typeof block.text !== 'string') throw new Error('Invalid text content');
+          break;
+        case 'thinking':
+          if (typeof block.thinking !== 'string') throw new Error('Invalid reasoning content');
+          break;
+        case 'toolCall':
+          if (
+            typeof block.id !== 'string' ||
+            typeof block.name !== 'string' ||
+            !block.arguments ||
+            typeof block.arguments !== 'object' ||
+            Array.isArray(block.arguments)
+          )
+            throw new Error('Invalid tool call');
+          break;
+        default:
+          throw new Error('Unknown session content type');
+      }
     }
   }
   if (
     message.role === 'toolResult' &&
     (typeof message.toolCallId !== 'string' ||
       typeof message.toolName !== 'string' ||
-      typeof message.isError !== 'boolean' ||
+      !toolResultStates.includes(message.state) ||
       (message.detailKeys !== undefined &&
-        (!Array.isArray(message.detailKeys) ||
-          !message.detailKeys.every((key) => typeof key === 'string'))) ||
-      (message.outcome !== undefined &&
-        (!message.isError ||
-          (message.outcome !== 'skipped' &&
-            message.outcome !== 'denied' &&
-            message.outcome !== 'cancelled'))))
+        (!Array.isArray(message.detailKeys) || !message.detailKeys.every((key) => typeof key === 'string'))))
   )
     throw new Error('Invalid tool result');
 }

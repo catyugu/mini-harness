@@ -3,7 +3,7 @@ import type { Context } from 'mini-harness/cordis';
 import { providerId } from './provider-settings.ts';
 
 export function setupAdministration(ctx: Context) {
-  const recent = () => ctx.get('harnessModelPreference')?.recent() ?? { provider: '', id: '' };
+  const recent = () => ctx.get('harnessModelPreference')?.recent() ?? null;
   const catalog = ctx.harnessModels;
   const providerAdministration = () => ctx.get('harnessProviderAdministration');
   const admin = () => {

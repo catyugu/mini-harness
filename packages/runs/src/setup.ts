@@ -12,7 +12,7 @@ export function setup(ctx: Context) {
     ctx.harnessTasks,
     scopes,
     (event, signal) => observe(ctx, event, signal, catalog.runScope(event.sessionId)),
-    () => ctx.get('harnessModelPreference')?.recent(),
+    () => ctx.get('harnessModelPreference')?.recent() ?? undefined,
     new SessionRun(catalog),
   );
   ctx.provide('harnessRuns', runs);

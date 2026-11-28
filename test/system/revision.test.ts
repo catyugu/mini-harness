@@ -21,12 +21,10 @@ test('conversation edits branch the native session instead of appending and enfo
   await send('Original second');
   const before = (await request('/sessions/' + session.id)).body;
   const textOf = (message: any) =>
-    typeof message.content === 'string'
-      ? message.content
-      : message.content
-          .filter((block: any) => block.type === 'text')
-          .map((block: any) => block.text)
-          .join('\n');
+    message.content
+      .filter((block: any) => block.type === 'text')
+      .map((block: any) => block.text)
+      .join('\n');
   const first = before.timeline.find(
     (message: { role: string; content: unknown; id?: string }) =>
       message.role === 'user' && textOf(message) === 'Original first',
@@ -67,7 +65,19 @@ test('conversation edits branch the native session instead of appending and enfo
   }
   const log = app.runtime.plugins.ctx.harnessSessions.log(session.id);
   const priorRun = before.run;
-  log.append({ type: 'run', run: { ...priorRun, id: 'discarded-run', state: 'cancelled' } });
+  log.append({
+    type: 'task',
+    task: {
+      id: 'discarded-run',
+      owner: 'session:' + session.id,
+      state: 'cancelled',
+      createdAt: priorRun.startedAt,
+      finishedAt: priorRun.finishedAt,
+      cancellationRequested: true,
+      outputCursor: 0,
+    },
+    run: { sequence: priorRun.sequence },
+  });
   assert.equal(log.projection(before.leafId).timeline.at(-1)?.id, 'discarded-run');
   const revision = await request('/sessions/' + session.id + '/revise', 'POST', {
     sourceEntryId: first.id,

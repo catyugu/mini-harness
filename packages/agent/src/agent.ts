@@ -1,9 +1,9 @@
 import type { Context } from 'mini-harness/cordis';
 import { isDeepStrictEqual } from 'node:util';
 import {
+  assistantFailed,
   validateNativeMessage,
   validateRequestSnapshot,
-  type NativeAssistantMessage,
   type ToolCallPart,
 } from '@mini-harness/llm/api';
 import type { AgentEvent, AgentPort, AgentRun } from './api.ts';
@@ -21,7 +21,6 @@ export class AgentLoop implements AgentPort {
     for (let turn = 1; turn <= maxTurns; turn++) {
       signal.throwIfAborted();
       let step = await input.prepare(turn);
-      if (!step) throw new Error('The step was not prepared');
       input.onEvent?.({ type: 'phase', phase: 'model', turn });
       input.onEvent?.({ type: 'assistant-start' });
       const original = await requestModel(
@@ -36,19 +35,19 @@ export class AgentLoop implements AgentPort {
           thinking: (text) => input.onEvent?.({ type: 'thinking', text }),
           attempt: (metrics) => input.onEvent?.({ type: 'model-attempt', metrics }),
           retry: input.retry,
-          async recover(failure) {
-            const next = await input.prepare(turn, failure);
+          async recover(request, failure) {
+            const next = await step.recover?.(request, failure);
             if (!next) return;
-            step = next;
+            step = { ...step, request: next };
             input.onEvent?.({ type: 'assistant-start' });
-            return { ...next.request, signal };
+            return { ...next, signal };
           },
         },
       );
       const { request, executor, execution, deliver } = step;
       let result = original;
       let diagnostic: Extract<AgentEvent, { type: 'assistant' }>['diagnostic'];
-      if (!failed(original)) {
+      if (!assistantFailed(original)) {
         result = executor.interpret(original, { model: request.model, turn, signal });
         if (!isDeepStrictEqual(result, original))
           diagnostic = { code: 'executor-response', message: original };
@@ -69,7 +68,7 @@ export class AgentLoop implements AgentPort {
       }
       validateNativeMessage(result);
       input.onEvent?.({ type: 'assistant', message: result, diagnostic });
-      if (failed(result)) {
+      if (assistantFailed(result)) {
         signal.throwIfAborted();
         throw new Error(result.errorMessage || 'Model request failed');
       }
@@ -99,8 +98,4 @@ export class AgentLoop implements AgentPort {
     }
     throw new Error('Agent reached the configured turn limit (' + maxTurns + ')');
   }
-}
-
-function failed(message: NativeAssistantMessage) {
-  return Boolean(message.errorMessage || message.stopReason === 'error' || message.stopReason === 'aborted');
 }

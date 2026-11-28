@@ -27,8 +27,8 @@ test('enabled Shell runs consecutive commands without approval and respects read
   assert.equal(results.length, 2);
   assert.ok(
     results.every(
-      (result: { details: { exitCode: number }; isError: boolean }) =>
-        result.details.exitCode === 0 && !result.isError,
+      (result: { details: { exitCode: number }; toolState: string }) =>
+        result.details.exitCode === 0 && result.toolState === 'finished',
     ),
   );
   assert.equal(
@@ -71,7 +71,7 @@ test('Shell preserves native workspace and environment', async (t) => {
   const result = await runTool(tool, 'native-environment', {
     command: 'node -e "console.log(JSON.stringify([process.cwd(), process.env.MINI_HARNESS_TEST_ENV]))"',
   });
-  assert.equal(result.isError, false);
+  assert.equal(result.state, 'finished');
   const [cwd, value] = JSON.parse(String(result.details?.stdout));
   assert.equal(await realpath(cwd), await realpath(paths.cwd));
   assert.equal(value, 'native-environment');

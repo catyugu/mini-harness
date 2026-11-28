@@ -1,6 +1,6 @@
 import { isThinkingLevel, type ToolSchema } from '@mini-harness/llm/vocabulary';
 import { pluginIdPattern, isScopeAddress } from '@mini-harness/plugin-api/selection';
-import { isRunning, type RunInfo } from './shared/run-state.ts';
+import type { RunInfo } from './shared/run-state.ts';
 import { terminal, type TaskSnapshot } from '@mini-harness/tasks/api';
 import { runFromEntry } from './log-api.ts';
 import { isDeepStrictEqual } from 'node:util';
@@ -116,20 +116,6 @@ export class SessionLog extends RecordLog<SessionEvent> implements SessionLogPor
     this.open(createdAt);
   }
 
-  protected decodeRecord(record: Record<string, unknown>): SessionEntry {
-    const entry = record as SessionEntry;
-    if (
-      entry.type === 'message' &&
-      entry.message.role === 'toolResult' &&
-      entry.message.details?.approvalDenied === true &&
-      !entry.message.outcome
-    ) {
-      const { approvalDenied: _, ...details } = entry.message.details;
-      entry.message = { ...entry.message, outcome: 'denied', details };
-    }
-    return entry;
-  }
-
   protected advancesBranch(entry: SessionEntry) {
     return advancesBranch(entry);
   }
@@ -168,8 +154,6 @@ export class SessionLog extends RecordLog<SessionEvent> implements SessionLogPor
       (entry.message.role !== 'user' || !this.pendingInbox.has(entry.inboxId))
     )
       throw new Error('Inbox input is not pending');
-    if (entry.type === 'run' && entry.run.sessionId !== this.sessionId)
-      throw new Error('Session run belongs to another conversation');
     if (entry.type === 'task' && entry.task.owner !== 'session:' + this.sessionId)
       throw new Error('Task belongs to another conversation');
     if (entry.type === 'context-replace') {
@@ -416,18 +400,6 @@ export class SessionLog extends RecordLog<SessionEvent> implements SessionLogPor
         run: entry.run,
       });
     }
-    const run = this.index.run;
-    if (run && isRunning(run)) {
-      this.append({
-        type: 'run',
-        run: {
-          ...run,
-          state: 'interrupted',
-          finishedAt: new Date().toISOString(),
-          error: 'The run stopped before a terminal state was recorded',
-        },
-      });
-    }
   }
 }
 
@@ -492,7 +464,7 @@ function validateEvent(event: SessionEvent) {
       return;
     case 'tool-execution':
       validateNativeMessage(event.result);
-      if (event.result.role !== 'toolResult' || event.result.isError)
+      if (event.result.role !== 'toolResult' || event.result.state !== 'finished')
         throw new Error('Invalid completed tool execution');
       return;
     case 'tool-accepted':
@@ -580,21 +552,6 @@ function validateEvent(event: SessionEvent) {
       )
         throw new Error('Invalid task record');
       return;
-    case 'run':
-      if (
-        !event.run ||
-        typeof event.run.id !== 'string' ||
-        typeof event.run.sessionId !== 'string' ||
-        !['queued', 'running', 'waiting', 'completed', 'failed', 'cancelled', 'interrupted'].includes(
-          event.run.state,
-        ) ||
-        !Number.isFinite(Date.parse(event.run.startedAt)) ||
-        !Number.isInteger(event.run.sequence) ||
-        event.run.sequence < 0 ||
-        (event.run.inputEntryId != null && !entryId.test(event.run.inputEntryId))
-      )
-        throw new Error('Invalid session run');
-      return;
     case 'branch':
       return;
     default:
@@ -610,7 +567,6 @@ function ownsRecord(pluginId: string, instanceId: string) {
 
 export function advancesBranch(entry: SessionEvent) {
   return !(
-    entry.type === 'run' ||
     entry.type === 'task' ||
     entry.type === 'model-request' ||
     entry.type === 'model-attempt' ||

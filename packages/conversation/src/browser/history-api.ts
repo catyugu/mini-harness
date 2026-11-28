@@ -1,13 +1,14 @@
 import type { PluginIcon } from '@mini-harness/plugin-api/descriptor';
 import type { LiveRecord } from '@mini-harness/runs/stream';
-import type { MessageContent, ViewMessage } from '@mini-harness/sessions/message';
+import type { NativeToolMessage, ToolResultState } from '@mini-harness/llm/api';
+import type { ViewMessage } from '@mini-harness/sessions/message';
 
 export type ToolPlacement = 'body' | 'action' | 'summary' | 'status';
 export type ToolRenderer = (tool: ToolView, signal: AbortSignal) => HTMLElement | undefined;
 export interface ToolView {
   name: string;
-  state: string;
-  content?: MessageContent;
+  state: ToolResultState | 'running' | 'approval';
+  content?: NativeToolMessage['content'];
   arguments?: unknown;
   details?: Record<string, unknown>;
   streams?: Readonly<Record<string, string>>;

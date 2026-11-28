@@ -28,7 +28,7 @@ const setup = (ctx: Context) => {
         const { message, rawText } = target;
         const sourceEntryId = message.id;
         const expectedLeafId = leafId;
-        const files = message.attachments ?? [];
+        const files = message.attachments;
         const imageType = /^image\/(png|jpeg|gif|webp)$/;
         const imageFiles = files.filter(({ mimeType }) => imageType.test(mimeType));
         const textFiles = files.filter(({ mimeType }) => !imageType.test(mimeType));
