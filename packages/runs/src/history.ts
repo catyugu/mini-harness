@@ -1,15 +1,22 @@
-import type { SessionStore } from '@mini-harness/sessions/records';
+import type { PluginRecordQuery, SessionStore } from '@mini-harness/sessions/records';
 import type { SessionLogReader } from '@mini-harness/sessions/log-api';
 import { isRunning, type RunHistoryEntry, type RunInfo } from './shared/run-state.ts';
 
+export const settledPrefix = 'settled:';
 const owner = { pluginId: 'core:runs', instanceId: 'core:runs' };
 
-export function runRecords(sessions: SessionStore, id: string, limit?: number) {
-  return sessions.pluginRecords<RunInfo>(id, owner, limit === undefined ? undefined : { limit });
+export function runRecords(sessions: SessionStore, id: string, query?: PluginRecordQuery) {
+  return sessions.pluginRecords<RunInfo>(id, owner, query);
 }
 
 export function recordRun(sessions: SessionStore, run: RunInfo) {
-  sessions.log(run.sessionId).append({ type: 'plugin-record', owner, scope: 'session', data: run });
+  sessions.log(run.sessionId).append({
+    type: 'plugin-record',
+    owner,
+    scope: 'session',
+    key: isRunning(run) ? undefined : settledPrefix + run.id,
+    data: run,
+  });
 }
 
 export function projectTimeline(
@@ -44,27 +51,4 @@ export function projectTimeline(
   }
   advance(Infinity);
   return { timeline: entries, leafId: leaf, model, thinkingLevel };
-}
-
-/** The last Assistant message within each run's durable interval is the stored answer. */
-export function settledRuns(log: SessionLogReader, records: ReturnType<typeof runRecords>) {
-  const messages = log.entries();
-  let index = 0;
-  let runId: string | undefined;
-  let answer: string | undefined;
-  return records.flatMap(({ seq, data: run }) => {
-    for (; messages[index] && messages[index].seq < seq; index++) {
-      const entry = messages[index];
-      if (runId && entry.type === 'message' && entry.message.role === 'assistant')
-        answer = entry.message.content.flatMap((part) => (part.type === 'text' ? [part.text] : [])).join('');
-    }
-    if (isRunning(run)) {
-      if (runId !== run.id) answer = undefined;
-      runId = run.id;
-      return [];
-    }
-    const text = run.state === 'completed' ? answer : run.error;
-    runId = undefined;
-    return [{ run, answer: text }];
-  });
 }

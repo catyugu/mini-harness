@@ -52,6 +52,7 @@ export class RunEvents {
       this.records = this.records.filter(({ id }) => !ids.has(id));
     }
     if (event.type === 'assistant-start' || event.type === 'assistant-end') this.partial = '';
+    if (event.type === 'assistant-end') this.info.answerEntryId = event.message.id;
     if (event.type === 'delta') this.partial += event.text;
     if (event.type === 'tool' || event.type === 'tool-output' || event.type === 'tool-end')
       this.tools = updateTools(this.tools, event);

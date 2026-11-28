@@ -29,7 +29,6 @@ export function setup(ctx: Context) {
         { additionalProperties: false },
       ),
       background: true,
-      metadata: { backgroundDetails: ['timeoutMs', 'diagnostics', 'stdoutOverflow', 'stderrOverflow'] },
       execute: async (args, { signal, write }): Promise<ToolResult> => {
         const cwd = workspace.workspacePath(sessionId);
         if (!cwd) throw new DomainError('unavailable', 'Shell requires a workspace');
@@ -62,16 +61,11 @@ export function setup(ctx: Context) {
             content: [{ type: 'text', text: JSON.stringify(output) }],
             summary: output.reason ?? 'Exit ' + output.code,
             state: cancelled ? 'cancelled' : output.reason || output.code !== 0 ? 'error' : 'finished',
-            detailKeys: ['exitCode'],
+            detailKeys: ['exitCode', 'timeoutMs', 'stdoutOverflow', 'stderrOverflow'],
             details: {
               ...output,
               timeoutMs,
               exitCode: output.code,
-              diagnostics: (output.stderr + '\n' + output.stdout)
-                .split('\n')
-                .filter((line) => /error|fatal|failed|warning|undefined reference/i.test(line))
-                .join('\n')
-                .slice(0, 1000),
             },
             elapsedMs: performance.now() - startedAt,
           };

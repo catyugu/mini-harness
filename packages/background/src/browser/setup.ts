@@ -5,6 +5,15 @@ import { browserRequest } from '@mini-harness/ui-runtime/http';
 import { icon } from '@mini-harness/ui-primitives/icons';
 import { bindPopover, button, fromMarkup, required } from '@mini-harness/ui-primitives/primitives';
 
+const statusTone = {
+  queued: 'info',
+  running: 'info',
+  waiting: 'warning',
+  completed: 'success',
+  failed: 'danger',
+  cancelled: 'warning',
+  interrupted: 'danger',
+};
 const live = ({ state }: Work) => ['queued', 'running', 'waiting'].includes(state);
 const failedTool = ({ result }: Work) =>
   result && ['error', 'skipped', 'denied', 'cancelled'].includes(result.toolState);
@@ -40,16 +49,11 @@ function duration(task: Work) {
 }
 
 function reconcile(parent: HTMLElement, children: HTMLElement[]) {
-  let next = parent.firstElementChild;
-  for (const child of children) {
-    if (child === next) next = next.nextElementSibling;
-    else parent.insertBefore(child, next);
+  for (const [index, child] of children.entries()) {
+    const current = parent.children.item(index);
+    if (current !== child) parent.insertBefore(child, current);
   }
-  while (next) {
-    const node = next;
-    next = next.nextElementSibling;
-    node.remove();
-  }
+  while (parent.children.length > children.length) parent.lastElementChild!.remove();
 }
 
 function setup(ctx: Context) {
@@ -137,8 +141,9 @@ function setup(ctx: Context) {
     let fetching = false;
     let text = '';
     let truncated = false;
-    let failure = '';
-    function show(next: Work) {
+    let latest = task;
+    function show(failure?: string) {
+      const next = latest;
       const following = output.scrollHeight - output.scrollTop - output.clientHeight < 16;
       const fallback =
         next.result?.content.join('\n') ||
@@ -162,37 +167,28 @@ function setup(ctx: Context) {
         .join(' · ');
     }
     async function update(next: Work) {
-      show(next);
-      if (fetching || lifetime.signal.aborted || next.outputCursor <= cursor) return;
+      latest = next;
+      show();
+      if (fetching || lifetime.signal.aborted || latest.outputCursor <= cursor) return;
       fetching = true;
-      const requestedCursor = cursor;
       try {
-        const data = await browserRequest<WorkOutput>(
-          ctx,
-          path(sessionId) + '/' + encodeURIComponent(task.id) + '/output?after=' + cursor,
-          { signal: lifetime.signal },
-        );
-        if (lifetime.signal.aborted) return;
-        if (data.truncated) {
-          truncated = true;
-          text = '';
+        while (latest.outputCursor > cursor) {
+          const data = await browserRequest<WorkOutput>(
+            ctx,
+            path(sessionId) + '/' + encodeURIComponent(task.id) + '/output?after=' + cursor,
+            { signal: lifetime.signal },
+          );
+          if (lifetime.signal.aborted || data.cursor <= cursor) break;
+          const joined = (data.truncated ? '' : text) + data.chunks.map(({ text }) => text).join('');
+          truncated ||= data.truncated || joined.length > 1024 * 1024;
+          text = joined.slice(-1024 * 1024);
+          cursor = data.cursor;
+          show();
         }
-        text += data.chunks.map(({ text }) => text).join('');
-        if (text.length > 1024 * 1024) {
-          truncated = true;
-          text = text.slice(-1024 * 1024);
-        }
-        cursor = data.cursor;
-        failure = '';
       } catch (error) {
-        if (!lifetime.signal.aborted) failure = String(error);
+        if (!lifetime.signal.aborted) show(String(error));
       } finally {
         fetching = false;
-        const latest = tasks.find(({ id }) => id === task.id);
-        if (!lifetime.signal.aborted && latest) {
-          show(latest);
-          if (!failure && cursor > requestedCursor && cursor < latest.outputCursor) void update(latest);
-        }
       }
     }
     return { id: task.id, node, lifetime, update };
@@ -215,7 +211,6 @@ function setup(ctx: Context) {
         </button>
       </div>
     </div>`);
-    node.dataset.taskId = task.id;
     const line = required(node.querySelector('.task-line'));
     const row = required(node.querySelector<HTMLButtonElement>('.task-row'));
     const dot = required(row.querySelector<HTMLElement>('.task-dot'));
@@ -227,6 +222,7 @@ function setup(ctx: Context) {
     row.append(chevron);
     const cancel = button('', 'quiet');
     cancel.classList.add('task-cancel');
+    cancel.title = 'Cancel task';
     cancel.append(icon('stop'));
     line.append(cancel);
     let current = task;
@@ -252,31 +248,18 @@ function setup(ctx: Context) {
       kind.textContent = next.name === title ? '' : next.name;
       kind.hidden = !kind.textContent;
       state.textContent = statusLabel(next);
-      node.dataset.state = next.state;
-      node.dataset.tone =
-        next.state === 'completed' && failedTool(next)
-          ? 'failed'
-          : next.cancellationRequested && live(next)
-            ? 'cancelled'
-            : next.state;
-      const tone = node.dataset.tone;
       dot.dataset.tone =
-        tone === 'running' || tone === 'queued'
-          ? 'info'
-          : tone === 'completed'
-            ? 'success'
-            : tone === 'failed' || tone === 'interrupted'
-              ? 'danger'
-              : tone === 'waiting' || tone === 'cancelled'
-                ? 'warning'
-                : 'neutral';
+        next.cancellationRequested && live(next)
+          ? 'warning'
+          : next.state === 'completed' && failedTool(next)
+            ? 'danger'
+            : statusTone[next.state];
       row.title = title + ' · ' + state.textContent;
       row.setAttribute('aria-label', title + ' · ' + state.textContent);
       row.setAttribute('aria-expanded', String(expanded?.id === next.id));
       chevron.classList.toggle('task-chevron-open', expanded?.id === next.id);
       cancel.hidden = !live(next);
       cancel.disabled = next.cancellationRequested;
-      cancel.title = 'Cancel task';
       cancel.setAttribute('aria-label', 'Cancel ' + title);
       tick();
       if (expanded?.id === next.id) {
@@ -291,16 +274,10 @@ function setup(ctx: Context) {
     const pending = tasks.filter(live);
     const settled = tasks.filter((task) => !live(task) && !dismissed.has(task.id));
     const finishedExpanded = finishedOpen ?? pending.length === 0;
-    const visible = [...pending, ...(finishedExpanded ? settled : [])];
-    const displayed = new Set(visible.map(({ id }) => id));
-    if (expanded && !displayed.has(expanded.id)) closeOutput();
-    for (const [id, row] of rows) {
-      if (displayed.has(id)) continue;
-      row.node.remove();
-      rows.delete(id);
-    }
+    const displayed = new Set<string>();
     const mount = (parent: HTMLElement, list: Work[]) => {
       const nodes = list.map((task) => {
+        displayed.add(task.id);
         let row = rows.get(task.id);
         if (!row) {
           row = createRow(task);
@@ -313,6 +290,8 @@ function setup(ctx: Context) {
     };
     mount(runningRows, pending);
     mount(finishedRows, finishedExpanded ? settled : []);
+    if (expanded && !displayed.has(expanded.id)) closeOutput();
+    for (const id of rows.keys()) if (!displayed.has(id)) rows.delete(id);
     running.hidden = !pending.length;
     finished.hidden = !settled.length;
     finishedRows.hidden = !finishedExpanded;
@@ -320,10 +299,9 @@ function setup(ctx: Context) {
     finishedCount.textContent = 'Finished ' + settled.length;
     finishedToggle.setAttribute('aria-expanded', String(finishedExpanded));
     const total = pending.length + settled.length;
-    const liveCount = pending.length;
     count.textContent = total + (total === 1 ? ' task' : ' tasks');
-    toggle.dataset.tone = liveCount > 0 ? 'info' : 'neutral';
-    toggle.title = liveCount + ' running · ' + (total - liveCount) + ' finished';
+    toggle.dataset.tone = pending.length ? 'info' : 'neutral';
+    toggle.title = pending.length + ' running · ' + settled.length + ' finished';
     container.hidden = !active || (!total && !notice.textContent);
     if (container.hidden && open()) panel.hidePopover();
   }

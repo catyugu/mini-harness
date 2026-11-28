@@ -17,7 +17,7 @@ import { assertImageInput } from '@mini-harness/models/selection';
 import { selectInputModel, SessionRun } from './session-run.ts';
 import { recordPublisher, type RunEvent } from './shared/stream.ts';
 import { isRunning, type RunDetails, type RunInfo } from './shared/run-state.ts';
-import { projectTimeline, recordRun, runRecords, settledRuns } from './history.ts';
+import { projectTimeline, recordRun, runRecords, settledPrefix } from './history.ts';
 import { RunEvents } from './events.ts';
 import type { RunInput, RunPolicy, RunPort, RunSubmission } from './api.ts';
 import type { SessionStore } from '@mini-harness/sessions/records';
@@ -118,6 +118,7 @@ export class Runs implements RunPort {
     try {
       const next = projectRun(id, task, {
         inputEntryId: info.inputEntryId,
+        answerEntryId: info.answerEntryId,
         changedFiles: info.changedFiles,
         sequence: info.sequence + 1 + Number(task.state === 'failed' && Boolean(task.error)),
       });
@@ -394,32 +395,30 @@ export class Runs implements RunPort {
     const run = this.info(id);
     if (run?.id !== runId || run.state !== 'failed')
       throw new DomainError('conflict', 'This run is no longer the failed conversation run');
-    return this.registry.inspectLog(id, (log) => {
-      const input = log.entries().find(({ id }) => id === run.inputEntryId);
-      if (input?.type !== 'message' || input.message.role !== 'user') return;
-      const { message, presentation, selection } = input;
-      const attachments: Attachment[] = [],
-        missing: string[] = [];
-      for (const { name, mimeType, id: attachmentId, data } of userContent(message.content, presentation)
-        .attachments) {
-        const bytes = attachmentId && this.registry.readAttachment(id, attachmentId);
-        if (bytes) attachments.push({ name, mimeType, data: bytes.toString('base64') });
-        else if (data) attachments.push({ name, mimeType, data });
-        else missing.push(name);
-      }
-      const text = message.content.flatMap((part) => (part.type === 'text' ? [part.text] : [])).join('\n');
-      return {
-        message: presentation?.userText ?? text,
-        attachments,
-        missing,
-        model: selection?.model,
-        thinkingLevel: selection?.thinkingLevel,
-      };
-    });
+    const input = run.inputEntryId && this.registry.messageEntry(id, run.inputEntryId);
+    if (!input || input.message.role !== 'user') return;
+    const { message, presentation, selection } = input;
+    const attachments: Attachment[] = [],
+      missing: string[] = [];
+    for (const { name, mimeType, id: attachmentId, data } of userContent(message.content, presentation)
+      .attachments) {
+      const bytes = attachmentId && this.registry.readAttachment(id, attachmentId);
+      if (bytes) attachments.push({ name, mimeType, data: bytes.toString('base64') });
+      else if (data) attachments.push({ name, mimeType, data });
+      else missing.push(name);
+    }
+    const text = message.content.flatMap((part) => (part.type === 'text' ? [part.text] : [])).join('\n');
+    return {
+      message: presentation?.userText ?? text,
+      attachments,
+      missing,
+      model: selection?.model,
+      thinkingLevel: selection?.thinkingLevel,
+    };
   }
 
   info(id: string): RunInfo | undefined {
-    const info = this.streams.get(id)?.info ?? runRecords(this.registry, id, 1)[0]?.data;
+    const info = this.streams.get(id)?.info ?? runRecords(this.registry, id, { limit: 1 })[0]?.data;
     return info && structuredClone(info);
   }
 
@@ -428,7 +427,24 @@ export class Runs implements RunPort {
   }
 
   settlements(id: string) {
-    return this.registry.inspectLog(id, (log) => settledRuns(log, runRecords(this.registry, id))) ?? [];
+    return runRecords(this.registry, id, { keyPrefix: settledPrefix }).map(({ data }) => data);
+  }
+
+  result(id: string, runId: string) {
+    const [record] = runRecords(this.registry, id, { key: settledPrefix + runId });
+    if (!record) return;
+    const run = record.data;
+    const answer =
+      run.state === 'completed' && run.answerEntryId
+        ? this.registry.messageEntry(id, run.answerEntryId)?.message
+        : undefined;
+    return {
+      run,
+      answer:
+        answer?.role === 'assistant'
+          ? answer.content.flatMap((part) => (part.type === 'text' ? [part.text] : [])).join('')
+          : undefined,
+    };
   }
 
   async wait(id: string, waitFor: ((taskId: string) => Promise<void>) | undefined, signal: AbortSignal) {

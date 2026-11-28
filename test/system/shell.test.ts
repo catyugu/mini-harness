@@ -141,7 +141,7 @@ test('foreground Shell streams live output and commits one final result', async 
     assert.deepEqual(completed.tools, []);
     const results = completed.timeline.filter((entry: { role?: string }) => entry.role === 'toolResult');
     assert.equal(results.length, 1);
-    assert.deepEqual(results[0].details, { exitCode: 0 });
+    assert.deepEqual(results[0].details, { exitCode: 0, timeoutMs: 15000 });
     assert.match(JSON.stringify(results[0].content), /final-shell-output/);
   } finally {
     release();

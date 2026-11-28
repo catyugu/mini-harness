@@ -77,7 +77,10 @@ export interface RunPort {
         thinkingLevel?: ThinkingLevel;
       }
     | undefined;
-  settlements(id: string): { run: RunInfo; answer?: string }[];
+  /** List durable terminal states without loading Assistant messages. */
+  settlements(id: string): RunInfo[];
+  /** Read one settled run and its answer from the original Assistant message. */
+  result(id: string, runId: string): { run: RunInfo; answer?: string } | undefined;
   wait(
     id: string,
     waitFor: ((taskId: string) => Promise<void>) | undefined,

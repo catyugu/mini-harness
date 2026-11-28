@@ -22,7 +22,10 @@ test(
           const payload = JSON.parse(last.content);
           if (payload.sessionId && payload.state === 'accepted')
             return { tool: 'subagent_control', args: { action: 'wait', sessionId: payload.sessionId } };
-          if (payload.sessionId) assert.equal(payload.run.state, 'completed');
+          if (payload.sessionId) {
+            assert.equal(payload.run.state, 'completed');
+            assert.equal(typeof payload.answer, 'string');
+          }
         }
         return (
           'Finished ' + ([...messages].reverse().find((message) => message.role === 'user')?.content ?? '')
@@ -75,6 +78,7 @@ test(
     assert.ok(childRecord && leafRecord);
     await app.runtime.plugins.ctx.harnessRuns.current(childRecord.id)?.result;
     await app.runtime.plugins.ctx.harnessRuns.current(leafRecord.id)?.result;
+    const leafRun = expectPresent(app.runtime.plugins.ctx.harnessRuns.info(leafRecord.id), 'leaf run');
     assert.deepEqual(app.runtime.plugins.ctx.harnessSessions.log(leafRecord.id).projection().model, {
       provider: 'local-mock',
       id: 'mock-model',
@@ -115,6 +119,22 @@ test(
       () => activeRunCount(app.runtime.plugins.ctx),
       (count) => count === 0,
     );
+    const ctx = app.runtime.plugins.ctx;
+    ctx.harnessRuns.stop(childRecord.id);
+    await sendRun(ctx.harnessRuns, leafRecord.id, 'Follow-up');
+    const control = expectPresent(
+      ctx.harnessTools.list({ resourceId: childRecord.id }).find(({ name }) => name === 'subagent_control'),
+      'child status tool',
+    );
+    const status = await runTool(control, 'historical-status', {
+      action: 'status',
+      sessionId: leafRecord.id,
+      runId: leafRun.id,
+    });
+    const [part] = status.content;
+    assert.ok(part?.type === 'text');
+    assert.equal(JSON.parse(part.text).answer, 'Leaf finished');
+    assert.equal(JSON.parse(part.text).run.id, leafRun.id);
     const exported = app.runtime.plugins.ctx.harnessSessions.export([parent.id, childRecord.id]);
     assert.deepEqual(
       exported.map(({ id, parentId }) => ({ id, parentId })),

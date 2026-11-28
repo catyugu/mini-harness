@@ -53,13 +53,14 @@ function messagePatch(base: NativeMessage[], actual: NativeMessage[]): MessagePa
 
 export interface LogIndex {
   records: Map<string, Map<string, RecordAddress>>;
+  messages: Map<string, RecordAddress>;
   inboxIds: Set<string>;
   wake: boolean;
 }
 
 /** Session semantics layered over the generic durable record log. */
 export class SessionLog extends RecordLog<SessionEvent> implements SessionLogPort {
-  readonly index: LogIndex = { records: new Map(), inboxIds: new Set(), wake: false };
+  readonly index: LogIndex = { records: new Map(), messages: new Map(), inboxIds: new Set(), wake: false };
   private readonly schemas = new Map<string, ToolSchema[]>();
   private readonly settings = new Map<string, unknown>();
   private paused = false;
@@ -136,6 +137,7 @@ export class SessionLog extends RecordLog<SessionEvent> implements SessionLogPor
   }
 
   protected recordAdded(entry: SessionEntry, address: RecordAddress) {
+    if (entry.type === 'message') this.index.messages.set(entry.id, address);
     if (entry.type === 'plugin-record') {
       const key = entry.owner.instanceId;
       const addresses = this.index.records.get(key) ?? new Map();
@@ -315,7 +317,9 @@ export class SessionLog extends RecordLog<SessionEvent> implements SessionLogPor
   }
 
   indexedEntry(id: string) {
-    return this.byId.get(id);
+    const entry = this.byId.get(id);
+    if (!entry) throw new Error('Missing indexed session record');
+    return structuredClone(entry);
   }
 }
 

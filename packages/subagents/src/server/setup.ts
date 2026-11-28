@@ -1,11 +1,16 @@
 import { createHash } from 'node:crypto';
 import { TaskPool } from '@mini-harness/tasks/api';
 import type { Context } from 'mini-harness/cordis';
-import type { RunInfo } from '@mini-harness/runs/run-state';
+import { isRunning, type RunInfo } from '@mini-harness/runs/run-state';
 import { defineTool } from '@mini-harness/tools/api';
 import { Type } from 'typebox';
 import { DomainError } from '@mini-harness/platform/errors';
 import { Delegation, type SubagentPolicy } from './delegation.ts';
+
+const response = (value: unknown) => ({
+  state: 'finished' as const,
+  content: [{ type: 'text' as const, text: JSON.stringify(value) }],
+});
 
 /** Optional plugin: delegation, scheduling and child-model rules exist only while mounted. */
 export function setup(ctx: Context) {
@@ -41,8 +46,7 @@ export function setup(ctx: Context) {
       execute: async (args, { signal, executionId }) => {
         const child = delegation.delegate(id, args, signal, executionId);
         return {
-          state: 'finished',
-          content: [{ type: 'text', text: JSON.stringify(child) }],
+          ...response(child),
           details: child,
           detailKeys: ['sessionId', 'state'],
         };
@@ -84,11 +88,7 @@ export function setup(ctx: Context) {
               origin: { source: 'agent', senderSessionId: id, taskId: executionId, label: 'Agent message' },
             });
             const receipt = { messageId, taskId };
-            return {
-              state: 'finished',
-              content: [{ type: 'text', text: JSON.stringify(receipt) }],
-              details: receipt,
-            };
+            return { ...response(receipt), details: receipt };
           },
         }),
     }),
@@ -101,7 +101,7 @@ export function setup(ctx: Context) {
           name: 'subagent_control',
           label: 'Subagent',
           description:
-            'List direct child conversations, inspect their latest run, or wait for or stop an active run.',
+            'List direct children, inspect a run and its answer (optionally by runId), or wait for or stop the active run.',
           parameters: Type.Object({
             action: Type.Union([
               Type.Literal('list'),
@@ -110,30 +110,31 @@ export function setup(ctx: Context) {
               Type.Literal('stop'),
             ]),
             sessionId: Type.Optional(Type.String({ minLength: 1, maxLength: 128 })),
+            runId: Type.Optional(Type.String({ minLength: 1, maxLength: 128 })),
           }),
           isConcurrencySafe: ({ action }) => action !== 'wait',
-          async execute({ action, sessionId }, { signal, waitFor }) {
-            const projection = (child: { id: string; title: string }, run = runs.info(child.id)) => ({
-              sessionId: child.id,
-              title: child.title,
-              run,
-            });
-            let result;
-            if (action === 'list') {
-              result = sessions
-                .list()
-                .filter(({ parentId }) => parentId === id)
-                .map((child) => projection(child));
-            } else {
-              const child = sessionId && sessions.get(sessionId);
-              if (!child || child.parentId !== id) throw new DomainError('not_found', 'Subagent not found');
-              if (action === 'wait') result = projection(child, await runs.wait(child.id, waitFor, signal));
-              else {
-                if (action === 'stop') runs.stop(child.id);
-                result = projection(child);
-              }
+          async execute({ action, sessionId, runId }, { signal, waitFor }) {
+            if (action === 'list')
+              return response(
+                sessions
+                  .list()
+                  .filter(({ parentId }) => parentId === id)
+                  .map(({ id, title }) => ({ sessionId: id, title, run: runs.info(id) })),
+              );
+            const child = sessionId && sessions.get(sessionId);
+            if (!child || child.parentId !== id) throw new DomainError('not_found', 'Subagent not found');
+            if (action === 'stop') runs.stop(child.id);
+            const run = action === 'wait' ? await runs.wait(child.id, waitFor, signal) : runs.info(child.id);
+            const details = { sessionId: child.id, title: child.title, run };
+            const requested = action === 'status' ? runId : undefined;
+            if (requested && requested !== run?.id) {
+              const result = runs.result(child.id, requested);
+              if (!result) throw new DomainError('not_found', 'Subagent run not found');
+              return response({ ...details, ...result });
             }
-            return { state: 'finished', content: [{ type: 'text', text: JSON.stringify(result) }] };
+            if ((action === 'wait' || action === 'status') && run && !isRunning(run))
+              return response({ ...details, answer: runs.result(child.id, run.id)?.answer });
+            return response(details);
           },
         }),
     }),
@@ -159,7 +160,11 @@ export function setup(ctx: Context) {
     if (event.type === 'run-ended') notify(event);
   });
   ctx.on('harness/start', () => {
-    for (const { id, parentId } of sessions.list())
-      if (parentId) for (const settlement of runs.settlements(id)) notify(settlement);
+    for (const { id, parentId } of sessions.list()) {
+      if (!parentId) continue;
+      for (const run of runs.settlements(id))
+        if (!sessions.hasInbox(parentId, run.id + ':settled'))
+          notify({ run, answer: run.error ?? runs.result(id, run.id)?.answer });
+    }
   });
 }

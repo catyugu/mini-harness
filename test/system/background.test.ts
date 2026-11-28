@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { rmSync } from 'node:fs';
+import fs, { rmSync } from 'node:fs';
+import { syncBuiltinESMExports } from 'node:module';
 import { runTool } from '@mini-harness/tools/execution';
 import { fixture, waitUntil } from '../support/api-fixture.ts';
 import { expectPresent } from '../support/required.ts';
@@ -21,6 +22,18 @@ test('Background recovers unfinished work and delivers only missed durable repor
   const { id } = sessions.create();
   runs.stop(id);
   const owner = { pluginId: 'background', instanceId: 'background' };
+  const text = 'x'.repeat(1024 * 1024);
+  sessions.log(id).append({
+    type: 'plugin-record',
+    owner,
+    scope: 'session',
+    key: 'output:already-delivered',
+    data: {
+      cursor: text.length,
+      truncated: false,
+      chunks: [{ start: 0, end: text.length, channel: 'stdout', text }],
+    },
+  });
   for (const [workId, state] of [
     ['already-delivered', 'completed'],
     ['lost', 'queued'],
@@ -29,18 +42,16 @@ test('Background recovers unfinished work and delivers only missed durable repor
       type: 'plugin-record',
       owner,
       scope: 'session',
-      key: workId,
+      key: 'work:' + workId,
       data: {
-        work: {
-          id: workId,
-          tool: 'fixture',
-          name: 'Fixture',
-          arguments: {},
-          state,
-          createdAt: new Date().toISOString(),
-          cancellationRequested: false,
-          outputCursor: 0,
-        },
+        id: workId,
+        tool: 'fixture',
+        name: 'Fixture',
+        arguments: {},
+        state,
+        createdAt: new Date().toISOString(),
+        cancellationRequested: false,
+        outputCursor: state === 'completed' ? text.length : 0,
       },
     });
   }
@@ -51,6 +62,38 @@ test('Background recovers unfinished work and delivers only missed durable repor
     app = await createMiniHarnessServer(paths);
     const { harnessSessions, harnessTasks } = app.runtime.plugins.ctx;
     assert.deepEqual(harnessTasks.list(), []);
+    if (restart === 1) {
+      const control = expectPresent(
+        app.runtime.plugins.ctx.harnessTools
+          .list({ resourceId: id })
+          .find(({ name }) => name === 'background_control'),
+        'background control',
+      );
+      const read = fs.readSync;
+      let bytes = 0;
+      const spy = t.mock.method(fs, 'readSync', ((...args: [number, Buffer, number, number, number]) => {
+        const count = read(...args);
+        bytes += count;
+        return count;
+      }) as typeof read);
+      syncBuiltinESMExports();
+      try {
+        const listed = await runTool(control, 'history-list', { action: 'list' });
+        assert.match(JSON.stringify(listed.content), /already-delivered/);
+        assert.ok(bytes > 0 && bytes < text.length, 'cold history list reads summaries only');
+        const beforeOutput = bytes;
+        const output = await runTool(control, 'read-output', {
+          action: 'output',
+          workId: 'already-delivered',
+          cursor: text.length - 4,
+        });
+        assert.match(JSON.stringify(output.content), /xxxx/);
+        assert.ok(bytes >= beforeOutput + text.length, 'output request reads the selected stream');
+      } finally {
+        spy.mock.restore();
+        syncBuiltinESMExports();
+      }
+    }
     assert.deepEqual(
       harnessSessions
         .log(id)
@@ -58,9 +101,11 @@ test('Background recovers unfinished work and delivers only missed durable repor
         .map(({ id }) => id),
       ['already-delivered:settled', 'lost:settled'],
     );
-    const records = harnessSessions.pluginRecords<{ work: { id: string; state: string } }>(id, owner);
+    const records = harnessSessions.pluginRecords<{ id: string; state: string }>(id, owner, {
+      keyPrefix: 'work:',
+    });
     assert.deepEqual(
-      records.map(({ data: { work } }) => [work.id, work.state]),
+      records.map(({ data }) => [data.id, data.state]),
       [
         ['already-delivered', 'completed'],
         ['lost', 'interrupted'],

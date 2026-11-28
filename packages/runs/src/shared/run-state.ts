@@ -4,6 +4,7 @@ import type { HistoryEntry } from '@mini-harness/sessions/message';
 /** Only conversation-specific facts; lifecycle state belongs to the task. */
 export interface RunDetails {
   inputEntryId: string | null;
+  answerEntryId?: string;
   sequence: number;
   changedFiles?: string[];
 }

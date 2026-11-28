@@ -8,7 +8,7 @@ Subagents is an optional Cordis plugin that creates child conversations and supp
 
 `send_message` sends to a parent or direct child Session. It defaults to Steer and accepts an explicit delivery mode. Both sides can send progress or follow-up requests while their own Run continues. An idle recipient wakes automatically unless it is paused. A child's terminal Run status is sent to its parent with Queue delivery. Child conversations stay available for further work.
 
-Use `subagent_control` to list direct children or inspect, wait for, or stop their latest Run by session ID. Stop and Interrupt affect the current Run in the selected conversation. Deleting a parent Session drains and deletes its descendants and their tasks.
+Use `subagent_control` to list direct children or inspect, wait for, or stop their latest Run by session ID. Status and wait include the completed answer. Supply `runId` with status to inspect an earlier Run. Stop and Interrupt affect the current Run in the selected conversation. Deleting a parent Session drains and deletes its descendants and their tasks.
 
 The Subagents browser contribution lists direct child conversations beside the working directory with their latest Run status and duration. Opening a row navigates to the child; Stop in that conversation cancels its active Run. It reads the existing session projection, independently of the background jobs panel.
 

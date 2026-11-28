@@ -9,7 +9,7 @@ import { dirname } from 'node:path';
 import { writeJson } from '@mini-harness/platform/json';
 import type { Paths } from '@mini-harness/platform/runtime-paths';
 import type { WorkspacePort } from '@mini-harness/workspaces/api';
-import type { RecordOwner, SessionRecords, SessionStore } from './records.ts';
+import type { PluginRecordQuery, RecordOwner, SessionRecords, SessionStore } from './records.ts';
 import {
   createScopeKey,
   scopeParentOf,
@@ -20,7 +20,7 @@ import type { ScopeAddress } from '@mini-harness/plugin-api/configuration';
 import type { CapabilityObservation } from '@mini-harness/plugin-api/observations';
 import type { ConversationPermission, SessionRecord } from './shared/identity.ts';
 import { advancesBranch, SessionLog, type LogIndex } from './log.ts';
-import { readRecordAt, syncDirectory } from './record-log.ts';
+import { readRecordAt, syncDirectory, type RecordAddress } from './record-log.ts';
 import { loadCatalog, type CatalogState } from './catalog.ts';
 import {
   attachmentDirectory,
@@ -317,25 +317,39 @@ export class SessionRegistry implements SessionStore {
     }
   }
 
-  pluginRecords<Data>(
-    id: string,
-    owner: RecordOwner,
-    query?: { limit: number } | { key: string },
-  ): PluginEntry<Data>[] {
+  private readIndexed(record: SessionRecord, address: RecordAddress) {
+    return (
+      this.logs.get(record.id)?.indexedEntry(address.id) ??
+      readRecordAt<SessionEvent>(nativeFile(this.paths, record, false), address)
+    );
+  }
+
+  messageEntry(id: string, entryId: string) {
+    const index = this.indexes.get(id);
+    const address = index?.projection.messages.get(entryId);
+    if (!index || !address) return;
+    const entry = this.readIndexed(index.record, address);
+    if (entry.type !== 'message') throw new Error('Invalid indexed message');
+    return entry;
+  }
+
+  pluginRecords<Data>(id: string, owner: RecordOwner, query?: PluginRecordQuery): PluginEntry<Data>[] {
     const index = this.indexes.get(id);
     const addresses = index?.projection.records.get(owner.instanceId);
     if (!index || !addresses) return [];
-    const log = this.logs.get(id);
-    const file = nativeFile(this.paths, index.record, false);
-    const selected =
+    const candidates =
       query && 'key' in query
         ? [addresses.get(query.key)].filter((address) => address !== undefined)
-        : [...addresses.values()].slice(query ? Math.max(0, addresses.size - query.limit) : 0);
+        : Array.from(addresses).flatMap(([key, address]) =>
+            !query?.keyPrefix || key.startsWith(query.keyPrefix) ? [address] : [],
+          );
+    const limit = query && 'limit' in query ? query.limit : undefined;
+    const selected = candidates.slice(limit === undefined ? 0 : Math.max(0, candidates.length - limit));
     return selected.map((address) => {
-      const entry = log ? log.indexedEntry(address.id) : readRecordAt<SessionEvent>(file, address);
-      if (entry?.type !== 'plugin-record' || entry.owner.pluginId !== owner.pluginId)
+      const entry = this.readIndexed(index.record, address);
+      if (entry.type !== 'plugin-record' || entry.owner.pluginId !== owner.pluginId)
         throw new Error('Invalid indexed plugin record');
-      return structuredClone(entry) as PluginEntry<Data>;
+      return entry as PluginEntry<Data>;
     });
   }
 
