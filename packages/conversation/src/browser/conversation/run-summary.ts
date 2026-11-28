@@ -1,4 +1,4 @@
-import { type RunInfo, isRunning } from '@mini-harness/sessions/run-state';
+import { type RunInfo, isRunning } from '@mini-harness/runs/run-state';
 import { required } from '@mini-harness/ui-primitives/primitives';
 
 export function createRunSummary(root: HTMLElement, onDispose: (cleanup: () => void) => void) {

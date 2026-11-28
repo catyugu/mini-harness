@@ -8,7 +8,7 @@ import type {
 import type { InputSource } from '@mini-harness/input/message';
 import type { ModelChoice } from '@mini-harness/llm/vocabulary';
 import type { SessionProjection } from '@mini-harness/sessions/log-api';
-import type { RunInfo } from '@mini-harness/sessions/run-state';
+import type { RunHistoryEntry, RunInfo } from './run-state.ts';
 
 export type StreamEvent =
   | RunStreamEvent
@@ -20,7 +20,8 @@ export type StreamEvent =
       tools?: ToolProgress[];
       records: LiveRecord[];
       run: RunInfo;
-    } & Pick<SessionProjection, 'timeline' | 'model' | 'thinkingLevel' | 'leafId'>);
+      timeline: RunHistoryEntry[];
+    } & Pick<SessionProjection, 'model' | 'thinkingLevel' | 'leafId'>);
 
 export interface ToolProgress {
   type: 'tool';

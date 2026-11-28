@@ -1,8 +1,5 @@
 import { isThinkingLevel, type ToolSchema } from '@mini-harness/llm/vocabulary';
 import { pluginIdPattern, isScopeAddress } from '@mini-harness/plugin-api/selection';
-import type { RunInfo } from './shared/run-state.ts';
-import { terminal, type TaskSnapshot } from '@mini-harness/tasks/api';
-import { runFromEntry } from './log-api.ts';
 import { isDeepStrictEqual } from 'node:util';
 import {
   RequestMessages,
@@ -55,31 +52,19 @@ function messagePatch(base: NativeMessage[], actual: NativeMessage[]): MessagePa
 }
 
 export interface LogIndex {
-  tasks: Map<
-    string,
-    {
-      task: Omit<TaskSnapshot, 'result' | 'progress'>;
-      address: RecordAddress;
-      entered: number;
-      answer?: RecordAddress;
-    }
-  >;
+  records: Map<string, RecordAddress[]>;
   inboxIds: Set<string>;
   wake: boolean;
-  run?: RunInfo;
 }
 
 /** Session semantics layered over the generic durable record log. */
 export class SessionLog extends RecordLog<SessionEvent> implements SessionLogPort {
-  readonly index: LogIndex = { tasks: new Map(), inboxIds: new Set(), wake: false };
-  private assistant?: { seq: number; address: RecordAddress };
-  private readonly indexTasks: boolean;
+  readonly index: LogIndex = { records: new Map(), inboxIds: new Set(), wake: false };
   private readonly schemas = new Map<string, ToolSchema[]>();
   private readonly settings = new Map<string, unknown>();
   private paused = false;
   private readonly pendingInbox = new Map<string, InboxItem>();
   private readonly inboxFailures: QueueEntry[] = [];
-  private readonly runEvents: { seq: number; parentId: string | null; run: RunInfo }[] = [];
   private cachedContext?: { state: SessionContext; checker: RequestMessages; checked: number };
   private cachedProjection?: SessionProjection;
 
@@ -92,7 +77,6 @@ export class SessionLog extends RecordLog<SessionEvent> implements SessionLogPor
     writeFailed?: (error: unknown) => void,
   ) {
     super(file, sessionId, changed, readOnly, writeFailed);
-    this.indexTasks = !readOnly;
     this.open(createdAt);
   }
 
@@ -140,8 +124,6 @@ export class SessionLog extends RecordLog<SessionEvent> implements SessionLogPor
       (entry.message.role !== 'user' || !this.pendingInbox.has(entry.inboxId))
     )
       throw new Error('Inbox input is not pending');
-    if (entry.type === 'task' && entry.task.owner !== 'session:' + this.sessionId)
-      throw new Error('Task belongs to another conversation');
     if (entry.type === 'context-replace') {
       const state = this.context(entry.parentId);
       applyReplacements(state, entry.replacements, entry.id);
@@ -154,21 +136,12 @@ export class SessionLog extends RecordLog<SessionEvent> implements SessionLogPor
   }
 
   protected recordAdded(entry: SessionEntry, address: RecordAddress) {
-    if (this.indexTasks) {
-      if (entry.type === 'message' && entry.message.role === 'assistant')
-        this.assistant = { seq: entry.seq, address };
-      if (entry.type === 'task') {
-        const { task, seq, run } = entry;
-        const entered = this.index.tasks.get(task.id)?.entered ?? seq;
-        const answer =
-          run && task.state === 'completed' && this.assistant && this.assistant.seq > entered
-            ? this.assistant.address
-            : undefined;
-        const { result: _result, progress: _progress, ...summary } = task;
-        this.index.tasks.set(task.id, { task: summary, address, entered, answer });
-      }
+    if (entry.type === 'plugin-record') {
+      const key = entry.owner.instanceId;
+      const addresses = this.index.records.get(key);
+      if (addresses) addresses.push(address);
+      else this.index.records.set(key, [address]);
     }
-    const run = runFromEntry(this.sessionId, entry);
     if (advancesBranch(entry)) {
       const view = this.cachedContext;
       if (view?.state.leafId === entry.parentId) {
@@ -179,14 +152,10 @@ export class SessionLog extends RecordLog<SessionEvent> implements SessionLogPor
         }
       } else this.cachedContext = undefined;
     }
-    if (advancesBranch(entry) || run) this.cachedProjection = undefined;
+    if (advancesBranch(entry)) this.cachedProjection = undefined;
     if (entry.type === 'session-setting') {
       if (entry.value == null) this.settings.delete(entry.owner);
       else this.settings.set(entry.owner, entry.value);
-    }
-    if (run) {
-      this.index.run = run;
-      this.runEvents.push({ seq: entry.seq, parentId: entry.parentId, run });
     }
     if (entry.type === 'tool-schema') this.schemas.set(entry.hash, entry.tools);
     if (entry.type === 'inbox-paused') this.paused = true;
@@ -261,7 +230,7 @@ export class SessionLog extends RecordLog<SessionEvent> implements SessionLogPor
   projection(leafId?: string | null) {
     // A display projection owns its timeline. Effective context is maintained on demand.
     const project = () =>
-      projectLog(this.branchEntries(leafId), this.execution, this.runEvents, this.contextAt(leafId).state);
+      projectLog(this.branchEntries(leafId), this.execution, this.contextAt(leafId).state);
     if (leafId !== undefined) return structuredClone(project());
     this.cachedProjection ??= project();
     return structuredClone(this.cachedProjection);
@@ -345,28 +314,8 @@ export class SessionLog extends RecordLog<SessionEvent> implements SessionLogPor
     return structuredClone(this.materializeRequest(this.recordedRequest(id)));
   }
 
-  /** Opening an existing log resolves interrupted work before it becomes writable. */
   indexedEntry(id: string) {
     return this.byId.get(id);
-  }
-
-  recover() {
-    for (const { task, address } of this.index.tasks.values()) {
-      if (terminal(task.state)) continue;
-      const entry = this.byId.get(address.id);
-      if (entry?.type !== 'task') throw new Error('Missing indexed task transition');
-      this.append({
-        type: 'task',
-        task: {
-          ...entry.task,
-          state: 'interrupted',
-          finishedAt: new Date().toISOString(),
-          error: 'Task interrupted before a terminal state was recorded',
-        },
-        output: entry.output,
-        run: entry.run,
-      });
-    }
   }
 }
 
@@ -450,6 +399,8 @@ function validateEvent(event: SessionEvent) {
         !ownsRecord(owner.pluginId, owner.instanceId)
       )
         throw new Error('Invalid plugin record');
+      if (event.scope !== undefined && (event.scope !== 'session' || event.displays?.length))
+        throw new Error('Invalid plugin record scope');
       return;
     }
     case 'diagnostic':
@@ -493,28 +444,6 @@ function validateEvent(event: SessionEvent) {
       )
         throw new Error('Invalid inbox failure');
       return;
-    case 'task':
-      if (
-        !event.task ||
-        typeof event.task.id !== 'string' ||
-        typeof event.task.owner !== 'string' ||
-        !['queued', 'running', 'waiting', 'completed', 'failed', 'cancelled', 'interrupted'].includes(
-          event.task.state,
-        ) ||
-        !Number.isFinite(Date.parse(event.task.createdAt)) ||
-        !Number.isSafeInteger(event.task.outputCursor) ||
-        event.task.outputCursor < 0 ||
-        (event.run !== undefined &&
-          (!event.run ||
-            !Number.isSafeInteger(event.run.sequence) ||
-            event.run.sequence < 0 ||
-            (event.run.inputEntryId != null && !entryId.test(event.run.inputEntryId)) ||
-            (event.run.changedFiles !== undefined &&
-              (!Array.isArray(event.run.changedFiles) ||
-                event.run.changedFiles.some((path) => typeof path !== 'string')))))
-      )
-        throw new Error('Invalid task record');
-      return;
     case 'branch':
       return;
     default:
@@ -530,7 +459,7 @@ function ownsRecord(pluginId: string, instanceId: string) {
 
 export function advancesBranch(entry: SessionEvent) {
   return !(
-    entry.type === 'task' ||
+    (entry.type === 'plugin-record' && entry.scope === 'session') ||
     entry.type === 'model-request' ||
     entry.type === 'model-attempt' ||
     entry.type === 'session-setting' ||

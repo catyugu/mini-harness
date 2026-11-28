@@ -1,8 +1,9 @@
-import type { TaskSnapshot, TaskState } from '@mini-harness/tasks/api';
+import type { TaskState } from '@mini-harness/tasks/api';
+import type { HistoryEntry } from '@mini-harness/sessions/message';
 
 /** Only conversation-specific facts; lifecycle state belongs to the task. */
 export interface RunDetails {
-  inputEntryId?: string | null;
+  inputEntryId: string | null;
   sequence: number;
   changedFiles?: string[];
 }
@@ -18,19 +19,6 @@ export interface RunInfo extends RunDetails {
   error?: string;
 }
 
-export function projectRun(sessionId: string, task: TaskSnapshot, details: RunDetails): RunInfo {
-  return {
-    ...details,
-    id: task.id,
-    sessionId,
-    state: task.state,
-    startedAt: task.createdAt,
-    executedAt: task.startedAt,
-    finishedAt: task.finishedAt,
-    error: task.error,
-  };
-}
-
 export interface RunTermination {
   type: 'termination';
   id: string;
@@ -42,3 +30,5 @@ export interface RunTermination {
 
 export const isRunning = (run?: RunInfo) =>
   run?.state === 'queued' || run?.state === 'running' || run?.state === 'waiting';
+
+export type RunHistoryEntry = HistoryEntry | RunTermination;

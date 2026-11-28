@@ -1,6 +1,6 @@
 import { registerConfiguration } from './configuration.ts';
 import type { Context } from 'mini-harness/cordis';
-import { isRunning, type RunInfo } from '@mini-harness/sessions/run-state';
+import { isRunning, type RunInfo } from '@mini-harness/runs/run-state';
 import { icon } from '@mini-harness/ui-primitives/icons';
 import { bindPopover, fromMarkup, required } from '@mini-harness/ui-primitives/primitives';
 

@@ -29,17 +29,7 @@ export function setup(ctx: Context) {
         { additionalProperties: false },
       ),
       background: true,
-      projectResult(result) {
-        if (result.details?.exitCode === undefined) return JSON.parse(JSON.stringify(result));
-        const { stdout: _stdout, stderr: _stderr, ...details } = result.details;
-        return JSON.parse(
-          JSON.stringify({
-            details,
-            summary: 'Exit ' + details.exitCode,
-            elapsedMs: result.elapsedMs,
-          }),
-        );
-      },
+      metadata: { backgroundDetails: ['timeoutMs', 'diagnostics', 'stdoutOverflow', 'stderrOverflow'] },
       execute: async (args, { signal, write }): Promise<ToolResult> => {
         const cwd = workspace.workspacePath(sessionId);
         if (!cwd) throw new DomainError('unavailable', 'Shell requires a workspace');

@@ -1,6 +1,5 @@
 import type { SessionDisplayRecord } from './display-record.ts';
 import type { MessageOrigin } from './queue.ts';
-import type { RunTermination } from './run-state.ts';
 import type {
   NativeAssistantMessage,
   NativeContent,
@@ -52,8 +51,8 @@ export interface ToolViewMessage extends MessageFields {
 
 export type ViewMessage = UserViewMessage | AssistantViewMessage | ToolViewMessage;
 
-export type HistoryEntry = ViewMessage | SessionDisplayRecord | RunTermination;
+export type HistoryEntry = ViewMessage | SessionDisplayRecord;
 
-export function isViewMessage(entry: HistoryEntry): entry is ViewMessage {
+export function isViewMessage(entry: { type: string }): entry is ViewMessage {
   return entry.type === 'message';
 }

@@ -6,7 +6,7 @@ import { tagScope, scopeTarget } from '@mini-harness/plugin-api/scopes';
 import type { ThinkingLevel, ModelChoice } from '@mini-harness/llm/vocabulary';
 import type { ProfileScopes } from '@mini-harness/plugin-api/configuration';
 import { DomainError } from '@mini-harness/platform/errors';
-import { terminal, type TaskEvent, type TaskPort, type TaskHistoryRecord } from '@mini-harness/tasks/api';
+import { terminal, type TaskEvent, type TaskPort, type TaskSnapshot } from '@mini-harness/tasks/api';
 import { imageMimeType } from '@mini-harness/input/prepare';
 import { validateModelOptions } from '@mini-harness/llm/options';
 import { defaultMessageMode, messageModes } from '@mini-harness/sessions/queue';
@@ -16,8 +16,8 @@ import { Inbox } from './inbox.ts';
 import { assertImageInput } from '@mini-harness/models/selection';
 import { selectInputModel, SessionRun } from './session-run.ts';
 import { recordPublisher, type RunEvent } from './shared/stream.ts';
-import { isRunning, projectRun, type RunDetails, type RunInfo } from '@mini-harness/sessions/run-state';
-import { runFromEntry } from '@mini-harness/sessions/log-api';
+import { isRunning, type RunDetails, type RunInfo } from './shared/run-state.ts';
+import { projectTimeline, recordRun, runRecords, settledRuns } from './history.ts';
 import { RunEvents } from './events.ts';
 import type { RunInput, RunPolicy, RunPort, RunSubmission } from './api.ts';
 import type { SessionStore } from '@mini-harness/sessions/records';
@@ -25,6 +25,19 @@ import type { SessionStore } from '@mini-harness/sessions/records';
 interface Revision extends RunInput {
   parentId: string | null;
   expectedLeafId: string | null;
+}
+
+function projectRun(sessionId: string, task: TaskSnapshot, details: RunDetails): RunInfo {
+  return {
+    ...details,
+    id: task.id,
+    sessionId,
+    state: task.state,
+    startedAt: task.createdAt,
+    executedAt: task.startedAt,
+    finishedAt: task.finishedAt,
+    error: task.error,
+  };
 }
 
 export class Runs implements RunPort {
@@ -46,7 +59,8 @@ export class Runs implements RunPort {
   }
 
   current(id: string) {
-    return this.tasks.active(this.lane(id));
+    const task = this.tasks.active(this.lane(id));
+    return task && (this.streams.get(id)?.handle ?? task);
   }
 
   private lane(id: string) {
@@ -94,48 +108,32 @@ export class Runs implements RunPort {
     return record;
   }
 
-  private liveRun(id: string, runId: string) {
-    const events = this.streams.get(id);
-    if (!events || events.info.id !== runId) throw new Error('Missing admitted run: ' + runId);
-    return events;
-  }
-
-  /** The run owns its domain-specific commit, including inbox settlement. */
-  private commitRun(id: string, { task, output }: TaskHistoryRecord) {
-    const info = this.streams.get(id)?.info;
-    const run: RunDetails =
-      info?.id === task.id
-        ? {
-            inputEntryId: info.inputEntryId,
-            changedFiles: info.changedFiles,
-            sequence: info.sequence + 1 + Number(task.state === 'failed' && Boolean(task.error)),
-          }
-        : { sequence: 0, inputEntryId: null };
-    this.registry.log(id).append({ type: 'task', task: { ...task, result: undefined }, output, run });
-    if (info?.id !== task.id) this.streams.set(id, new RunEvents(projectRun(id, task, run)));
-  }
-
   private taskChanged(id: string, { type, task }: TaskEvent) {
     if (type !== 'transition') return;
-    const events = this.liveRun(id, task.id);
+    const events = this.streams.get(id);
+    if (events?.info.id !== task.id) return;
     const info = events.info;
     const firstAdmission = !info.executedAt && task.state === 'running';
     const ended = terminal(task.state);
     try {
-      if (task.state === 'failed' && task.error) events.publish({ type: 'error', error: task.error });
       const next = projectRun(id, task, {
         inputEntryId: info.inputEntryId,
         changedFiles: info.changedFiles,
-        sequence: info.sequence + 1,
+        sequence: info.sequence + 1 + Number(task.state === 'failed' && Boolean(task.error)),
       });
+      if (ended) recordRun(this.registry, next);
+      if (next.state === 'failed' && next.error) events.publish({ type: 'error', error: next.error });
       Object.assign(info, next, { sequence: info.sequence });
       events.publish({ type: 'run', run: next });
       if (firstAdmission)
         this.observe({ type: 'run-started', sessionId: id, run: next }, this.current(id)?.signal);
-      if (ended) this.observe({ type: 'run-ended', sessionId: id, run: next });
+    } catch (error) {
+      this.ctx.logger.error('Could not record run ' + task.id, error);
+      events.writeError = new Error('Run settlement could not be saved', { cause: error });
+      events.publish({ type: 'error', error: events.writeError.message });
     } finally {
       if (ended) {
-        if (this.streams.get(id) === events) this.streams.delete(id);
+        this.streams.delete(id);
         events.close();
       }
       this.changed(id);
@@ -152,7 +150,7 @@ export class Runs implements RunPort {
       parentId: revision.parentId,
       expectedLeafId: revision.expectedLeafId,
     };
-    const { owner } = this.registry.task(id);
+    const owner = this.lane(id);
     const context = this.scopes.context(`session:${id}`);
     const policy: RunPolicy | undefined = context.bail('runs/policy', id);
     const pending = new Set(
@@ -162,20 +160,17 @@ export class Runs implements RunPort {
         .map(({ id }) => id),
     );
     let runSource: InputSource | undefined;
+    let events: RunEvents;
     const task = this.tasks.start<string>(
       {
         owner,
-        commit: (record) => this.commitRun(id, record),
         onEvent: (event) => this.taskChanged(id, event),
-        project: (answer) => answer,
-        type: 'agent-run',
         lane: this.lane(id),
         provider: policy?.provider ?? this.ctx,
+        signal: this.ctx.fiber.signal,
         pool: policy?.pool,
-        metadata: policy?.metadata,
       },
       (task) => {
-        const events = this.liveRun(id, task.id);
         return this.withAgentContext(id, task.signal, (ctx, signal) =>
           this.sessionRun.prompt(
             ctx,
@@ -210,18 +205,36 @@ export class Runs implements RunPort {
         });
       },
     );
-    void task.result.then(
-      () => this.wake(id),
-      () =>
+    const info = projectRun(id, task.snapshot(), { sequence: 0, inputEntryId: null });
+    try {
+      recordRun(this.registry, info);
+    } catch (error) {
+      task.cancel(error);
+      throw error;
+    }
+    events = new RunEvents(info, task);
+    this.streams.set(id, events);
+    const settled = (answer?: string) => {
+      if (!events.writeError)
+        this.observe({ type: 'run-ended', sessionId: id, run: structuredClone(info), answer });
+    };
+    void events.handle.result.then(
+      (answer) => {
+        settled(answer);
+        this.wake(id);
+      },
+      () => {
+        settled(info.error);
         this.wake(
           id,
           pending,
           task.signal.reason instanceof DOMException &&
             task.signal.reason.message === 'Interrupted by a new message',
-        ),
+        );
+      },
     );
     this.changed(id);
-    return { info: this.liveRun(id, task.id).info, task };
+    return { info, task: events.handle };
   }
 
   send(id: string, input: RunSubmission) {
@@ -315,6 +328,20 @@ export class Runs implements RunPort {
   }
 
   recover() {
+    for (const { id } of this.registry.list()) {
+      if (this.current(id)) continue;
+      const run = this.info(id);
+      if (run && isRunning(run)) {
+        const ended: RunInfo = {
+          ...run,
+          state: 'interrupted',
+          finishedAt: new Date().toISOString(),
+          error: 'Run interrupted before settlement was recorded',
+        };
+        recordRun(this.registry, ended);
+        this.observe({ type: 'run-ended', sessionId: id, run: ended, answer: ended.error });
+      }
+    }
     for (const id of this.registry.readyInboxSessions()) this.wake(id);
   }
 
@@ -368,23 +395,7 @@ export class Runs implements RunPort {
     if (run?.id !== runId || run.state !== 'failed')
       throw new DomainError('conflict', 'This run is no longer the failed conversation run');
     return this.registry.inspectLog(id, (log) => {
-      const entries = log.entries();
-      const matches = (entry: (typeof entries)[number], state: RunInfo['state']) => {
-        const item = runFromEntry(id, entry);
-        return item?.id === runId && item.state === state;
-      };
-      const start = entries.findIndex((entry) => matches(entry, 'queued'));
-      const end = entries.findIndex((entry, index) => index > start && matches(entry, 'failed'));
-      if (start < 0 || end < 0) return;
-      const delivered = entries
-        .slice(start + 1, end)
-        .filter((entry) => entry.type === 'message' && entry.message.role === 'user');
-      const input =
-        run.inputEntryId === undefined
-          ? delivered.length === 1 && delivered[0].type === 'message' && delivered[0].submissionId === runId
-            ? delivered[0]
-            : undefined
-          : delivered.find(({ id }) => id === run.inputEntryId);
+      const input = log.entries().find(({ id }) => id === run.inputEntryId);
       if (input?.type !== 'message' || input.message.role !== 'user') return;
       const { message, presentation, selection } = input;
       const attachments: Attachment[] = [],
@@ -408,8 +419,30 @@ export class Runs implements RunPort {
   }
 
   info(id: string): RunInfo | undefined {
-    const info = this.streams.get(id)?.info ?? this.registry.runSummary(id);
+    const info = this.streams.get(id)?.info ?? runRecords(this.registry, id, 1)[0]?.data;
     return info && structuredClone(info);
+  }
+
+  history(id: string, leafId?: string | null) {
+    return this.registry.inspectLog(id, (log) => projectTimeline(log, runRecords(this.registry, id), leafId));
+  }
+
+  settlements(id: string) {
+    return this.registry.inspectLog(id, (log) => settledRuns(log, runRecords(this.registry, id))) ?? [];
+  }
+
+  async wait(id: string, waitFor: ((taskId: string) => Promise<void>) | undefined, signal: AbortSignal) {
+    const events = this.streams.get(id);
+    if (!events) return this.info(id);
+    const taskId = events.info.id;
+    if (waitFor) await waitFor(taskId);
+    else await this.tasks.wait(taskId, signal);
+    if (events.writeError) throw events.writeError;
+    return structuredClone(events.info);
+  }
+
+  async remove(id: string) {
+    await this.tasks.removeOwner(this.lane(id));
   }
 
   watch(id: string, runId: string, after: number, emit: (event: RunEvent) => void, end?: () => void) {
@@ -420,7 +453,7 @@ export class Runs implements RunPort {
     if (!Number.isSafeInteger(after) || after < 0 || (after > info.sequence && info.state !== 'interrupted'))
       throw new DomainError('invalid_input', 'Invalid event cursor');
     const history = () => {
-      const projection = this.registry.inspectLog(id, (log) => log.projection(), true);
+      const projection = this.history(id);
       return {
         timeline: projection?.timeline ?? [],
         leafId: projection?.leafId ?? null,
@@ -452,12 +485,11 @@ export class Runs implements RunPort {
   async runTask<T>(
     provider: Context,
     id: string,
-    type: string,
     work: (ctx: Context, signal: AbortSignal, taskId: string) => Promise<T>,
   ) {
     this.assertIdle(id);
     const task = this.tasks.start(
-      { ...this.registry.task(id), type, lane: this.lane(id), provider },
+      { owner: this.lane(id), lane: this.lane(id), provider, signal: this.ctx.fiber.signal },
       ({ id: taskId, signal }) =>
         this.withAgentContext(id, signal, async (ctx, signal) => {
           this.sessionRun.closeUnfinishedTools(this.registry.log(id));

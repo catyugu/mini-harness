@@ -1,7 +1,7 @@
 import { displayRecords } from './projection.ts';
 import type { RecordAppend } from './shared/display-record.ts';
 import { userContent } from './user-content.ts';
-import type { SessionEntry, SessionEvent, SessionLogPort, SessionLogReader } from './log-api.ts';
+import type { PluginEntry, SessionEntry, SessionEvent, SessionLogPort, SessionLogReader } from './log-api.ts';
 import { DomainError } from '@mini-harness/platform/errors';
 import { randomUUID } from 'node:crypto';
 import { lstatSync, unlinkSync } from 'node:fs';
@@ -10,8 +10,6 @@ import { writeJson } from '@mini-harness/platform/json';
 import type { Paths } from '@mini-harness/platform/runtime-paths';
 import type { WorkspacePort } from '@mini-harness/workspaces/api';
 import type { RecordOwner, SessionRecords, SessionStore } from './records.ts';
-import type { TaskOptions, TaskSnapshot } from '@mini-harness/tasks/api';
-import { readTaskOutput } from '@mini-harness/tasks/output';
 import {
   createScopeKey,
   scopeParentOf,
@@ -22,7 +20,7 @@ import type { ScopeAddress } from '@mini-harness/plugin-api/configuration';
 import type { CapabilityObservation } from '@mini-harness/plugin-api/observations';
 import type { ConversationPermission, SessionRecord } from './shared/identity.ts';
 import { advancesBranch, SessionLog, type LogIndex } from './log.ts';
-import { readRecordAt, syncDirectory, type RecordAddress } from './record-log.ts';
+import { readRecordAt, syncDirectory } from './record-log.ts';
 import { loadCatalog, type CatalogState } from './catalog.ts';
 import {
   attachmentDirectory,
@@ -252,11 +250,6 @@ export class SessionRegistry implements SessionStore {
     return directory ? readAttachmentFile(directory, attachmentId) : undefined;
   }
 
-  runSummary(id: string) {
-    const run = this.indexes.get(id)?.projection.run;
-    return run && structuredClone(run);
-  }
-
   logError(id: string) {
     return this.logErrors.get(id);
   }
@@ -309,7 +302,6 @@ export class SessionRegistry implements SessionStore {
       );
       if (writable) {
         this.indexes.set(id, { projection: log.index, record });
-        log.recover();
         if (this.logErrors.delete(id)) this.notify(id);
       }
       return log;
@@ -325,71 +317,18 @@ export class SessionRegistry implements SessionStore {
     }
   }
 
-  task(id: string): Pick<TaskOptions, 'owner' | 'commit'> {
-    this.assertAvailable(id);
-    // Open/recover the writer before the scheduler marks the task active.
-    this.log(id);
-    return {
-      owner: 'session:' + id,
-      commit: (record) => {
-        if (!record.task.startedAt && record.task.state === 'queued') this.assertAvailable(id);
-        this.log(id).append({ type: 'task', ...record });
-      },
-    };
-  }
-
-  tasks(sessionId: string, type?: string, limit = Infinity, exclude?: ReadonlySet<string>) {
-    const index = this.indexes.get(sessionId);
-    if (!index) return [];
-    // The index preserves first admission order, even when a task's latest record changes.
-    const entries =
-      limit === Infinity ? index.projection.tasks.values() : [...index.projection.tasks.values()].reverse();
-    const tasks: TaskSnapshot[] = [];
-    for (const { task } of entries) {
-      if (tasks.length >= limit) break;
-      if ((type === undefined || task.type === type) && !exclude?.has(task.id))
-        tasks.push(structuredClone(task));
-    }
-    return tasks;
-  }
-
-  private readTaskEntry(record: SessionRecord, address: RecordAddress) {
-    const existing = this.logs.get(record.id);
-    if (existing) return existing.indexedEntry(address.id);
-    return readRecordAt<SessionEvent>(nativeFile(this.paths, record, false), address);
-  }
-
-  taskStatus(sessionId: string, taskId: string, detail = true) {
-    const index = this.indexes.get(sessionId);
-    if (!index) return;
-    const entry = index.projection.tasks.get(taskId);
-    if (!entry) return;
-    if (!detail) return structuredClone(entry.task);
-    const record = this.readTaskEntry(index.record, entry.address);
-    if (record?.type !== 'task') throw new Error('Missing indexed task transition');
-    const task = structuredClone(record.task);
-    if (entry.answer) {
-      const message = this.readTaskEntry(index.record, entry.answer);
-      if (message?.type !== 'message' || message.message.role !== 'assistant')
-        throw new Error('Missing indexed assistant response');
-      task.result = message.message.content
-        .flatMap((part) => (part.type === 'text' ? [part.text] : []))
-        .join('');
-    }
-    return task;
-  }
-
-  taskOutput(sessionId: string, taskId: string, after?: number) {
-    const index = this.indexes.get(sessionId);
-    if (!index) return;
-    const entry = index.projection.tasks.get(taskId);
-    if (!entry) return;
-    const cursor = entry.task.outputCursor;
-    const record = cursor ? this.readTaskEntry(index.record, entry.address) : undefined;
-    return readTaskOutput(
-      (record?.type === 'task' ? record.output : undefined) ?? { cursor, truncated: false, chunks: [] },
-      after,
-    );
+  pluginRecords<Data>(id: string, owner: RecordOwner, limit?: number): PluginEntry<Data>[] {
+    const index = this.indexes.get(id);
+    const addresses = index?.projection.records.get(owner.instanceId);
+    if (!index || !addresses) return [];
+    const log = this.logs.get(id);
+    const file = nativeFile(this.paths, index.record, false);
+    return (limit === undefined ? addresses : addresses.slice(-limit)).map((address) => {
+      const entry = log ? log.indexedEntry(address.id) : readRecordAt<SessionEvent>(file, address);
+      if (entry?.type !== 'plugin-record' || entry.owner.pluginId !== owner.pluginId)
+        throw new Error('Invalid indexed plugin record');
+      return structuredClone(entry) as PluginEntry<Data>;
+    });
   }
 
   readyInboxSessions() {

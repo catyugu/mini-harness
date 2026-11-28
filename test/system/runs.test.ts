@@ -152,11 +152,13 @@ test(
       .trim()
       .split('\n')
       .map((line) => JSON.parse(line));
-    const persistedRun = durable.filter((entry) => entry.type === 'task' && entry.run).at(-1);
+    const persistedRun = durable
+      .filter((entry) => entry.type === 'plugin-record' && entry.owner.pluginId === 'core:runs')
+      .at(-1);
     assert.ok(persistedRun);
-    assert.equal(persistedRun.task.state, 'completed');
-    assert.equal(persistedRun.task.id, finishedRun.id);
-    assert.equal(persistedRun.run.state, undefined);
+    assert.equal(persistedRun.data.state, 'completed');
+    assert.equal(persistedRun.data.id, finishedRun.id);
+    assert.equal(persistedRun.data.result, undefined);
   },
 );
 
@@ -220,18 +222,16 @@ test('startup durably interrupts runs and delivers pending inbox messages', asyn
   const parent = registry.create(),
     child = registry.create({ parentId: parent.id });
   registry.log(child.id).append({
-    type: 'task',
-    task: {
+    type: 'plugin-record',
+    owner: { pluginId: 'core:runs', instanceId: 'core:runs' },
+    scope: 'session',
+    data: {
       id: 'fixture-run',
-      owner: 'session:' + child.id,
-      type: 'agent-run',
+      sessionId: child.id,
       state: 'running',
-      createdAt: new Date().toISOString(),
+      sequence: 1,
       startedAt: new Date().toISOString(),
-      cancellationRequested: false,
-      outputCursor: 0,
     },
-    run: { sequence: 1 },
   });
   registry.log(child.id).append({
     type: 'inbox-enqueued',
@@ -257,9 +257,8 @@ test('startup durably interrupts runs and delivers pending inbox messages', asyn
       ['Old instruction', 'Recovered follow-up', 'New manual input'],
     );
     assert.deepEqual(
-      restarted.runtime.plugins.ctx.harnessSessions
-        .log(child.id)
-        .projection()
+      restarted.runtime.plugins.ctx.harnessRuns
+        .history(child.id)!
         .timeline.flatMap((entry) => (entry.type === 'termination' ? [[entry.id, entry.state]] : [])),
       [['fixture-run', 'interrupted']],
     );
@@ -568,8 +567,8 @@ test(
     const finished = assert.rejects(first.result, /Interrupted by a new message/);
     await entered.promise;
     assert.deepEqual(
-      ctx.harnessTasks.list('session:' + id).map(({ type }) => type),
-      ['agent-run'],
+      ctx.harnessTasks.list().map(({ id }) => id),
+      [first.id],
     );
     runs.send(id, { message: 'Interrupt one', origin: user });
     await abort.promise;

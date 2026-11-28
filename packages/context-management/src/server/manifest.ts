@@ -3,7 +3,6 @@ import type { PluginInfo } from '@mini-harness/plugin-api/descriptor';
 import { modelRetry, type RequestPreparation } from '@mini-harness/agent/events';
 import type { LlmRequest } from '@mini-harness/llm/api';
 import type {} from '@mini-harness/runs/api';
-import { terminal } from '@mini-harness/tasks/api';
 import { prepareModelMessages, selectModel } from '@mini-harness/models/selection';
 import type { SessionLogPort } from '@mini-harness/sessions/log-api';
 import { defineTool } from '@mini-harness/tools/api';
@@ -25,6 +24,7 @@ function setup(ctx: Context) {
   const { harnessSessions: sessions, harnessChanges: changes } = ctx;
   const notify = (id?: string) => changes.invalidate('context-management', id);
   const defaults = () => validateSettings(ctx.fiber.effectiveConfig);
+  const compacting = new Set<string>();
   const statistics = new WeakMap<Pick<SessionLogPort, 'entries'>, Statistics>();
   const createManager = (scoped: Context, id: string) =>
     new ContextManagement(scoped.harnessModels, scoped.harnessLlm, modelRetry(scoped, id));
@@ -63,12 +63,12 @@ function setup(ctx: Context) {
     web.inject(['harnessRuns'], (run) => {
       run.effect(() =>
         routes.register('POST', '/api/sessions/:id/compact', async ({ params }) => {
+          const { id } = params;
           try {
-            const compacted = await run.harnessRuns.runTask(
-              ctx,
-              params.id,
-              'compaction',
-              async (scoped, signal, taskId) => {
+            const compacted = await run.harnessRuns.runTask(ctx, id, async (scoped, signal, taskId) => {
+              compacting.add(id);
+              notify(id);
+              try {
                 const log = sessions.log(params.id);
                 const projection = log.context();
                 if (!projection.contextMessages.length)
@@ -119,8 +119,11 @@ function setup(ctx: Context) {
                   taskId,
                 );
                 return Boolean(compacted);
-              },
-            );
+              } finally {
+                compacting.delete(id);
+                notify(id);
+              }
+            });
             return { ok: true, compacted };
           } catch (error) {
             if (error instanceof Error && error.name === 'AbortError') return { cancelled: true };
@@ -149,12 +152,9 @@ function setup(ctx: Context) {
           },
           true,
         );
-        const manual = ctx.harnessTasks
-          .list('session:' + id)
-          .some((task) => task.type === 'compaction' && !terminal(task.state));
         return {
           ...(result ?? { ...configuration(undefined, defaults()), turns: 0, steps: 0, assistantUsage: {} }),
-          compacting: manual ? 'manual' : undefined,
+          compacting: compacting.has(id) ? 'manual' : undefined,
         } satisfies ContextState;
       }),
     );
@@ -239,7 +239,6 @@ const plugin: Plugin.Object = {
     'harnessSessions',
     'harnessModels',
     'harnessLlm',
-    'harnessTasks',
     'harnessTools',
     'harnessChanges',
     'harnessProfileConfig',

@@ -65,7 +65,7 @@ export class Delegation {
     const { taskId } = this.runs.send(record.id, {
       message: request.task,
       model,
-      origin: { source: 'agent', senderSessionId: parentId, taskId: creator },
+      origin: { source: 'agent', senderSessionId: parentId, taskId: creator, label: 'Agent message' },
       mode: 'queue',
     });
     if (!taskId) throw new Error('Child conversation accepted the task but could not start: ' + record.id);

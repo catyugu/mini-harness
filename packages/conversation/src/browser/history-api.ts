@@ -3,7 +3,7 @@ import type { LiveRecord } from '@mini-harness/runs/stream';
 import type { NativeToolMessage, ToolResultState } from '@mini-harness/llm/api';
 import type { ViewMessage } from '@mini-harness/sessions/message';
 
-export type ToolPlacement = 'body' | 'action' | 'summary' | 'status';
+export type ToolPlacement = 'body' | 'action' | 'summary' | 'status' | 'input' | 'diagnostics';
 export type ToolRenderer = (tool: ToolView, signal: AbortSignal) => HTMLElement | undefined;
 export interface ToolView {
   name: string;
@@ -59,6 +59,8 @@ export type RecordRenderer = (
 declare module 'mini-harness/cordis' {
   interface Context {
     miniMessages: {
+      render(tool: ToolView, signal: AbortSignal, placement?: ToolPlacement): HTMLElement | undefined;
+      subscribeToTools(listener: (name: string) => void, signal: AbortSignal): void;
       registerTurnFooter(id: string, render: TurnFooterRenderer): () => void;
       registerRecord(plugin: string, kind: string, render: RecordRenderer, priority?: number): () => void;
       registerAction(action: MessageAction): () => void;

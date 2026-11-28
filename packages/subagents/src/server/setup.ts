@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
-import { TaskPool, terminal, type TaskSnapshot } from '@mini-harness/tasks/api';
+import { TaskPool } from '@mini-harness/tasks/api';
 import type { Context } from 'mini-harness/cordis';
+import type { RunInfo } from '@mini-harness/runs/run-state';
 import { defineTool } from '@mini-harness/tools/api';
 import { Type } from 'typebox';
 import { DomainError } from '@mini-harness/platform/errors';
@@ -8,6 +9,7 @@ import { Delegation, type SubagentPolicy } from './delegation.ts';
 
 /** Optional plugin: delegation, scheduling and child-model rules exist only while mounted. */
 export function setup(ctx: Context) {
+  const { harnessSessions: sessions, harnessRuns: runs } = ctx;
   const policy = () => ctx.fiber.effectiveConfig as unknown as SubagentPolicy;
   const validate = ({ model }: SubagentPolicy) => {
     if (model && !ctx.harnessModels.resolve(model))
@@ -17,9 +19,7 @@ export function setup(ctx: Context) {
   const pool = new TaskPool(policy().maxParallel);
   const delegation = new Delegation(ctx.harnessSessions, ctx.harnessRuns, policy);
   ctx.on('runs/policy', (id) =>
-    ctx.harnessSessions.get(id)?.parentId
-      ? { pool, provider: ctx, metadata: { reportToParent: true } }
-      : undefined,
+    ctx.harnessSessions.get(id)?.parentId ? { pool, provider: ctx } : undefined,
   );
   ctx.on('internal/update', (next) => {
     const config = next as unknown as SubagentPolicy;
@@ -31,7 +31,7 @@ export function setup(ctx: Context) {
       name: 'delegate',
       label: 'Delegate',
       description:
-        'Start a child agent asynchronously. Returns its session ID and task ID immediately; the child continues independently. Use task_control to inspect, await or cancel it. Set provider/model to override the default; specifying only a provider selects its first model.',
+        'Start a child agent asynchronously. Returns its session ID and task ID immediately; the child continues independently. Use subagent_control with its session ID to inspect, await or stop it. Set provider/model to override the default; specifying only a provider selects its first model.',
       parameters: Type.Object({
         task: Type.String({ minLength: 1, maxLength: 12000 }),
         provider: Type.Optional(Type.String({ maxLength: 160 })),
@@ -81,7 +81,7 @@ export function setup(ctx: Context) {
               message,
               mode,
               messageId: 'agent:' + deliveryId,
-              origin: { source: 'agent', senderSessionId: id, taskId: executionId },
+              origin: { source: 'agent', senderSessionId: id, taskId: executionId, label: 'Agent message' },
             });
             const receipt = { messageId, taskId };
             return {
@@ -93,47 +93,73 @@ export function setup(ctx: Context) {
         }),
     }),
   );
-  const tasks = ctx.harnessTasks;
-  const sessions = ctx.harnessSessions;
-  const notify = (task: TaskSnapshot) => {
-    if (!task.metadata?.reportToParent || tasks.sealed || ctx.fiber.signal.aborted) return;
-    const id = task.owner.slice('session:'.length);
-    const child = sessions.get(id);
-    if (!child?.parentId) return;
-    try {
-      sessions.assertAvailable(id);
-      const result = typeof task.result === 'string' ? task.result : task.error;
-      const summary = 'Child run ' + task.state + (result ? ': ' + result.slice(0, 4000) : '.');
-      ctx.harnessRuns.send(child.parentId, {
-        message: summary,
-        messageId: task.id + ':settled',
-        mode: 'queue',
-        origin: { source: 'agent', senderSessionId: id, taskId: task.id },
-      });
-    } catch (error) {
-      if (!(error instanceof DomainError && ['conflict', 'not_found'].includes(error.code)))
-        ctx.logger.error('Could not deliver child run notification ' + task.id, error);
-    }
-  };
   ctx.effect(() =>
-    tasks.subscribe(({ type, task }) => {
-      if (type === 'transition' && task.type === 'agent-run' && terminal(task.state))
-        queueMicrotask(() => notify(task));
+    ctx.harnessTools.register({
+      name: 'subagent_control',
+      resolve: (id) =>
+        defineTool({
+          name: 'subagent_control',
+          label: 'Subagent',
+          description:
+            'List direct child conversations, inspect their latest run, or wait for or stop an active run.',
+          parameters: Type.Object({
+            action: Type.Union([
+              Type.Literal('list'),
+              Type.Literal('status'),
+              Type.Literal('wait'),
+              Type.Literal('stop'),
+            ]),
+            sessionId: Type.Optional(Type.String({ minLength: 1, maxLength: 128 })),
+          }),
+          isConcurrencySafe: ({ action }) => action !== 'wait',
+          async execute({ action, sessionId }, { signal, waitFor }) {
+            const projection = (child: { id: string; title: string }, run = runs.info(child.id)) => ({
+              sessionId: child.id,
+              title: child.title,
+              run,
+            });
+            let result;
+            if (action === 'list') {
+              result = sessions
+                .list()
+                .filter(({ parentId }) => parentId === id)
+                .map((child) => projection(child));
+            } else {
+              const child = sessionId && sessions.get(sessionId);
+              if (!child || child.parentId !== id) throw new DomainError('not_found', 'Subagent not found');
+              if (action === 'wait') result = projection(child, await runs.wait(child.id, waitFor, signal));
+              else {
+                if (action === 'stop') runs.stop(child.id);
+                result = projection(child);
+              }
+            }
+            return { state: 'finished', content: [{ type: 'text', text: JSON.stringify(result) }] };
+          },
+        }),
     }),
   );
-  ctx.on('harness/start', () => {
-    for (const { id, parentId } of sessions.list()) {
-      if (!parentId) continue;
-      for (const task of sessions.tasks(id, 'agent-run'))
-        if (
-          terminal(task.state) &&
-          task.metadata?.reportToParent &&
-          !sessions.hasInbox(parentId, task.id + ':settled')
-        ) {
-          const record = sessions.taskStatus(id, task.id);
-          if (!record) throw new Error('Missing indexed task: ' + task.id);
-          notify(record);
-        }
+
+  const notify = ({ run, answer }: { run: RunInfo; answer?: string }) => {
+    const child = sessions.get(run.sessionId);
+    if (!child?.parentId || sessions.hasInbox(child.parentId, run.id + ':settled')) return;
+    try {
+      sessions.assertAvailable(child.id);
+      runs.send(child.parentId, {
+        message: 'Child run ' + run.state + (answer ? ': ' + answer.slice(0, 4000) : '.'),
+        messageId: run.id + ':settled',
+        mode: 'queue',
+        origin: { source: 'agent', senderSessionId: child.id, taskId: run.id, label: 'Subagent finished' },
+      });
+    } catch (error) {
+      if (!(error instanceof DomainError && ['conflict', 'not_found', 'unavailable'].includes(error.code)))
+        ctx.logger.error('Could not deliver child run notification ' + run.id, error);
     }
+  };
+  ctx.on('harness/observe', (event) => {
+    if (event.type === 'run-ended') notify(event);
+  });
+  ctx.on('harness/start', () => {
+    for (const { id, parentId } of sessions.list())
+      if (parentId) for (const settlement of runs.settlements(id)) notify(settlement);
   });
 }

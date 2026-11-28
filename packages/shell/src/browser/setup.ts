@@ -102,9 +102,26 @@ function renderExitCode({ details }: ToolView) {
   return node;
 }
 
+function renderInput({ arguments: args }: ToolView) {
+  if (!args || typeof args !== 'object' || !('command' in args) || typeof args.command !== 'string') return;
+  const node = document.createElement('span');
+  node.textContent = args.command;
+  return node;
+}
+
+function renderDiagnostics({ details }: ToolView) {
+  const paths = [details?.stdoutOverflow, details?.stderrOverflow].filter((path) => typeof path === 'string');
+  if (!paths.length) return;
+  const node = document.createElement('span');
+  node.textContent = paths.join(' · ');
+  return node;
+}
+
 const setup = (ctx: Context) => {
   ctx.inject(['miniSettingsRegistry', 'miniPrimitives'], registerConfiguration);
   ctx.effect(() => ctx.miniMessages.registerTool('shell', renderResult));
   ctx.effect(() => ctx.miniMessages.registerTool('shell', renderExitCode, 'summary'));
+  ctx.effect(() => ctx.miniMessages.registerTool('shell', renderInput, 'input'));
+  ctx.effect(() => ctx.miniMessages.registerTool('shell', renderDiagnostics, 'diagnostics'));
 };
 export default { inject: ['miniMessages'], provide: [], apply: setup };

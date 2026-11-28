@@ -2,7 +2,7 @@ import type { Context } from 'mini-harness/cordis';
 import type { Attachment } from '@mini-harness/input/message';
 import type { ConversationPermission } from '@mini-harness/sessions/identity';
 import type { ModelChoice, ThinkingLevel } from '@mini-harness/llm/vocabulary';
-import { isRunning } from '@mini-harness/sessions/run-state';
+import { isRunning } from '@mini-harness/runs/run-state';
 import type { Completer, ComposerDraft, ComposerModel, DraftMode } from '../composer-api.ts';
 import { CommandRegistry } from './commands.ts';
 

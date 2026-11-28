@@ -4,9 +4,9 @@ import type { MessageMode } from '@mini-harness/sessions/queue';
 import type { ToolProgress } from '@mini-harness/runs/stream';
 import type { ModelChoice, ThinkingLevel } from '@mini-harness/llm/vocabulary';
 import type { Attachment } from '@mini-harness/input/message';
-import type { HistoryEntry } from '@mini-harness/sessions/message';
+import type { RunHistoryEntry } from '@mini-harness/runs/run-state';
 import type { LiveRecord } from '@mini-harness/runs/stream';
-import type { RunInfo } from '@mini-harness/sessions/run-state';
+import type { RunInfo } from '@mini-harness/runs/run-state';
 
 export interface ConversationRevision {
   sourceEntryId: string;
@@ -33,7 +33,7 @@ export interface ConversationSubmission {
 export interface ConversationState {
   session?: Omit<Conversation, 'run'> & { thinkingLevel?: ThinkingLevel };
   history?: {
-    readonly timeline: readonly HistoryEntry[];
+    readonly timeline: readonly RunHistoryEntry[];
     leafId: string | null;
   };
   run?: RunInfo;

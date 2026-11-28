@@ -6,7 +6,7 @@ import { modeLabel } from './queue-view.ts';
 import { icon } from '@mini-harness/ui-primitives/icons';
 import { promptEditor } from './prompt-editor.ts';
 import { createComposer } from './composer.ts';
-import { isRunning } from '@mini-harness/sessions/run-state';
+import { isRunning } from '@mini-harness/runs/run-state';
 
 export function mountComposer(ctx: Context, signal: AbortSignal) {
   const { miniConversation: control, miniComposer: model } = ctx;

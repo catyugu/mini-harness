@@ -6,6 +6,7 @@ export const defaultMessageMode: MessageMode = 'interrupt';
 
 export interface MessageOrigin {
   source: InputSource;
+  label?: string;
   senderSessionId?: string;
   taskId?: string;
 }

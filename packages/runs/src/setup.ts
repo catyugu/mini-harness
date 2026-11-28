@@ -16,6 +16,14 @@ export function setup(ctx: Context) {
     new SessionRun(catalog),
   );
   ctx.provide('harnessRuns', runs);
+  ctx.effect(() =>
+    catalog.beforeDelete({
+      busy: (id) => Boolean(runs.current(id)),
+      async quiesce(ids) {
+        await Promise.all(ids.map((id) => runs.remove(id)));
+      },
+    }),
+  );
   ctx.on('harness/start', () => runs.recover());
   ctx.effect(() => {
     const changed = (event: Event) => {

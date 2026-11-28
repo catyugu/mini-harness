@@ -19,7 +19,7 @@ export function renderQueue(
     const row = document.createElement('div');
     row.className = 'queue-item';
     const label = document.createElement('span');
-    const summary = notificationLabel(item.origin, item.id) ?? item.summary;
+    const summary = notificationLabel(item.origin) ?? item.summary;
     label.textContent = modeLabel[item.mode] + ' · ' + summary;
     row.append(label);
     if (item.state === 'failed') {

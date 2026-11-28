@@ -25,4 +25,4 @@ For independent work, return the IDs after admission, select a provider Context 
 
 ## Check lifecycle behavior
 
-Verify model selection, queued admission, cancellation, plugin removal and parent deletion. A serial task-control wait yields the enclosing run's pool capacity while retaining its exclusive session lane. The [execution reference](../subsystems/execution.md) explains the relationship between independent child Runs and ordinary tool calls. Keep delegation policy in the delegating plugin, with generic scheduling in Tasks.
+Verify model selection, queued admission, cancellation, plugin removal and parent deletion. A serial `subagent_control` wait yields the enclosing run's pool capacity while retaining its exclusive session lane. The [execution reference](../subsystems/execution.md) explains the relationship between independent child Runs and ordinary tool calls. Keep delegation policy in the delegating plugin, with generic scheduling in Tasks.

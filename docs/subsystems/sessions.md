@@ -4,7 +4,7 @@
 
 ## Durable and live state
 
-The native log has a single append sequence and a selected conversation branch. Runs prepares inputs for the Agent execution loop and commits outputs through the session record contract. Agent receives a caller-owned context and emits native execution events. Sessions owns the durable record contract; Runs owns volatile record state and replay. The model transcript, visible history, and operational run/inbox projections are derived from those records. The scheduler owns live task state; the persisted task projection supports historical queries, not resumed execution. The [native session log reference](../session-log.md) owns framing, branch, delivery, recovery and export semantics.
+The native log has a single append sequence and a selected conversation branch. Runs prepares inputs for the Agent execution loop and commits outputs through the session record contract. Agent receives a caller-owned context and emits native execution events. Sessions owns the durable record contract; Runs owns volatile record state and replay. The model transcript, visible history, and operational run/inbox projections are derived from those records. Runs and Background define and recover their own session-scoped records. Tasks owns live scheduling. The [native session log reference](../session-log.md) owns framing, branch, delivery, recovery and export semantics.
 
 ## Lifecycle across domains
 

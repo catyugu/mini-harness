@@ -20,9 +20,9 @@ test(
       if (last.role === 'tool') {
         if (last.content.startsWith('{')) {
           const payload = JSON.parse(last.content);
-          if (payload.taskId && payload.state === 'accepted')
-            return { tool: 'task_control', args: { action: 'wait', taskId: payload.taskId } };
-          if (payload.taskId) assert.equal(payload.state, 'completed');
+          if (payload.sessionId && payload.state === 'accepted')
+            return { tool: 'subagent_control', args: { action: 'wait', sessionId: payload.sessionId } };
+          if (payload.sessionId) assert.equal(payload.run.state, 'completed');
         }
         return (
           'Finished ' + ([...messages].reverse().find((message) => message.role === 'user')?.content ?? '')
@@ -45,6 +45,7 @@ test(
     writeFileSync(join(root, 'outside.txt'), 'private fixture');
     await app.runtime.configuration.update({
       entries: {
+        background: { disabled: true },
         subagents: {
           config: { maxDepth: 2, maxParallel: 1, model: { provider: 'local-mock', id: 'mock-model' } },
         },
@@ -74,11 +75,6 @@ test(
     assert.ok(childRecord && leafRecord);
     await app.runtime.plugins.ctx.harnessRuns.current(childRecord.id)?.result;
     await app.runtime.plugins.ctx.harnessRuns.current(leafRecord.id)?.result;
-    const leafRun = expectPresent(app.runtime.plugins.ctx.harnessRuns.info(leafRecord.id), 'leaf run');
-    assert.equal(
-      app.runtime.plugins.ctx.harnessSessions.taskStatus(leafRecord.id, leafRun.id)?.outputCursor,
-      0,
-    );
     assert.deepEqual(app.runtime.plugins.ctx.harnessSessions.log(leafRecord.id).projection().model, {
       provider: 'local-mock',
       id: 'mock-model',
@@ -155,13 +151,12 @@ test('stopping a root leaves its delegated child running', { timeout: 15000 }, a
   await Promise.all([parentEntered.promise, childEntered.promise]);
   const child = ctx.harnessSessions.list().find(({ parentId }) => parentId === parent.id);
   assert.ok(child);
-  const childRun = expectPresent(ctx.harnessRuns.info(child.id), 'child run');
   assert.equal(ctx.harnessRuns.stop(parent.id), true);
   await aborted;
-  assert.equal(ctx.harnessTasks.get(childRun.id)?.state, 'running');
+  assert.equal(ctx.harnessRuns.info(child.id)?.state, 'running');
   held.release();
   await ctx.harnessRuns.current(child.id)?.result;
-  assert.equal(ctx.harnessSessions.taskStatus(child.id, childRun.id)?.state, 'completed');
+  assert.equal(ctx.harnessRuns.info(child.id)?.state, 'completed');
   assert.equal(activeRunCount(ctx), 0);
   assert.equal(ctx.harnessSessions.export([parent.id]).length, 2);
 });
@@ -305,10 +300,10 @@ test(
     assert.equal(runs.current(childId)?.id, childRun.id);
     held.release();
     await childRun.result;
+    await waitUntil(() => sessions.hasInbox(parent.id, childRun.id + ':settled'), Boolean);
     await runs.current(parent.id)?.result;
-    const childInputs = sessions
-      .log(childId)
-      .projection()
+    const childInputs = runs
+      .history(childId)!
       .timeline.filter(isViewMessage)
       .filter((message) => message.role === 'user');
     assert.equal(childInputs.length, 2);

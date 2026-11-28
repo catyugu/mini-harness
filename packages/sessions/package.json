@@ -12,7 +12,6 @@
     "./user-content": "./src/user-content.ts",
     "./queue": "./src/shared/queue.ts",
     "./records": "./src/records.ts",
-    "./run-state": "./src/shared/run-state.ts",
     "./display-record": "./src/shared/display-record.ts"
   },
   "miniHarness": {
@@ -23,7 +22,6 @@
       "./message",
       "./queue",
       "./records",
-      "./run-state",
       "./display-record"
     ],
     "profileModules": {
@@ -36,7 +34,6 @@
     "@mini-harness/llm": "workspace:*",
     "@mini-harness/platform": "workspace:*",
     "@mini-harness/plugin-api": "workspace:*",
-    "@mini-harness/tasks": "workspace:*",
     "@mini-harness/tools": "workspace:*",
     "@mini-harness/workspaces": "workspace:*"
   }

@@ -27,8 +27,6 @@ export interface ToolDefinition<Arguments = Record<string, any>> extends ToolSch
   isConcurrencySafe?(args: Arguments): boolean;
   /** Allow independent execution through start_background. */
   background?: boolean;
-  /** Compact observation for independent execution. */
-  projectResult?(result: ToolResult): Record<string, unknown>;
   execute(args: Arguments, context: ToolContext): Promise<ToolResult>;
 }
 

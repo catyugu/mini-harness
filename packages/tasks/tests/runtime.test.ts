@@ -18,11 +18,9 @@ test('cancellation is a request until execution finishes cleaning up', async () 
   const cleanup = gate();
   const states: string[] = [];
   runtime.subscribe(({ task: { state } }) => states.push(state));
-  const task = runtime.start({ owner: 'session:one' }, async ({ signal, write }) => {
-    write('one');
+  const task = runtime.start({ owner: 'resource' }, async ({ signal }) => {
     entered.release();
     await cleanup.promise;
-    write('two');
     signal.throwIfAborted();
   });
   assert.equal(runtime.get(task.id)?.state, 'queued');
@@ -33,11 +31,8 @@ test('cancellation is a request until execution finishes cleaning up', async () 
   assert.equal(runtime.get(task.id)?.cancellationRequested, true);
   cleanup.release();
   await assert.rejects(task.result, /cancelled/);
-  assert.equal(runtime.get(task.id)?.state, 'cancelled');
+  assert.equal(task.snapshot().state, 'cancelled');
   assert.equal(states.filter((state) => state === 'cancelled').length, 1);
-  assert.deepEqual(runtime.readOutput(task.id, 3)?.chunks, [
-    { start: 3, end: 6, channel: 'log', text: 'two' },
-  ]);
 });
 
 test('suspending releases admission and resumes only after reacquisition', async () => {
@@ -46,7 +41,7 @@ test('suspending releases admission and resumes only after reacquisition', async
   const wake = gate();
   const target = runtime.start({ owner: 'target' }, () => wake.promise);
   const pool = new TaskPool(1);
-  const task = runtime.start({ owner: 'session:one', pool }, async (context) => {
+  const task = runtime.start({ owner: 'resource', pool }, async (context) => {
     assert.equal(pool.active, 1);
     ready.release();
     await context.waitFor(target.id);
@@ -59,8 +54,8 @@ test('suspending releases admission and resumes only after reacquisition', async
   wake.release();
   assert.equal(await task.result, 42);
   assert.equal(pool.active, 0);
-  assert.equal((await runtime.wait(task.id)).state, 'completed');
-  await runtime.removeOwner('session:one');
+  assert.equal(task.snapshot().state, 'completed');
+  await runtime.removeOwner('resource');
   assert.equal(runtime.get(task.id), undefined);
 });
 
@@ -82,7 +77,7 @@ test('queued cancellation does not run user code; shutdown interrupts active wor
   });
   await entered.promise;
   await runtime.stop();
-  assert.equal(runtime.get(running.id)?.state, 'interrupted');
+  assert.equal(running.snapshot().state, 'interrupted');
   assert.throws(() => runtime.start({ owner: 'three' }, async () => {}), /closing/);
 });
 
@@ -90,87 +85,53 @@ test('ownership, not creation, controls cancellation and deletion', async () => 
   const runtime = new TaskRuntime(new Context());
   const entered = gate();
   const released = gate();
-  const parent = runtime.start({ owner: 'session:parent' }, async ({ signal }) => {
+  const parent = runtime.start({ owner: 'shared' }, async ({ signal }) => {
     entered.release();
     await released.promise;
     signal.throwIfAborted();
   });
   await entered.promise;
-  const background = runtime.start(
-    { owner: 'session:parent', metadata: { creator: parent.id } },
-    async () => {
-      await released.promise;
-      return 'independent';
-    },
-  );
+  const background = runtime.start({ owner: 'shared' }, async () => {
+    await released.promise;
+    return 'independent';
+  });
   parent.cancel();
   released.release();
   await assert.rejects(parent.result);
   assert.equal(await background.result, 'independent');
-  await runtime.removeOwner('session:parent');
+  await runtime.removeOwner('shared');
   assert.equal(runtime.list().length, 0);
 });
 
-test('a durable projection fault cannot acknowledge a successful task', async () => {
-  const runtime = new TaskRuntime(new Context());
-  const task = runtime.start(
-    {
-      owner: 'one',
-      commit({ task }) {
-        if (task.state === 'completed') throw new Error('write failed');
-      },
-    },
-    async () => 'not acknowledged',
-  );
-  await assert.rejects(task.result, /write failed/);
-  assert.equal(runtime.get(task.id)?.state, 'failed');
-});
-
-test('owner removal rejects new work immediately and emits deletion after cleanup', async () => {
+test('owner removal rejects new work immediately and drains until cleanup', async () => {
   const runtime = new TaskRuntime(new Context());
   const entered = gate();
   const release = gate();
   const events: string[] = [];
   runtime.subscribe(({ type }) => events.push(type));
-  const task = runtime.start({ owner: 'session:one' }, async () => {
+  const task = runtime.start({ owner: 'resource' }, async () => {
     entered.release();
     await release.promise;
   });
   await entered.promise;
-  const removing = runtime.removeOwner('session:one');
-  assert.throws(() => runtime.start({ owner: 'session:one' }, async () => {}), /removed/);
-  assert.strictEqual(runtime.removeOwner('session:one'), removing);
+  const removing = runtime.removeOwner('resource');
+  assert.throws(() => runtime.start({ owner: 'resource' }, async () => {}), /removed/);
+  assert.strictEqual(runtime.removeOwner('resource'), removing);
   release.release();
   await removing;
   await assert.rejects(task.result);
   assert.equal(runtime.get(task.id), undefined);
-  assert.equal(events.at(-1), 'deleted');
+  assert.equal(events.at(-1), 'transition');
 });
 
 test('arbitrary results are delivered without retaining arbitrary objects', async () => {
   const runtime = new TaskRuntime(new Context());
   const value = () => 42;
-  const handle = runtime.start({ owner: 'session:one' }, async () => value);
+  const handle = runtime.start({ owner: 'resource' }, async () => value);
   const terminal = runtime.wait(handle.id);
   assert.strictEqual(await handle.result, value);
   assert.equal((await terminal).state, 'completed');
-  assert.equal(runtime.get(handle.id)?.result, undefined);
-});
-
-test('output uses UTF-8 byte offsets and preserves channel and Unicode boundaries', async () => {
-  const runtime = new TaskRuntime(new Context());
-  const handle = runtime.start({ owner: 'session:one' }, async (context) => {
-    context.write('😀'.repeat(300000), 'stdout');
-    context.write('完', 'stderr');
-  });
-  await handle.result;
-  const output = runtime.readOutput(handle.id)!;
-  assert.equal(output.cursor, 1200003);
-  assert.equal(output.truncated, true);
-  assert.ok(output.chunks[0].start > 0);
-  assert.ok(!output.chunks[0].text.includes('�'));
-  assert.equal(output.chunks.at(-1)?.channel, 'stderr');
-  assert.equal(runtime.readOutput(handle.id, 1200000)?.chunks[0].text, '完');
+  assert.equal(runtime.get(handle.id), undefined);
 });
 
 test('terminal observation cannot retroactively cancel a wait', async () => {
@@ -199,7 +160,7 @@ test('a cancellation during running observation prevents invocation of executor 
   });
   await assert.rejects(handle.result, /cancelled/);
   assert.equal(executed, false);
-  assert.equal(runtime.get(handle.id)?.state, 'cancelled');
+  assert.equal(handle.snapshot().state, 'cancelled');
 });
 
 test('creator disposal does not cancel a task executed by another provider fiber', async () => {
@@ -243,11 +204,11 @@ test('creator disposal does not cancel a task executed by another provider fiber
     const stopping = provider.dispose();
     await cleaning.promise;
     assert.equal(handle.signal.aborted, true);
-    assert.equal(runtime.get(handle.id)?.state, 'running');
+    assert.equal(handle.snapshot().state, 'running');
     release.release();
     await stopping;
     await assert.rejects(handle.result);
-    assert.equal(runtime.get(handle.id)?.state, 'cancelled');
+    assert.equal(handle.snapshot().state, 'cancelled');
     assert.equal(observations, count);
   } finally {
     release.release();
@@ -255,25 +216,6 @@ test('creator disposal does not cancel a task executed by another provider fiber
     await provider.dispose();
     await runtime.stop();
   }
-});
-
-test('observation data is detached from arbitrary result objects', async () => {
-  const runtime = new TaskRuntime(new Context());
-  const metadata = { nested: { value: 'original' } };
-  const result = { value: 'answer' };
-  const handle = runtime.start<{ value: string }>(
-    { owner: 'one', metadata, project: (value) => value },
-    async () => result,
-  );
-  metadata.nested.value = 'modified';
-  assert.strictEqual(await handle.result, result);
-  result.value = 'modified';
-  const snapshot = runtime.get(handle.id)!;
-  assert.deepEqual(snapshot.result, { value: 'answer' });
-  assert.deepEqual(snapshot.metadata, { nested: { value: 'original' } });
-  const copy = snapshot.result as { value: string };
-  copy.value = 'modified again';
-  assert.deepEqual(runtime.get(handle.id)?.result, { value: 'answer' });
 });
 
 test('pool resizing, queued cancellation and failed execution return capacity', async () => {

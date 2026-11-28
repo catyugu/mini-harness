@@ -1,4 +1,5 @@
-import type { HistoryEntry, MessageContent, ViewMessage } from '@mini-harness/sessions/message';
+import type { RunHistoryEntry } from '@mini-harness/runs/run-state';
+import type { MessageContent, ViewMessage } from '@mini-harness/sessions/message';
 import type { LiveRecord, ToolProgress } from '@mini-harness/runs/stream';
 import type { MessageActionTarget } from '../history-api.ts';
 
@@ -8,7 +9,7 @@ export const textOf = (content: MessageContent = []) =>
     .map(({ text }) => text)
     .join('\n');
 
-export function hasContent(entry: HistoryEntry) {
+export function hasContent(entry: RunHistoryEntry) {
   if (entry.type !== 'message' || entry.role === 'toolResult') return true;
   if (entry.role === 'user' ? entry.attachments.length : entry.error) return true;
   return entry.content.some((part) => part.type === 'text' && Boolean(part.text));
@@ -17,7 +18,7 @@ export function hasContent(entry: HistoryEntry) {
 type TurnPart =
   | { type: 'text' | 'error'; id: string; text: string }
   | { type: 'partial' }
-  | Extract<HistoryEntry, { type: 'record' } | { role: 'toolResult' }>
+  | Extract<RunHistoryEntry, { type: 'record' } | { role: 'toolResult' }>
   | ToolProgress;
 
 interface Turn {
@@ -28,10 +29,10 @@ interface Turn {
   target?: Extract<MessageActionTarget, { type: 'assistant-turn' }>;
 }
 
-type HistoryRow = Exclude<HistoryEntry, { role: 'assistant' | 'toolResult' }> | Turn;
+type HistoryRow = Exclude<RunHistoryEntry, { role: 'assistant' | 'toolResult' }> | Turn;
 
 export function groupHistory(
-  entries: readonly HistoryEntry[],
+  entries: readonly RunHistoryEntry[],
   runId: string | undefined,
   partial: string,
   tools: readonly ToolProgress[],

@@ -1,4 +1,5 @@
-import { isRunning, type RunInfo } from '@mini-harness/sessions/run-state';
+import type { TaskHandle } from '@mini-harness/tasks/api';
+import { isRunning, type RunInfo } from './shared/run-state.ts';
 import {
   updateRecords,
   updateTools,
@@ -20,7 +21,20 @@ export class RunEvents {
     return this.records;
   }
 
-  constructor(readonly info: RunInfo) {}
+  readonly handle: TaskHandle<string>;
+  writeError?: Error;
+
+  constructor(
+    readonly info: RunInfo,
+    task: TaskHandle<string>,
+  ) {
+    this.handle = {
+      ...task,
+      result: task.result.finally(() => {
+        if (this.writeError) throw this.writeError;
+      }),
+    };
+  }
 
   get activeTools() {
     return this.tools;

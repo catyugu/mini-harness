@@ -1,26 +1,31 @@
 import type { Context } from 'mini-harness/cordis';
-import type { TaskData, TaskOutput, TaskSnapshot } from '@mini-harness/tasks/api';
+import type { ToolView } from '@mini-harness/conversation/browser/history-api';
+import type { Work, WorkOutput } from '../shared/work.ts';
 import { browserRequest } from '@mini-harness/ui-runtime/http';
 import { icon } from '@mini-harness/ui-primitives/icons';
 import { bindPopover, button, fromMarkup, required } from '@mini-harness/ui-primitives/primitives';
 
-const live = ({ state }: TaskSnapshot) => ['queued', 'running', 'waiting'].includes(state);
-const object = (value?: TaskData): Record<string, TaskData> =>
-  value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+const live = ({ state }: Work) => ['queued', 'running', 'waiting'].includes(state);
+const failedTool = ({ result }: Work) =>
+  result && ['error', 'skipped', 'denied', 'cancelled'].includes(result.toolState);
 
-const failedTool = (task: TaskSnapshot) =>
-  ['error', 'skipped', 'denied', 'cancelled'].some((state) => object(task.result).toolState === state);
-
-function status(task: TaskSnapshot) {
+function status(task: Work) {
   if (task.cancellationRequested && live(task)) return 'Cancelling';
-  if (live(task) && object(task.progress).state === 'approval') return 'Awaiting approval';
-  const summary = object(task.result).summary;
-  if (task.state === 'completed' && typeof summary === 'string') return summary;
+  if (live(task) && task.progress?.state === 'approval') return 'Awaiting approval';
   if (task.state === 'completed' && failedTool(task)) return 'Failed';
   return task.state[0].toUpperCase() + task.state.slice(1);
 }
 
-function duration(task: TaskSnapshot) {
+function toolView(work: Work): ToolView {
+  return {
+    name: work.tool,
+    arguments: work.arguments,
+    state: work.result?.toolState ?? work.progress?.state ?? 'running',
+    details: work.result?.details,
+  };
+}
+
+function duration(task: Work) {
   const seconds = Math.max(
     0,
     Math.floor(
@@ -32,25 +37,6 @@ function duration(task: TaskSnapshot) {
   if (seconds >= 3600) return Math.floor(seconds / 3600) + ' h ' + (Math.floor(seconds / 60) % 60) + ' min';
   if (seconds >= 60) return Math.floor(seconds / 60) + ' min ' + (seconds % 60) + ' s';
   return seconds + ' s';
-}
-
-function input(task: TaskSnapshot) {
-  const args = task.metadata?.arguments;
-  if (task.metadata?.tool === 'shell' && typeof object(args).command === 'string')
-    return String(object(args).command);
-  return args === undefined ? '' : JSON.stringify(args, null, 2);
-}
-
-function resultText(value?: TaskData) {
-  const content = object(value).content;
-  if (!Array.isArray(content)) return typeof value === 'string' ? value : '';
-  return content
-    .flatMap((part) => {
-      if (typeof part === 'string') return [part];
-      const block = object(part);
-      return block.type === 'text' && typeof block.text === 'string' ? [block.text] : [];
-    })
-    .join('\n');
 }
 
 function reconcile(parent: HTMLElement, children: HTMLElement[]) {
@@ -94,18 +80,26 @@ function setup(ctx: Context) {
   finishedToggle.prepend(icon('chevron'));
   const clear = required(finished.querySelector<HTMLButtonElement>('.task-clear'));
   clear.title = 'Hide finished jobs from this panel without deleting their history';
-  let tasks: TaskSnapshot[] = [];
+  let tasks: Work[] = [];
   let active: string | undefined;
   let revision = 0;
   let finishedOpen: boolean | undefined;
   const dismissed = new Set<string>();
   const rows = new Map<string, ReturnType<typeof createRow>>();
-  const path = (id: string) => '/sessions/' + encodeURIComponent(id) + '/tasks';
+  const path = (id: string) => '/sessions/' + encodeURIComponent(id) + '/background';
   const open = () => panel.matches(':popover-open');
   let expanded: ReturnType<typeof createOutput> | undefined;
 
-  function label(task: TaskSnapshot) {
-    return task.metadata?.tool === 'shell' ? input(task) || task.name || 'Shell' : (task.name ?? 'Task');
+  function input(task: Work) {
+    return ctx.miniMessages.render(toolView(task), signal, 'input')?.textContent;
+  }
+
+  function label(task: Work) {
+    return input(task) || task.name;
+  }
+
+  function statusLabel(task: Work) {
+    return ctx.miniMessages.render(toolView(task), signal, 'summary')?.textContent || status(task);
   }
 
   function closeOutput() {
@@ -114,7 +108,7 @@ function setup(ctx: Context) {
     expanded = undefined;
   }
 
-  function createOutput(task: TaskSnapshot, sessionId: string) {
+  function createOutput(task: Work, sessionId: string) {
     const lifetime = new AbortController();
     const node = fromMarkup(`<div class="task-detail">
       <div class="task-input"><pre></pre></div>
@@ -123,7 +117,7 @@ function setup(ctx: Context) {
       <pre class="task-output" aria-label="Task output"></pre>
     </div>`);
     const command = required(node.querySelector<HTMLElement>('.task-input'));
-    const commandText = input(task);
+    const commandText = input(task) ?? JSON.stringify(task.arguments, null, 2);
     command.hidden = !commandText;
     required(command.querySelector('pre')).textContent = commandText;
     const copy = (text: () => string, title: string) => {
@@ -133,7 +127,7 @@ function setup(ctx: Context) {
       action.onclick = () => void navigator.clipboard.writeText(text()).catch(control.report);
       return action;
     };
-    command.append(copy(() => commandText, 'Copy command'));
+    command.append(copy(() => commandText, 'Copy input'));
     const output = required(node.querySelector<HTMLElement>('.task-output'));
     const warning = required(node.querySelector<HTMLElement>('.task-notice'));
     required(node.querySelector('.task-output-heading')).append(
@@ -144,33 +138,36 @@ function setup(ctx: Context) {
     let text = '';
     let truncated = false;
     let failure = '';
-    function show(next: TaskSnapshot) {
+    function show(next: Work) {
       const following = output.scrollHeight - output.scrollTop - output.clientHeight < 16;
-      const fallback = resultText(next.result) || resultText(next.progress);
+      const fallback =
+        next.result?.content.join('\n') ||
+        next.progress?.content?.flatMap((part) => (part.type === 'text' ? [part.text] : [])).join('\n');
       const shown = text || fallback || (live(next) ? 'Waiting for output…' : 'No output');
       if (output.textContent !== shown) {
         output.textContent = shown;
         if (following) output.scrollTop = output.scrollHeight;
       }
-      const details = object(object(next.result).details);
-      const overflow = [details.stdoutOverflow, details.stderrOverflow].filter(
-        (path) => typeof path === 'string',
-      );
+      const diagnostics = ctx.miniMessages.render(
+        toolView(next),
+        lifetime.signal,
+        'diagnostics',
+      )?.textContent;
       warning.textContent = [
         truncated ? 'Earlier output was truncated' : '',
-        ...overflow,
+        diagnostics,
         failure || next.error || '',
       ]
         .filter(Boolean)
         .join(' · ');
     }
-    async function update(next: TaskSnapshot) {
+    async function update(next: Work) {
       show(next);
       if (fetching || lifetime.signal.aborted || next.outputCursor <= cursor) return;
       fetching = true;
       const requestedCursor = cursor;
       try {
-        const data = await browserRequest<TaskOutput>(
+        const data = await browserRequest<WorkOutput>(
           ctx,
           path(sessionId) + '/' + encodeURIComponent(task.id) + '/output?after=' + cursor,
           { signal: lifetime.signal },
@@ -201,7 +198,7 @@ function setup(ctx: Context) {
     return { id: task.id, node, lifetime, update };
   }
 
-  function showOutput(task: TaskSnapshot) {
+  function showOutput(task: Work) {
     if (!active) return;
     const wasOpen = expanded?.id === task.id;
     closeOutput();
@@ -209,7 +206,7 @@ function setup(ctx: Context) {
     render();
   }
 
-  function createRow(task: TaskSnapshot) {
+  function createRow(task: Work) {
     const node = fromMarkup(`<div class="task-item">
       <div class="task-line ui-list-row">
         <button type="button" class="task-row ui-row ui-fill">
@@ -248,13 +245,13 @@ function setup(ctx: Context) {
     function tick() {
       time.textContent = duration(current);
     }
-    function update(next: TaskSnapshot) {
+    function update(next: Work) {
       current = next;
       const title = label(next);
       name.textContent = title;
-      kind.textContent = next.name === title ? '' : (next.name ?? '');
+      kind.textContent = next.name === title ? '' : next.name;
       kind.hidden = !kind.textContent;
-      state.textContent = status(next);
+      state.textContent = statusLabel(next);
       node.dataset.state = next.state;
       node.dataset.tone =
         next.state === 'completed' && failedTool(next)
@@ -302,7 +299,7 @@ function setup(ctx: Context) {
       row.node.remove();
       rows.delete(id);
     }
-    const mount = (parent: HTMLElement, list: TaskSnapshot[]) => {
+    const mount = (parent: HTMLElement, list: Work[]) => {
       const nodes = list.map((task) => {
         let row = rows.get(task.id);
         if (!row) {
@@ -355,7 +352,7 @@ function setup(ctx: Context) {
     }
     if (!id) return;
     try {
-      const result = await browserRequest<TaskSnapshot[]>(ctx, path(id), { signal });
+      const result = await browserRequest<Work[]>(ctx, path(id), { signal });
       if (signal.aborted || request !== revision) return;
       tasks = result;
       notice.textContent = '';
@@ -370,7 +367,7 @@ function setup(ctx: Context) {
 
   ctx.effect(() => ctx.miniSlots.register('header.actions', container));
   ctx.effect(() =>
-    ctx.miniProjections.register('tasks', {
+    ctx.miniProjections.register('background', {
       sync(_revision, reconnect, id) {
         if (!id || reconnect || id === active) return refresh();
       },
@@ -383,6 +380,11 @@ function setup(ctx: Context) {
     },
     signal,
   );
+  ctx.miniMessages.subscribeToTools(() => {
+    closeOutput();
+    render();
+    events.dispatchEvent(new Event('change'));
+  }, signal);
   signal.addEventListener('abort', closeOutput, { once: true });
   const show = bindPopover(toggle, panel, signal);
   panel.addEventListener(
@@ -401,7 +403,7 @@ function setup(ctx: Context) {
   }, 1000);
   ctx.effect(() => () => clearInterval(interval));
   const receipt = ({ details }: { details?: Record<string, unknown> }, signal: AbortSignal) => {
-    const taskId = details?.taskId;
+    const taskId = details?.workId;
     if (typeof taskId !== 'string') return;
     const node = document.createElement('div');
     node.className = 'task-receipt';
@@ -420,7 +422,7 @@ function setup(ctx: Context) {
     node.append(view);
     const update = () => {
       const task = tasks.find(({ id }) => id === taskId);
-      text.textContent = task ? label(task) + ' · ' + status(task) : 'Accepted';
+      text.textContent = task ? label(task) + ' · ' + statusLabel(task) : 'Accepted';
     };
     events.addEventListener('change', update, { signal });
     update();

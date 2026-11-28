@@ -5,16 +5,17 @@
   "type": "module",
   "exports": {
     "./api": "./src/api.ts",
-    "./stream": "./src/shared/stream.ts"
+    "./stream": "./src/shared/stream.ts",
+    "./run-state": "./src/shared/run-state.ts"
   },
   "miniHarness": {
     "api": [
       "./api",
-      "./stream"
+      "./stream",
+      "./run-state"
     ],
     "profileModules": {
-      "@mini-harness/runs": "./src/manifest.ts",
-      "@mini-harness/task-control": "./src/background.ts"
+      "@mini-harness/runs": "./src/manifest.ts"
     }
   },
   "dependencies": {

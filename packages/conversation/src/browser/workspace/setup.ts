@@ -201,7 +201,7 @@ function workspacePicker(ctx: Context, sessions: () => { workspaceId: string | n
             count +
             ' conversation' +
             (count === 1 ? '' : 's') +
-            ' (including subagents)? Workspace files will be kept.',
+            ' (including child conversations)? Workspace files will be kept.',
           { title: 'Delete workspace', signal },
         ))
       )
