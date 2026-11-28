@@ -46,7 +46,8 @@ export async function requestModel(
     const started = performance.now();
     let firstTokenMs: number | undefined;
     let message: NativeAssistantMessage | undefined;
-    let partial = '',
+    let streamed = false,
+      partial = '',
       thinking = '';
     try {
       signal.throwIfAborted();
@@ -54,6 +55,7 @@ export async function requestModel(
         if (event.type === 'done') message = event.message;
         else {
           signal.throwIfAborted();
+          streamed = true;
           firstTokenMs ??= performance.now() - started;
           if (event.type === 'text-delta') {
             partial += event.text;
@@ -79,12 +81,7 @@ export async function requestModel(
       };
     }
     options.attempt?.({ elapsedMs: performance.now() - started, firstTokenMs, usage: message.usage });
-    if (
-      message.stopReason !== 'error' ||
-      firstTokenMs !== undefined ||
-      message.content.length ||
-      signal.aborted
-    )
+    if (message.stopReason !== 'error' || streamed || message.content.length || signal.aborted)
       return message;
     if (attempt >= 3) return message;
     const failure: ModelFailure = {
