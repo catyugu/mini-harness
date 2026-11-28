@@ -80,7 +80,15 @@ export class TaskRuntime implements TaskPort {
 
   start<T>(options: TaskOptions<T>, execute: (context: TaskContext) => Promise<T>): TaskHandle<T> {
     if (this.closing) throw new Error('Task runtime is closing');
-    const { signal: lifetime, provider = this.context, pool, commit, onEvent, project, ...metadata } = options;
+    const {
+      signal: lifetime,
+      provider = this.context,
+      pool,
+      commit,
+      onEvent,
+      project,
+      ...metadata
+    } = options;
     if (this.removing.has(options.owner)) throw new Error('Task owner has been removed');
     if (options.lane !== undefined && this.active(options.lane))
       throw new Error('Task lane is already occupied');
@@ -139,8 +147,7 @@ export class TaskRuntime implements TaskPort {
         const target = this.get(id);
         if (!target) throw new Error('Task not found: ' + id);
         if (terminal(target.state)) return target;
-        if (snapshot.state !== 'running')
-          throw new Error('Wait requires a single whole-task wait point');
+        if (snapshot.state !== 'running') throw new Error('Wait requires a single whole-task wait point');
         this.assertWait(entry, id);
         entry.waitingFor = id;
         try {
@@ -183,7 +190,11 @@ export class TaskRuntime implements TaskPort {
         (error === signal.reason ||
           (error instanceof Error && (error.name === 'AbortError' || error.cause === signal.reason)));
       const reason = aborted ? signal.reason : error;
-      const failureState = aborted ? (reason instanceof TaskInterrupted ? 'interrupted' : 'cancelled') : 'failed';
+      const failureState = aborted
+        ? reason instanceof TaskInterrupted
+          ? 'interrupted'
+          : 'cancelled'
+        : 'failed';
       const remember = () => this.remember({ task: snapshot, output: entry.output?.read() });
       try {
         transition(

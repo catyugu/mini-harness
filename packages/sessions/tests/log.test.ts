@@ -41,7 +41,14 @@ const user = (content: string) => ({
 
 const queued = (id: string, mode: InboxItem['mode'], text: string): SessionEvent => ({
   type: 'inbox-enqueued',
-  item: { id, mode, text, images: [], origin: { source: 'user' }, input: { userText: text, attachments: [] } },
+  item: {
+    id,
+    mode,
+    text,
+    images: [],
+    origin: { source: 'user' },
+    input: { userText: text, attachments: [] },
+  },
 });
 
 test('native log retains model semantics and gives defensive read projections', (t) => {
