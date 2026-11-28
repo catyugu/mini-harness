@@ -67,7 +67,7 @@ export interface SessionLifecycle {
   }): SessionRecord;
   setPermission(id: string, permission: ConversationPermission): SessionRecord;
   rename(id: string, title: string, source?: SessionRecord['titleSource']): SessionRecord;
-  assertAvailable(id?: string, workspaceId?: string | null): void;
+  assertAvailable(id: string): SessionRecord;
   beforeDelete(handler: { quiesce(ids: string[]): Promise<void>; busy?(id: string): boolean }): () => void;
   export(ids: string[]): (SessionRecord & { log: string; attachments: Record<string, string> })[];
   delete(ids: string[]): Promise<string[]>;

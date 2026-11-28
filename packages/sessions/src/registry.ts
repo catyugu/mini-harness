@@ -132,10 +132,17 @@ export class SessionRegistry implements SessionStore {
     return key && scopeParentOf(key);
   }
 
-  assertAvailable(id?: string, workspaceId = id && this.get(id)?.workspaceId) {
+  private assertOpen() {
     if (this.closing) throw new DomainError('unavailable', 'Agent service is unavailable during shutdown');
-    if (id && this.deleting.has(id)) throw new DomainError('conflict', 'Conversation is being deleted');
-    if (workspaceId) this.workspaceService()?.assertAvailable(workspaceId);
+  }
+
+  assertAvailable(id: string) {
+    this.assertOpen();
+    if (this.deleting.has(id)) throw new DomainError('conflict', 'Conversation is being deleted');
+    const record = this.get(id);
+    if (!record) throw new DomainError('not_found', 'Conversation not found');
+    if (record.workspaceId) this.workspaceService()?.assertAvailable(record.workspaceId);
+    return record;
   }
 
   beforeDelete(handler: Participant) {
@@ -164,8 +171,8 @@ export class SessionRegistry implements SessionStore {
     workspaceId,
     permission = 'standard',
   }: Parameters<SessionStore['create']>[0] = {}) {
-    const parent = parentId ? this.get(parentId) : undefined;
-    if (parentId && !parent) throw new DomainError('not_found', 'Parent conversation not found');
+    this.assertOpen();
+    const parent = parentId ? this.assertAvailable(parentId) : undefined;
     if (parent && workspaceId !== undefined && workspaceId !== parent.workspaceId)
       throw new DomainError('invalid_input', 'Conversation workspace does not match its parent');
     const targetWorkspace = parent
@@ -173,10 +180,10 @@ export class SessionRegistry implements SessionStore {
       : workspaceId === undefined
         ? (this.workspaceService()?.defaultId ?? null)
         : workspaceId;
-    this.assertAvailable(parentId ?? undefined, targetWorkspace);
     if (targetWorkspace !== null) {
       const workspaces = this.workspaceService();
       if (!workspaces) throw new DomainError('unavailable', 'Workspace service unavailable');
+      if (!parent) workspaces.assertAvailable(targetWorkspace);
       const workspace = workspaces.get(targetWorkspace);
       workspaces.resolveRoot(workspace.path, workspace.id);
     }
@@ -196,9 +203,8 @@ export class SessionRegistry implements SessionStore {
     return { ...session };
   }
 
-  private replace(id: string, patch: Partial<SessionRecord>) {
-    const item = this.get(id);
-    if (!item) throw new DomainError('not_found', 'Conversation not found');
+  private replace(item: SessionRecord, patch: Partial<SessionRecord>) {
+    const { id } = item;
     const updated = { ...item, ...patch };
     this.commit({
       ...this.state,
@@ -209,17 +215,14 @@ export class SessionRegistry implements SessionStore {
   }
 
   setPermission(id: string, permission: ConversationPermission) {
-    this.assertAvailable(id);
-    return this.replace(id, { permission });
+    return this.replace(this.assertAvailable(id), { permission });
   }
 
   rename(id: string, title: string, source: SessionRecord['titleSource'] = 'manual') {
-    this.assertAvailable(id);
-    const record = this.get(id);
-    if (!record) throw new DomainError('not_found', 'Conversation not found');
+    const record = this.assertAvailable(id);
     if (source === 'auto' && (record.titleSource === 'manual' || record.title !== 'New conversation'))
       return record;
-    return this.replace(id, { title, titleSource: source });
+    return this.replace(record, { title, titleSource: source });
   }
 
   private nativeFile(record: Pick<SessionRecord, 'id' | 'workspaceId'>) {
@@ -227,11 +230,9 @@ export class SessionRegistry implements SessionStore {
   }
 
   prepareInput(id: string, text: unknown, attachments?: Attachment[]) {
-    this.assertAvailable(id);
+    const record = this.assertAvailable(id);
     const { files, ...prepared } = prepareInput(text, attachments);
     if (files.length) {
-      const record = this.get(id);
-      if (!record) throw new DomainError('not_found', 'Conversation not found');
       const directory = attachmentDirectory(this.nativeFile(record), true)!;
       storeAttachments(directory, files);
       syncDirectory(directory);
@@ -242,9 +243,7 @@ export class SessionRegistry implements SessionStore {
   }
 
   attachmentDirectory(id: string) {
-    this.assertAvailable(id);
-    const record = this.get(id);
-    if (!record) throw new DomainError('not_found', 'Conversation not found');
+    const record = this.assertAvailable(id);
     return attachmentDirectory(this.nativeFile(record));
   }
 
@@ -414,9 +413,7 @@ export class SessionRegistry implements SessionStore {
       this.logs.set(id, existing);
       return existing;
     }
-    this.assertAvailable(id);
-    const record = this.get(id);
-    if (!record) throw new DomainError('not_found', 'Conversation not found');
+    const record = this.assertAvailable(id);
     if (this.logErrors.has(id) && [...this.participants].some(({ busy }) => busy?.(id)))
       throw new DomainError('unavailable', 'The conversation must finish before reopening its log');
     const log = this.openLog(record, 'write');
@@ -483,7 +480,6 @@ export class SessionRegistry implements SessionStore {
 
   history(id: string): ReturnType<SessionStore['history']> {
     this.assertAvailable(id);
-    if (!this.get(id)) throw new DomainError('not_found', 'Conversation not found');
     return (
       this.inspectLog(
         id,
@@ -498,7 +494,6 @@ export class SessionRegistry implements SessionStore {
 
   records<Data = unknown>(id: string, owner: RecordOwner): SessionRecords<Data> {
     this.assertAvailable(id);
-    if (!this.get(id)) throw new DomainError('not_found', 'Conversation not found');
     return {
       list: () =>
         this.inspectLog(
@@ -572,11 +567,9 @@ export class SessionRegistry implements SessionStore {
 
   export(ids: string[]) {
     return this.descendants(ids).map((id) => {
-      this.assertAvailable(id);
+      const record = this.assertAvailable(id);
       if ([...this.participants].some(({ busy }) => busy?.(id)))
         throw new DomainError('invalid_input', 'Stop active conversations before exporting them');
-      const record = this.get(id);
-      if (!record) throw new Error('Conversation disappeared during export');
       this.nativeFile(record);
       const log = this.writer(id);
       const attachments: Record<string, string> = {};
@@ -599,7 +592,7 @@ export class SessionRegistry implements SessionStore {
   }
 
   delete(ids: string[]) {
-    this.assertAvailable();
+    this.assertOpen();
     return this.deleteOwnedTree(ids);
   }
 

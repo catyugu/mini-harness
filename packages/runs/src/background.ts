@@ -64,7 +64,6 @@ function writableToolResult(result: ToolResult) {
 
 function sendNotice(ctx: Context, id: string, taskId: string, name: string, message: string, key: string) {
   if (ctx.fiber.signal.aborted || ctx.harnessTasks.sealed || !ctx.harnessSessions.get(id)) return;
-  ctx.harnessSessions.assertAvailable(id);
   ctx.harnessRuns.send(id, {
     message: name + ': ' + message,
     messageId: taskId + ':' + key,

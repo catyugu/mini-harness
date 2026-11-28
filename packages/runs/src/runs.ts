@@ -88,9 +88,10 @@ export class Runs implements RunPort {
   }
 
   private assertIdle(id: string) {
-    this.registry.assertAvailable(id);
+    const record = this.registry.assertAvailable(id);
     this.assertOpen();
     if (this.current(id)) throw new DomainError('conflict', 'Conversation is already running');
+    return record;
   }
 
   private liveRun(id: string, runId: string) {
@@ -142,10 +143,8 @@ export class Runs implements RunPort {
   }
 
   private launch(id: string, revision?: Revision) {
-    this.assertIdle(id);
+    const record = this.assertIdle(id);
     const fallback = this.recent();
-    const record = this.registry.get(id);
-    if (!record) throw new DomainError('not_found', 'Conversation not found');
     const prepared = revision && {
       ...this.registry.prepareInput(id, revision.message, revision.attachments),
       model: revision.model,
