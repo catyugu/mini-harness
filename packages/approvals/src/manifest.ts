@@ -1,7 +1,7 @@
 import type { ApprovalRequests } from './server/api.ts';
 import { Service, type Plugin } from 'mini-harness/cordis';
 import { entryFiber } from '@mini-harness/plugin-api/plugin-configuration';
-import { isRunning } from '@mini-harness/sessions/run-state';
+import { isRunning } from '@mini-harness/runs/run-state';
 import { DomainError } from '@mini-harness/platform/errors';
 import type { PluginInfo } from '@mini-harness/plugin-api/descriptor';
 import { Approvals } from './server/approvals.ts';

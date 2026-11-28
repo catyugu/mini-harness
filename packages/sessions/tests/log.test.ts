@@ -79,16 +79,10 @@ test('operational entries keep the transcript leaf stable and revision uses comp
   const log = open();
   const first = log.append(user('original'));
   log.append({
-    type: 'task',
-    task: {
-      id: 'run',
-      owner: 'session:conversation',
-      state: 'running',
-      createdAt: new Date().toISOString(),
-      cancellationRequested: false,
-      outputCursor: 0,
-    },
-    run: { sequence: 1 },
+    type: 'plugin-record',
+    owner: { pluginId: 'fixture', instanceId: 'fixture' },
+    scope: 'session',
+    data: { value: 'operational record' },
   });
   log.append({ type: 'inbox-enqueued', item: { id: 'queued', mode: 'steer', text: 'later', images: [] } });
   assert.equal(log.projection().leafId, first.id);
@@ -122,29 +116,12 @@ test('a durable message acknowledges inbox delivery exactly once and restart ret
   log.append({ ...user('first'), inboxId: 'delivered' });
   assert.throws(() => log.append({ ...user('duplicate'), inboxId: 'delivered' }), /not pending/);
   log.append({ type: 'inbox-enqueued', item: { id: 'pending', mode: 'queue', text: 'next', images: [] } });
-  log.append({
-    type: 'task',
-    task: {
-      id: 'run',
-      owner: 'session:conversation',
-      state: 'running',
-      createdAt: new Date().toISOString(),
-      cancellationRequested: false,
-      outputCursor: 0,
-    },
-    run: { sequence: 4 },
-  });
   log.close();
   log = open();
-  log.recover();
-  assert.equal(log.projection().run?.state, 'interrupted');
   assert.deepEqual(
     log.inbox().map(({ id }) => id),
     ['pending'],
   );
-  const count = log.entries().length;
-  log.recover();
-  assert.equal(log.entries().length, count);
   log.append({ type: 'inbox-cancelled', ids: ['pending'], reason: 'User cancelled' });
   assert.deepEqual(log.inbox(), []);
 });

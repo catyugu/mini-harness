@@ -132,9 +132,39 @@ importers:
       '@mini-harness/plugin-api':
         specifier: workspace:*
         version: link:../plugin-api
+      '@mini-harness/runs':
+        specifier: workspace:*
+        version: link:../runs
+      '@mini-harness/ui-runtime':
+        specifier: workspace:*
+        version: link:../ui-runtime
+
+  packages/background:
+    dependencies:
+      '@mini-harness/conversation':
+        specifier: workspace:*
+        version: link:../conversation
+      '@mini-harness/platform':
+        specifier: workspace:*
+        version: link:../platform
+      '@mini-harness/plugin-api':
+        specifier: workspace:*
+        version: link:../plugin-api
+      '@mini-harness/runs':
+        specifier: workspace:*
+        version: link:../runs
       '@mini-harness/sessions':
         specifier: workspace:*
         version: link:../sessions
+      '@mini-harness/tasks':
+        specifier: workspace:*
+        version: link:../tasks
+      '@mini-harness/tools':
+        specifier: workspace:*
+        version: link:../tools
+      '@mini-harness/ui-primitives':
+        specifier: workspace:*
+        version: link:../ui-primitives
       '@mini-harness/ui-runtime':
         specifier: workspace:*
         version: link:../ui-runtime
@@ -168,9 +198,6 @@ importers:
       '@mini-harness/settings':
         specifier: workspace:*
         version: link:../settings
-      '@mini-harness/tasks':
-        specifier: workspace:*
-        version: link:../tasks
       '@mini-harness/tools':
         specifier: workspace:*
         version: link:../tools
@@ -210,9 +237,6 @@ importers:
       '@mini-harness/sessions':
         specifier: workspace:*
         version: link:../sessions
-      '@mini-harness/tasks':
-        specifier: workspace:*
-        version: link:../tasks
       '@mini-harness/transport':
         specifier: workspace:*
         version: link:../transport
@@ -440,9 +464,6 @@ importers:
       '@mini-harness/plugin-api':
         specifier: workspace:*
         version: link:../plugin-api
-      '@mini-harness/tasks':
-        specifier: workspace:*
-        version: link:../tasks
       '@mini-harness/tools':
         specifier: workspace:*
         version: link:../tools

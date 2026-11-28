@@ -46,4 +46,4 @@ This tool is safe to run concurrently and declares `readOnly` for the built-in c
 
 Use a `ToolFactory` when the implementation depends on the resource ID passed by the caller. The [Task notes tool](../examples/task-notes/plugin.ts) resolves the session and writes through Sessions; it does not infer the selected conversation from browser state. The [scoped greeting](../examples/scoped-tool/plugin.ts) demonstrates a contribution mounted specifically in a session scope and a separate display transform.
 
-[Tools](../../packages/tools/README.md) owns argument validation, serial barriers, inline/background invocation and waiting semantics. Use its task-based invocation contract for programmatic calls. A serial tool waiting on behalf of the enclosing run can use `context.waitFor`; do not use that whole-task waiting boundary from a concurrently executing tool.
+[Tools](../../packages/tools/README.md) owns argument validation, serial barriers, and provider-bound invocation. Use `runTool` for programmatic calls. A serial tool waiting on behalf of the enclosing run can use `context.waitFor`; do not use that whole-task waiting boundary from a concurrently executing tool.

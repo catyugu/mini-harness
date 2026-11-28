@@ -78,7 +78,7 @@ test('Shell preserves native workspace and environment', async (t) => {
 });
 
 test('independent shell calls use one task, retain output channels and do not duplicate process output', async (t) => {
-  const { app } = await fixture(t);
+  const { app, request } = await fixture(t);
   const ctx = app.runtime.plugins.ctx;
   await app.runtime.configuration.update({
     entries: { shell: { disabled: false, config: { timeoutMs: 1000 } } },
@@ -94,25 +94,25 @@ test('independent shell calls use one task, retain output channels and do not du
     tool: 'shell',
     arguments: { command, timeoutMs: 30000 },
   });
-  const id = String(receipt.details?.taskId);
-  await ctx.harnessTasks.wait(id);
-  const task = expectPresent(ctx.harnessSessions.taskStatus(session.id, id), 'settled background task');
-  assert.equal(task.state, 'completed');
-  assert.deepEqual(task.metadata, { tool: 'shell', arguments: { command, timeoutMs: 30000 } });
-  assert.equal((task.result as { details: { exitCode: number } }).details.exitCode, 0);
-  assert.equal((task.result as { details: { timeoutMs: number } }).details.timeoutMs, 30000);
-  assert.equal(ctx.harnessSessions.tasks(session.id).length, 1);
+  const id = String(receipt.details?.workId);
+  const base = '/sessions/' + session.id + '/background';
+  const [{ result }] = await waitUntil(
+    async () => (await request(base)).body,
+    (items) => items[0]?.state === 'completed',
+  );
+  assert.equal(result.details.exitCode, 0);
+  assert.equal(result.details.timeoutMs, 30000);
+  const { body: output } = await request(base + '/' + id + '/output');
   assert.match(
-    ctx.harnessSessions
-      .taskOutput(session.id, id)
-      ?.chunks.filter(({ channel }) => channel === 'stdout')
-      .map(({ text }) => text)
-      .join('') ?? '',
+    output.chunks
+      .filter(({ channel }: { channel: string }) => channel === 'stdout')
+      .map(({ text }: { text: string }) => text)
+      .join(''),
     /task-output/,
   );
-  assert.doesNotMatch(JSON.stringify(task.result), /task-output/);
+  assert.doesNotMatch(JSON.stringify(result), /task-output/);
   await ctx.harnessSessions.delete([session.id]);
-  assert.equal(ctx.harnessSessions.taskStatus(session.id, id), undefined);
+  assert.equal((await request(base)).status, 404);
 });
 
 test('foreground Shell streams live output and commits one final result', async (t) => {
@@ -141,7 +141,7 @@ test('foreground Shell streams live output and commits one final result', async 
     assert.deepEqual(completed.tools, []);
     const results = completed.timeline.filter((entry: { role?: string }) => entry.role === 'toolResult');
     assert.equal(results.length, 1);
-    assert.deepEqual(results[0].details, { exitCode: 0 });
+    assert.deepEqual(results[0].details, { exitCode: 0, timeoutMs: 15000 });
     assert.match(JSON.stringify(results[0].content), /final-shell-output/);
   } finally {
     release();

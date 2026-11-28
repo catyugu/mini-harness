@@ -31,7 +31,8 @@ test('conversation edits branch the native session instead of appending and enfo
   );
   assert.ok(first?.id, 'Session Log identity must be present on persisted user messages');
   assert.ok(before.leafId, 'API must expose current branch leaf');
-  const beforeProjection = app.runtime.plugins.ctx.harnessSessions.log(session.id).projection();
+  const runs = app.runtime.plugins.ctx.harnessRuns;
+  const beforeProjection = runs.history(session.id)!;
   const invalid = [
     { message: 'Invalid model', model: { provider: 'unknown-provider', id: 'unknown-model' } },
     {
@@ -49,7 +50,7 @@ test('conversation edits branch the native session instead of appending and enfo
     });
     if (result.status === 200) assert.equal((await finish(session.id)).body.run.state, 'failed');
     else assert.equal(result.status, 400, JSON.stringify(result.body));
-    const unchanged = app.runtime.plugins.ctx.harnessSessions.log(session.id).projection();
+    const unchanged = runs.history(session.id)!;
     assert.equal(
       unchanged.leafId,
       beforeProjection.leafId,
@@ -66,19 +67,12 @@ test('conversation edits branch the native session instead of appending and enfo
   const log = app.runtime.plugins.ctx.harnessSessions.log(session.id);
   const priorRun = before.run;
   log.append({
-    type: 'task',
-    task: {
-      id: 'discarded-run',
-      owner: 'session:' + session.id,
-      state: 'cancelled',
-      createdAt: priorRun.startedAt,
-      finishedAt: priorRun.finishedAt,
-      cancellationRequested: true,
-      outputCursor: 0,
-    },
-    run: { sequence: priorRun.sequence },
+    type: 'plugin-record',
+    owner: { pluginId: 'core:runs', instanceId: 'core:runs' },
+    scope: 'session',
+    data: { ...priorRun, id: 'discarded-run', state: 'cancelled' },
   });
-  assert.equal(log.projection(before.leafId).timeline.at(-1)?.id, 'discarded-run');
+  assert.equal(runs.history(session.id, before.leafId)?.timeline.at(-1)?.id, 'discarded-run');
   const revision = await request('/sessions/' + session.id + '/revise', 'POST', {
     sourceEntryId: first.id,
     expectedLeafId: before.leafId,
@@ -117,7 +111,7 @@ test('conversation edits branch the native session instead of appending and enfo
     after.timeline.map(({ runId }: { runId: string }) => runId),
     [after.run.id, after.run.id],
   );
-  assert.equal(log.projection(before.leafId).timeline.at(-1)?.id, 'discarded-run');
+  assert.equal(runs.history(session.id, before.leafId)?.timeline.at(-1)?.id, 'discarded-run');
   const exportFile = app.runtime.plugins.ctx.harnessSessions.export([session.id])[0].log;
   for (const message of ['Original first', 'Original second', 'Revised first'])
     assert.ok(exportFile.includes(message));

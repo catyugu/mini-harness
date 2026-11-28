@@ -1,4 +1,5 @@
-import type { TaskChunk, TaskOutput } from './api.ts';
+import { DomainError } from '@mini-harness/platform/errors';
+import type { OutputChunk, WorkOutput } from '../shared/work.ts';
 
 function boundary(bytes: Buffer, offset: number) {
   while (offset < bytes.length && (bytes[offset] & 0xc0) === 0x80) offset++;
@@ -6,8 +7,8 @@ function boundary(bytes: Buffer, offset: number) {
 }
 
 /** Absolute UTF-8 byte positions survive eviction and independent consumer reads. */
-export class TaskOutputRing {
-  private chunks: TaskChunk[] = [];
+export class WorkOutputRing {
+  private chunks: OutputChunk[] = [];
   cursor = 0;
 
   constructor(private readonly capacity = 1024 * 1024) {}
@@ -35,13 +36,14 @@ export class TaskOutputRing {
     }
   }
 
-  read(after = 0): TaskOutput {
-    return readTaskOutput({ cursor: this.cursor, truncated: false, chunks: this.chunks }, after);
+  read(after = 0): WorkOutput {
+    return readWorkOutput({ cursor: this.cursor, truncated: false, chunks: this.chunks }, after);
   }
 }
 
-export function readTaskOutput(output: TaskOutput, after = 0): TaskOutput {
-  if (!Number.isSafeInteger(after) || after < 0) throw new Error('Invalid task output cursor');
+export function readWorkOutput(output: WorkOutput, after = 0): WorkOutput {
+  if (!Number.isSafeInteger(after) || after < 0)
+    throw new DomainError('invalid_input', 'Invalid output cursor');
   const first = output.chunks[0]?.start ?? output.cursor;
   const chunks = output.chunks
     .filter(({ end }) => end > after)

@@ -29,17 +29,6 @@ export function setup(ctx: Context) {
         { additionalProperties: false },
       ),
       background: true,
-      projectResult(result) {
-        if (result.details?.exitCode === undefined) return JSON.parse(JSON.stringify(result));
-        const { stdout: _stdout, stderr: _stderr, ...details } = result.details;
-        return JSON.parse(
-          JSON.stringify({
-            details,
-            summary: 'Exit ' + details.exitCode,
-            elapsedMs: result.elapsedMs,
-          }),
-        );
-      },
       execute: async (args, { signal, write }): Promise<ToolResult> => {
         const cwd = workspace.workspacePath(sessionId);
         if (!cwd) throw new DomainError('unavailable', 'Shell requires a workspace');
@@ -70,17 +59,13 @@ export function setup(ctx: Context) {
           const cancelled = output.reason === 'cancelled';
           return {
             content: [{ type: 'text', text: JSON.stringify(output) }],
+            summary: output.reason ?? 'Exit ' + output.code,
             state: cancelled ? 'cancelled' : output.reason || output.code !== 0 ? 'error' : 'finished',
-            detailKeys: ['exitCode'],
+            detailKeys: ['exitCode', 'timeoutMs', 'stdoutOverflow', 'stderrOverflow'],
             details: {
               ...output,
               timeoutMs,
               exitCode: output.code,
-              diagnostics: (output.stderr + '\n' + output.stdout)
-                .split('\n')
-                .filter((line) => /error|fatal|failed|warning|undefined reference/i.test(line))
-                .join('\n')
-                .slice(0, 1000),
             },
             elapsedMs: performance.now() - startedAt,
           };

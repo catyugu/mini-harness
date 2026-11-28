@@ -6,31 +6,22 @@ import {
   type TaskContext,
   type TaskEvent,
   type TaskHandle,
-  type TaskHistoryRecord,
   type TaskOptions,
-  type TaskOutput,
   type TaskPort,
   type TaskSnapshot,
 } from './api.ts';
-import { TaskOutputRing, readTaskOutput } from './output.ts';
 
 interface Entry {
   snapshot: TaskSnapshot;
   handle: TaskHandle;
-  output?: TaskOutputRing;
   waitingFor?: string;
   onEvent?: (event: TaskEvent) => void;
 }
 
 const describe = (error: unknown) => (error instanceof Error ? error.message : String(error));
-const clone = <T>(value: T): T => structuredClone(value);
-// Observation data crosses the JSON persistence boundary, unlike handle results.
-const jsonData = <T>(value: T): T => (value === undefined ? value : JSON.parse(JSON.stringify(value)));
 
 export class TaskRuntime implements TaskPort {
   private readonly entries = new Map<string, Entry>();
-  private readonly recent = new Map<string, TaskHistoryRecord & { bytes: number }>();
-  private recentBytes = 0;
   private readonly listeners = new Set<(event: TaskEvent) => void>();
   private readonly removing = new Map<string, Promise<void>>();
   private closing = false;
@@ -54,7 +45,7 @@ export class TaskRuntime implements TaskPort {
         return runtime.sealed;
       },
       active: runtime.active.bind(runtime),
-      start<T>(options: TaskOptions<T>, execute: (context: TaskContext) => Promise<T>) {
+      start<T>(options: TaskOptions, execute: (context: TaskContext) => Promise<T>) {
         return runtime.start({ ...options, provider: options.provider ?? Service.caller(this) }, execute);
       },
       get: runtime.get.bind(runtime),
@@ -73,41 +64,27 @@ export class TaskRuntime implements TaskPort {
           }),
         );
       },
-      readOutput: runtime.readOutput.bind(runtime),
       removeOwner: runtime.removeOwner.bind(runtime),
     });
   }
 
-  start<T>(options: TaskOptions<T>, execute: (context: TaskContext) => Promise<T>): TaskHandle<T> {
+  start<T>(options: TaskOptions, execute: (context: TaskContext) => Promise<T>): TaskHandle<T> {
     if (this.closing) throw new Error('Task runtime is closing');
-    const {
-      signal: lifetime,
-      provider = this.context,
-      pool,
-      commit,
-      onEvent,
-      project,
-      ...metadata
-    } = options;
-    if (this.removing.has(options.owner)) throw new Error('Task owner has been removed');
-    if (options.lane !== undefined && this.active(options.lane))
-      throw new Error('Task lane is already occupied');
+    const { signal: lifetime, provider = this.context, pool, onEvent, owner, lane } = options;
+    if (this.removing.has(owner)) throw new Error('Task owner has been removed');
+    if (lane !== undefined && this.active(lane)) throw new Error('Task lane is already occupied');
     const controller = new AbortController();
-    const signals = [controller.signal, lifetime, provider.fiber.signal].filter(
-      (signal): signal is AbortSignal => signal !== undefined,
-    );
+    const signals = [controller.signal, provider.fiber.signal];
+    if (lifetime) signals.push(lifetime);
     const signal = AbortSignal.any(signals);
     signal.throwIfAborted();
     const snapshot: TaskSnapshot = {
-      ...jsonData(metadata),
+      owner,
+      lane,
       id: randomUUID(),
       state: 'queued',
       createdAt: new Date().toISOString(),
       cancellationRequested: false,
-      outputCursor: 0,
-    };
-    const persist = (task: TaskSnapshot, output?: TaskOutput) => {
-      commit?.({ task: clone(task), output });
     };
     let release: (() => void) | undefined;
     const relinquish = () => {
@@ -115,15 +92,9 @@ export class TaskRuntime implements TaskPort {
       release = undefined;
       held?.();
     };
-    const update = (patch: Partial<TaskSnapshot>, type: TaskEvent['type'] = 'updated') => {
-      if (terminal(snapshot.state)) return;
-      Object.assign(snapshot, clone(patch));
-      this.notify(type, snapshot);
-    };
     const transition = (patch: Partial<TaskSnapshot>) => {
-      const next = { ...snapshot, ...patch };
-      persist(next, terminal(next.state) ? entry.output?.read() : undefined);
-      update(patch, 'transition');
+      Object.assign(snapshot, patch);
+      this.notify('transition', snapshot);
     };
     const enter = async () => {
       signal.throwIfAborted();
@@ -131,61 +102,42 @@ export class TaskRuntime implements TaskPort {
       signal.throwIfAborted();
       transition({ state: 'running', startedAt: snapshot.startedAt ?? new Date().toISOString() });
     };
-    let admissionFailure: { error: unknown } | undefined;
     const context: TaskContext = {
       id: snapshot.id,
-      owner: snapshot.owner,
       signal,
-      update: (progress) => update({ progress: jsonData(progress) }),
-      write: (text, channel = 'log') => {
-        if (terminal(snapshot.state) || !text) return;
-        entry.output ??= new TaskOutputRing();
-        entry.output.write(text, channel);
-        update({ outputCursor: entry.output.cursor }, 'output');
-      },
       waitFor: async (id, cancellation) => {
         const target = this.get(id);
         if (!target) throw new Error('Task not found: ' + id);
         if (terminal(target.state)) return target;
         if (snapshot.state !== 'running') throw new Error('Wait requires a single whole-task wait point');
         this.assertWait(entry, id);
+        signal.throwIfAborted();
         entry.waitingFor = id;
+        transition({ state: 'waiting' });
+        relinquish();
         try {
-          signal.throwIfAborted();
-          transition({ state: 'waiting' });
-          relinquish();
-          try {
-            return await this.wait(id, cancellation ? AbortSignal.any([signal, cancellation]) : signal);
-          } finally {
-            signal.throwIfAborted();
-            try {
-              if (terminal(snapshot.state)) throw new Error('Task ended with an unawaited wait');
-              transition({ state: 'queued' });
-              await enter();
-            } catch (error) {
-              relinquish();
-              if (signal.aborted && error === signal.reason) throw error;
-              admissionFailure = { error };
-              controller.abort(error);
-              throw error;
-            }
-          }
+          return await this.wait(id, cancellation ? AbortSignal.any([signal, cancellation]) : signal);
         } finally {
           entry.waitingFor = undefined;
+          signal.throwIfAborted();
+          if (terminal(snapshot.state)) throw new Error('Task ended with an unawaited wait');
+          transition({ state: 'queued' });
+          await enter();
         }
       },
     };
-    const cancelled = () => update({ cancellationRequested: true });
-    type Outcome = { value: T; projected: TaskSnapshot['result'] } | { error: unknown };
+    const cancelled = () => {
+      snapshot.cancellationRequested = true;
+      this.notify('cancelling', snapshot);
+    };
+    type Outcome = { value: T } | { error: unknown };
     const settle = (outcome: Outcome): T => {
       relinquish();
-      if (admissionFailure) outcome = admissionFailure;
-      else if ('value' in outcome && signal.aborted) outcome = { error: signal.reason };
+      if ('value' in outcome && signal.aborted) outcome = { error: signal.reason };
       signal.removeEventListener('abort', cancelled);
       const finishedAt = new Date().toISOString();
       const error = 'error' in outcome ? outcome.error : undefined;
       const aborted =
-        !admissionFailure &&
         signal.aborted &&
         (error === signal.reason ||
           (error instanceof Error && (error.name === 'AbortError' || error.cause === signal.reason)));
@@ -195,21 +147,15 @@ export class TaskRuntime implements TaskPort {
           ? 'interrupted'
           : 'cancelled'
         : 'failed';
-      const remember = () => this.remember({ task: snapshot, output: entry.output?.read() });
-      try {
-        transition(
-          'error' in outcome
-            ? { state: failureState, error: describe(reason), finishedAt }
-            : { state: 'completed', result: outcome.projected, finishedAt },
-        );
-      } catch (error) {
-        update({ state: 'failed', error: describe(error), finishedAt }, 'transition');
-        remember();
-        throw error;
-      } finally {
-        this.entries.delete(snapshot.id);
-      }
-      if (!commit) remember();
+      transition(
+        'error' in outcome
+          ? { state: failureState, error: describe(reason), finishedAt }
+          : {
+              state: 'completed',
+              finishedAt,
+            },
+      );
+      this.entries.delete(snapshot.id);
       if ('error' in outcome) throw reason;
       return outcome.value;
     };
@@ -220,27 +166,23 @@ export class TaskRuntime implements TaskPort {
         signal.throwIfAborted();
         const value = await execute(context);
         signal.throwIfAborted();
-        outcome = { value, projected: project && jsonData(project(value)) };
+        outcome = { value };
       } catch (error) {
         outcome = { error };
       }
       return settle(outcome);
     };
-    // Admission is synchronous; only registered tasks reach the provider Fiber.
-    const result = Promise.resolve().then(() => {
-      if (!this.entries.has(snapshot.id)) throw new Error('Task submission failed');
-      return provider.fiber.run(run, signal).catch((error) => {
+    const result = Promise.resolve().then(() =>
+      provider.fiber.run(run, signal).catch((error) => {
         if (terminal(snapshot.state)) throw error;
         return settle({ error });
-      });
-    });
+      }),
+    );
     const handle: TaskHandle<T> = {
       id: snapshot.id,
       signal,
-      get state() {
-        return snapshot.state;
-      },
       result,
+      snapshot: () => ({ ...snapshot }),
       cancel(reason = new Error('Task cancelled')) {
         if (terminal(snapshot.state) || signal.aborted) return false;
         controller.abort(reason);
@@ -254,32 +196,9 @@ export class TaskRuntime implements TaskPort {
     };
     this.entries.set(handle.id, entry);
     void result.catch(() => {});
-    try {
-      persist(snapshot);
-    } catch (error) {
-      this.entries.delete(handle.id);
-      throw error;
-    }
-    if (signal.aborted) snapshot.cancellationRequested = true;
-    else signal.addEventListener('abort', cancelled, { once: true });
+    signal.addEventListener('abort', cancelled, { once: true });
     this.notify('created', snapshot);
     return handle;
-  }
-
-  private remember(record: TaskHistoryRecord) {
-    const bytes = Buffer.byteLength(JSON.stringify(record));
-    this.recent.set(record.task.id, { ...record, bytes });
-    this.recentBytes += bytes;
-    for (const recent of this.recent.values()) {
-      if (this.recent.size <= 256 && this.recentBytes <= 16 * 1024 * 1024) break;
-      this.forget(recent);
-    }
-  }
-
-  private forget({ task, bytes }: TaskHistoryRecord & { bytes: number }) {
-    this.recent.delete(task.id);
-    this.recentBytes -= bytes;
-    this.notify('deleted', task);
   }
 
   private assertWait(waiter: Entry, target: string) {
@@ -288,18 +207,13 @@ export class TaskRuntime implements TaskPort {
   }
 
   get(id: string) {
-    const entry = this.entries.get(id);
-    if (entry) return clone(entry.snapshot);
-    return clone(this.recent.get(id)?.task);
+    return this.entries.get(id)?.handle.snapshot();
   }
 
-  list(owner?: string | ReadonlySet<string>) {
-    return [
-      ...Array.from(this.entries.values(), ({ snapshot }) => snapshot),
-      ...Array.from(this.recent.values(), ({ task }) => task),
-    ]
-      .filter((task) => (typeof owner === 'string' ? task.owner === owner : (owner?.has(task.owner) ?? true)))
-      .map(clone);
+  list(owner?: string) {
+    return [...this.entries.values()]
+      .filter(({ snapshot }) => owner === undefined || snapshot.owner === owner)
+      .map(({ handle }) => handle.snapshot());
   }
 
   cancel(id: string, reason?: unknown) {
@@ -308,21 +222,15 @@ export class TaskRuntime implements TaskPort {
 
   wait(id: string, signal?: AbortSignal): Promise<TaskSnapshot> {
     const entry = this.entries.get(id);
-    if (!entry || terminal(entry.snapshot.state)) {
-      const current = this.get(id);
-      return current ? Promise.resolve(current) : Promise.reject(new Error('Task not found: ' + id));
-    }
+    if (!entry) return Promise.reject(new Error('Task not found: ' + id));
     const { handle, snapshot } = entry;
     return new Promise((resolve, reject) => {
       const finish = () => {
         signal?.removeEventListener('abort', cancel);
-        resolve(clone(snapshot));
+        resolve(handle.snapshot());
       };
-      const cancel = () => {
-        if (terminal(snapshot.state)) return finish();
-        signal?.removeEventListener('abort', cancel);
-        reject(signal?.reason);
-      };
+      const cancel = () => (terminal(snapshot.state) ? finish() : reject(signal?.reason));
+      if (terminal(snapshot.state)) return finish();
       if (signal?.aborted) return cancel();
       signal?.addEventListener('abort', cancel, { once: true });
       void handle.result.then(finish, finish);
@@ -340,22 +248,11 @@ export class TaskRuntime implements TaskPort {
     const local = this.entries.get(snapshot.id)?.onEvent;
     for (const listener of local ? [local, ...this.listeners] : [...this.listeners]) {
       try {
-        listener({ type, task: clone(snapshot) });
+        listener({ type, task: { ...snapshot } });
       } catch {
         // Observers cannot interrupt execution or other observers.
       }
     }
-  }
-
-  readOutput(id: string, after = 0) {
-    const entry = this.entries.get(id);
-    if (entry) return entry.output?.read(after) ?? { cursor: 0, truncated: false, chunks: [] };
-    const recent = this.recent.get(id);
-    if (recent) return readTaskOutput(recent.output ?? { cursor: 0, truncated: false, chunks: [] }, after);
-  }
-
-  private owned(owner: string) {
-    return [...this.entries.values()].filter(({ snapshot }) => snapshot.owner === owner);
   }
 
   private async drain(entries: Entry[], reason?: unknown) {
@@ -368,10 +265,7 @@ export class TaskRuntime implements TaskPort {
     const existing = this.removing.get(owner);
     if (existing) return existing;
     const operation = Promise.resolve()
-      .then(async () => {
-        await this.drain(this.owned(owner));
-        for (const recent of this.recent.values()) if (recent.task.owner === owner) this.forget(recent);
-      })
+      .then(() => this.drain([...this.entries.values()].filter(({ snapshot }) => snapshot.owner === owner)))
       .finally(() => this.removing.delete(owner));
     this.removing.set(owner, operation);
     return operation;

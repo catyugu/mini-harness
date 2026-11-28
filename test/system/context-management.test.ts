@@ -280,16 +280,7 @@ test('session overrides inherit defaults, reject invalid ratios and accept unstr
   const sessionLog = ctx.harnessSessions.log(session.id);
   const before = sessionLog.projection();
   const compacted = await request(path + '/compact', 'POST');
-  assert.equal(
-    compacted.status,
-    200,
-    JSON.stringify(
-      sessionLog
-        .entries()
-        .filter((entry) => entry.type === 'task')
-        .at(-1),
-    ),
-  );
+  assert.equal(compacted.status, 200, JSON.stringify(compacted.body));
   assert.ok(sessionLog.context().contextMessages.length < before.contextMessages.length);
   const checkpoint = sessionLog
     .entries()
@@ -470,17 +461,7 @@ test('stopping a manual checkpoint or unloading its plugin releases the lane and
     await Promise.race([
       entered,
       compact.then((result) => {
-        throw new Error(
-          'Compaction settled before cancellation: ' +
-            JSON.stringify(result) +
-            ' ' +
-            JSON.stringify(
-              log
-                .entries()
-                .filter((entry) => entry.type === 'task')
-                .at(-1),
-            ),
-        );
+        throw new Error('Compaction settled before cancellation: ' + JSON.stringify(result));
       }),
     ]);
     assert.equal((await request(endpoint + '/context')).body.compacting, 'manual');
@@ -502,7 +483,7 @@ test('stopping a manual checkpoint or unloading its plugin releases the lane and
     assert.equal(disabled.status, 200, JSON.stringify(disabled.body));
     await settled;
     await running;
-    assert.equal(ctx.harnessSessions.taskStatus(session.id, task.id)?.state, 'cancelled');
+    assert.equal(task.snapshot().state, 'cancelled');
     assert.equal(ctx.harnessRuns.current(session.id), undefined);
     assert.deepEqual(log.context(), before);
     assert.equal(await sendRun(ctx.harnessRuns, session.id, 'Continue'), 'Finished');
@@ -537,18 +518,7 @@ test('native compaction reduces context and preserves message identities and his
     .projection()
     .timeline.filter(isViewMessage);
   const compacted = await compact();
-  assert.equal(
-    compacted.status,
-    200,
-    JSON.stringify(compacted.body) +
-      ' ' +
-      JSON.stringify(
-        log
-          .entries()
-          .filter((entry) => entry.type === 'task')
-          .at(-1),
-      ),
-  );
+  assert.equal(compacted.status, 200, JSON.stringify(compacted.body));
   assert.equal(mock.requests.length, 7);
   assert.match(JSON.stringify(mock.requests.at(-1)), /Image 1 offloaded/);
   assert.doesNotMatch(JSON.stringify(mock.requests.at(-1)), /iVBORw0KGgo=/);

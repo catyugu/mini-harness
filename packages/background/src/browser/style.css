@@ -46,15 +46,10 @@
   --gap: 0px;
   --row-size: 30px;
 }
-.task-line:hover,
 .task-line:has(.task-row[aria-expanded='true']) {
   background: var(--hover);
 }
 .task-row {
-  display: flex;
-  align-items: center;
-  flex: 1;
-  min-width: 0;
   gap: 7px;
   min-height: 30px;
   padding: 4px 6px;

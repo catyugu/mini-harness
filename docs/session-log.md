@@ -57,7 +57,7 @@ an unacknowledged partial write. Writable recovery truncates it after the comple
 been verified; read-only inspection validates and ignores the incomplete tail without modifying the file. Invalid complete lines, invalid checksums, unknown events and
 invalid ancestry stop loading without rewriting the history.
 
-Recovery converts unfinished work recorded in that log, including `queued`, `running` and `waiting` tasks, into a durable `interrupted` record.
+Each plugin recovers unfinished executions recorded under its own record identity.
 It does not resume model requests or execute tools. Before a later agent turn,
 Runs closes any unfinished tool calls with explicit interrupted results;
 it never retries an unknown tool outcome automatically.
@@ -118,12 +118,10 @@ There is no archive state.
 
 ## Extension records
 
-Plugin records use a typed payload (`PluginRecord<Data>` / `SessionRecords<Data>`) in the same record log with an explicit owner (plugin ID and instance ID). A branch event may carry multiple display descriptors in `displays`, each identifying its renderer by plugin ID and kind, with a title and either a presentation payload or an explicit source path. Display metadata does not change the model context; the source is resolved from the committed event. A producer can assign a stable record ID before the durable event is written. Live records use the same renderer and a generic set/append/remove protocol, with independent text channels and a snapshot of active records. The committed display replaces its live counterpart by ID; individual stream chunks are not persisted. Private records still advance the branch. Deleting a conversation removes all of its records.
+Plugin records use a typed payload (`PluginRecord<Data>` / `SessionRecords<Data>`) in the same record log with an explicit owner (plugin ID and instance ID). A branch event may carry multiple display descriptors in `displays`, each identifying its renderer by plugin ID and kind, with a title and either a presentation payload or an explicit source path. Display metadata does not change the model context; the source is resolved from the committed event. A producer can assign a stable record ID before the durable event is written. Live records use the same renderer and a generic set/append/remove protocol, with independent text channels and a snapshot of active records. The committed display replaces its live counterpart by ID; individual stream chunks are not persisted. Plugin records advance the branch by default. A record with `scope: 'session'` stays outside the branch, carries no display descriptors, and remains queryable by owner. Deleting a conversation removes all of its records.
 
-## Retained tasks and retry identity
+## Retry identity
 
 A failed run records the stable entry ID for its active input, including inbox deliveries. An explicit retry can retrieve that input from the native log. A null ID indicates the run failed before accepting the current submission. Older records with ambiguous input or missing attachment content require user input before resubmission.
 
 File Preview reads stored attachment bytes through the conversation attachment endpoint. Workspace references remain part of the original user text and resolve through File Access when opened.
-
-Independent work submitted with the explicit `harnessSessions.task(sessionId)` binding adds operational `task` records to the same log. The task ID is independent of record identity. State transitions do not move the conversation branch. Terminal records can include a compact result projection and bounded output with absolute byte cursors; ordinary inline tool results remain in the existing tool execution/acceptance records. Runs use the same task record with a small `run` object containing only input identity, replay sequence and changed files. Run lifecycle is projected from the task snapshot, and the final answer remains in the message log. On recovery, an unfinished task is marked `interrupted` and never automatically executed again.

@@ -4,7 +4,6 @@ export const provide = ['taskNotes'];
 export const inject = [
   'harnessSessions',
   'harnessRuns',
-  'harnessTasks',
   'harnessApprovalRequests',
   'harnessPluginSettings',
   'harnessPluginData',
@@ -18,7 +17,6 @@ export const inject = [
 import { HttpError } from 'mini-harness/transport';
 import type { SessionStore, SessionRecords } from 'mini-harness/sessions';
 import type { RunPort } from 'mini-harness/runs';
-import type { TaskPort } from 'mini-harness/tasks';
 import type { ApprovalRequests } from 'mini-harness/approvals';
 import type { PluginData, PluginSecrets } from 'mini-harness/plugin-data';
 import type { PromptPort } from 'mini-harness/agent/prompt';
@@ -47,7 +45,7 @@ export const Config = defineConfig(
 export function apply(ctx: Context) {
   const sessions: SessionStore = ctx.harnessSessions;
   const runs: RunPort = ctx.harnessRuns;
-  const tasks: TaskPort = ctx.harnessTasks;
+  const followUps = new Map<string, () => boolean>();
   const data: PluginData = ctx.harnessPluginData;
   const secrets: PluginSecrets = ctx.harnessPluginSecrets;
   const prompt: PromptPort = ctx.harnessPrompt;
@@ -88,10 +86,7 @@ export function apply(ctx: Context) {
     routes.register('POST', '/api/extensions/task-notes/cancel-follow-up', async ({ body }) => {
       const { runId } = await body();
       return {
-        cancelled:
-          typeof runId === 'string' &&
-          tasks.get(runId)?.metadata?.origin === 'task-notes' &&
-          tasks.cancel(runId),
+        cancelled: typeof runId === 'string' && (followUps.get(runId)?.() ?? false),
       };
     }),
   );
@@ -134,9 +129,21 @@ export function apply(ctx: Context) {
         model,
         origin: { source: 'plugin', senderSessionId: parentId },
       });
-      if (!taskId) throw new Error('The follow-up was accepted but could not start');
-      const task = await tasks.wait(taskId, signal);
-      return { childId: child.id, runId: task.id, state: task.state, text: task.result };
+      const run = runs.current(child.id);
+      if (!run || run.id !== taskId) throw new Error('The follow-up could not start');
+      followUps.set(run.id, run.cancel);
+      try {
+        const outcome = await runs.wait(child.id, undefined, signal);
+        if (!outcome) throw new Error('Missing follow-up outcome');
+        return {
+          childId: child.id,
+          runId: run.id,
+          state: outcome.state,
+          text: outcome.state === 'completed' ? await run.result : undefined,
+        };
+      } finally {
+        followUps.delete(run.id);
+      }
     }),
   );
 }

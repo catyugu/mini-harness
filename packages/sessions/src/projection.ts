@@ -1,6 +1,5 @@
 import { userContent } from './user-content.ts';
 import type { RecordPresentation, SessionDisplayRecord } from './shared/display-record.ts';
-import { isRunning, type RunInfo } from './shared/run-state.ts';
 import type { NativeMessage, NativeToolMessage } from '@mini-harness/llm/api';
 import type { ViewMessage } from './shared/message.ts';
 import type {
@@ -168,53 +167,28 @@ export function projectContextEntry(state: SessionContext, entry: SessionEntry, 
 export function projectLog(
   branch: SessionEntry[],
   execution: (id: string) => NativeToolMessage | undefined,
-  runs: readonly { seq: number; parentId: string | null; run: RunInfo }[],
   context: SessionContext,
 ): SessionProjection {
-  const state: SessionProjection = { ...context, timeline: [] };
-  const lastRun = runs.at(-1)?.run;
-  if (lastRun) state.run = lastRun;
-  const messageOf = (entry: SessionEntry) => projectMessage(entry, execution);
+  const state: SessionProjection = { ...context, timeline: [], timelineSequences: [] };
   const calls = new Map<string, unknown>();
-  const ancestry = new Set(branch.map(({ id }) => id));
-  let runIndex = 0;
-  let runId: string | undefined;
-  function projectRuns(before: number) {
-    for (; runs[runIndex] && runs[runIndex].seq < before; runIndex++) {
-      const { parentId, run } = runs[runIndex];
-      // A revision can start on one branch and commit its new input on another.
-      // Sequence bounds identify the producing run. Only its end is anchored to the branch.
-      runId = isRunning(run) ? run.id : undefined;
-      if (parentId !== null && !ancestry.has(parentId)) continue;
-      const { id, state: outcome, error, startedAt, finishedAt } = run;
-      if (outcome === 'failed' || outcome === 'cancelled' || outcome === 'interrupted')
-        state.timeline.push({
-          type: 'termination',
-          id,
-          state: outcome,
-          startedAt,
-          finishedAt,
-          error,
-        });
-    }
-  }
   for (const entry of branch) {
-    projectRuns(entry.seq);
-    state.timeline.push(...displayRecords(entry, runId));
-    const message = messageOf(entry);
-    if (!message) continue;
-    if (message.role === 'assistant')
-      for (const block of message.content)
-        if (block.type === 'toolCall') calls.set(block.id, block.arguments);
-    state.timeline.push(
-      displayMessage(
-        entry,
-        message,
-        runId,
-        message.role === 'toolResult' ? calls.get(message.toolCallId) : undefined,
-      ),
-    );
+    const start = state.timeline.length;
+    state.timeline.push(...displayRecords(entry));
+    const message = projectMessage(entry, execution);
+    if (message) {
+      if (message.role === 'assistant')
+        for (const block of message.content)
+          if (block.type === 'toolCall') calls.set(block.id, block.arguments);
+      state.timeline.push(
+        displayMessage(
+          entry,
+          message,
+          undefined,
+          message.role === 'toolResult' ? calls.get(message.toolCallId) : undefined,
+        ),
+      );
+    }
+    for (let index = start; index < state.timeline.length; index++) state.timelineSequences.push(entry.seq);
   }
-  projectRuns(Infinity);
   return state;
 }

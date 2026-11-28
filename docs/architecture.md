@@ -14,6 +14,9 @@ flowchart TD
   Runs --> Sessions
   Runs --> Tasks
   Subagents --> Runs
+  Background --> Tasks
+  Background --> Tools
+  Background --> Runs
   Subagents --> Sessions
   Subagents --> Tasks
   Conversation --> Runs
@@ -59,24 +62,26 @@ A Run is a Task with a conversation-specific lane and durable projection. Agent 
 
 ## State ownership
 
-| State or resource                                                                    | Owner              |
-| ------------------------------------------------------------------------------------ | ------------------ |
-| Profile layer loading and accepted YAML persistence                                  | Host               |
-| Service activation, injection, effects and Entry lifecycle                           | Cordis             |
-| Configuration reconciliation, plugin resolution, scope bindings and browser assets   | Plugins            |
-| Workspace identity and canonical roots                                               | Workspaces         |
-| Conversation identity, ancestry, branch history, inbox, task history and attachments | Sessions           |
-| Live task state, exclusive lanes, capacity and settlement                            | Tasks              |
-| Conversation admission policy, model selection for a run, transient replay           | Runs               |
-| Context preparation policy, token meter and derived usage statistics                 | Context Management |
-| Tool registrations and invocation contract                                           | Tools              |
-| Provider credentials/catalog, recent application model                               | Models             |
-| Pending confirmations                                                                | Approvals          |
-| HTTP registrations and projection revisions                                          | Transport          |
-| Selected conversation and composer drafts                                            | Conversation       |
-| Workspace-owned open tabs and page/dialog contributions                              | UI Layout          |
-| Slot registry, contributions and renderer lifetime                                   | UI Slots           |
-| Theme configuration and visual tokens                                                | UI Theme           |
+| State or resource                                                                  | Owner              |
+| ---------------------------------------------------------------------------------- | ------------------ |
+| Profile layer loading and accepted YAML persistence                                | Host               |
+| Service activation, injection, effects and Entry lifecycle                         | Cordis             |
+| Configuration reconciliation, plugin resolution, scope bindings and browser assets | Plugins            |
+| Workspace identity and canonical roots                                             | Workspaces         |
+| Conversation identity, ancestry, branch history, inbox and attachments             | Sessions           |
+| Live task state, exclusive lanes, capacity and settlement                          | Tasks              |
+| Run admission, inbox delivery, replay and Run history                              | Runs               |
+| Independent tool work, output and completion delivery                              | Background         |
+| Child delegation, concurrency policy and completion delivery                       | Subagents          |
+| Context preparation policy, token meter and derived usage statistics               | Context Management |
+| Tool registrations and invocation contract                                         | Tools              |
+| Provider credentials/catalog, recent application model                             | Models             |
+| Pending confirmations                                                              | Approvals          |
+| HTTP registrations and projection revisions                                        | Transport          |
+| Selected conversation and composer drafts                                          | Conversation       |
+| Workspace-owned open tabs and page/dialog contributions                            | UI Layout          |
+| Slot registry, contributions and renderer lifetime                                 | UI Slots           |
+| Theme configuration and visual tokens                                              | UI Theme           |
 
 The owner exposes the authoritative contract; a derived view, historical record or transport projection is not another mutable owner.
 

@@ -13,7 +13,7 @@ if (tool) await runTool(tool, callId, { path: 'README.md' }, { signal });
 
 Tool execution uses the providing Cordis Fiber. Registration uses the caller’s service and scope, with an optional explicit provider Context for contributions to another scope. The synchronous unregister function removes the definition and requests cancellation of accepted calls, including independently scheduled calls. It can be called from the tool itself. Fiber disposal waits for execution to settle before releasing its effects. Put resources that require independent disposal in a dedicated provider Fiber, with the registration owned by that Fiber. Removing a scoped override restores inherited selection. A definition selected before a replacement cannot invoke the replacement.
 
-`ToolContext` provides the call ID, cancellation signal, progress updates and an output writer. An execution environment can also supply a whole-task wait function or a background report function. A tool that supports independent execution can declare `background: true` and optionally project a compact result for task history. See [Runs](../runs/README.md#independent-tools) for the built-in background entry.
+`ToolContext` provides the call ID, cancellation signal, progress updates and an output writer. An execution environment can also supply a whole-task wait function or a background report function. A tool that supports independent execution declares `background: true`. [Background](../background/README.md) owns independent admission and result projection.
 
 An executor presents the system prompt and tool schemas once per turn. It does not transform conversation messages; a plugin can contribute message projection through the scoped Agent hook.
 

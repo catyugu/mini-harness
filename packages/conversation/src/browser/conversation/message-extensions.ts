@@ -16,6 +16,8 @@ export class MessageExtensions {
     action: new KeyedRegistry<string, ToolRenderer>(),
     summary: new KeyedRegistry<string, ToolRenderer>(),
     status: new KeyedRegistry<string, ToolRenderer>(),
+    input: new KeyedRegistry<string, ToolRenderer>(),
+    diagnostics: new KeyedRegistry<string, ToolRenderer>(),
   };
   private readonly records = new KeyedRegistry<string, RecordRenderer>();
   private readonly footers = new Map<string, TurnFooterRenderer>();

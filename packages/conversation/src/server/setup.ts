@@ -27,7 +27,7 @@ export function setup(ctx: Context) {
   registerSessionRoutes(ctx, (id): ConversationView => {
     const { harnessSessions: sessions, harnessRuns } = ctx;
     const record = sessions.assertAvailable(id);
-    const history = sessions.inspectLog(id, (log) => ({ ...log.projection(), queue: log.queue() }));
+    const history = harnessRuns.history(id);
     const { partial, tools, records } = harnessRuns.activity(id);
     return {
       ...projectSession(ctx, record),
@@ -35,7 +35,7 @@ export function setup(ctx: Context) {
       leafId: history?.leafId ?? null,
       model: history?.model,
       thinkingLevel: history?.thinkingLevel,
-      queue: history?.queue ?? [],
+      queue: sessions.inspectLog(id, (log) => log.queue()) ?? [],
       partial,
       records,
       tools: tools.map((tool) => projectToolEvent(ctx, id, tool)),

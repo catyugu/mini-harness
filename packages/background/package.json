@@ -1,0 +1,22 @@
+{
+  "name": "@mini-harness/background",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@mini-harness/conversation": "workspace:*",
+    "@mini-harness/platform": "workspace:*",
+    "@mini-harness/plugin-api": "workspace:*",
+    "@mini-harness/runs": "workspace:*",
+    "@mini-harness/sessions": "workspace:*",
+    "@mini-harness/tasks": "workspace:*",
+    "@mini-harness/tools": "workspace:*",
+    "@mini-harness/ui-primitives": "workspace:*",
+    "@mini-harness/ui-runtime": "workspace:*"
+  },
+  "miniHarness": {
+    "profileModules": {
+      "@mini-harness/background": "./src/manifest.ts"
+    }
+  }
+}

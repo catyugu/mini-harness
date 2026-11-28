@@ -49,5 +49,3 @@ plugins:
     name: '@mini-harness/attachment-input'
   - id: core:history
     name: '@mini-harness/conversation-history'
-  - id: background-tasks
-    name: '@mini-harness/background-tasks'

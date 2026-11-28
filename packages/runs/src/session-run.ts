@@ -399,7 +399,6 @@ export class SessionRun {
           if (event.type === 'thinking') return;
           if (event.type === 'phase') {
             if (event.phase === 'model') modelStep = event.turn;
-            task.update({ phase: event.phase, turn: event.turn });
             return;
           }
           if (event.type === 'request') {

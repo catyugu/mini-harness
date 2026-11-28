@@ -1,7 +1,7 @@
 import { isViewMessage } from '@mini-harness/sessions/message';
 import { waitFor } from '@mini-harness/platform/wait';
 import type { ConversationView } from '../shared/api.ts';
-import { isRunning } from '@mini-harness/sessions/run-state';
+import { isRunning } from '@mini-harness/runs/run-state';
 import { eventStream } from '@mini-harness/transport/http';
 import { projectHistory, projectToolEvent, projectToolResult } from './display-events.ts';
 import { scheduler } from 'node:timers/promises';

@@ -11,9 +11,9 @@ import type {
 import { updateRecords, updateTools, type RunEvent } from '@mini-harness/runs/stream';
 import type { SendReceipt } from '@mini-harness/runs/api';
 import { defaultMessageMode, type MessageMode } from '@mini-harness/sessions/queue';
-import type { RunInfo } from '@mini-harness/sessions/run-state';
-import type { HistoryEntry } from '@mini-harness/sessions/message';
-import { isRunning } from '@mini-harness/sessions/run-state';
+import type { RunInfo } from '@mini-harness/runs/run-state';
+import type { RunHistoryEntry } from '@mini-harness/runs/run-state';
+import { isRunning } from '@mini-harness/runs/run-state';
 import { payload } from '@mini-harness/ui-runtime/http';
 import { workspaceRoute } from '@mini-harness/workspaces/browser/route';
 import { readConversation, observeRun } from '../session-client.ts';
@@ -89,7 +89,7 @@ export function createConversationController(ctx: Context): ConversationControll
     if (!signal.aborted && isRunning(run)) void observe(item, signal);
   }
 
-  function append(entry: HistoryEntry, patch: Partial<ConversationState> = {}) {
+  function append(entry: RunHistoryEntry, patch: Partial<ConversationState> = {}) {
     const timeline = state.history?.timeline ?? [];
     if (timeline.some(({ id }) => id === entry.id)) {
       update(patch);

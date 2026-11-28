@@ -1,12 +1,10 @@
-import type { TaskOptions, TaskOutput, TaskSnapshot } from '@mini-harness/tasks/api';
 import type { ScopeKey } from '@mini-harness/plugin-api/scopes';
 import type { ModelChoice } from '@mini-harness/llm/vocabulary';
 import type { HistoryEntry } from './shared/message.ts';
 import type { ConversationPermission, SessionRecord } from './shared/identity.ts';
-import type { SessionLogPort, SessionLogReader } from './log-api.ts';
+import type { PluginEntry, SessionEntry, SessionLogPort, SessionLogReader } from './log-api.ts';
 export type { SessionLogPort, SessionEntry, SessionEvent, SessionProjection } from './log-api.ts';
 import type { Attachment, ImageInput, PreparedMessage } from '@mini-harness/input/message';
-import type { RunInfo } from './shared/run-state.ts';
 
 import type { RecordDisplay, RecordOwner } from './shared/display-record.ts';
 export type { RecordDisplay, RecordOwner } from './shared/display-record.ts';
@@ -16,6 +14,10 @@ export interface PluginRecord<Data = unknown> {
   type: 'plugin-record';
   owner: RecordOwner;
   data: Data;
+  /** Session-scoped records do not advance the selected branch. */
+  scope?: 'session';
+  /** Records with the same key share a latest-record index entry. */
+  key?: string;
 }
 
 export interface SessionRecords<Data = unknown> {
@@ -35,6 +37,8 @@ export interface SessionCatalog {
   modifiedAt(record: SessionRecord): string;
 }
 
+export type PluginRecordQuery = { limit?: number; keyPrefix?: string } | { key: string };
+
 export interface SessionHistory {
   revisionTarget(
     id: string,
@@ -46,12 +50,10 @@ export interface SessionHistory {
     textFiles: string[];
   };
   inspectLog<T>(id: string, read: (log: SessionLogReader) => T, strict?: boolean): T | undefined;
-  runSummary(id: string): RunInfo | undefined;
-  /** Committed task summaries without result or progress; limited queries use newest admission first. */
-  tasks(sessionId: string, type?: string, limit?: number, exclude?: ReadonlySet<string>): TaskSnapshot[];
-  /** Read the committed task; pass false for its indexed summary without loading details. */
-  taskStatus(sessionId: string, taskId: string, detail?: boolean): TaskSnapshot | undefined;
-  taskOutput(sessionId: string, taskId: string, after?: number): TaskOutput | undefined;
+  /** Read one stored message by entry ID, without opening a history projection. */
+  messageEntry(id: string, entryId: string): Extract<SessionEntry, { type: 'message' }> | undefined;
+  /** Select records by key or prefix before reading their payloads. */
+  pluginRecords<Data>(id: string, owner: RecordOwner, query?: PluginRecordQuery): PluginEntry<Data>[];
   readyInboxSessions(): string[];
   hasInbox(sessionId: string, messageId: string): boolean;
   logError(id: string): string | undefined;
@@ -78,8 +80,6 @@ export interface SessionStore extends SessionCatalog, SessionHistory, SessionLif
   history(id: string): { timeline: HistoryEntry[]; leafId: string | null; model?: ModelChoice };
   records<Data = unknown>(id: string, owner: RecordOwner): SessionRecords<Data>;
   log(id: string): SessionLogPort;
-  /** Bind independent work to this session's lifetime and durable log. */
-  task(id: string): Pick<TaskOptions, 'owner' | 'commit'>;
   prepareInput(
     id: string,
     text: unknown,

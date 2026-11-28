@@ -19,6 +19,7 @@ These private source packages are built into a single npm package. Locate the ow
 - [llm](../packages/llm/README.md): Native model protocol and adapter selection.
 - [models](../packages/models/README.md): Model catalog, provider data and model preference.
 - [tools](../packages/tools/README.md): Tool registration and invocation.
+- [background](../packages/background/README.md): Independent tool execution, output and history.
 - [subagents](../packages/subagents/README.md): Child conversation delegation policy.
 
 ## Data and identity

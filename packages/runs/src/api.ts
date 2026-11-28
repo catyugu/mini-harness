@@ -7,7 +7,7 @@ export type { MessageMode, MessageOrigin } from '@mini-harness/sessions/queue';
 import type { MessageMode, MessageOrigin, QueueEntry } from '@mini-harness/sessions/queue';
 import type { Context } from 'mini-harness/cordis';
 import type { TaskHandle, TaskOptions } from '@mini-harness/tasks/api';
-import type { RunInfo } from '@mini-harness/sessions/run-state';
+import type { RunHistoryEntry, RunInfo } from './shared/run-state.ts';
 
 export interface RunInput {
   message: string;
@@ -29,7 +29,7 @@ export interface SendReceipt {
   queue: QueueEntry[];
 }
 
-export type RunPolicy = Pick<TaskOptions, 'pool' | 'provider' | 'metadata'>;
+export type RunPolicy = Pick<TaskOptions, 'pool' | 'provider'>;
 
 export interface RunPort {
   readonly events: EventTarget;
@@ -66,6 +66,26 @@ export interface RunPort {
       }
     | undefined;
   info(id: string): RunInfo | undefined;
+  history(
+    id: string,
+    leafId?: string | null,
+  ):
+    | {
+        timeline: RunHistoryEntry[];
+        leafId: string | null;
+        model?: ModelChoice;
+        thinkingLevel?: ThinkingLevel;
+      }
+    | undefined;
+  /** List durable terminal states without loading Assistant messages. */
+  settlements(id: string): RunInfo[];
+  /** Read one settled run and its answer from the original Assistant message. */
+  result(id: string, runId: string): { run: RunInfo; answer?: string } | undefined;
+  wait(
+    id: string,
+    waitFor: ((taskId: string) => Promise<void>) | undefined,
+    signal: AbortSignal,
+  ): Promise<RunInfo | undefined>;
   watch(
     id: string,
     runId: string,
@@ -78,7 +98,6 @@ export interface RunPort {
   runTask<T>(
     provider: Context,
     id: string,
-    type: string,
     work: (ctx: Context, signal: AbortSignal, taskId: string) => Promise<T>,
   ): Promise<T>;
 }
@@ -95,7 +114,7 @@ declare module 'mini-harness/cordis' {
 declare module '@mini-harness/plugin-api/observations' {
   interface CapabilityObservations {
     'run-started': { type: 'run-started'; sessionId: string; run: RunInfo };
-    'run-ended': { type: 'run-ended'; sessionId: string; run: RunInfo };
+    'run-ended': { type: 'run-ended'; sessionId: string; run: RunInfo; answer?: string };
     'input-accepted': {
       type: 'input-accepted';
       sessionId: string;

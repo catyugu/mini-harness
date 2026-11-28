@@ -1,7 +1,8 @@
+import type { RunHistoryEntry } from '@mini-harness/runs/run-state';
 import { scopeTarget } from '@mini-harness/plugin-api/scopes';
 import { isTextImageContent, type NativeToolMessage } from '@mini-harness/llm/api';
 import type { Context } from 'mini-harness/cordis';
-import type { HistoryEntry, ViewMessage } from '@mini-harness/sessions/message';
+import type { ViewMessage } from '@mini-harness/sessions/message';
 
 export interface ToolProjection {
   sessionId: string;
@@ -35,7 +36,11 @@ export function projectTool(ctx: Context, projection: ToolProjection) {
   return content;
 }
 
-export function projectHistory(ctx: Context, sessionId: string, timeline: HistoryEntry[]): HistoryEntry[] {
+export function projectHistory(
+  ctx: Context,
+  sessionId: string,
+  timeline: RunHistoryEntry[],
+): RunHistoryEntry[] {
   return timeline.map((entry) =>
     entry.type === 'message' && entry.role === 'toolResult'
       ? projectToolResult(ctx, sessionId, entry)

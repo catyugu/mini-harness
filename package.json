@@ -188,10 +188,6 @@
       "types": "./dist/types/packages/sessions/src/shared/identity.d.ts",
       "default": "./dist/packages/sessions/src/shared/identity.js"
     },
-    "./sessions/run-state": {
-      "types": "./dist/types/packages/sessions/src/shared/run-state.d.ts",
-      "default": "./dist/packages/sessions/src/shared/run-state.js"
-    },
     "./sessions/display-record": {
       "types": "./dist/types/packages/sessions/src/shared/display-record.d.ts",
       "default": "./dist/packages/sessions/src/shared/display-record.js"
@@ -251,6 +247,10 @@
     "./runs": {
       "types": "./dist/types/packages/runs/src/api.d.ts",
       "default": "./dist/packages/runs/src/api.js"
+    },
+    "./runs/state": {
+      "types": "./dist/types/packages/runs/src/shared/run-state.d.ts",
+      "default": "./dist/packages/runs/src/shared/run-state.js"
     }
   },
   "packageManager": "pnpm@10.34.9"

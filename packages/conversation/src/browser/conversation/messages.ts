@@ -1,7 +1,8 @@
+import type { RunHistoryEntry } from '@mini-harness/runs/run-state';
 import type { Context } from 'mini-harness/cordis';
 import type { LiveRecord } from '@mini-harness/runs/stream';
-import type { HistoryEntry, ViewMessage } from '@mini-harness/sessions/message';
-import type { RunInfo, RunTermination } from '@mini-harness/sessions/run-state';
+import type { ViewMessage } from '@mini-harness/sessions/message';
+import type { RunInfo, RunTermination } from '@mini-harness/runs/run-state';
 import type {
   MessageAction,
   MessageActionContext,
@@ -252,7 +253,7 @@ export function createMessageView(
 
   function renderUser(message: Extract<ViewMessage, { role: 'user' }>) {
     const origin = message.origin;
-    const notification = notificationLabel(origin, message.inboxId);
+    const notification = notificationLabel(origin);
     const entry = document.createElement(notification ? 'details' : 'div');
     entry.className = notification ? 'async-message ui-record ui-disclosure' : 'message-row user';
     const text = textOf(message.content);
@@ -372,7 +373,7 @@ export function createMessageView(
   }
 
   function history(
-    entries: readonly HistoryEntry[],
+    entries: readonly RunHistoryEntry[],
     run: RunInfo | undefined,
     partial: string,
     tools: Parameters<typeof groupHistory>[3],

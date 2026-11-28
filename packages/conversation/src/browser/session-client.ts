@@ -1,4 +1,4 @@
-import { isRunning } from '@mini-harness/sessions/run-state';
+import { isRunning } from '@mini-harness/runs/run-state';
 import type { RunEvent } from '@mini-harness/runs/stream';
 import { api, AuthenticationError, data, payload, readEvents, wait } from '@mini-harness/ui-runtime/http';
 import type { ConversationView } from '../shared/api.ts';

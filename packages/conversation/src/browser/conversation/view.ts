@@ -3,7 +3,7 @@ import type { Context } from 'mini-harness/cordis';
 import { scopedElements, fromMarkup } from '@mini-harness/ui-primitives/primitives';
 import { createRunSummary } from './run-summary.ts';
 import { renderQueue } from './queue-view.ts';
-import { isRunning } from '@mini-harness/sessions/run-state';
+import { isRunning } from '@mini-harness/runs/run-state';
 
 export function mountConversationLayout(ctx: Context) {
   const signal = ctx.fiber.signal;

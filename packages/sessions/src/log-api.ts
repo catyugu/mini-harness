@@ -1,6 +1,5 @@
 import type { PluginRecord } from './records.ts';
 import type { RecordPresentation } from './shared/display-record.ts';
-import type { TaskHistoryRecord } from '@mini-harness/tasks/api';
 import type { LogEntry } from './record-log.ts';
 import type { MessageMode, MessageOrigin, QueueEntry } from './shared/queue.ts';
 import type { ContentDelta } from './content-delta.ts';
@@ -16,7 +15,6 @@ import type {
   NativeUsage,
 } from '@mini-harness/llm/api';
 import type { HistoryEntry } from './shared/message.ts';
-import { projectRun, type RunDetails, type RunInfo } from './shared/run-state.ts';
 
 export interface InboxItem {
   id: string;
@@ -97,7 +95,6 @@ type SessionOperation<Data = unknown> =
   | { type: 'inbox-paused' }
   | { type: 'inbox-consumed' | 'inbox-cancelled'; ids: string[]; reason?: string }
   | { type: 'inbox-failed'; inboxId: string; reason: string }
-  | ({ type: 'task'; run?: RunDetails } & TaskHistoryRecord)
   | { type: 'branch' };
 
 export type SessionEvent<Data = unknown> = SessionOperation<Data> & {
@@ -106,9 +103,7 @@ export type SessionEvent<Data = unknown> = SessionOperation<Data> & {
 
 export type SessionEntry<Data = unknown> = LogEntry<SessionEvent<Data>>;
 
-export function runFromEntry(sessionId: string, entry: SessionEntry): RunInfo | undefined {
-  if (entry.type === 'task' && entry.run) return projectRun(sessionId, entry.task, entry.run);
-}
+export type PluginEntry<Data> = Extract<SessionEntry<Data>, { type: 'plugin-record' }>;
 
 export interface SessionContext {
   leafId: string | null;
@@ -122,7 +117,7 @@ export interface SessionContext {
 
 export interface SessionProjection extends SessionContext {
   timeline: HistoryEntry[];
-  run?: RunInfo;
+  timelineSequences: number[];
 }
 
 export interface SessionLogPort {

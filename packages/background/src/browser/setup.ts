@@ -1,26 +1,40 @@
 import type { Context } from 'mini-harness/cordis';
-import type { TaskData, TaskOutput, TaskSnapshot } from '@mini-harness/tasks/api';
+import type { ToolView } from '@mini-harness/conversation/browser/history-api';
+import type { Work, WorkOutput } from '../shared/work.ts';
 import { browserRequest } from '@mini-harness/ui-runtime/http';
 import { icon } from '@mini-harness/ui-primitives/icons';
 import { bindPopover, button, fromMarkup, required } from '@mini-harness/ui-primitives/primitives';
 
-const live = ({ state }: TaskSnapshot) => ['queued', 'running', 'waiting'].includes(state);
-const object = (value?: TaskData): Record<string, TaskData> =>
-  value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+const statusTone = {
+  queued: 'info',
+  running: 'info',
+  waiting: 'warning',
+  completed: 'success',
+  failed: 'danger',
+  cancelled: 'warning',
+  interrupted: 'danger',
+};
+const live = ({ state }: Work) => ['queued', 'running', 'waiting'].includes(state);
+const failedTool = ({ result }: Work) =>
+  result && ['error', 'skipped', 'denied', 'cancelled'].includes(result.toolState);
 
-const failedTool = (task: TaskSnapshot) =>
-  ['error', 'skipped', 'denied', 'cancelled'].some((state) => object(task.result).toolState === state);
-
-function status(task: TaskSnapshot) {
+function status(task: Work) {
   if (task.cancellationRequested && live(task)) return 'Cancelling';
-  if (live(task) && object(task.progress).state === 'approval') return 'Awaiting approval';
-  const summary = object(task.result).summary;
-  if (task.state === 'completed' && typeof summary === 'string') return summary;
+  if (live(task) && task.progress?.state === 'approval') return 'Awaiting approval';
   if (task.state === 'completed' && failedTool(task)) return 'Failed';
   return task.state[0].toUpperCase() + task.state.slice(1);
 }
 
-function duration(task: TaskSnapshot) {
+function toolView(work: Work): ToolView {
+  return {
+    name: work.tool,
+    arguments: work.arguments,
+    state: work.result?.toolState ?? work.progress?.state ?? 'running',
+    details: work.result?.details,
+  };
+}
+
+function duration(task: Work) {
   const seconds = Math.max(
     0,
     Math.floor(
@@ -34,36 +48,12 @@ function duration(task: TaskSnapshot) {
   return seconds + ' s';
 }
 
-function input(task: TaskSnapshot) {
-  const args = task.metadata?.arguments;
-  if (task.metadata?.tool === 'shell' && typeof object(args).command === 'string')
-    return String(object(args).command);
-  return args === undefined ? '' : JSON.stringify(args, null, 2);
-}
-
-function resultText(value?: TaskData) {
-  const content = object(value).content;
-  if (!Array.isArray(content)) return typeof value === 'string' ? value : '';
-  return content
-    .flatMap((part) => {
-      if (typeof part === 'string') return [part];
-      const block = object(part);
-      return block.type === 'text' && typeof block.text === 'string' ? [block.text] : [];
-    })
-    .join('\n');
-}
-
 function reconcile(parent: HTMLElement, children: HTMLElement[]) {
-  let next = parent.firstElementChild;
-  for (const child of children) {
-    if (child === next) next = next.nextElementSibling;
-    else parent.insertBefore(child, next);
+  for (const [index, child] of children.entries()) {
+    const current = parent.children.item(index);
+    if (current !== child) parent.insertBefore(child, current);
   }
-  while (next) {
-    const node = next;
-    next = next.nextElementSibling;
-    node.remove();
-  }
+  while (parent.children.length > children.length) parent.lastElementChild!.remove();
 }
 
 function setup(ctx: Context) {
@@ -94,18 +84,26 @@ function setup(ctx: Context) {
   finishedToggle.prepend(icon('chevron'));
   const clear = required(finished.querySelector<HTMLButtonElement>('.task-clear'));
   clear.title = 'Hide finished jobs from this panel without deleting their history';
-  let tasks: TaskSnapshot[] = [];
+  let tasks: Work[] = [];
   let active: string | undefined;
   let revision = 0;
   let finishedOpen: boolean | undefined;
   const dismissed = new Set<string>();
   const rows = new Map<string, ReturnType<typeof createRow>>();
-  const path = (id: string) => '/sessions/' + encodeURIComponent(id) + '/tasks';
+  const path = (id: string) => '/sessions/' + encodeURIComponent(id) + '/background';
   const open = () => panel.matches(':popover-open');
   let expanded: ReturnType<typeof createOutput> | undefined;
 
-  function label(task: TaskSnapshot) {
-    return task.metadata?.tool === 'shell' ? input(task) || task.name || 'Shell' : (task.name ?? 'Task');
+  function input(task: Work) {
+    return ctx.miniMessages.render(toolView(task), signal, 'input')?.textContent;
+  }
+
+  function label(task: Work) {
+    return input(task) || task.name;
+  }
+
+  function statusLabel(task: Work) {
+    return ctx.miniMessages.render(toolView(task), signal, 'summary')?.textContent || status(task);
   }
 
   function closeOutput() {
@@ -114,7 +112,7 @@ function setup(ctx: Context) {
     expanded = undefined;
   }
 
-  function createOutput(task: TaskSnapshot, sessionId: string) {
+  function createOutput(task: Work, sessionId: string) {
     const lifetime = new AbortController();
     const node = fromMarkup(`<div class="task-detail">
       <div class="task-input"><pre></pre></div>
@@ -123,7 +121,7 @@ function setup(ctx: Context) {
       <pre class="task-output" aria-label="Task output"></pre>
     </div>`);
     const command = required(node.querySelector<HTMLElement>('.task-input'));
-    const commandText = input(task);
+    const commandText = input(task) ?? JSON.stringify(task.arguments, null, 2);
     command.hidden = !commandText;
     required(command.querySelector('pre')).textContent = commandText;
     const copy = (text: () => string, title: string) => {
@@ -133,7 +131,7 @@ function setup(ctx: Context) {
       action.onclick = () => void navigator.clipboard.writeText(text()).catch(control.report);
       return action;
     };
-    command.append(copy(() => commandText, 'Copy command'));
+    command.append(copy(() => commandText, 'Copy input'));
     const output = required(node.querySelector<HTMLElement>('.task-output'));
     const warning = required(node.querySelector<HTMLElement>('.task-notice'));
     required(node.querySelector('.task-output-heading')).append(
@@ -143,65 +141,60 @@ function setup(ctx: Context) {
     let fetching = false;
     let text = '';
     let truncated = false;
-    let failure = '';
-    function show(next: TaskSnapshot) {
+    let latest = task;
+    function show(failure?: string) {
+      const next = latest;
       const following = output.scrollHeight - output.scrollTop - output.clientHeight < 16;
-      const fallback = resultText(next.result) || resultText(next.progress);
+      const fallback =
+        next.result?.content.join('\n') ||
+        next.progress?.content?.flatMap((part) => (part.type === 'text' ? [part.text] : [])).join('\n');
       const shown = text || fallback || (live(next) ? 'Waiting for output…' : 'No output');
       if (output.textContent !== shown) {
         output.textContent = shown;
         if (following) output.scrollTop = output.scrollHeight;
       }
-      const details = object(object(next.result).details);
-      const overflow = [details.stdoutOverflow, details.stderrOverflow].filter(
-        (path) => typeof path === 'string',
-      );
+      const diagnostics = ctx.miniMessages.render(
+        toolView(next),
+        lifetime.signal,
+        'diagnostics',
+      )?.textContent;
       warning.textContent = [
         truncated ? 'Earlier output was truncated' : '',
-        ...overflow,
+        diagnostics,
         failure || next.error || '',
       ]
         .filter(Boolean)
         .join(' · ');
     }
-    async function update(next: TaskSnapshot) {
-      show(next);
-      if (fetching || lifetime.signal.aborted || next.outputCursor <= cursor) return;
+    async function update(next: Work) {
+      latest = next;
+      show();
+      if (fetching || lifetime.signal.aborted || latest.outputCursor <= cursor) return;
       fetching = true;
-      const requestedCursor = cursor;
       try {
-        const data = await browserRequest<TaskOutput>(
-          ctx,
-          path(sessionId) + '/' + encodeURIComponent(task.id) + '/output?after=' + cursor,
-          { signal: lifetime.signal },
-        );
-        if (lifetime.signal.aborted) return;
-        if (data.truncated) {
-          truncated = true;
-          text = '';
+        while (latest.outputCursor > cursor) {
+          const data = await browserRequest<WorkOutput>(
+            ctx,
+            path(sessionId) + '/' + encodeURIComponent(task.id) + '/output?after=' + cursor,
+            { signal: lifetime.signal },
+          );
+          if (lifetime.signal.aborted || data.cursor <= cursor) break;
+          const joined = (data.truncated ? '' : text) + data.chunks.map(({ text }) => text).join('');
+          truncated ||= data.truncated || joined.length > 1024 * 1024;
+          text = joined.slice(-1024 * 1024);
+          cursor = data.cursor;
+          show();
         }
-        text += data.chunks.map(({ text }) => text).join('');
-        if (text.length > 1024 * 1024) {
-          truncated = true;
-          text = text.slice(-1024 * 1024);
-        }
-        cursor = data.cursor;
-        failure = '';
       } catch (error) {
-        if (!lifetime.signal.aborted) failure = String(error);
+        if (!lifetime.signal.aborted) show(String(error));
       } finally {
         fetching = false;
-        const latest = tasks.find(({ id }) => id === task.id);
-        if (!lifetime.signal.aborted && latest) {
-          show(latest);
-          if (!failure && cursor > requestedCursor && cursor < latest.outputCursor) void update(latest);
-        }
       }
     }
     return { id: task.id, node, lifetime, update };
   }
 
-  function showOutput(task: TaskSnapshot) {
+  function showOutput(task: Work) {
     if (!active) return;
     const wasOpen = expanded?.id === task.id;
     closeOutput();
@@ -209,7 +202,7 @@ function setup(ctx: Context) {
     render();
   }
 
-  function createRow(task: TaskSnapshot) {
+  function createRow(task: Work) {
     const node = fromMarkup(`<div class="task-item">
       <div class="task-line ui-list-row">
         <button type="button" class="task-row ui-row ui-fill">
@@ -218,7 +211,6 @@ function setup(ctx: Context) {
         </button>
       </div>
     </div>`);
-    node.dataset.taskId = task.id;
     const line = required(node.querySelector('.task-line'));
     const row = required(node.querySelector<HTMLButtonElement>('.task-row'));
     const dot = required(row.querySelector<HTMLElement>('.task-dot'));
@@ -230,6 +222,7 @@ function setup(ctx: Context) {
     row.append(chevron);
     const cancel = button('', 'quiet');
     cancel.classList.add('task-cancel');
+    cancel.title = 'Cancel task';
     cancel.append(icon('stop'));
     line.append(cancel);
     let current = task;
@@ -248,38 +241,25 @@ function setup(ctx: Context) {
     function tick() {
       time.textContent = duration(current);
     }
-    function update(next: TaskSnapshot) {
+    function update(next: Work) {
       current = next;
       const title = label(next);
       name.textContent = title;
-      kind.textContent = next.name === title ? '' : (next.name ?? '');
+      kind.textContent = next.name === title ? '' : next.name;
       kind.hidden = !kind.textContent;
-      state.textContent = status(next);
-      node.dataset.state = next.state;
-      node.dataset.tone =
-        next.state === 'completed' && failedTool(next)
-          ? 'failed'
-          : next.cancellationRequested && live(next)
-            ? 'cancelled'
-            : next.state;
-      const tone = node.dataset.tone;
+      state.textContent = statusLabel(next);
       dot.dataset.tone =
-        tone === 'running' || tone === 'queued'
-          ? 'info'
-          : tone === 'completed'
-            ? 'success'
-            : tone === 'failed' || tone === 'interrupted'
-              ? 'danger'
-              : tone === 'waiting' || tone === 'cancelled'
-                ? 'warning'
-                : 'neutral';
+        next.cancellationRequested && live(next)
+          ? 'warning'
+          : next.state === 'completed' && failedTool(next)
+            ? 'danger'
+            : statusTone[next.state];
       row.title = title + ' · ' + state.textContent;
       row.setAttribute('aria-label', title + ' · ' + state.textContent);
       row.setAttribute('aria-expanded', String(expanded?.id === next.id));
       chevron.classList.toggle('task-chevron-open', expanded?.id === next.id);
       cancel.hidden = !live(next);
       cancel.disabled = next.cancellationRequested;
-      cancel.title = 'Cancel task';
       cancel.setAttribute('aria-label', 'Cancel ' + title);
       tick();
       if (expanded?.id === next.id) {
@@ -294,16 +274,10 @@ function setup(ctx: Context) {
     const pending = tasks.filter(live);
     const settled = tasks.filter((task) => !live(task) && !dismissed.has(task.id));
     const finishedExpanded = finishedOpen ?? pending.length === 0;
-    const visible = [...pending, ...(finishedExpanded ? settled : [])];
-    const displayed = new Set(visible.map(({ id }) => id));
-    if (expanded && !displayed.has(expanded.id)) closeOutput();
-    for (const [id, row] of rows) {
-      if (displayed.has(id)) continue;
-      row.node.remove();
-      rows.delete(id);
-    }
-    const mount = (parent: HTMLElement, list: TaskSnapshot[]) => {
+    const displayed = new Set<string>();
+    const mount = (parent: HTMLElement, list: Work[]) => {
       const nodes = list.map((task) => {
+        displayed.add(task.id);
         let row = rows.get(task.id);
         if (!row) {
           row = createRow(task);
@@ -316,6 +290,8 @@ function setup(ctx: Context) {
     };
     mount(runningRows, pending);
     mount(finishedRows, finishedExpanded ? settled : []);
+    if (expanded && !displayed.has(expanded.id)) closeOutput();
+    for (const id of rows.keys()) if (!displayed.has(id)) rows.delete(id);
     running.hidden = !pending.length;
     finished.hidden = !settled.length;
     finishedRows.hidden = !finishedExpanded;
@@ -323,10 +299,9 @@ function setup(ctx: Context) {
     finishedCount.textContent = 'Finished ' + settled.length;
     finishedToggle.setAttribute('aria-expanded', String(finishedExpanded));
     const total = pending.length + settled.length;
-    const liveCount = pending.length;
     count.textContent = total + (total === 1 ? ' task' : ' tasks');
-    toggle.dataset.tone = liveCount > 0 ? 'info' : 'neutral';
-    toggle.title = liveCount + ' running · ' + (total - liveCount) + ' finished';
+    toggle.dataset.tone = pending.length ? 'info' : 'neutral';
+    toggle.title = pending.length + ' running · ' + settled.length + ' finished';
     container.hidden = !active || (!total && !notice.textContent);
     if (container.hidden && open()) panel.hidePopover();
   }
@@ -355,7 +330,7 @@ function setup(ctx: Context) {
     }
     if (!id) return;
     try {
-      const result = await browserRequest<TaskSnapshot[]>(ctx, path(id), { signal });
+      const result = await browserRequest<Work[]>(ctx, path(id), { signal });
       if (signal.aborted || request !== revision) return;
       tasks = result;
       notice.textContent = '';
@@ -370,7 +345,7 @@ function setup(ctx: Context) {
 
   ctx.effect(() => ctx.miniSlots.register('header.actions', container));
   ctx.effect(() =>
-    ctx.miniProjections.register('tasks', {
+    ctx.miniProjections.register('background', {
       sync(_revision, reconnect, id) {
         if (!id || reconnect || id === active) return refresh();
       },
@@ -383,6 +358,11 @@ function setup(ctx: Context) {
     },
     signal,
   );
+  ctx.miniMessages.subscribeToTools(() => {
+    closeOutput();
+    render();
+    events.dispatchEvent(new Event('change'));
+  }, signal);
   signal.addEventListener('abort', closeOutput, { once: true });
   const show = bindPopover(toggle, panel, signal);
   panel.addEventListener(
@@ -401,7 +381,7 @@ function setup(ctx: Context) {
   }, 1000);
   ctx.effect(() => () => clearInterval(interval));
   const receipt = ({ details }: { details?: Record<string, unknown> }, signal: AbortSignal) => {
-    const taskId = details?.taskId;
+    const taskId = details?.workId;
     if (typeof taskId !== 'string') return;
     const node = document.createElement('div');
     node.className = 'task-receipt';
@@ -420,7 +400,7 @@ function setup(ctx: Context) {
     node.append(view);
     const update = () => {
       const task = tasks.find(({ id }) => id === taskId);
-      text.textContent = task ? label(task) + ' · ' + status(task) : 'Accepted';
+      text.textContent = task ? label(task) + ' · ' + statusLabel(task) : 'Accepted';
     };
     events.addEventListener('change', update, { signal });
     update();
