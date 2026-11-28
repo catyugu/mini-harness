@@ -1,6 +1,6 @@
 import type { Context, Plugin } from 'mini-harness/cordis';
 import type { PluginInfo } from '@mini-harness/plugin-api/descriptor';
-import { modelRetry } from '@mini-harness/agent/events';
+import { modelRetry, type RequestPreparation } from '@mini-harness/agent/events';
 import type { LlmRequest } from '@mini-harness/llm/api';
 import type {} from '@mini-harness/runs/api';
 import { terminal } from '@mini-harness/tasks/api';
@@ -28,7 +28,7 @@ function setup(ctx: Context) {
   const statistics = new WeakMap<Pick<SessionLogPort, 'entries'>, Statistics>();
   const createManager = (scoped: Context, id: string) =>
     new ContextManagement(scoped.harnessModels, scoped.harnessLlm, modelRetry(scoped, id));
-  ctx.on('agent/prepare-request', (request, step) => {
+  const prepare = (request: LlmRequest, step: RequestPreparation, reason: 'normal' | 'context-overflow' | 'image-limit') => {
     const log = sessions.log(step.sessionId);
     return createManager(step.context, step.sessionId).prepare(
       log,
@@ -36,8 +36,13 @@ function setup(ctx: Context) {
       (messages) => step.rebuild(messages, step.signal),
       configuration(log.setting(owner), defaults()).settings,
       step.runId,
-      step.failure,
+      reason,
     );
+  };
+  ctx.on('agent/prepare-request', (request, step) => prepare(request, step, 'normal'));
+  ctx.on('agent/recover-request', (request, step) => {
+    const { kind } = step.failure;
+    if (kind === 'context-overflow' || kind === 'image-limit') return prepare(request, step, kind);
   });
   ctx.effect(() => changes.register('context-management'));
   ctx.effect(() => ctx.harnessProfileConfig.subscribe(() => notify()));

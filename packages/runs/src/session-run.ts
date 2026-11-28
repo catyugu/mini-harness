@@ -4,8 +4,8 @@ import { conversationTools } from './tool-selection.ts';
 import type { Context } from 'mini-harness/cordis';
 import type { TaskContext } from '@mini-harness/tasks/api';
 import { scopeTarget } from '@mini-harness/plugin-api/scopes';
-import type { AgentTurn, ModelFailure } from '@mini-harness/agent/api';
-import { modelRetry, type InputContext, type StepContext } from '@mini-harness/agent/events';
+import type { AgentTurn } from '@mini-harness/agent/api';
+import { modelRetry, type InputContext, type StepContext, type RequestPreparation } from '@mini-harness/agent/events';
 import { DomainError } from '@mini-harness/platform/errors';
 import { isDeepStrictEqual } from 'node:util';
 import type { SessionCatalog, SessionLifecycle, SessionStore } from '@mini-harness/sessions/records';
@@ -26,7 +26,7 @@ import type { RecordPresentation } from '@mini-harness/sessions/display-record';
 import type { MessageOrigin, MessageMode } from '@mini-harness/sessions/queue';
 import type { SessionLogPort, InboxItem, SessionProjection } from '@mini-harness/sessions/log-api';
 import { Inbox } from './inbox.ts';
-import { applyTransforms } from './transforms.ts';
+import { applyTransforms, recoverRequest } from './transforms.ts';
 import { toolFailure } from '@mini-harness/tools/execution';
 import {
   prepareModelMessages,
@@ -246,7 +246,7 @@ export class SessionRun {
     const publisher = recordPublisher(emit);
     const target = scopeTarget(ctx);
     const toolTransforms = () => ctx.events.listeners('agent/tool-result', target);
-    const prepareTurn = async (turn: number, failure?: ModelFailure) => {
+    const buildTurn = async (turn: number) => {
       const current = log.context();
       const model = current.model;
       if (!model) throw new Error('Configure a model before sending a message');
@@ -254,17 +254,15 @@ export class SessionRun {
       const step: StepContext = { sessionId: id, turn, cwd, model, signal };
       const executor = requireService(ctx, 'harnessToolExecutor');
       const { tools: advertisedTools, assemble } = await this.requestBuilder(ctx, step, log);
-      const prepareHooks = ctx.events.listeners('agent/prepare-request', target);
-      const initial = await assemble(log.context().contextMessages);
-      const prepared = await applyTransforms(prepareHooks, initial, {
+      const request = await assemble(log.context().contextMessages);
+      const preparation: RequestPreparation = {
         ...step,
         context: ctx,
         runId: submissionId,
-        failure,
         rebuild: assemble,
-      });
+      };
       const result: AgentTurn = {
-        request: prepared,
+        request,
         executor,
         tools: advertisedTools,
         execution: {
@@ -341,7 +339,7 @@ export class SessionRun {
           if (transformError) throw transformError;
         },
       };
-      return { initial, result };
+      return { request, result, preparation };
     };
     const answer = await requireService(ctx, 'harnessAgent')
       .run(ctx, {
@@ -396,11 +394,17 @@ export class SessionRun {
         afterTurn: async () => {
           if (await deliver(['steer'])) return 'continue';
         },
-        prepare: async (turn) => (await prepareTurn(turn)).result,
+        async prepare(turn) {
+          const { request, result, preparation } = await buildTurn(turn);
+          result.request = await applyTransforms(ctx.events.listeners('agent/prepare-request', target), request, preparation);
+          return result;
+        },
         async recover(turn, failure) {
-          if (!ctx.events.listeners('agent/prepare-request', target).length) return;
-          const { initial, result } = await prepareTurn(turn, failure);
-          if (initial !== result.request) return result;
+          const hooks = ctx.events.listeners('agent/recover-request', target);
+          if (!hooks.length) return;
+          const { request, result, preparation } = await buildTurn(turn);
+          const recovered = await recoverRequest(hooks, request, { ...preparation, failure });
+          if (recovered !== undefined) return { ...result, request: recovered };
         },
       })
       .catch((error) => {

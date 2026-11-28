@@ -5,7 +5,7 @@ import {
   type NativeMessage,
 } from '@mini-harness/llm/api';
 import type { ModelCatalogPort } from '@mini-harness/models/api';
-import type { ModelFailure, ModelRetry } from '@mini-harness/agent/api';
+import type { ModelRetry } from '@mini-harness/agent/api';
 import { requestModel } from '@mini-harness/agent/model-request';
 import { selectModel } from '@mini-harness/models/selection';
 import { DomainError } from '@mini-harness/platform/errors';
@@ -171,28 +171,27 @@ export class ContextManagement {
     rebuild: Rebuild,
     settings: ContextSettings,
     taskId: string,
-    failure?: ModelFailure,
+    reason: 'normal' | 'context-overflow' | 'image-limit',
   ) {
-    if (failure && failure.kind !== 'context-overflow' && failure.kind !== 'image-limit') return;
     const replacements = prune(log.context());
     let changed = replacements.length > 0;
     let current = await this.measure(log, await this.replace(log, request, rebuild, replacements));
     const pressure = () =>
       totalTokens(current.inputMeasurement) >= current.inputMeasurement.budget * settings.triggerRatio;
-    if (pressure() || failure) {
+    if (pressure() || reason !== 'normal') {
       const projection = log.context();
       const images = offloadImages(projection, pendingInputStart(log, projection));
       if (images.length) {
         changed = true;
         current = await this.measure(log, await this.replace(log, current, rebuild, images));
       }
-      if (failure?.kind === 'image-limit' && !images.length)
+      if (reason === 'image-limit' && !images.length)
         throw new DomainError(
           'unavailable',
           'No historical images can be offloaded without changing pending user input',
         );
     }
-    const overflow = failure?.kind === 'context-overflow';
+    const overflow = reason === 'context-overflow';
     if (settings.autoCompact && (overflow || pressure())) {
       const next = await this.compact(log, current, rebuild, settings, taskId);
       if (next) return next;

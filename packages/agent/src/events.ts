@@ -28,8 +28,11 @@ export type ModelRequestTransform = Transform<ModelRequestContent, StepContext>;
 export interface RequestPreparation extends StepContext {
   readonly runId: string;
   readonly context: Context;
-  readonly failure?: ModelFailure;
   rebuild(messages: NativeMessage[], signal: AbortSignal): Promise<LlmRequest>;
+}
+
+export interface RequestRecovery extends RequestPreparation {
+  readonly failure: ModelFailure;
 }
 
 export type ModelRetryHandler = (
@@ -67,8 +70,10 @@ declare module 'mini-harness/cordis' {
     'agent/tool-result': ToolResultTransform;
     'agent/prepare-input': InputPreparation;
     'agent/model-request': ModelRequestTransform;
-    /** Prepare or recover the final model-visible request before execution. */
+    /** Prepare the final model-visible request before execution. */
     'agent/prepare-request': Transform<LlmRequest, RequestPreparation>;
+    /** Return a replacement request to accept recovery, or undefined to decline it. */
+    'agent/recover-request': Transform<LlmRequest, RequestRecovery>;
     'agent/model-retry': ModelRetryHandler;
   }
 }

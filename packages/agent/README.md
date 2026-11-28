@@ -39,7 +39,8 @@ The executor presents tool schemas, interprets the assistant response and delive
 | `agent/records`         | Observe native events and contribute assistant record presentations. |
 | `agent/prepare-input`   | Transform prepared user content before acceptance.                   |
 | `agent/model-request`   | Transform model-visible content before a request.                    |
-| `agent/prepare-request` | Prepare the final request or recover it after a model input error.   |
+| `agent/prepare-request` | Transform the final request before execution. |
+| `agent/recover-request` | Return a replacement request after a model input error; the first handler to accept recovery wins. |
 | `agent/model-retry`     | Choose whether to retry a failed request before output has streamed. |
 | `agent/tool-result`     | Transform accepted tool content after raw execution is persisted.    |
 
