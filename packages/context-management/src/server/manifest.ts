@@ -100,7 +100,15 @@ function setup(ctx: Context) {
                 const manager = createManager(scoped, params.id);
                 const request = await manager.prune(
                   log,
-                  { model, systemPrompt, tools, thinkingLevel, maxTokens, messages: await projectMessages(projection.contextMessages), signal },
+                  {
+                    model,
+                    systemPrompt,
+                    tools,
+                    thinkingLevel,
+                    maxTokens,
+                    messages: await projectMessages(projection.contextMessages),
+                    signal,
+                  },
                   projectMessages,
                 );
                 const compacted = await manager.compact(

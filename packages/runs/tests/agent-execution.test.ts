@@ -738,42 +738,48 @@ test('request recovery composes with prepared parameters and repeatable message 
   let recoveries = 0;
   let presentations = 0;
   let projections = 0;
-  const { agent, ctx, record } = await fixture(t, {
-    async *stream(request) {
-      requests++;
-      assert.equal(request.maxTokens, 512);
-      assert.equal(
-        request.systemPrompt,
-        requests === 1 ? 'Fixture [presented] [prepared]' : 'Fixture [presented] [prepared] [repair]',
-      );
-      assert.deepEqual(
-        request.messages.flatMap((message) =>
-          message.content.filter((part) => part.type === 'text').map((part) => part.text),
-        ),
-        requests === 3 ? ['Rebuilt', 'Temporary context'] : ['Recover', 'Temporary context'],
-      );
-      if (requests < 3) {
-        yield {
-          type: 'done',
-          message: {
-            ...answer(),
-            content: [],
-            stopReason: 'error',
-            errorMessage: 'Context limit',
-            errorKind: 'context-overflow',
-          },
-        };
-      } else {
-        yield { type: 'done', message: answer() };
-      }
+  const { agent, ctx, record } = await fixture(
+    t,
+    {
+      async *stream(request) {
+        requests++;
+        assert.equal(request.maxTokens, 512);
+        assert.equal(
+          request.systemPrompt,
+          requests === 1 ? 'Fixture [presented] [prepared]' : 'Fixture [presented] [prepared] [repair]',
+        );
+        assert.deepEqual(
+          request.messages.flatMap((message) =>
+            message.content.filter((part) => part.type === 'text').map((part) => part.text),
+          ),
+          requests === 3 ? ['Rebuilt', 'Temporary context'] : ['Recover', 'Temporary context'],
+        );
+        if (requests < 3) {
+          yield {
+            type: 'done',
+            message: {
+              ...answer(),
+              content: [],
+              stopReason: 'error',
+              errorMessage: 'Context limit',
+              errorKind: 'context-overflow',
+            },
+          };
+        } else {
+          yield { type: 'done', message: answer() };
+        }
+      },
     },
-  }, undefined, undefined, {
-    ...nativeExecutor,
-    present(systemPrompt, tools, step) {
-      presentations++;
-      return nativeExecutor.present(systemPrompt + ' [presented]', tools, step);
+    undefined,
+    undefined,
+    {
+      ...nativeExecutor,
+      present(systemPrompt, tools, step) {
+        presentations++;
+        return nativeExecutor.present(systemPrompt + ' [presented]', tools, step);
+      },
     },
-  });
+  );
   ctx.on('agent/project-messages', (messages) => {
     projections++;
     return [
@@ -805,7 +811,10 @@ test('request recovery composes with prepared parameters and repeatable message 
     }),
     'Done',
   );
-  assert.deepEqual({ requests, preparations, recoveries, presentations, projections }, { requests: 3, preparations: 1, recoveries: 2, presentations: 1, projections: 2 });
+  assert.deepEqual(
+    { requests, preparations, recoveries, presentations, projections },
+    { requests: 3, preparations: 1, recoveries: 2, presentations: 1, projections: 2 },
+  );
 });
 
 test('a queued follow-up can preselect the next model and thinking level', async (t) => {

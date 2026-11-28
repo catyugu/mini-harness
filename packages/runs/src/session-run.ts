@@ -260,11 +260,10 @@ export class SessionRun {
       const capabilities = selectModel(requireService(ctx, 'harnessModels'), [model]).capabilities;
       const projectMessages = async (messages: NativeMessage[], requestSignal: AbortSignal) => {
         const hooks = ctx.events.listeners('agent/project-messages', target);
-        const projected = await applyTransforms(
-          hooks,
-          hooks.length ? structuredClone(messages) : messages,
-          { ...step, signal: requestSignal },
-        );
+        const projected = await applyTransforms(hooks, hooks.length ? structuredClone(messages) : messages, {
+          ...step,
+          signal: requestSignal,
+        });
         return prepareModelMessages(capabilities, projected);
       };
       const tools = conversationTools(ctx, id);
@@ -447,5 +446,4 @@ export class SessionRun {
     emit({ type: 'complete', text });
     return text;
   }
-
 }
