@@ -238,10 +238,8 @@ test('startup durably interrupts runs and delivers pending inbox messages', asyn
     item: {
       id: 'steer',
       mode: 'steer',
-      text: 'Old instruction',
-      images: [],
       origin: { source: 'user' },
-      input: { userText: 'Old instruction', attachments: [] },
+      ...registry.prepareInput(child.id, 'Old instruction'),
     },
   });
   registry.log(child.id).append({
@@ -249,10 +247,8 @@ test('startup durably interrupts runs and delivers pending inbox messages', asyn
     item: {
       id: 'follow',
       mode: 'queue',
-      text: 'Recovered follow-up',
-      images: [],
       origin: { source: 'user' },
-      input: { userText: 'Recovered follow-up', attachments: [] },
+      ...registry.prepareInput(child.id, 'Recovered follow-up'),
     },
   });
   await initial.close();
@@ -494,10 +490,8 @@ test('retry looks up the failed delivery by its native entry identity', async (t
     item: {
       id: 'recover-this',
       mode: 'queue',
-      text: 'fail this queued input',
-      images: [],
       origin: { source: 'user' },
-      input: { userText: 'fail this queued input', attachments: [] },
+      ...registry.prepareInput(session.id, 'fail this queued input'),
     },
   });
   const failed = runs.send(session.id, { message: 'Manual input waiting for delivery', mode: 'queue' });

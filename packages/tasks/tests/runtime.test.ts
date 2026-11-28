@@ -13,7 +13,7 @@ function gate() {
 }
 
 test('cancellation is a request until execution finishes cleaning up', async () => {
-  const runtime = new TaskRuntime();
+  const runtime = new TaskRuntime(new Context());
   const entered = gate();
   const cleanup = gate();
   const states: string[] = [];
@@ -41,7 +41,7 @@ test('cancellation is a request until execution finishes cleaning up', async () 
 });
 
 test('suspending releases admission and resumes only after reacquisition', async () => {
-  const runtime = new TaskRuntime();
+  const runtime = new TaskRuntime(new Context());
   const ready = gate();
   const wake = gate();
   const target = runtime.start({ owner: 'target' }, () => wake.promise);
@@ -65,7 +65,7 @@ test('suspending releases admission and resumes only after reacquisition', async
 });
 
 test('queued cancellation does not run user code; shutdown interrupts active work', async () => {
-  const runtime = new TaskRuntime();
+  const runtime = new TaskRuntime(new Context());
   let executed = false;
   const queued = runtime.start({ owner: 'one' }, async () => {
     executed = true;
@@ -87,7 +87,7 @@ test('queued cancellation does not run user code; shutdown interrupts active wor
 });
 
 test('ownership, not creation, controls cancellation and deletion', async () => {
-  const runtime = new TaskRuntime();
+  const runtime = new TaskRuntime(new Context());
   const entered = gate();
   const released = gate();
   const parent = runtime.start({ owner: 'session:parent' }, async ({ signal }) => {
@@ -112,7 +112,7 @@ test('ownership, not creation, controls cancellation and deletion', async () => 
 });
 
 test('a durable projection fault cannot acknowledge a successful task', async () => {
-  const runtime = new TaskRuntime();
+  const runtime = new TaskRuntime(new Context());
   const task = runtime.start(
     {
       owner: 'one',
@@ -127,7 +127,7 @@ test('a durable projection fault cannot acknowledge a successful task', async ()
 });
 
 test('owner removal rejects new work immediately and emits deletion after cleanup', async () => {
-  const runtime = new TaskRuntime();
+  const runtime = new TaskRuntime(new Context());
   const entered = gate();
   const release = gate();
   const events: string[] = [];
@@ -148,7 +148,7 @@ test('owner removal rejects new work immediately and emits deletion after cleanu
 });
 
 test('arbitrary results are delivered without retaining arbitrary objects', async () => {
-  const runtime = new TaskRuntime();
+  const runtime = new TaskRuntime(new Context());
   const value = () => 42;
   const handle = runtime.start({ owner: 'session:one' }, async () => value);
   const terminal = runtime.wait(handle.id);
@@ -158,7 +158,7 @@ test('arbitrary results are delivered without retaining arbitrary objects', asyn
 });
 
 test('output uses UTF-8 byte offsets and preserves channel and Unicode boundaries', async () => {
-  const runtime = new TaskRuntime();
+  const runtime = new TaskRuntime(new Context());
   const handle = runtime.start({ owner: 'session:one' }, async (context) => {
     context.write('😀'.repeat(300000), 'stdout');
     context.write('完', 'stderr');
@@ -174,7 +174,7 @@ test('output uses UTF-8 byte offsets and preserves channel and Unicode boundarie
 });
 
 test('terminal observation cannot retroactively cancel a wait', async () => {
-  const runtime = new TaskRuntime();
+  const runtime = new TaskRuntime(new Context());
   const cancel = new AbortController();
   const gatekeeper = gate();
   const task = runtime.start({ owner: 'one' }, async () => {
@@ -189,7 +189,7 @@ test('terminal observation cannot retroactively cancel a wait', async () => {
 });
 
 test('a cancellation during running observation prevents invocation of executor code', async () => {
-  const runtime = new TaskRuntime();
+  const runtime = new TaskRuntime(new Context());
   let executed = false;
   runtime.subscribe(({ task }) => {
     if (task.state === 'running') runtime.cancel(task.id);
@@ -203,7 +203,7 @@ test('a cancellation during running observation prevents invocation of executor 
 });
 
 test('creator disposal does not cancel a task executed by another provider fiber', async () => {
-  const runtime = new TaskRuntime();
+  const runtime = new TaskRuntime(new Context());
   const ctx = new Context();
   ctx.provide('harnessTasks', runtime.service());
   const entered = gate();
@@ -258,7 +258,7 @@ test('creator disposal does not cancel a task executed by another provider fiber
 });
 
 test('observation data is detached from arbitrary result objects', async () => {
-  const runtime = new TaskRuntime();
+  const runtime = new TaskRuntime(new Context());
   const metadata = { nested: { value: 'original' } };
   const result = { value: 'answer' };
   const handle = runtime.start<{ value: string }>(
@@ -277,7 +277,7 @@ test('observation data is detached from arbitrary result objects', async () => {
 });
 
 test('pool resizing, queued cancellation and failed execution return capacity', async () => {
-  const runtime = new TaskRuntime();
+  const runtime = new TaskRuntime(new Context());
   const pool = new TaskPool(1);
   const hold = gate();
   const entered = gate();
@@ -302,7 +302,7 @@ test('pool resizing, queued cancellation and failed execution return capacity', 
 });
 
 test('task waits release capacity and reject circular waits', async () => {
-  const runtime = new TaskRuntime();
+  const runtime = new TaskRuntime(new Context());
   const pool = new TaskPool(1);
   let first!: TaskHandle<void>;
   let second!: TaskHandle<void>;
@@ -317,7 +317,7 @@ test('task waits release capacity and reject circular waits', async () => {
 });
 
 test('a lane stays exclusive while its task releases pool capacity', async () => {
-  const runtime = new TaskRuntime();
+  const runtime = new TaskRuntime(new Context());
   const pool = new TaskPool(1);
   const ready = gate();
   const wake = gate();

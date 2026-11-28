@@ -17,6 +17,7 @@ import { join } from 'node:path';
 import test from 'node:test';
 import type { NativeAssistantMessage } from '@mini-harness/llm/api';
 import { SessionLog } from '../src/log.ts';
+import type { InboxItem, SessionEvent } from '../src/log-api.ts';
 
 function fixture(t: test.TestContext) {
   const root = mkdtempSync(join(tmpdir(), 'mini-harness-log-'));
@@ -36,6 +37,11 @@ function fixture(t: test.TestContext) {
 const user = (content: string) => ({
   type: 'message' as const,
   message: { role: 'user' as const, content: [{ type: 'text' as const, text: content }], timestamp: 1 },
+});
+
+const queued = (id: string, mode: InboxItem['mode'], text: string): SessionEvent => ({
+  type: 'inbox-enqueued',
+  item: { id, mode, text, images: [], origin: { source: 'user' }, input: { userText: text, attachments: [] } },
 });
 
 test('native log retains model semantics and gives defensive read projections', (t) => {
@@ -90,17 +96,7 @@ test('operational entries keep the transcript leaf stable and revision uses comp
     },
     run: { sequence: 1, inputEntryId: null },
   });
-  log.append({
-    type: 'inbox-enqueued',
-    item: {
-      id: 'queued',
-      mode: 'steer',
-      text: 'later',
-      images: [],
-      origin: { source: 'user' },
-      input: { userText: 'later', attachments: [] },
-    },
-  });
+  log.append(queued('queued', 'steer', 'later'));
   assert.equal(log.projection().leafId, first.id);
   assert.equal(log.entries().length, 3);
   const second = log.revise(user('revised'), null, first.id);
@@ -128,30 +124,10 @@ test('operational entries keep the transcript leaf stable and revision uses comp
 test('a durable message acknowledges inbox delivery exactly once and restart retains pending input', (t) => {
   const { open } = fixture(t);
   let log = open();
-  log.append({
-    type: 'inbox-enqueued',
-    item: {
-      id: 'delivered',
-      mode: 'steer',
-      text: 'first',
-      images: [],
-      origin: { source: 'user' },
-      input: { userText: 'first', attachments: [] },
-    },
-  });
+  log.append(queued('delivered', 'steer', 'first'));
   log.append({ ...user('first'), inboxId: 'delivered' });
   assert.throws(() => log.append({ ...user('duplicate'), inboxId: 'delivered' }), /not pending/);
-  log.append({
-    type: 'inbox-enqueued',
-    item: {
-      id: 'pending',
-      mode: 'queue',
-      text: 'next',
-      images: [],
-      origin: { source: 'user' },
-      input: { userText: 'next', attachments: [] },
-    },
-  });
+  log.append(queued('pending', 'queue', 'next'));
   log.append({
     type: 'task',
     task: {

@@ -141,10 +141,8 @@ export const apply = (ctx) => {
     item: {
       id: 'blocked',
       mode: 'queue',
-      text: 'Blocked',
-      images: [],
       origin: { source: 'user' },
-      input: { userText: 'Blocked', attachments: [] },
+      ...registry.prepareInput(session.id, 'Blocked'),
     },
   });
   log.append({
@@ -152,10 +150,8 @@ export const apply = (ctx) => {
     item: {
       id: 'recovered',
       mode: 'queue',
-      text: 'Recovered',
-      images: [],
       origin: { source: 'user' },
-      input: { userText: 'Recovered', attachments: [] },
+      ...registry.prepareInput(session.id, 'Recovered'),
     },
   });
   await sendRun(plugins.ctx.harnessRuns, session.id, 'Manual', undefined, { mode: 'queue' });

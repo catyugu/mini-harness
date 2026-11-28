@@ -82,27 +82,6 @@ export class SessionLog extends RecordLog<SessionEvent> implements SessionLogPor
   private cachedProjection?: SessionProjection;
   private recovery = { leaf: null as string | null, checker: new RequestMessages() };
 
-  /** All consumers share record operations; only the Registry owns the open file. */
-  readonly port: SessionLogPort = {
-    sessionId: this.sessionId,
-    entries: (after) => this.entries(after),
-    originalMessage: (id, raw) => this.originalMessage(id, raw),
-    setting: (owner) => this.setting(owner),
-    inbox: () => this.inbox(),
-    hasInbox: (id) => this.hasInbox(id),
-    inboxPaused: () => this.inboxPaused(),
-    queue: () => this.queue(),
-    branch: (leafId) => this.branch(leafId),
-    append: (event, leafId) => this.append(event, leafId),
-    revise: (event, parentId, leafId) => this.revise(event, parentId, leafId),
-    context: (leafId) => this.context(leafId),
-    projection: (leafId) => this.projection(leafId),
-    recordRequest: (snapshot, purpose) => this.recordRequest(snapshot, purpose),
-    acceptToolResult: (id, content) => this.acceptToolResult(id, content),
-    requestDefinition: (id) => this.requestDefinition(id),
-    requestSnapshot: (id) => this.requestSnapshot(id),
-  };
-
   constructor(
     file: string,
     sessionId: string,

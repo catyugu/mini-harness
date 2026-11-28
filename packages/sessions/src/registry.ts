@@ -404,7 +404,7 @@ export class SessionRegistry implements SessionStore {
   }
 
   log(id: string): SessionLogPort {
-    return this.writer(id).port;
+    return this.writer(id);
   }
 
   private writer(id: string) {
@@ -464,14 +464,14 @@ export class SessionRegistry implements SessionStore {
 
   inspectLog<T>(id: string, read: (log: SessionLogReader) => T, strict = false): T | undefined {
     const existing = this.logs.get(id);
-    if (existing) return read(existing.port);
+    if (existing) return read(existing);
     const record = this.get(id);
     if (!record) return;
     try {
       const log = this.openLog(record, 'read');
       if (!log) return;
       try {
-        return read(log.port);
+        return read(log);
       } finally {
         log.close();
       }
