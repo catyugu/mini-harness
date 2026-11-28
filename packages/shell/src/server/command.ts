@@ -2,7 +2,6 @@ import { mkdtemp, open, rm, type FileHandle } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { Readable } from 'node:stream';
-import { StringDecoder } from 'node:string_decoder';
 import type { ProcessCommand, ProcessExecutionPort } from '@mini-harness/process-execution/api';
 
 async function capture(
@@ -11,32 +10,36 @@ async function capture(
   spill: () => Promise<string>,
   write?: (text: string) => void,
 ) {
-  const output: Buffer[] = [];
-  const decoder = new StringDecoder('utf8');
+  let output = '';
   let bytes = 0;
   let overflow: string | undefined;
   let file: FileHandle | undefined;
   try {
-    for await (const value of stream) {
-      const chunk = Buffer.isBuffer(value) ? value : Buffer.from(value);
-      const accepted = Math.min(limit - bytes, chunk.length);
-      if (accepted) {
-        output.push(chunk.subarray(0, accepted));
-        bytes += accepted;
-      }
-      if (accepted < chunk.length) {
-        if (!file) {
-          overflow = await spill();
-          file = await open(overflow, 'wx', 0o600);
+    for await (const chunk of stream.setEncoding('utf8')) {
+      let text = String(chunk);
+      write?.(text);
+      if (!file) {
+        const size = Buffer.byteLength(text);
+        if (size <= limit - bytes) {
+          output += text;
+          bytes += size;
+          continue;
         }
-        await file.writeFile(chunk.subarray(accepted));
+        let end = 0;
+        for (const character of text) {
+          const length = Buffer.byteLength(character);
+          if (bytes + length > limit) break;
+          bytes += length;
+          end += character.length;
+        }
+        output += text.slice(0, end);
+        text = text.slice(end);
+        overflow = await spill();
+        file = await open(overflow, 'wx', 0o600);
       }
-      const text = decoder.write(chunk);
-      if (text) write?.(text);
+      await file.writeFile(text, 'utf8');
     }
-    const tail = decoder.end();
-    if (tail) write?.(tail);
-    return { text: Buffer.concat(output).toString('utf8'), overflow };
+    return { text: output, overflow };
   } finally {
     await file?.close();
   }

@@ -75,6 +75,14 @@ test('Shell preserves native workspace and environment', async (t) => {
   const [cwd, value] = JSON.parse(String(result.details?.stdout));
   assert.equal(await realpath(cwd), await realpath(paths.cwd));
   assert.equal(value, 'native-environment');
+  if (process.platform === 'win32') {
+    const name = '中文日本語.txt';
+    writeFileSync(join(paths.cwd, name), '');
+    const native = await runTool(tool, 'native-unicode', { command: 'chcp && where ' + name });
+    assert.equal(native.state, 'finished');
+    assert.match(String(native.details?.stdout), /65001/);
+    assert.ok(String(native.details?.stdout).includes(name));
+  }
 });
 
 test('independent shell calls use one task, retain output channels and do not duplicate process output', async (t) => {
