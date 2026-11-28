@@ -21,7 +21,7 @@ export function respond(ctx: Context, request: Omit<LlmRequest, 'signal'>, signa
 }
 ```
 
-Await the returned Promise for the assistant message. `prepare(turn)` supplies the request, executor and tool map for each turn. The optional `recover(turn, failure)` callback may replace a failed turn. For multi-turn work the caller retains assistant messages from `onEvent` and tool results from `deliver`, then prepares the next request from that context. `afterTurn` can continue or restart the conversation cycle. Use Runs when the work belongs to a persisted conversation.
+Await the returned Promise for the assistant message. `prepare(turn)` supplies the request, executor and tool map for each turn. The returned turn may supply a `recover(request, failure)` callback to repair its actual failed request without preparing a new turn. For multi-turn work the caller retains assistant messages from `onEvent` and tool results from `deliver`, then prepares the next request from that context. `afterTurn` can continue or restart the conversation cycle. Use Runs when the work belongs to a persisted conversation.
 
 The executor presents tool schemas, interprets the assistant response and delivers tool results. Agent rejects duplicate call IDs, unmatched results and omitted results before another model turn. Executor implementations and reusable execution helpers belong to [Tools](../tools/README.md).
 
@@ -38,13 +38,15 @@ The executor presents tool schemas, interprets the assistant response and delive
 | `agent/setup`           | Register scoped capabilities before execution.                                                     |
 | `agent/records`         | Observe native events and contribute assistant record presentations.                               |
 | `agent/prepare-input`   | Transform prepared user content before acceptance.                                                 |
-| `agent/model-request`   | Transform model-visible content before a request.                                                  |
-| `agent/prepare-request` | Transform the final request before execution.                                                      |
-| `agent/recover-request` | Return a replacement request after a model input error; the first handler to accept recovery wins. |
+| `agent/model-request`   | Repeatable model-visible content projection.                                                  |
+| `agent/prepare-request` | Prepare the final request once per turn.                                                      |
+| `agent/recover-request` | Repair the last attempted request; the first handler to accept recovery wins. |
 | `agent/model-retry`     | Choose whether to retry a failed request before output has streamed.                               |
 | `agent/tool-result`     | Transform accepted tool content after raw execution is persisted.                                  |
 
 These hooks are dispatched by conversation orchestration in Runs; a direct `harnessAgent.run` call uses its supplied callbacks. The native execution API and model request loop do not import session contracts. The conversation integration in `events.ts` owns scoped policy dispatch and record contributions. `agent/setup` receives the target Run Context. Resolve the target tool or prompt service from that Context and pass the contributing Context as the registration provider. Return the registration disposer (or an effect disposer for multiple registrations). Runs binds it to both the contributing Fiber and the Run, so either lifetime ending releases the contribution. Synchronous record observers own any per-run state they need. Return transformed values instead of mutating inputs. The [execution reference](../../docs/subsystems/execution.md) describes their position in the persistence flow.
+
+Request recovery uses the last attempted request and the same turn's executor and tool capabilities. Preparation hooks are not rerun. Both preparation and recovery handlers can call `step.rebuild(request, messages, signal)` with the current prepared request and replacement conversation messages: this reprojects model-visible messages through `agent/model-request` and the executor, retains the current request's other parameters and invalidates its input measurement. Put repeatable, nonpersistent message contributions in `agent/model-request` (it may run multiple times); use `agent/prepare-request` for once-per-turn effects and final request parameters. Rebuild replaces the message sequence, so direct message edits in final preparation are not replayed. A handler changing measured request parameters must invalidate or update the measurement.
 
 ## Configuration, lifetime and failures
 

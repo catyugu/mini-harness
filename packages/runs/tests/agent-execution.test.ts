@@ -733,13 +733,20 @@ test('the retry policy cannot replay a model attempt after output has streamed',
   assert.deepEqual({ requests, retries, deltas }, { requests: 1, retries: 0, deltas: ['Partial'] });
 });
 
-test('explicit request recovery accepts the same request without rerunning preparation', async (t) => {
+test('request recovery composes with prepared parameters and repeatable message projection', async (t) => {
   let requests = 0;
   let preparations = 0;
   let recoveries = 0;
   const { agent, ctx, record } = await fixture(t, {
-    async *stream() {
-      if (++requests === 1) {
+    async *stream(request) {
+      requests++;
+      assert.equal(request.maxTokens, 512);
+      assert.equal(request.systemPrompt, requests === 1 ? 'Fixture [prepared]' : 'Fixture [prepared] [repair]');
+      assert.deepEqual(
+        request.messages.flatMap((message) => message.content.filter((part) => part.type === 'text').map((part) => part.text)),
+        requests === 3 ? ['Rebuilt', 'Temporary context'] : ['Recover', 'Temporary context'],
+      );
+      if (requests < 3) {
         yield {
           type: 'done',
           message: {
@@ -755,14 +762,19 @@ test('explicit request recovery accepts the same request without rerunning prepa
       }
     },
   });
+  ctx.on('agent/model-request', (request) => ({
+    ...request,
+    messages: [...request.messages, { role: 'user', timestamp: 0, content: [{ type: 'text', text: 'Temporary context' }] }],
+  }));
   ctx.on('agent/prepare-request', (request) => {
     preparations++;
-    return request;
+    return { ...request, maxTokens: 512, systemPrompt: request.systemPrompt + ' [prepared]' };
   });
-  ctx.on('agent/recover-request', (request, { failure }) => {
-    assert.equal(failure.kind, 'context-overflow');
+  ctx.on('agent/recover-request', async (request, step) => {
+    assert.equal(step.failure.kind, 'context-overflow');
     recoveries++;
-    return request;
+    if (recoveries === 1) return { ...request, systemPrompt: request.systemPrompt + ' [repair]' };
+    return step.rebuild(request, [{ role: 'user', timestamp: 0, content: [{ type: 'text', text: 'Rebuilt' }] }], step.signal);
   });
   assert.equal(
     await agent.prompt(ctx, record, 'Recover', () => {}, {
@@ -771,7 +783,7 @@ test('explicit request recovery accepts the same request without rerunning prepa
     }),
     'Done',
   );
-  assert.deepEqual({ requests, preparations, recoveries }, { requests: 2, preparations: 1, recoveries: 1 });
+  assert.deepEqual({ requests, preparations, recoveries }, { requests: 3, preparations: 1, recoveries: 2 });
 });
 
 test('a queued follow-up can preselect the next model and thinking level', async (t) => {

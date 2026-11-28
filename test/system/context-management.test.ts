@@ -392,7 +392,7 @@ test('image rejection offloads all historical images and an irreducible overflow
   assert.equal(failed.entries().filter(({ type }) => type === 'model-attempt').length, 1);
 });
 
-test('disabled automatic compaction still retries context overflow after deterministic image offloading', async (t) => {
+test('context overflow offloads images without dropping another plugin’s prepared parameters', async (t) => {
   let attempts = 0;
   const { app, request } = await fixture(
     t,
@@ -412,6 +412,11 @@ test('disabled automatic compaction still retries context overflow after determi
   const { body: session } = await request('/sessions', 'POST', {});
   const endpoint = '/sessions/' + session.id + '/context';
   assert.equal((await request(endpoint, 'PUT', { ...settings, autoCompact: false })).status, 200);
+  let preparations = 0;
+  ctx.on('agent/prepare-request', (request) => {
+    preparations++;
+    return { ...request, maxTokens: 512, systemPrompt: request.systemPrompt + ' [prepared]' };
+  }, { prepend: true });
   const attachment = { name: 'sample.png', mimeType: 'image/png', data: 'iVBORw0KGgo=' };
   await sendRun(ctx.harnessRuns, session.id, 'Earlier input', undefined, { attachments: [attachment] });
   await sendRun(ctx.harnessRuns, session.id, 'Latest input', undefined, { attachments: [attachment] });
@@ -419,8 +424,13 @@ test('disabled automatic compaction still retries context overflow after determi
   const log = ctx.harnessSessions.log(session.id);
   const records = log.entries().filter((entry) => entry.type === 'model-request');
   assert.equal(records.length, 3);
+  assert.equal(preparations, 2);
   const rejected = log.requestSnapshot(records[1].id);
   const repaired = log.requestSnapshot(records[2].id);
+  assert.equal(rejected.maxTokens, 512);
+  assert.equal(repaired.maxTokens, rejected.maxTokens);
+  assert.match(rejected.systemPrompt, /\[prepared\]$/);
+  assert.equal(repaired.systemPrompt, rejected.systemPrompt);
   assert.deepEqual(repaired.messages.at(-1), rejected.messages.at(-1));
   assert.ok(totalTokens(repaired.inputMeasurement!) < totalTokens(rejected.inputMeasurement!));
 });

@@ -26,6 +26,8 @@ export interface AgentTurn {
   executor: ToolExecutorPort;
   tools: ReadonlyMap<string, ToolDefinition>;
   execution?: Omit<ToolExecution, 'signal' | 'deliver'>;
+  /** Repair the actual failed request within this turn, or decline recovery. */
+  recover?(request: LlmRequest, failure: ModelFailure): LlmRequest | undefined | Promise<LlmRequest | undefined>;
   deliver?(result: NativeToolMessage, signal: AbortSignal, call: ToolCallPart): Promise<void>;
 }
 
@@ -51,8 +53,6 @@ export type AgentRun = {
   retry?(failure: ModelFailure): ModelRetry | undefined | Promise<ModelRetry | undefined>;
   /** The caller owns the context and supplies a complete turn. */
   prepare(turn: number): AgentTurn | Promise<AgentTurn>;
-  /** Return undefined to decline recovery after a failed model request. */
-  recover?(turn: number, failure: ModelFailure): AgentTurn | undefined | Promise<AgentTurn | undefined>;
   afterTurn?(
     calls: readonly ToolCallPart[],
   ): 'continue' | 'restart' | void | Promise<'continue' | 'restart' | void>;

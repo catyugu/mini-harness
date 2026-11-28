@@ -37,7 +37,7 @@ function setup(ctx: Context) {
     return createManager(step.context, step.sessionId).prepare(
       log,
       { ...request, signal: step.signal },
-      (messages) => step.rebuild(messages, step.signal),
+      (request, messages) => step.rebuild(request, messages, step.signal),
       configuration(log.setting(owner), defaults()).settings,
       step.runId,
       reason,
@@ -95,17 +95,17 @@ function setup(ctx: Context) {
                   maxTokens,
                 } = log.requestDefinition(latest.id);
                 const { model, capabilities } = selectModel(models, [choice]);
-                const rebuild = async (messages: LlmRequest['messages']): Promise<LlmRequest> => ({
-                  model,
-                  systemPrompt,
-                  tools,
-                  thinkingLevel,
-                  maxTokens,
+                const rebuild = async (request: LlmRequest, messages: LlmRequest['messages']): Promise<LlmRequest> => ({
+                  ...request,
                   messages: prepareModelMessages(capabilities, messages),
-                  signal,
+                  inputMeasurement: undefined,
                 });
                 const manager = createManager(scoped, params.id);
-                const request = await manager.prune(log, await rebuild(projection.contextMessages), rebuild);
+                const initial = await rebuild(
+                  { model, systemPrompt, tools, thinkingLevel, maxTokens, messages: [], signal },
+                  projection.contextMessages,
+                );
+                const request = await manager.prune(log, initial, rebuild);
                 const compacted = await manager.compact(
                   log,
                   request,

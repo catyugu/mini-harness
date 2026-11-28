@@ -32,7 +32,7 @@ export async function requestModel(
   request: LlmRequest,
   options: {
     request?(request: LlmRequest): void;
-    recover?(failure: ModelFailure): Promise<LlmRequest | undefined>;
+    recover?(request: LlmRequest, failure: ModelFailure): Promise<LlmRequest | undefined>;
     delta?(text: string): void;
     thinking?(text: string): void;
     attempt?(metrics: ModelAttemptMetrics): void;
@@ -92,7 +92,7 @@ export async function requestModel(
       kind: message.errorKind,
     };
     if (failure.kind && failure.kind !== 'transient') {
-      const next = await options.recover?.(failure);
+      const next = await options.recover?.(request, failure);
       if (!next) return message;
       request = next;
       options.request?.(request);

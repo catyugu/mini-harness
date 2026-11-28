@@ -35,12 +35,12 @@ export class AgentLoop implements AgentPort {
           thinking: (text) => input.onEvent?.({ type: 'thinking', text }),
           attempt: (metrics) => input.onEvent?.({ type: 'model-attempt', metrics }),
           retry: input.retry,
-          async recover(failure) {
-            const next = await input.recover?.(turn, failure);
+          async recover(request, failure) {
+            const next = await step.recover?.(request, failure);
             if (!next) return;
-            step = next;
+            step = { ...step, request: next };
             input.onEvent?.({ type: 'assistant-start' });
-            return { ...next.request, signal };
+            return { ...next, signal };
           },
         },
       );

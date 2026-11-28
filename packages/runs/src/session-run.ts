@@ -251,7 +251,7 @@ export class SessionRun {
     const publisher = recordPublisher(emit);
     const target = scopeTarget(ctx);
     const toolTransforms = () => ctx.events.listeners('agent/tool-result', target);
-    const buildTurn = async (turn: number) => {
+    const prepareTurn = async (turn: number): Promise<AgentTurn> => {
       const current = log.context();
       const model = current.model;
       if (!model) throw new Error('Configure a model before sending a message');
@@ -259,15 +259,24 @@ export class SessionRun {
       const step: StepContext = { sessionId: id, turn, cwd, model, signal };
       const executor = requireService(ctx, 'harnessToolExecutor');
       const { tools: advertisedTools, assemble } = await this.requestBuilder(ctx, step, log);
-      const request = await assemble(log.context().contextMessages);
       const preparation: RequestPreparation = {
         ...step,
         context: ctx,
         runId: submissionId,
-        rebuild: assemble,
+        async rebuild(request, messages, signal) {
+          const projected = await assemble(messages, signal);
+          return { ...request, messages: projected.messages, inputMeasurement: undefined, signal };
+        },
       };
-      const result: AgentTurn = {
+      const request = await applyTransforms(
+        ctx.events.listeners('agent/prepare-request', target),
+        await assemble(log.context().contextMessages),
+        preparation,
+      );
+      return {
         request,
+        recover: (request, failure) =>
+          recoverRequest(ctx.events.listeners('agent/recover-request', target), request, { ...preparation, failure }),
         executor,
         tools: advertisedTools,
         execution: {
@@ -344,7 +353,6 @@ export class SessionRun {
           if (transformError) throw transformError;
         },
       };
-      return { request, result, preparation };
     };
     const answer = await requireService(ctx, 'harnessAgent')
       .run(ctx, {
@@ -399,22 +407,7 @@ export class SessionRun {
         afterTurn: async () => {
           if (await deliver(['steer'])) return 'continue';
         },
-        async prepare(turn) {
-          const { request, result, preparation } = await buildTurn(turn);
-          result.request = await applyTransforms(
-            ctx.events.listeners('agent/prepare-request', target),
-            request,
-            preparation,
-          );
-          return result;
-        },
-        async recover(turn, failure) {
-          const hooks = ctx.events.listeners('agent/recover-request', target);
-          if (!hooks.length) return;
-          const { request, result, preparation } = await buildTurn(turn);
-          const recovered = await recoverRequest(hooks, request, { ...preparation, failure });
-          if (recovered !== undefined) return { ...result, request: recovered };
-        },
+        prepare: prepareTurn,
       })
       .catch((error) => {
         if (signal.aborted) this.closeUnfinishedTools(log, true);

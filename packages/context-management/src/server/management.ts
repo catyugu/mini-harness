@@ -23,7 +23,7 @@ export function configuration(stored: unknown, defaults: ContextSettings) {
   return { settings: stored == null ? defaults : validateSettings(stored), customized: stored != null };
 }
 
-type Rebuild = (messages: NativeMessage[]) => Promise<LlmRequest>;
+type Rebuild = (request: LlmRequest, messages: NativeMessage[]) => Promise<LlmRequest>;
 
 function pendingInputStart(log: SessionLogPort, projection: SessionContext) {
   const pending = new Set<string>();
@@ -63,7 +63,7 @@ export class ContextManagement {
   ) {
     if (!replacements.length) return request;
     log.append({ type: 'context-replace', replacements }, log.context().leafId);
-    return rebuild(log.context().contextMessages);
+    return rebuild(request, log.context().contextMessages);
   }
 
   async prune(log: SessionLogPort, request: LlmRequest, rebuild: Rebuild) {
@@ -132,7 +132,7 @@ export class ContextManagement {
       },
       () => (scale ??= calibration(log, model)),
     );
-    const next = await this.measure(log, await rebuild([summary, ...kept]));
+    const next = await this.measure(log, await rebuild(request, [summary, ...kept]));
     validateRequestSnapshot(next);
     request.signal.throwIfAborted();
     if (totalTokens(next.inputMeasurement) >= totalTokens(counts)) return;
