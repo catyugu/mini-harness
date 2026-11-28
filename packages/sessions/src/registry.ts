@@ -317,13 +317,21 @@ export class SessionRegistry implements SessionStore {
     }
   }
 
-  pluginRecords<Data>(id: string, owner: RecordOwner, limit?: number): PluginEntry<Data>[] {
+  pluginRecords<Data>(
+    id: string,
+    owner: RecordOwner,
+    query?: { limit: number } | { key: string },
+  ): PluginEntry<Data>[] {
     const index = this.indexes.get(id);
     const addresses = index?.projection.records.get(owner.instanceId);
     if (!index || !addresses) return [];
     const log = this.logs.get(id);
     const file = nativeFile(this.paths, index.record, false);
-    return (limit === undefined ? addresses : addresses.slice(-limit)).map((address) => {
+    const selected =
+      query && 'key' in query
+        ? [addresses.get(query.key)].filter((address) => address !== undefined)
+        : [...addresses.values()].slice(query ? Math.max(0, addresses.size - query.limit) : 0);
+    return selected.map((address) => {
       const entry = log ? log.indexedEntry(address.id) : readRecordAt<SessionEvent>(file, address);
       if (entry?.type !== 'plugin-record' || entry.owner.pluginId !== owner.pluginId)
         throw new Error('Invalid indexed plugin record');

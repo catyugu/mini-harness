@@ -32,6 +32,10 @@ function project(input: ActiveWork['input'], handle: TaskHandle, outputCursor: n
   return { ...input, ...state, outputCursor };
 }
 
+function liveSnapshot({ input, handle, output, progress }: ActiveWork) {
+  return { ...project(input, handle, output.cursor), progress };
+}
+
 export class Background {
   private readonly active = new Map<string, ActiveWork>();
 
@@ -40,10 +44,8 @@ export class Background {
     private readonly change: (id: string) => void,
   ) {}
 
-  private history(id: string) {
-    return new Map(
-      this.ctx.harnessSessions.pluginRecords<WorkRecord>(id, owner).map(({ data }) => [data.work.id, data]),
-    );
+  private history(id: string, query?: { limit: number } | { key: string }) {
+    return this.ctx.harnessSessions.pluginRecords<WorkRecord>(id, owner, query).map(({ data }) => data);
   }
 
   private notice(sessionId: string, id: string, name: string, message: string, key: string) {
@@ -82,13 +84,14 @@ export class Background {
     if (!policy()) throw new Error('Tool denied by conversation policy: ' + name);
     const prepared = prepareTool(tool, args);
     const log = sessions.log(sessionId);
-    const append = (data: WorkRecord) => log.append({ type: 'plugin-record', owner, scope: 'session', data });
     const input = {
       id: randomUUID(),
       tool: name,
       name: tool.label ?? name,
       arguments: structuredClone(args),
     };
+    const append = (data: WorkRecord) =>
+      log.append({ type: 'plugin-record', owner, scope: 'session', key: input.id, data });
     const output = new WorkOutputRing();
     let reports = 0;
     let entry: ActiveWork;
@@ -129,7 +132,7 @@ export class Background {
           ...backgroundDetailKeys(tool.metadata?.backgroundDetails),
         ];
         work.result = {
-          content: output.cursor ? [] : textContent(result),
+          content: typeof result.summary === 'string' ? [result.summary.slice(0, 4000)] : textContent(result),
           toolState: result.state,
           details: Object.fromEntries(
             Object.entries(result.details ?? {}).filter(([key]) => keys.includes(key)),
@@ -163,30 +166,26 @@ export class Background {
 
   list(sessionId: string) {
     this.ctx.harnessSessions.assertAvailable(sessionId);
-    const history = this.history(sessionId);
     const live = [...this.active.values()]
       .filter((entry) => entry.sessionId === sessionId)
-      .map(({ input, handle, output, progress }) => ({ ...project(input, handle, output.cursor), progress }));
-    for (const { id } of live) history.delete(id);
-    return [
-      ...live.reverse(),
-      ...Array.from(history.values(), ({ work }) => work)
-        .reverse()
-        .slice(0, 50),
-    ];
+      .map(liveSnapshot)
+      .filter(({ state }) => !terminal(state));
+    const active = new Set(live.map(({ id }) => id));
+    const history = this.history(sessionId, { limit: 50 + live.length })
+      .map(({ work }) => work)
+      .filter(({ id }) => !active.has(id));
+    return [...live.reverse(), ...history.slice(-50).reverse()];
   }
 
   private find(sessionId: string, id: string) {
     this.ctx.harnessSessions.assertAvailable(sessionId);
-    const live = this.active.get(id);
-    if (live?.sessionId === sessionId)
-      return {
-        live,
-        work: { ...project(live.input, live.handle, live.output.cursor), progress: live.progress },
-      };
-    const history = this.history(sessionId).get(id);
+    const candidate = this.active.get(id);
+    const live = candidate?.sessionId === sessionId ? candidate : undefined;
+    const snapshot = live && liveSnapshot(live);
+    if (snapshot && !terminal(snapshot.state)) return { live, work: snapshot };
+    const [history] = this.history(sessionId, { key: id });
     if (!history) throw new DomainError('not_found', 'Background work not found');
-    return { ...history, live: undefined };
+    return { ...history, live };
   }
 
   status(sessionId: string, id: string) {
@@ -208,7 +207,7 @@ export class Background {
       if (!terminal(work.state)) throw new Error('Background work settlement could not be saved');
       return work;
     }
-    if (context.waitFor && !terminal(work.state)) await context.waitFor(live.handle.id);
+    if (context.waitFor && !terminal(live.handle.snapshot().state)) await context.waitFor(live.handle.id);
     return waitFor(live.settlement, context.signal);
   }
 
@@ -225,7 +224,7 @@ export class Background {
   recover() {
     const sessions = this.ctx.harnessSessions;
     for (const { id } of sessions.list()) {
-      for (let { work } of this.history(id).values()) {
+      for (let { work } of this.history(id)) {
         if (this.active.has(work.id)) continue;
         if (!terminal(work.state)) {
           work = {
@@ -234,7 +233,9 @@ export class Background {
             finishedAt: new Date().toISOString(),
             error: 'Background work interrupted before settlement was recorded',
           };
-          sessions.log(id).append({ type: 'plugin-record', owner, scope: 'session', data: { work } });
+          sessions
+            .log(id)
+            .append({ type: 'plugin-record', owner, scope: 'session', key: work.id, data: { work } });
         }
         if (!sessions.hasInbox(id, work.id + ':settled')) this.notify(id, work);
       }

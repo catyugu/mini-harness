@@ -34,7 +34,7 @@ The [public contract](src/records.ts) groups four kinds of operation:
 
 `log(id)` returns a record-operation port. The registry retains ownership of the underlying writer and its close/recovery lifecycle; plugins must not open a second writer for the same log. `inspectLog` provides the read-only type of the same record interface. History returns defensive projections rather than mutable backing records. The same log holds Inbox delivery IDs, message origins and the automatic wake pause.
 
-`pluginRecords(id, owner, limit?)` reads an owner's committed records in log order across all branches. Plugins can append session-scoped records using `scope: 'session'` to keep the branch leaf unchanged. The owning plugin interprets the payload and handles recovery.
+`pluginRecords(id, owner, query?)` reads an owner's committed records across all branches. A plugin can query a single key or limit the number of results. For a key reused across records, queries return the latest value at its original position. Plugins can append session-scoped records using `scope: 'session'` to keep the branch leaf unchanged. The owning plugin interprets the payload and handles recovery.
 
 ## Lifecycle and dependencies
 

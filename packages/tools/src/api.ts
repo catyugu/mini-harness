@@ -12,6 +12,8 @@ export interface ToolUpdate {
 }
 export interface ToolResult {
   content: (TextPart | ImagePart)[];
+  /** Compact description for consumers that display or retain the result separately. */
+  summary?: string;
   detailKeys?: NativeToolMessage['detailKeys'];
   state: ToolResultState;
   details?: Record<string, unknown>;

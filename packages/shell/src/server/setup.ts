@@ -60,6 +60,7 @@ export function setup(ctx: Context) {
           const cancelled = output.reason === 'cancelled';
           return {
             content: [{ type: 'text', text: JSON.stringify(output) }],
+            summary: output.reason ?? 'Exit ' + output.code,
             state: cancelled ? 'cancelled' : output.reason || output.code !== 0 ? 'error' : 'finished',
             detailKeys: ['exitCode'],
             details: {

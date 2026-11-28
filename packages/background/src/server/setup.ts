@@ -74,12 +74,9 @@ export function setup(ctx: Context) {
       web.effect(() => routes.register(method, '/api/sessions/:id/background' + path, handler));
     web.effect(() => web.harnessChanges.register('background'));
     add('GET', '', ({ params }) => work.list(params.id));
-    add('GET', '/:work/output', ({ params, url }) => {
-      const cursor = Number(url.searchParams.get('after') ?? 0);
-      if (!Number.isSafeInteger(cursor) || cursor < 0)
-        throw new DomainError('invalid_input', 'Invalid cursor');
-      return work.output(params.id, params.work, cursor);
-    });
+    add('GET', '/:work/output', ({ params, url }) =>
+      work.output(params.id, params.work, Number(url.searchParams.get('after') ?? 0)),
+    );
     add('DELETE', '/:work', ({ params }) => ({ cancelled: work.cancel(params.id, params.work) }));
   });
 }

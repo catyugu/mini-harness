@@ -29,6 +29,7 @@ test('Background recovers unfinished work and delivers only missed durable repor
       type: 'plugin-record',
       owner,
       scope: 'session',
+      key: workId,
       data: {
         work: {
           id: workId,
@@ -62,7 +63,6 @@ test('Background recovers unfinished work and delivers only missed durable repor
       records.map(({ data: { work } }) => [work.id, work.state]),
       [
         ['already-delivered', 'completed'],
-        ['lost', 'queued'],
         ['lost', 'interrupted'],
       ],
     );

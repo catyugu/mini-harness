@@ -74,9 +74,8 @@ export class TaskRuntime implements TaskPort {
     if (this.removing.has(owner)) throw new Error('Task owner has been removed');
     if (lane !== undefined && this.active(lane)) throw new Error('Task lane is already occupied');
     const controller = new AbortController();
-    const signals = [controller.signal, lifetime, provider.fiber.signal].filter(
-      (signal): signal is AbortSignal => signal !== undefined,
-    );
+    const signals = [controller.signal, provider.fiber.signal];
+    if (lifetime) signals.push(lifetime);
     const signal = AbortSignal.any(signals);
     signal.throwIfAborted();
     const snapshot: TaskSnapshot = {
@@ -112,21 +111,18 @@ export class TaskRuntime implements TaskPort {
         if (terminal(target.state)) return target;
         if (snapshot.state !== 'running') throw new Error('Wait requires a single whole-task wait point');
         this.assertWait(entry, id);
+        signal.throwIfAborted();
         entry.waitingFor = id;
+        transition({ state: 'waiting' });
+        relinquish();
         try {
-          signal.throwIfAborted();
-          transition({ state: 'waiting' });
-          relinquish();
-          try {
-            return await this.wait(id, cancellation ? AbortSignal.any([signal, cancellation]) : signal);
-          } finally {
-            signal.throwIfAborted();
-            if (terminal(snapshot.state)) throw new Error('Task ended with an unawaited wait');
-            transition({ state: 'queued' });
-            await enter();
-          }
+          return await this.wait(id, cancellation ? AbortSignal.any([signal, cancellation]) : signal);
         } finally {
           entry.waitingFor = undefined;
+          signal.throwIfAborted();
+          if (terminal(snapshot.state)) throw new Error('Task ended with an unawaited wait');
+          transition({ state: 'queued' });
+          await enter();
         }
       },
     };

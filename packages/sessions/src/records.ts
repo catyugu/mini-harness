@@ -16,6 +16,8 @@ export interface PluginRecord<Data = unknown> {
   data: Data;
   /** Session-scoped records do not advance the selected branch. */
   scope?: 'session';
+  /** Records with the same key share a latest-record index entry. */
+  key?: string;
 }
 
 export interface SessionRecords<Data = unknown> {
@@ -47,7 +49,11 @@ export interface SessionHistory {
   };
   inspectLog<T>(id: string, read: (log: SessionLogReader) => T, strict?: boolean): T | undefined;
   /** Read an owner's records across branches, in log order. */
-  pluginRecords<Data>(id: string, owner: RecordOwner, limit?: number): PluginEntry<Data>[];
+  pluginRecords<Data>(
+    id: string,
+    owner: RecordOwner,
+    query?: { limit: number } | { key: string },
+  ): PluginEntry<Data>[];
   readyInboxSessions(): string[];
   hasInbox(sessionId: string, messageId: string): boolean;
   logError(id: string): string | undefined;

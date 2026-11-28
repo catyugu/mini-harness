@@ -1,3 +1,4 @@
+import { DomainError } from '@mini-harness/platform/errors';
 import type { OutputChunk, WorkOutput } from '../shared/work.ts';
 
 function boundary(bytes: Buffer, offset: number) {
@@ -41,7 +42,8 @@ export class WorkOutputRing {
 }
 
 export function readWorkOutput(output: WorkOutput, after = 0): WorkOutput {
-  if (!Number.isSafeInteger(after) || after < 0) throw new Error('Invalid task output cursor');
+  if (!Number.isSafeInteger(after) || after < 0)
+    throw new DomainError('invalid_input', 'Invalid output cursor');
   const first = output.chunks[0]?.start ?? output.cursor;
   const chunks = output.chunks
     .filter(({ end }) => end > after)

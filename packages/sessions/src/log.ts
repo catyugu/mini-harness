@@ -52,7 +52,7 @@ function messagePatch(base: NativeMessage[], actual: NativeMessage[]): MessagePa
 }
 
 export interface LogIndex {
-  records: Map<string, RecordAddress[]>;
+  records: Map<string, Map<string, RecordAddress>>;
   inboxIds: Set<string>;
   wake: boolean;
 }
@@ -138,9 +138,9 @@ export class SessionLog extends RecordLog<SessionEvent> implements SessionLogPor
   protected recordAdded(entry: SessionEntry, address: RecordAddress) {
     if (entry.type === 'plugin-record') {
       const key = entry.owner.instanceId;
-      const addresses = this.index.records.get(key);
-      if (addresses) addresses.push(address);
-      else this.index.records.set(key, [address]);
+      const addresses = this.index.records.get(key) ?? new Map();
+      addresses.set(entry.key ?? entry.id, address);
+      this.index.records.set(key, addresses);
     }
     if (advancesBranch(entry)) {
       const view = this.cachedContext;
@@ -401,6 +401,8 @@ function validateEvent(event: SessionEvent) {
         throw new Error('Invalid plugin record');
       if (event.scope !== undefined && (event.scope !== 'session' || event.displays?.length))
         throw new Error('Invalid plugin record scope');
+      if (event.key !== undefined && (typeof event.key !== 'string' || !event.key))
+        throw new Error('Invalid plugin record key');
       return;
     }
     case 'diagnostic':

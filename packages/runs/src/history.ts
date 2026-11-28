@@ -5,7 +5,7 @@ import { isRunning, type RunHistoryEntry, type RunInfo } from './shared/run-stat
 const owner = { pluginId: 'core:runs', instanceId: 'core:runs' };
 
 export function runRecords(sessions: SessionStore, id: string, limit?: number) {
-  return sessions.pluginRecords<RunInfo>(id, owner, limit);
+  return sessions.pluginRecords<RunInfo>(id, owner, limit === undefined ? undefined : { limit });
 }
 
 export function recordRun(sessions: SessionStore, run: RunInfo) {
