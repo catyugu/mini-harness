@@ -27,7 +27,7 @@ import {
 } from '@mini-harness/llm/api';
 import { recordPublisher, type RunStreamEvent } from './shared/stream.ts';
 import type { RecordPresentation } from '@mini-harness/sessions/display-record';
-import type { MessageOrigin, MessageMode } from '@mini-harness/sessions/queue';
+import type { MessageMode } from '@mini-harness/sessions/queue';
 import type { SessionLogPort, InboxItem, SessionProjection } from '@mini-harness/sessions/log-api';
 import { Inbox } from './inbox.ts';
 import { applyTransforms, recoverRequest } from './transforms.ts';
@@ -54,22 +54,28 @@ interface SessionPrompt {
   signal: AbortSignal;
   task: TaskContext;
   fallback?: ModelChoice;
-  revision?: Pick<InboxItem, 'text' | 'images' | 'input' | 'model' | 'thinkingLevel'> & {
-    parentId: string | null;
-    expectedLeafId: string | null;
-  };
+  revision?: Revision;
+
 }
+
+type Revision = Omit<InboxItem, 'id' | 'mode'> & {
+  mode: 'revision';
+  parentId: string | null;
+  expectedLeafId: string | null;
+};
+
+type Input = InboxItem | Revision;
 
 export function selectInputModel(
   models: ModelCatalogPort,
-  item: Pick<InboxItem, 'model' | 'thinkingLevel'> & Partial<Pick<InboxItem, 'mode' | 'origin'>>,
+  item: Pick<Input, 'model' | 'thinkingLevel' | 'mode' | 'origin'>,
   previous: Pick<SessionProjection, 'model' | 'thinkingLevel'>,
   fallback: ModelChoice | undefined,
   parentId: string | null,
 ) {
   const choices = item.model
     ? [item.model]
-    : parentId || item.mode === 'steer' || item.origin?.source !== 'user'
+    : parentId || item.mode === 'steer' || item.mode === 'revision' || item.origin.source !== 'user'
       ? [previous.model, fallback]
       : [fallback, previous.model];
   const selected = selectModel(
@@ -139,8 +145,6 @@ export class SessionRun {
     const log = this.sessions.log(id);
     if (!revision) this.closeUnfinishedTools(log);
     const inbox = new Inbox(log);
-    type Input = Pick<InboxItem, 'text' | 'images' | 'input' | 'model' | 'thinkingLevel'> &
-      Partial<Pick<InboxItem, 'mode' | 'origin'>>;
 
     const selection = (item: Input, previous = log.context()) => {
       const models = requireService(ctx, 'harnessModels');
@@ -154,8 +158,8 @@ export class SessionRun {
       return selected;
     };
 
-    const prepare = async (item: Input, selected: ReturnType<typeof selection>, origin: MessageOrigin) => {
-      const presentation = item.input ?? { userText: item.text, attachments: [] };
+    const prepare = async (item: Input, selected: ReturnType<typeof selection>) => {
+      const { input: presentation, origin } = item;
       const context: InputContext = {
         sessionId: id,
         model: selected.model,
@@ -188,22 +192,18 @@ export class SessionRun {
       };
     };
 
-    const commit = async (
-      item: Input,
-      prepared: Awaited<ReturnType<typeof prepare>>,
-      origin: MessageOrigin,
-      inboxId?: string,
-    ) => {
+    const commit = async (item: Input, prepared: Awaited<ReturnType<typeof prepare>>) => {
       signal.throwIfAborted();
       this.sessions.assertAvailable(id);
-      const edit = inboxId ? undefined : revision;
+      const edit = item.mode === 'revision' ? item : undefined;
+      const { origin } = item;
       const event = {
         type: 'message',
         message: { role: 'user', content: prepared.content, timestamp: Date.now() },
         presentation: prepared.presentation,
         selection: prepared.selection,
         submissionId,
-        inboxId,
+        inboxId: item.mode === 'revision' ? undefined : item.id,
         origin,
       } as const;
       const first = log
@@ -218,26 +218,20 @@ export class SessionRun {
         message: displayMessage(entry, event.message, submissionId),
       });
       if (record.titleSource === 'auto' && first && origin.source === 'user') {
-        const title = item.input?.userText || item.input?.attachments[0]?.name || item.text;
+        const title = item.input.userText || item.input.attachments[0]?.name || item.text;
         this.sessions.rename(id, title.slice(0, 72), 'auto');
       }
     };
-    const originOf = (item: InboxItem): MessageOrigin => item.origin ?? { source: 'user' };
     const deliver = (modes: MessageMode[], requireInput = false) =>
       inbox.deliver(
         modes,
         signal,
-        (item) => prepare(item, selection(item), originOf(item)),
-        (item, prepared) => commit(item, prepared, originOf(item), item.id),
+        (item) => prepare(item, selection(item)),
+        commit,
         requireInput,
       );
     if (revision) {
-      const origin = { source: 'user' } as const;
-      await commit(
-        revision,
-        await prepare(revision, selection(revision, log.context(revision.parentId)), origin),
-        origin,
-      );
+      await commit(revision, await prepare(revision, selection(revision, log.context(revision.parentId))));
       this.closeUnfinishedTools(log);
     } else {
       if (!(await deliver(['interrupt', 'steer', 'queue'], true))) return '';
