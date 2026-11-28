@@ -50,11 +50,14 @@ export const apply = (ctx) => {
   const child = app.runtime.plugins.ctx.harnessSessions.create({ parentId: parent.id });
   const sibling = app.runtime.plugins.ctx.harnessSessions.create();
   async function prompt(id: string) {
-    await sendRun(app.runtime.plugins.ctx.harnessRuns, id, 'Continue');
-    const request = expectPresent(mock.requests.at(-1), 'recorded model request');
-    const system = (request.messages as { role: string; content: string }[]).find(
-      ({ role }) => role === 'system',
-    );
+    const start = mock.requests.length;
+    const input = 'Inspect prompt for ' + id;
+    await sendRun(app.runtime.plugins.ctx.harnessRuns, id, input);
+    const messages = mock.requests
+      .slice(start)
+      .map(({ messages }) => messages as { role: string; content: string }[])
+      .find((messages) => messages.at(-1)?.content === input);
+    const system = messages?.find(({ role }) => role === 'system');
     return expectPresent(system, 'system message').content;
   }
   const configured = await request('/settings', 'PATCH', {
