@@ -160,14 +160,15 @@ test('credential updates serialize across providers and survive adapter replacem
   assert.equal(saved.anthropic.key, 'second-secret');
   if (process.platform !== 'win32') assert.equal(statSync(join(paths.home, 'auth.json')).mode & 0o777, 0o600);
   assert.doesNotMatch(
-    JSON.stringify({ providers: adapter.providers(), status: adapter.authStatus('openai') }),
+    JSON.stringify(adapter.providers()),
     /first-secret|second-secret/,
   );
   const replacement = new ModelStore(paths.home);
   await replacement.refresh();
   await new PiLlm(replacement).registerModels();
   await replacement.available();
-  assert.deepEqual(replacement.authStatus('openai'), { configured: true, source: 'stored' });
+  const openai = replacement.providers().find(({ id }) => id === 'openai');
+  assert.ok(openai?.configured && openai.storedCredential);
   await replacement.removeProvider({ id: 'openai' });
   assert.equal(JSON.parse(readFileSync(join(paths.home, 'auth.json'), 'utf8')).openai, undefined);
   assert.equal(
@@ -449,7 +450,8 @@ test(
     const available = await query;
     assert.equal(available.find(({ provider }) => provider === 'slow-auth')?.configured, false);
     assert.equal(cancelled, 1);
-    assert.deepEqual(store.authStatus('slow-auth'), { configured: false, source: 'stored' });
+    const slow = store.providers().find(({ id }) => id === 'slow-auth');
+    assert.ok(slow?.storedCredential && !slow.configured);
     assert.ok(changes.length);
     assert.equal(
       changes.every((kind) => kind === 'auth'),
@@ -486,7 +488,6 @@ test(
       store.providers().some(({ id }) => id === 'slow-auth'),
       false,
     );
-    assert.deepEqual(store.authStatus('slow-auth'), { configured: false });
     assert.ok(changes.includes('catalog'));
   },
 );

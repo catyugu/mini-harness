@@ -19,7 +19,7 @@ import {
   type ProviderConfiguration,
 } from './provider-settings.ts';
 import { discover, protocolOptions } from './protocols.ts';
-import type { AuthStatus, CatalogModel, CatalogProvider, ModelStorePort } from './store-api.ts';
+import type { CatalogModel, CatalogProvider, ModelStorePort } from './store-api.ts';
 
 export class ModelStore implements ModelStorePort {
   private readonly file: string;
@@ -27,7 +27,7 @@ export class ModelStore implements ModelStorePort {
   private storedCredentials?: Record<string, Credential>;
   private defaults = new Set<readonly CatalogProvider[]>();
   private configuration: ProviderConfiguration = { providers: {}, builtins: {} };
-  private readonly status = new Map<string, AuthStatus>();
+  private readonly status = new Map<string, boolean>();
   private readonly checks = new Map<string, { controller: AbortController; work: Promise<void> }>();
   private readonly lifetime = new AbortController();
   private effective = new Map<string, CatalogProvider>();
@@ -210,7 +210,7 @@ export class ModelStore implements ModelStorePort {
       this.report(new Error('Could not read authentication configuration', { cause: error }));
       for (const { id } of providers) {
         this.checks.get(id)?.controller.abort();
-        this.status.set(id, { configured: false });
+        this.status.set(id, false);
       }
       return;
     }
@@ -226,14 +226,12 @@ export class ModelStore implements ModelStorePort {
     const { id } = provider;
     const previous = this.checks.get(id);
     previous?.controller.abort();
-    const stored = credential ? 'stored' : undefined;
     const check = provider.authStatus;
     if (!check) {
-      const configured = Boolean(resolveKey(provider, credential));
-      this.status.set(id, { configured, source: stored ?? (configured ? 'configured' : undefined) });
+      this.status.set(id, Boolean(resolveKey(provider, credential)));
       return;
     }
-    this.status.set(id, { configured: false, source: stored });
+    this.status.set(id, false);
     const controller = new AbortController();
     const signal = AbortSignal.any([controller.signal, this.lifetime.signal]);
     const work = Promise.resolve()
@@ -241,11 +239,11 @@ export class ModelStore implements ModelStorePort {
         await previous?.work;
         if (signal.aborted) return;
         const deadline = AbortSignal.any([signal, AbortSignal.timeout(5000)]);
-        let auth: boolean | string = false;
+        let configured = false;
         try {
           const result = await check.call(provider, deadline);
           deadline.throwIfAborted();
-          auth = result;
+          configured = result;
         } catch (error) {
           if (!signal.aborted)
             this.report(
@@ -258,14 +256,9 @@ export class ModelStore implements ModelStorePort {
             );
         }
         if (!signal.aborted) {
-          const value = {
-            configured: Boolean(auth),
-            source: stored ?? (auth ? (typeof auth === 'string' ? auth : 'configured') : undefined),
-          };
-          const current = this.status.get(id);
-          this.status.set(id, value);
-          if (current?.configured !== value.configured || current?.source !== value.source)
-            this.notify('auth');
+          const previous = this.status.get(id);
+          this.status.set(id, configured);
+          if (previous !== configured) this.notify('auth');
         }
       })
       .finally(() => {
@@ -289,7 +282,7 @@ export class ModelStore implements ModelStorePort {
         id: model.id,
         name: model.name,
         input: model.input,
-        configured: this.authStatus(provider).configured,
+        configured: this.status.get(provider) ?? false,
         thinkingLevels: getSupportedThinkingLevels(model),
       })),
     );
@@ -336,12 +329,11 @@ export class ModelStore implements ModelStorePort {
         builtin && Object.hasOwn(this.configuration.builtins, id)
           ? this.configuration.builtins[id]
           : undefined;
-      const status = this.authStatus(id);
       return {
         id,
         name,
-        configured: status.configured,
-        storedCredential: status.source === 'stored',
+        configured: this.status.get(id) ?? false,
+        storedCredential: Object.hasOwn(this.storedCredentials ?? {}, id),
         canSetKey,
         custom: !builtin,
         baseUrl,
@@ -362,10 +354,6 @@ export class ModelStore implements ModelStorePort {
     const builtin = this.defaultProviders().get(id);
     if (!builtin) throw new DomainError('not_found', 'Unknown built-in provider');
     return builtin.models.map((model) => ({ ...definition(model), templateId: model.id }));
-  }
-
-  authStatus(id: string) {
-    return this.status.get(id) ?? { configured: false };
   }
 
   private commit(id: string, configuration: ProviderConfiguration, key?: string | null) {
