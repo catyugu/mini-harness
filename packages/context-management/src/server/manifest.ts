@@ -28,7 +28,11 @@ function setup(ctx: Context) {
   const statistics = new WeakMap<Pick<SessionLogPort, 'entries'>, Statistics>();
   const createManager = (scoped: Context, id: string) =>
     new ContextManagement(scoped.harnessModels, scoped.harnessLlm, modelRetry(scoped, id));
-  const prepare = (request: LlmRequest, step: RequestPreparation, reason: 'normal' | 'context-overflow' | 'image-limit') => {
+  const prepare = (
+    request: LlmRequest,
+    step: RequestPreparation,
+    reason: 'normal' | 'context-overflow' | 'image-limit',
+  ) => {
     const log = sessions.log(step.sessionId);
     return createManager(step.context, step.sessionId).prepare(
       log,

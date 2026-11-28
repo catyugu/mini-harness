@@ -33,16 +33,16 @@ The executor presents tool schemas, interprets the assistant response and delive
 
 [`mini-harness/agent/events`](src/events.ts) declares the hooks used by Runs:
 
-| Hook                    | Purpose                                                              |
-| ----------------------- | -------------------------------------------------------------------- |
-| `agent/setup`           | Register scoped capabilities before execution.                       |
-| `agent/records`         | Observe native events and contribute assistant record presentations. |
-| `agent/prepare-input`   | Transform prepared user content before acceptance.                   |
-| `agent/model-request`   | Transform model-visible content before a request.                    |
-| `agent/prepare-request` | Transform the final request before execution. |
+| Hook                    | Purpose                                                                                            |
+| ----------------------- | -------------------------------------------------------------------------------------------------- |
+| `agent/setup`           | Register scoped capabilities before execution.                                                     |
+| `agent/records`         | Observe native events and contribute assistant record presentations.                               |
+| `agent/prepare-input`   | Transform prepared user content before acceptance.                                                 |
+| `agent/model-request`   | Transform model-visible content before a request.                                                  |
+| `agent/prepare-request` | Transform the final request before execution.                                                      |
 | `agent/recover-request` | Return a replacement request after a model input error; the first handler to accept recovery wins. |
-| `agent/model-retry`     | Choose whether to retry a failed request before output has streamed. |
-| `agent/tool-result`     | Transform accepted tool content after raw execution is persisted.    |
+| `agent/model-retry`     | Choose whether to retry a failed request before output has streamed.                               |
+| `agent/tool-result`     | Transform accepted tool content after raw execution is persisted.                                  |
 
 These hooks are dispatched by conversation orchestration in Runs; a direct `harnessAgent.run` call uses its supplied callbacks. The native execution API and model request loop do not import session contracts. The conversation integration in `events.ts` owns scoped policy dispatch and record contributions. `agent/setup` receives the target Run Context. Resolve the target tool or prompt service from that Context and pass the contributing Context as the registration provider. Return the registration disposer (or an effect disposer for multiple registrations). Runs binds it to both the contributing Fiber and the Run, so either lifetime ending releases the contribution. Synchronous record observers own any per-run state they need. Return transformed values instead of mutating inputs. The [execution reference](../../docs/subsystems/execution.md) describes their position in the persistence flow.
 

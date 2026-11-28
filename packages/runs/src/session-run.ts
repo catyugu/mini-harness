@@ -5,7 +5,12 @@ import type { Context } from 'mini-harness/cordis';
 import type { TaskContext } from '@mini-harness/tasks/api';
 import { scopeTarget } from '@mini-harness/plugin-api/scopes';
 import type { AgentTurn } from '@mini-harness/agent/api';
-import { modelRetry, type InputContext, type StepContext, type RequestPreparation } from '@mini-harness/agent/events';
+import {
+  modelRetry,
+  type InputContext,
+  type StepContext,
+  type RequestPreparation,
+} from '@mini-harness/agent/events';
 import { DomainError } from '@mini-harness/platform/errors';
 import { isDeepStrictEqual } from 'node:util';
 import type { SessionCatalog, SessionLifecycle, SessionStore } from '@mini-harness/sessions/records';
@@ -396,7 +401,11 @@ export class SessionRun {
         },
         async prepare(turn) {
           const { request, result, preparation } = await buildTurn(turn);
-          result.request = await applyTransforms(ctx.events.listeners('agent/prepare-request', target), request, preparation);
+          result.request = await applyTransforms(
+            ctx.events.listeners('agent/prepare-request', target),
+            request,
+            preparation,
+          );
           return result;
         },
         async recover(turn, failure) {

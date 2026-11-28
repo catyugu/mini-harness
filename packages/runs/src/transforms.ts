@@ -18,10 +18,7 @@ async function invoke<Value, Input extends { signal: AbortSignal }>(
   const { signal, ...data } = input;
   signal.throwIfAborted();
   try {
-    const result = await context.fiber.run(
-      (signal) => callback(value, { ...data, signal } as Input),
-      signal,
-    );
+    const result = await context.fiber.run((signal) => callback(value, { ...data, signal } as Input), signal);
     signal.throwIfAborted();
     return result;
   } catch (error) {
