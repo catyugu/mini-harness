@@ -139,11 +139,10 @@ export interface LlmRequest {
   inputMeasurement?: InputMeasurement;
 }
 
-export type ModelRequestSnapshot = Omit<LlmRequest, 'signal' | 'messages'> & {
-  messages?: NativeMessage[];
-};
+export type ModelRequestSnapshot = Omit<LlmRequest, 'signal'>;
+export type ModelRequestMetadata = Omit<ModelRequestSnapshot, 'messages'>;
 
-export function validateRequestSnapshot(request: ModelRequestSnapshot) {
+export function validateRequestMetadata(request: ModelRequestMetadata) {
   if (
     !request ||
     !request.model ||
@@ -157,21 +156,27 @@ export function validateRequestSnapshot(request: ModelRequestSnapshot) {
     (request.maxTokens !== undefined && (!Number.isSafeInteger(request.maxTokens) || request.maxTokens < 1))
   )
     throw new Error('Invalid model request');
+  if (request.tools !== undefined) validateToolSchemas(request.tools);
+}
+
+export function validateToolSchemas(tools: ToolSchema[]) {
   if (
-    request.tools !== undefined &&
-    (!Array.isArray(request.tools) ||
-      request.tools.some(
-        (tool) =>
-          !tool ||
-          typeof tool.name !== 'string' ||
-          typeof tool.description !== 'string' ||
-          !tool.parameters ||
-          typeof tool.parameters !== 'object' ||
-          Array.isArray(tool.parameters),
-      ))
+    !Array.isArray(tools) ||
+    tools.some(
+      (tool) =>
+        !tool ||
+        typeof tool.name !== 'string' ||
+        typeof tool.description !== 'string' ||
+        !tool.parameters ||
+        typeof tool.parameters !== 'object' ||
+        Array.isArray(tool.parameters),
+    )
   )
     throw new Error('Invalid advertised tools');
-  if (request.messages === undefined) return;
+}
+
+export function validateRequestSnapshot(request: ModelRequestSnapshot) {
+  validateRequestMetadata(request);
   if (!Array.isArray(request.messages)) throw new Error('Invalid model request messages');
   const checker = new RequestMessages();
   checker.append(request.messages);

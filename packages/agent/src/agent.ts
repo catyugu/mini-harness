@@ -28,7 +28,7 @@ export class AgentLoop implements AgentPort {
         { ...step.request, signal },
         {
           request(request) {
-            for (const id of validateRequestSnapshot(request) ?? []) knownCalls.add(id);
+            for (const id of validateRequestSnapshot(request)) knownCalls.add(id);
             input.onEvent?.({ type: 'request', request });
           },
           delta: (text) => input.onEvent?.({ type: 'delta', text }),

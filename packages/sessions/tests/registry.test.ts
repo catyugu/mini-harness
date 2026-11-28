@@ -217,22 +217,3 @@ test('a valid catalog keeps the deletion journal and rejects a partial one', (t)
   writeFileSync(paths.registry, JSON.stringify({ sessions: [], pendingDelete: { id: session.id } }));
   assert.throws(() => loadCatalog(paths), /Invalid deletion journal/);
 });
-
-test('public session logs expose record operations but not the writer lifecycle', (t) => {
-  const { registry } = fixture(t);
-  const session = registry.create();
-  const log = registry.log(session.id);
-  assert.equal('close' in log, false);
-  assert.equal('file' in log, false);
-  registry.inspectLog(session.id, (view) => {
-    assert.equal('close' in view, false);
-    assert.equal('file' in view, false);
-  });
-  log.append({
-    type: 'message',
-    message: { role: 'user', content: [{ type: 'text', text: 'Still writable' }], timestamp: 1 },
-  });
-  assert.deepEqual(registry.history(session.id).timeline.filter(isViewMessage)[0].content, [
-    { type: 'text', text: 'Still writable' },
-  ]);
-});

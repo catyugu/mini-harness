@@ -10,6 +10,7 @@ import type {
   LlmRequest,
   InputMeasurement,
   ModelRequestSnapshot,
+  ModelRequestMetadata,
   NativeMessage,
   NativeToolMessage,
   NativeUsage,
@@ -35,7 +36,7 @@ export interface MessagePatch {
   insert: NativeMessage[];
 }
 
-export type RecordedModelRequest = Omit<ModelRequestSnapshot, 'messages' | 'tools'> & {
+export type RecordedModelRequest = Omit<ModelRequestMetadata, 'tools'> & {
   toolSchema?: string;
   purpose?: 'summary';
   messagesPatch?: MessagePatch;
@@ -149,9 +150,9 @@ export interface SessionLogPort {
   /** Commit the model-visible content of a previously recorded raw execution. */
   acceptToolResult(executionId: string, content: NativeToolMessage['content']): SessionEntry;
   /** Read the stable components of a recorded request without materializing its messages. */
-  requestDefinition(id: string): Omit<ModelRequestSnapshot, 'messages'>;
+  requestDefinition(id: string): ModelRequestMetadata;
   /** Reconstruct exact model-visible inputs for audits, including distinct tool schemas. */
-  requestSnapshot(id: string): ModelRequestSnapshot & { messages: NativeMessage[] };
+  requestSnapshot(id: string): ModelRequestSnapshot;
 }
 
 /** Non-mutating operations available while inspecting a closed conversation log. */
