@@ -159,10 +159,7 @@ test('credential updates serialize across providers and survive adapter replacem
   assert.equal(saved.openai.key, 'first-secret');
   assert.equal(saved.anthropic.key, 'second-secret');
   if (process.platform !== 'win32') assert.equal(statSync(join(paths.home, 'auth.json')).mode & 0o777, 0o600);
-  assert.doesNotMatch(
-    JSON.stringify(adapter.providers()),
-    /first-secret|second-secret/,
-  );
+  assert.doesNotMatch(JSON.stringify(adapter.providers()), /first-secret|second-secret/);
   const replacement = new ModelStore(paths.home);
   await replacement.refresh();
   await new PiLlm(replacement).registerModels();
