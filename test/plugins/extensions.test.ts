@@ -10,7 +10,13 @@ import { fixture } from '../support/api-fixture.ts';
 import { writePlugin } from '../support/plugin-fixture.ts';
 
 test('prompt contributions coexist, override within a session tree and are removed with their plugins', async (t) => {
-  const { app, paths, mock, request } = await fixture(t);
+  const prompts = new Map<string, string>();
+  const { app, paths, request } = await fixture(t, ({ messages }) => {
+    const input = messages.at(-1);
+    const system = messages.find(({ role }) => role === 'system');
+    if (input?.role === 'user' && system) prompts.set(input.content, system.content);
+    return 'Mock response';
+  });
   writePlugin(
     paths.plugins,
     'app-prompt',
@@ -50,15 +56,9 @@ export const apply = (ctx) => {
   const child = app.runtime.plugins.ctx.harnessSessions.create({ parentId: parent.id });
   const sibling = app.runtime.plugins.ctx.harnessSessions.create();
   async function prompt(id: string) {
-    const start = mock.requests.length;
     const input = 'Inspect prompt for ' + id;
     await sendRun(app.runtime.plugins.ctx.harnessRuns, id, input);
-    const messages = mock.requests
-      .slice(start)
-      .map(({ messages }) => messages as { role: string; content: string }[])
-      .find((messages) => messages.at(-1)?.content === input);
-    const system = messages?.find(({ role }) => role === 'system');
-    return expectPresent(system, 'system message').content;
+    return expectPresent(prompts.get(input), 'system message');
   }
   const configured = await request('/settings', 'PATCH', {
     entries: {
