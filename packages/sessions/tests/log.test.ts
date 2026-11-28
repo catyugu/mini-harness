@@ -90,7 +90,17 @@ test('operational entries keep the transcript leaf stable and revision uses comp
     },
     run: { sequence: 1, inputEntryId: null },
   });
-  log.append({ type: 'inbox-enqueued', item: { id: 'queued', mode: 'steer', text: 'later', images: [], origin: { source: 'user' }, input: { userText: 'later', attachments: [] } } });
+  log.append({
+    type: 'inbox-enqueued',
+    item: {
+      id: 'queued',
+      mode: 'steer',
+      text: 'later',
+      images: [],
+      origin: { source: 'user' },
+      input: { userText: 'later', attachments: [] },
+    },
+  });
   assert.equal(log.projection().leafId, first.id);
   assert.equal(log.entries().length, 3);
   const second = log.revise(user('revised'), null, first.id);
@@ -118,10 +128,30 @@ test('operational entries keep the transcript leaf stable and revision uses comp
 test('a durable message acknowledges inbox delivery exactly once and restart retains pending input', (t) => {
   const { open } = fixture(t);
   let log = open();
-  log.append({ type: 'inbox-enqueued', item: { id: 'delivered', mode: 'steer', text: 'first', images: [], origin: { source: 'user' }, input: { userText: 'first', attachments: [] } } });
+  log.append({
+    type: 'inbox-enqueued',
+    item: {
+      id: 'delivered',
+      mode: 'steer',
+      text: 'first',
+      images: [],
+      origin: { source: 'user' },
+      input: { userText: 'first', attachments: [] },
+    },
+  });
   log.append({ ...user('first'), inboxId: 'delivered' });
   assert.throws(() => log.append({ ...user('duplicate'), inboxId: 'delivered' }), /not pending/);
-  log.append({ type: 'inbox-enqueued', item: { id: 'pending', mode: 'queue', text: 'next', images: [], origin: { source: 'user' }, input: { userText: 'next', attachments: [] } } });
+  log.append({
+    type: 'inbox-enqueued',
+    item: {
+      id: 'pending',
+      mode: 'queue',
+      text: 'next',
+      images: [],
+      origin: { source: 'user' },
+      input: { userText: 'next', attachments: [] },
+    },
+  });
   log.append({
     type: 'task',
     task: {

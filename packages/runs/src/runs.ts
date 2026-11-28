@@ -225,8 +225,7 @@ export class Runs implements RunPort {
       );
       void task.result.then(
         () => this.wake(id),
-        () =>
-          this.wake(id, task.signal.reason instanceof RunInterrupted ? undefined : pending),
+        () => this.wake(id, task.signal.reason instanceof RunInterrupted ? undefined : pending),
       );
       this.changed(id);
       return { info: activity.events!.info, task };
@@ -311,12 +310,7 @@ export class Runs implements RunPort {
       const pending = log.inbox();
       if (log.inboxPaused() || !pending.length) return;
       // Retry only when the previous executor advanced the inbox or new work arrived.
-      if (
-        previous &&
-        pending.length === previous.size &&
-        pending.every(({ id }) => previous.has(id))
-      )
-        return;
+      if (previous && pending.length === previous.size && pending.every(({ id }) => previous.has(id))) return;
       return this.launch(id).task;
     } catch (error) {
       if (error instanceof DomainError && (error.code === 'not_found' || error.code === 'conflict')) return;

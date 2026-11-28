@@ -146,7 +146,14 @@ function queueInput(
   const model = options?.model ?? log.projection().model;
   log.append({
     type: 'inbox-enqueued',
-    item: { id: randomUUID(), mode, origin: { source: 'user' }, ...sessions.prepareInput(id, text, attachments), ...options, model },
+    item: {
+      id: randomUUID(),
+      mode,
+      origin: { source: 'user' },
+      ...sessions.prepareInput(id, text, attachments),
+      ...options,
+      model,
+    },
   });
   return log.queue();
 }

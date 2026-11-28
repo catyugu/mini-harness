@@ -55,7 +55,6 @@ interface SessionPrompt {
   task: TaskContext;
   fallback?: ModelChoice;
   revision?: Revision;
-
 }
 
 type Revision = Omit<InboxItem, 'id' | 'mode'> & {
@@ -223,13 +222,7 @@ export class SessionRun {
       }
     };
     const deliver = (modes: MessageMode[], requireInput = false) =>
-      inbox.deliver(
-        modes,
-        signal,
-        (item) => prepare(item, selection(item)),
-        commit,
-        requireInput,
-      );
+      inbox.deliver(modes, signal, (item) => prepare(item, selection(item)), commit, requireInput);
     if (revision) {
       await commit(revision, await prepare(revision, selection(revision, log.context(revision.parentId))));
       this.closeUnfinishedTools(log);
