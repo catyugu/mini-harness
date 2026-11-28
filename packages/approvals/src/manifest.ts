@@ -31,7 +31,6 @@ const plugin: Plugin.Object = {
         const caller = Service.caller(this);
         const instanceId = entryFiber(caller)?.entry?.options.id ?? 'fiber:' + caller.fiber.uid;
         ctx.harnessSessions.assertAvailable(id);
-        if (!ctx.harnessSessions.get(id)) throw new DomainError('not_found', 'Conversation not found');
         return caller.fiber.run(
           (lifetime) => approvals.request(id, executionId, instanceId, prompt, lifetime),
           signal,

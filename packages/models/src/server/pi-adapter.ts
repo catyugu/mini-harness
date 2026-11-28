@@ -59,8 +59,7 @@ export class PiLlm implements LlmAdapter {
           canSetKey: Boolean(provider.auth.apiKey?.login),
           models,
           async authStatus(signal: AbortSignal) {
-            const auth = await runtime.checkAuth(provider.id, { signal });
-            return auth?.source || Boolean(auth);
+            return Boolean(await runtime.checkAuth(provider.id, { signal }));
           },
           async discoveryKey(credential, signal) {
             if (credential?.type === 'oauth') return;

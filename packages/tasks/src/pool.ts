@@ -38,10 +38,7 @@ export class TaskPool {
       const start = () => {
         signal.removeEventListener('abort', cancel);
         this.running++;
-        let held = true;
         resolve(() => {
-          if (!held) return;
-          held = false;
           this.running--;
           this.drain();
         });

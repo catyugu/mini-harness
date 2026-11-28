@@ -25,10 +25,8 @@ export function setup(ctx: Context) {
   track(ctx.harnessRuns.events, () => 'sessions');
   track(ctx.harnessApprovals.events, () => 'sessions');
   registerSessionRoutes(ctx, (id): ConversationView => {
-    const record = ctx.harnessSessions.get(id);
-    if (!record) throw new Error('Conversation not found');
     const { harnessSessions: sessions, harnessRuns } = ctx;
-    sessions.assertAvailable(id);
+    const record = sessions.assertAvailable(id);
     const history = sessions.inspectLog(id, (log) => ({ ...log.projection(), queue: log.queue() }));
     const { partial, tools, records } = harnessRuns.activity(id);
     return {

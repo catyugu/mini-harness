@@ -8,6 +8,8 @@ import {
   RequestMessages,
   validateNativeMessage,
   validateRequestSnapshot,
+  validateRequestMetadata,
+  validateToolSchemas,
   type LlmRequest,
   type NativeMessage,
   type NativeToolMessage,
@@ -78,30 +80,8 @@ export class SessionLog extends RecordLog<SessionEvent> implements SessionLogPor
   private readonly pendingInbox = new Map<string, InboxItem>();
   private readonly inboxFailures: QueueEntry[] = [];
   private readonly runEvents: { seq: number; parentId: string | null; run: RunInfo }[] = [];
-  private cachedContext?: SessionContext;
+  private cachedContext?: { state: SessionContext; checker: RequestMessages; checked: number };
   private cachedProjection?: SessionProjection;
-  private recovery = { leaf: null as string | null, checker: new RequestMessages() };
-
-  /** All consumers share record operations; only the Registry owns the open file. */
-  readonly port: SessionLogPort = {
-    sessionId: this.sessionId,
-    entries: (after) => this.entries(after),
-    originalMessage: (id, raw) => this.originalMessage(id, raw),
-    setting: (owner) => this.setting(owner),
-    inbox: () => this.inbox(),
-    hasInbox: (id) => this.hasInbox(id),
-    inboxPaused: () => this.inboxPaused(),
-    queue: () => this.queue(),
-    branch: (leafId) => this.branch(leafId),
-    append: (event, leafId) => this.append(event, leafId),
-    revise: (event, parentId, leafId) => this.revise(event, parentId, leafId),
-    context: (leafId) => this.context(leafId),
-    projection: (leafId) => this.projection(leafId),
-    recordRequest: (snapshot, purpose) => this.recordRequest(snapshot, purpose),
-    acceptToolResult: (id, content) => this.acceptToolResult(id, content),
-    requestDefinition: (id) => this.requestDefinition(id),
-    requestSnapshot: (id) => this.requestSnapshot(id),
-  };
 
   constructor(
     file: string,
@@ -120,17 +100,23 @@ export class SessionLog extends RecordLog<SessionEvent> implements SessionLogPor
     return advancesBranch(entry);
   }
 
-  protected validateRecord(entry: SessionEntry, recovering: boolean) {
-    const recovery = recovering ? this.recovery : undefined;
+  protected validateRecord(entry: SessionEntry) {
     validateEvent(entry);
     if (entry.type === 'tool-schema' && digest(entry.tools) !== entry.hash)
       throw new Error('Tool schema digest does not match its content');
     if (entry.type === 'model-request') {
-      if (!recovery || entry.request.messagesPatch !== undefined)
-        validateRequestSnapshot(this.materializeRequest(entry));
+      if (entry.request.messagesPatch !== undefined) validateRequestSnapshot(this.materializeRequest(entry));
       else {
-        validateRequestSnapshot(this.requestMetadata(entry));
-        this.validateRecoveryContext(entry.parentId, recovery);
+        validateRequestMetadata(this.requestMetadata(entry));
+        const view = this.contextAt(entry.parentId);
+        try {
+          view.checker.append(view.state.contextMessages.slice(view.checked));
+        } catch (error) {
+          this.cachedContext = undefined;
+          throw error;
+        }
+        view.checked = view.state.contextMessages.length;
+        view.checker.complete();
       }
     }
     if (entry.type === 'tool-accepted') {
@@ -184,8 +170,8 @@ export class SessionLog extends RecordLog<SessionEvent> implements SessionLogPor
     }
     const run = runFromEntry(this.sessionId, entry);
     if (advancesBranch(entry)) {
-      if (this.cachedContext?.leafId === entry.parentId)
-        projectContextEntry(this.cachedContext, entry, projectMessage(entry, this.execution));
+      if (entry.type !== 'context-replace' && this.cachedContext?.state.leafId === entry.parentId)
+        projectContextEntry(this.cachedContext.state, entry, projectMessage(entry, this.execution));
       else this.cachedContext = undefined;
     }
     if (advancesBranch(entry) || run) this.cachedProjection = undefined;
@@ -254,29 +240,30 @@ export class SessionLog extends RecordLog<SessionEvent> implements SessionLogPor
   }
 
   private contextAt(leafId = this.leafId) {
-    if (this.cachedContext?.leafId === leafId) return this.cachedContext;
+    if (this.cachedContext?.state.leafId === leafId) return this.cachedContext;
     const state = newContext();
     for (const entry of this.branchEntries(leafId))
       projectContextEntry(state, entry, projectMessage(entry, this.execution));
-    if (leafId === this.leafId) this.cachedContext = state;
-    return state;
+    const view = { state, checker: new RequestMessages(), checked: 0 };
+    if (leafId === this.leafId) this.cachedContext = view;
+    return view;
   }
 
   context(leafId?: string | null) {
-    return structuredClone(this.contextAt(leafId));
+    return structuredClone(this.contextAt(leafId).state);
   }
 
   projection(leafId?: string | null) {
     // A display projection owns its timeline. Effective context is maintained on demand.
     const project = () =>
-      projectLog(this.branchEntries(leafId), this.execution, this.runEvents, this.contextAt(leafId));
+      projectLog(this.branchEntries(leafId), this.execution, this.runEvents, this.contextAt(leafId).state);
     if (leafId !== undefined) return structuredClone(project());
     this.cachedProjection ??= project();
     return structuredClone(this.cachedProjection);
   }
 
   recordRequest(snapshot: Omit<LlmRequest, 'signal'>, purpose?: 'summary') {
-    const projected = this.contextAt();
+    const projected = this.contextAt().state;
     const { messages, tools, model, systemPrompt, thinkingLevel, maxTokens, inputMeasurement } = snapshot;
     const patch = messagePatch(projected.contextMessages, messages);
     const toolSchema = tools === undefined ? undefined : digest(tools);
@@ -317,34 +304,9 @@ export class SessionLog extends RecordLog<SessionEvent> implements SessionLogPor
     return tools ? { ...request, tools } : request;
   }
 
-  private validateRecoveryContext(
-    leaf: string | null,
-    recovery: { leaf: string | null; checker: RequestMessages },
-  ) {
-    const tail: SessionEntry[] = [];
-    let cursor = leaf;
-    while (cursor !== null && cursor !== recovery.leaf) {
-      const entry = this.byId.get(cursor);
-      if (!entry) throw new Error('Unknown session branch');
-      tail.push(entry);
-      cursor = entry.parentId;
-    }
-    if (cursor !== recovery.leaf || tail.some(({ type }) => type === 'context-replace')) {
-      recovery.checker = new RequestMessages();
-      recovery.checker.append(this.contextAt(leaf).contextMessages);
-    } else {
-      for (const entry of tail.reverse()) {
-        const message = projectMessage(entry, this.execution);
-        if (message) recovery.checker.append([message]);
-      }
-    }
-    recovery.checker.complete();
-    recovery.leaf = leaf;
-  }
-
   private materializeRequest(entry: Extract<SessionEntry, { type: 'model-request' }>) {
     const { messagesPatch } = entry.request;
-    const context = this.contextAt(entry.parentId).contextMessages;
+    const context = this.contextAt(entry.parentId).state.contextMessages;
     let messages = context;
     if (messagesPatch) {
       const { start, deleteCount, insert } = messagesPatch;
@@ -455,11 +417,7 @@ function validateEvent(event: SessionEvent) {
         throw new Error('Invalid recorded model request');
       return;
     case 'tool-schema':
-      validateRequestSnapshot({
-        model: { provider: 'audit', id: 'audit' },
-        systemPrompt: '',
-        tools: event.tools,
-      });
+      validateToolSchemas(event.tools);
       if (!/^[a-f0-9]{64}$/.test(event.hash)) throw new Error('Invalid tool schema hash');
       return;
     case 'tool-execution':

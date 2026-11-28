@@ -101,10 +101,7 @@ export async function requestModel(
     try {
       const custom = await options.retry?.(failure);
       const retry =
-        custom ??
-        (message.errorKind === 'transient' && attempt < 3
-          ? { delayMs: 250 * 2 ** (attempt - 1) }
-          : undefined);
+        custom ?? (message.errorKind === 'transient' ? { delayMs: 250 * 2 ** (attempt - 1) } : undefined);
       if (!retry) return message;
       if (retry.delayMs !== undefined) {
         if (!Number.isSafeInteger(retry.delayMs) || retry.delayMs < 0 || retry.delayMs > 2_147_483_647)

@@ -64,7 +64,6 @@ function writableToolResult(result: ToolResult) {
 
 function sendNotice(ctx: Context, id: string, taskId: string, name: string, message: string, key: string) {
   if (ctx.fiber.signal.aborted || ctx.harnessTasks.sealed || !ctx.harnessSessions.get(id)) return;
-  ctx.harnessSessions.assertAvailable(id);
   ctx.harnessRuns.send(id, {
     message: name + ': ' + message,
     messageId: taskId + ':' + key,
@@ -92,15 +91,14 @@ function start(ctx: Context, id: string, name: string, args: Record<string, unkn
   );
   if (!tool?.background) throw new Error('Tool does not support background execution: ' + name);
   const prepared = prepareTool(tool, args);
-  if (!prepared.binding) throw new Error('Background tool has no registered provider: ' + name);
   const task = ctx.harnessTasks.start(
     {
       ...service.task(id),
       type: backgroundTool,
       name: tool.label ?? tool.name,
       metadata: { tool: name, arguments: prepared.args as TaskData },
-      provider: prepared.binding.provider,
-      signal: prepared.binding.signal,
+      provider: tool.binding.provider,
+      signal: tool.binding.signal,
       project: (result: ToolResult) =>
         ({
           ...(tool.projectResult?.(result) ?? writableToolResult(result)),

@@ -6,7 +6,7 @@ export const metadata = { title: 'Task Runtime', description: 'Asynchronous work
 const plugin: Plugin.Object = {
   provide: ['harnessTasks'],
   apply(ctx) {
-    const runtime = new TaskRuntime();
+    const runtime = new TaskRuntime(ctx);
     ctx.provide('harnessTasks', runtime.service());
     ctx.on('harness/seal', () => runtime.seal());
     ctx.on('harness/quiesce', () => runtime.stop());

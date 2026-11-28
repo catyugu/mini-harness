@@ -96,7 +96,7 @@ export abstract class RecordLog<Event extends { type: string }> {
   private closed = false;
   private length = 0;
 
-  protected abstract validateRecord(entry: LogEntry<Event>, recovering: boolean): void;
+  protected abstract validateRecord(entry: LogEntry<Event>): void;
   protected abstract recordAdded(entry: LogEntry<Event>, address: RecordAddress): void;
   protected abstract advancesBranch(entry: LogEntry<Event>): boolean;
 
@@ -146,7 +146,7 @@ export abstract class RecordLog<Event extends { type: string }> {
     for (let offset = first + 1; offset < end; ) {
       const newline = bytes.indexOf(10, offset);
       const entry = parseRecord(bytes.toString('utf8', offset, newline)) as LogEntry<Event>;
-      this.validateEntry(entry, true);
+      this.validateEntry(entry);
       this.remember(entry, offset, newline - offset);
       offset = newline + 1;
     }
@@ -159,7 +159,7 @@ export abstract class RecordLog<Event extends { type: string }> {
     }
   }
 
-  private validateEntry(entry: LogEntry<Event>, recovering = false) {
+  private validateEntry(entry: LogEntry<Event>) {
     if (
       entry.version !== 1 ||
       entry.seq !== this.records.length + 1 ||
@@ -170,7 +170,7 @@ export abstract class RecordLog<Event extends { type: string }> {
       !Number.isFinite(Date.parse(entry.timestamp))
     )
       throw new Error('Invalid session log sequence or ancestry');
-    this.validateRecord(entry, recovering);
+    this.validateRecord(entry);
   }
 
   private remember(entry: LogEntry<Event>, offset: number, length: number) {

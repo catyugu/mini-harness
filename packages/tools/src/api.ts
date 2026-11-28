@@ -32,6 +32,15 @@ export interface ToolDefinition<Arguments = Record<string, any>> extends ToolSch
   execute(args: Arguments, context: ToolContext): Promise<ToolResult>;
 }
 
+/** A registry-selected definition whose provider owns execution. */
+export interface ResolvedTool extends ToolDefinition {
+  readonly binding: {
+    provider: Context;
+    signal: AbortSignal;
+    available(): boolean;
+  };
+}
+
 export interface ToolFactory {
   name: string;
   resolve(resourceId: string, caller?: Context): ToolDefinition;
@@ -70,7 +79,7 @@ export interface ToolPort {
    * Dispose the provider Fiber before releasing resources used by active calls.
    */
   register(tool: ToolDefinition | ToolFactory, provider?: Context): () => void;
-  list(selection?: ToolSelection): ToolDefinition[];
+  list(selection?: ToolSelection): ResolvedTool[];
 }
 
 /** Infer argument types from a JSON schema without binding plugins to a model SDK. */

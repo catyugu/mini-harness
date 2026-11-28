@@ -5,7 +5,6 @@ import type { ModelSummary } from '../shared/catalog.ts';
 import type { ProtocolInfo, ProviderInfo, ProviderModelDefinition } from '../shared/pi-provider.ts';
 import type { ProviderConnection } from './provider-settings.ts';
 
-export type AuthStatus = { configured: boolean; source?: string };
 export type CatalogModel = Model<Api>;
 export interface CatalogProvider extends ProviderConnection {
   id: string;
@@ -15,7 +14,7 @@ export interface CatalogProvider extends ProviderConnection {
   key?: string;
   headers?: Record<string, string | null>;
   /** Must settle on abort, including the store's authentication deadline. */
-  authStatus?(signal: AbortSignal): Promise<boolean | string>;
+  authStatus?(signal: AbortSignal): Promise<boolean>;
   endpointOverride?: string;
   discoveryKey?(credential: Credential | undefined, signal: AbortSignal): Promise<string | undefined>;
 }
