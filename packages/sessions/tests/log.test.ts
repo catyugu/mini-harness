@@ -255,6 +255,46 @@ test('compaction and context edits change model context without deleting convers
   assert.deepEqual(log.context(compacted.leafId), compacted);
 });
 
+test('context replacement resets request validation to the effective messages', (t) => {
+  const { open } = fixture(t);
+  const log = open();
+  const call: NativeAssistantMessage = {
+    role: 'assistant',
+    provider: 'test',
+    model: 'model',
+    content: [{ type: 'toolCall', id: 'call', name: 'read', arguments: {} }],
+    timestamp: 2,
+    stopReason: 'toolUse',
+  };
+  const result = {
+    role: 'toolResult' as const,
+    toolCallId: 'call',
+    toolName: 'read',
+    content: [{ type: 'text' as const, text: 'result' }],
+    state: 'finished' as const,
+    timestamp: 3,
+  };
+  const recordRequest = () =>
+    log.recordRequest({
+      model: { provider: 'test', id: 'model' },
+      systemPrompt: '',
+      messages: log.context().contextMessages,
+    });
+  log.append({ type: 'message', message: call });
+  log.append({ type: 'message', message: result });
+  recordRequest();
+  const summary = user('summary').message;
+  log.append({
+    type: 'context-replace',
+    replacements: [{ start: 0, deleteCount: 2, insert: [summary] }],
+  });
+  log.append({ type: 'message', message: call });
+  log.append({ type: 'message', message: result });
+  const request = recordRequest();
+  log.close();
+  assert.deepEqual(open().requestSnapshot(request.id).messages, [summary, call, result]);
+});
+
 test('attachments retain full model input while display keeps the submitted text and labels', (t) => {
   const { open } = fixture(t);
   const log = open();
