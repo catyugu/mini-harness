@@ -413,10 +413,14 @@ test('context overflow offloads images without dropping another plugin’s prepa
   const endpoint = '/sessions/' + session.id + '/context';
   assert.equal((await request(endpoint, 'PUT', { ...settings, autoCompact: false })).status, 200);
   let preparations = 0;
-  ctx.on('agent/prepare-request', (request) => {
-    preparations++;
-    return { ...request, maxTokens: 512, systemPrompt: request.systemPrompt + ' [prepared]' };
-  }, { prepend: true });
+  ctx.on(
+    'agent/prepare-request',
+    (request) => {
+      preparations++;
+      return { ...request, maxTokens: 512, systemPrompt: request.systemPrompt + ' [prepared]' };
+    },
+    { prepend: true },
+  );
   const attachment = { name: 'sample.png', mimeType: 'image/png', data: 'iVBORw0KGgo=' };
   await sendRun(ctx.harnessRuns, session.id, 'Earlier input', undefined, { attachments: [attachment] });
   await sendRun(ctx.harnessRuns, session.id, 'Latest input', undefined, { attachments: [attachment] });

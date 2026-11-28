@@ -276,7 +276,10 @@ export class SessionRun {
       return {
         request,
         recover: (request, failure) =>
-          recoverRequest(ctx.events.listeners('agent/recover-request', target), request, { ...preparation, failure }),
+          recoverRequest(ctx.events.listeners('agent/recover-request', target), request, {
+            ...preparation,
+            failure,
+          }),
         executor,
         tools: advertisedTools,
         execution: {

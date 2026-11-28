@@ -95,7 +95,10 @@ function setup(ctx: Context) {
                   maxTokens,
                 } = log.requestDefinition(latest.id);
                 const { model, capabilities } = selectModel(models, [choice]);
-                const rebuild = async (request: LlmRequest, messages: LlmRequest['messages']): Promise<LlmRequest> => ({
+                const rebuild = async (
+                  request: LlmRequest,
+                  messages: LlmRequest['messages'],
+                ): Promise<LlmRequest> => ({
                   ...request,
                   messages: prepareModelMessages(capabilities, messages),
                   inputMeasurement: undefined,

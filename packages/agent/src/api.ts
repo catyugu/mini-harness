@@ -27,7 +27,10 @@ export interface AgentTurn {
   tools: ReadonlyMap<string, ToolDefinition>;
   execution?: Omit<ToolExecution, 'signal' | 'deliver'>;
   /** Repair the actual failed request within this turn, or decline recovery. */
-  recover?(request: LlmRequest, failure: ModelFailure): LlmRequest | undefined | Promise<LlmRequest | undefined>;
+  recover?(
+    request: LlmRequest,
+    failure: ModelFailure,
+  ): LlmRequest | undefined | Promise<LlmRequest | undefined>;
   deliver?(result: NativeToolMessage, signal: AbortSignal, call: ToolCallPart): Promise<void>;
 }
 

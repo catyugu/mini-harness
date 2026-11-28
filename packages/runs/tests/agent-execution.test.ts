@@ -741,9 +741,14 @@ test('request recovery composes with prepared parameters and repeatable message 
     async *stream(request) {
       requests++;
       assert.equal(request.maxTokens, 512);
-      assert.equal(request.systemPrompt, requests === 1 ? 'Fixture [prepared]' : 'Fixture [prepared] [repair]');
+      assert.equal(
+        request.systemPrompt,
+        requests === 1 ? 'Fixture [prepared]' : 'Fixture [prepared] [repair]',
+      );
       assert.deepEqual(
-        request.messages.flatMap((message) => message.content.filter((part) => part.type === 'text').map((part) => part.text)),
+        request.messages.flatMap((message) =>
+          message.content.filter((part) => part.type === 'text').map((part) => part.text),
+        ),
         requests === 3 ? ['Rebuilt', 'Temporary context'] : ['Recover', 'Temporary context'],
       );
       if (requests < 3) {
@@ -764,7 +769,10 @@ test('request recovery composes with prepared parameters and repeatable message 
   });
   ctx.on('agent/model-request', (request) => ({
     ...request,
-    messages: [...request.messages, { role: 'user', timestamp: 0, content: [{ type: 'text', text: 'Temporary context' }] }],
+    messages: [
+      ...request.messages,
+      { role: 'user', timestamp: 0, content: [{ type: 'text', text: 'Temporary context' }] },
+    ],
   }));
   ctx.on('agent/prepare-request', (request) => {
     preparations++;
@@ -774,7 +782,11 @@ test('request recovery composes with prepared parameters and repeatable message 
     assert.equal(step.failure.kind, 'context-overflow');
     recoveries++;
     if (recoveries === 1) return { ...request, systemPrompt: request.systemPrompt + ' [repair]' };
-    return step.rebuild(request, [{ role: 'user', timestamp: 0, content: [{ type: 'text', text: 'Rebuilt' }] }], step.signal);
+    return step.rebuild(
+      request,
+      [{ role: 'user', timestamp: 0, content: [{ type: 'text', text: 'Rebuilt' }] }],
+      step.signal,
+    );
   });
   assert.equal(
     await agent.prompt(ctx, record, 'Recover', () => {}, {
