@@ -98,8 +98,8 @@ function start(ctx: Context, id: string, name: string, args: Record<string, unkn
       type: backgroundTool,
       name: tool.label ?? tool.name,
       metadata: { tool: name, arguments: prepared.args as TaskData },
-      provider: prepared.binding.provider,
-      signal: prepared.binding.signal,
+      provider: tool.binding.provider,
+      signal: tool.binding.signal,
       project: (result: ToolResult) =>
         ({
           ...(tool.projectResult?.(result) ?? writableToolResult(result)),

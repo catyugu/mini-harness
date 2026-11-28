@@ -46,8 +46,7 @@ export async function requestModel(
     const started = performance.now();
     let firstTokenMs: number | undefined;
     let message: NativeAssistantMessage | undefined;
-    let streamed = false,
-      partial = '',
+    let partial = '',
       thinking = '';
     try {
       signal.throwIfAborted();
@@ -55,7 +54,6 @@ export async function requestModel(
         if (event.type === 'done') message = event.message;
         else {
           signal.throwIfAborted();
-          streamed = true;
           firstTokenMs ??= performance.now() - started;
           if (event.type === 'text-delta') {
             partial += event.text;
@@ -81,7 +79,7 @@ export async function requestModel(
       };
     }
     options.attempt?.({ elapsedMs: performance.now() - started, firstTokenMs, usage: message.usage });
-    if (message.stopReason !== 'error' || streamed || message.content.length || signal.aborted)
+    if (message.stopReason !== 'error' || firstTokenMs !== undefined || message.content.length || signal.aborted)
       return message;
     if (attempt >= 3) return message;
     const failure: ModelFailure = {
@@ -102,7 +100,7 @@ export async function requestModel(
       const custom = await options.retry?.(failure);
       const retry =
         custom ??
-        (message.errorKind === 'transient' && attempt < 3
+        (message.errorKind === 'transient'
           ? { delayMs: 250 * 2 ** (attempt - 1) }
           : undefined);
       if (!retry) return message;

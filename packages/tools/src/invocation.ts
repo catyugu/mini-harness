@@ -10,18 +10,18 @@ export function prepareTool(tool: ResolvedTool, args: Record<string, unknown>) {
   if (!toolAvailable(tool)) throw new Error('Tool is no longer available: ' + tool.name);
   if (!Check(tool.parameters, args))
     throw new Error('Invalid arguments for ' + tool.name + ': Schema mismatch');
-  return { tool, binding: tool.binding, args };
+  return { tool, args };
 }
 
 /** Execute validated work in an already admitted provider Fiber. */
 export async function executePreparedTool(
-  { tool, binding, args }: ReturnType<typeof prepareTool>,
+  { tool, args }: ReturnType<typeof prepareTool>,
   callId: string,
   options: ToolInvocation & { signal: AbortSignal },
 ): Promise<ToolResult> {
   const { signal, executionId, report, onUpdate, write, waitFor } = options;
   signal.throwIfAborted();
-  if (!binding.available()) throw new Error('Tool is no longer available: ' + tool.name);
+  if (!toolAvailable(tool)) throw new Error('Tool is no longer available: ' + tool.name);
   const result = await tool.execute(args, {
     callId,
     executionId,
@@ -41,7 +41,7 @@ export function invokeTool(
   callId: string,
   options: ToolInvocation = {},
 ): Promise<ToolResult> {
-  const { binding } = prepared;
+  const { binding } = prepared.tool;
   const signal = options.signal ? AbortSignal.any([binding.signal, options.signal]) : binding.signal;
   // Preserve a tool's observed result when cancellation races its return.
   let completed: ToolResult | undefined;
