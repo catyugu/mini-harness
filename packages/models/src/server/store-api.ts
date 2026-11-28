@@ -31,6 +31,7 @@ export interface ProviderAdministrationPort {
 }
 
 export interface ModelStorePort extends ModelSource, ProviderAdministrationPort {
+  available(): Promise<ModelSummary[]>;
   requestModel(choice: ModelChoice): { provider: CatalogProvider; model: CatalogModel } | undefined;
   readonly credentials: CredentialStore;
   apiKey(provider: CatalogProvider): Promise<string | undefined>;

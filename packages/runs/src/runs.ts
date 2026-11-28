@@ -15,7 +15,7 @@ import type { CapabilityObservation } from '@mini-harness/plugin-api/observation
 import { Inbox } from './inbox.ts';
 import { assertImageInput } from '@mini-harness/models/selection';
 import { selectInputModel, SessionRun } from './session-run.ts';
-import { recordPublisher, type StreamEvent, type RunEvent } from './shared/stream.ts';
+import { recordPublisher, type RunEvent } from './shared/stream.ts';
 import { isRunning, projectRun, type RunDetails, type RunInfo } from '@mini-harness/sessions/run-state';
 import { runFromEntry } from '@mini-harness/sessions/log-api';
 import { RunEvents } from './events.ts';
