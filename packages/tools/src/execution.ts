@@ -1,5 +1,5 @@
 import type { Context } from 'mini-harness/cordis';
-import { type ToolDefinition, type ToolInvocation, type ToolUpdate } from './api.ts';
+import { type ResolvedTool, type ToolInvocation, type ToolResult, type ToolUpdate } from './api.ts';
 import { runBatch } from './batch.ts';
 import { invokeTool, prepareTool } from './invocation.ts';
 export { runTool, toolAvailable } from './invocation.ts';
@@ -39,7 +39,7 @@ export interface ToolExecutorPort {
   /** Interpret, execute and deliver a result for each call. */
   execute(
     calls: readonly ToolCallPart[],
-    tools: ReadonlyMap<string, ToolDefinition>,
+    tools: ReadonlyMap<string, ResolvedTool>,
     execution: ToolExecution,
   ): Promise<void>;
 }
@@ -51,22 +51,22 @@ export const executeTools: ToolExecutorPort['execute'] = async (calls, tools, ex
   function* jobs() {
     for (const call of calls) {
       const tool = tools.get(call.name);
-      let invalid = call.argumentsError && 'Invalid arguments for ' + call.name + ': ' + call.argumentsError;
-      let prepared: ReturnType<typeof prepareTool> | undefined;
-      if (!invalid && tool) {
-        try {
-          prepared = prepareTool(tool, call.arguments);
-        } catch (error) {
-          invalid = error instanceof Error ? error.message : String(error);
-        }
-      }
+      let invoke: (signal: AbortSignal) => Promise<ToolResult>;
       let parallel = false;
-      if (!invalid && tool?.isConcurrencySafe) {
-        try {
-          parallel = tool.isConcurrencySafe(call.arguments);
-        } catch {
-          // A scheduling hint that fails leaves the call serial.
-        }
+      try {
+        if (call.argumentsError) throw new Error('Invalid arguments for ' + call.name + ': ' + call.argumentsError);
+        if (!tool) throw new Error('Tool is no longer available: ' + call.name);
+        const prepared = prepareTool(tool, call.arguments);
+        parallel = tool.isConcurrencySafe?.(prepared.args) ?? false;
+        invoke = (signal) => invokeTool(prepared, call.id, {
+          signal,
+          executionId: execution.executionId,
+          waitFor: execution.waitFor,
+          onUpdate: (update) => execution.update?.(call, update),
+          write: (text, channel = 'output') => execution.write?.(call, text, channel),
+        });
+      } catch (error) {
+        invoke = async () => { throw error; };
       }
       yield {
         parallel,
@@ -74,7 +74,7 @@ export const executeTools: ToolExecutorPort['execute'] = async (calls, tools, ex
           const rejection = execution.start?.(call);
           const result = rejection
             ? toolFailure(call, rejection.reason, rejection.state)
-            : await executeTool(call, tool, prepared, execution, batchSignal, invalid);
+            : await executeTool(call, invoke, batchSignal);
           await execution.deliver(result, batchSignal);
         },
       };
@@ -98,11 +98,8 @@ export const toolFailure = (
 
 async function executeTool(
   call: ToolCallPart,
-  tool: ToolDefinition | undefined,
-  prepared: ReturnType<typeof prepareTool> | undefined,
-  execution: Parameters<ToolExecutorPort['execute']>[2],
+  invoke: (signal: AbortSignal) => Promise<ToolResult>,
   signal: AbortSignal,
-  invalid?: string,
 ): Promise<NativeToolMessage> {
   if (signal.aborted)
     return toolFailure(
@@ -112,15 +109,7 @@ async function executeTool(
     );
   const start = performance.now();
   try {
-    if (!tool) throw new Error('Tool is no longer available: ' + call.name);
-    if (invalid) throw new Error(invalid);
-    const result = await invokeTool(prepared!, call.id, {
-      signal,
-      executionId: execution.executionId,
-      waitFor: execution.waitFor,
-      onUpdate: (update) => execution.update?.(call, update),
-      write: (text, channel = 'output') => execution.write?.(call, text, channel),
-    });
+    const result = await invoke(signal);
     return {
       ...result,
       role: 'toolResult',

@@ -1,5 +1,4 @@
 import { explicitFileReader, rootedFileAccess } from '@mini-harness/file-access/api';
-import { runTool } from '@mini-harness/tools/execution';
 import { containsPath } from '@mini-harness/platform/paths';
 import { expectPresent } from '../../../test/support/required.ts';
 import test from 'node:test';
@@ -27,19 +26,14 @@ test('explicit reads use native paths while searches and writes use the workspac
   const workspace = rootedFileAccess(access, cwd, {
     exclude: (path) => containsPath(state, path),
   });
+  const definitions = fileTools(cwd, () => workspace, () => explicitFileReader(access, cwd));
   const execute = async (name: string, value: object) =>
-    runTool(
-      expectPresent(
-        fileTools(
-          cwd,
-          () => workspace,
-          () => explicitFileReader(access, cwd),
-        ).find((tool) => tool.name === name),
-        'file tool ' + name,
-      ),
-      'test',
-      value as Record<string, unknown>,
-    );
+    expectPresent(definitions.find((tool) => tool.name === name), 'file tool ' + name).execute(value as Record<string, unknown>, {
+      callId: 'test',
+      signal: new AbortController().signal,
+      update() {},
+      write() {},
+    });
   assert.match(
     JSON.stringify(await execute('write', { path: 'src/note.txt', content: 'good text' })),
     /wrote/i,

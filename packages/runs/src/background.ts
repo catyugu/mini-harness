@@ -92,7 +92,6 @@ function start(ctx: Context, id: string, name: string, args: Record<string, unkn
   );
   if (!tool?.background) throw new Error('Tool does not support background execution: ' + name);
   const prepared = prepareTool(tool, args);
-  if (!prepared.binding) throw new Error('Background tool has no registered provider: ' + name);
   const task = ctx.harnessTasks.start(
     {
       ...service.task(id),

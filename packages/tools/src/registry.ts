@@ -1,11 +1,10 @@
 import { ScopedLayers, scopeOf, type ScopeKey } from '@mini-harness/plugin-api/scopes';
 import { toolNamePattern } from '@mini-harness/llm/vocabulary';
 import { Service, type Context } from 'mini-harness/cordis';
-import { bindTool } from './invocation.ts';
-import { type ToolDefinition, type ToolPort, type ToolFactory, type ToolSelection } from './api.ts';
+import { type ToolDefinition, type ResolvedTool, type ToolPort, type ToolFactory, type ToolSelection } from './api.ts';
 interface ToolRegistration {
   name: string;
-  resolve(selection: ToolSelection, caller?: Context): ToolDefinition;
+  resolve(selection: ToolSelection, caller?: Context): ResolvedTool;
   visible(resourceId?: string): boolean;
 }
 
@@ -46,11 +45,14 @@ export class ToolRegistry {
           ? factory.resolve(selection.resourceId!, caller)
           : (definition as ToolDefinition);
         if (tool.name !== name) throw new Error('Tool binding changed its registered name: ' + name);
-        return bindTool(tool, {
-          provider: owner,
-          signal: lifetime.signal,
-          available: () => registry.selected(name, selection) === entry,
-        });
+        return {
+          ...tool,
+          binding: {
+            provider: owner,
+            signal: lifetime.signal,
+            available: () => registry.selected(name, selection) === entry,
+          },
+        };
       },
     };
     const remove = this.tools.add(scope, name, entry);
@@ -75,7 +77,7 @@ export class ToolRegistry {
         .reverse()
         .flatMap((layer) => [...layer.keys()]),
     );
-    const available: ToolDefinition[] = [];
+    const available: ResolvedTool[] = [];
     for (const name of names) {
       const selected = this.selected(name, selection);
       if (selected) available.push(selected.resolve(selection, caller));

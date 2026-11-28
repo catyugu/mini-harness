@@ -7,7 +7,7 @@ import type {
   NativeAssistantMessage,
   NativeToolMessage,
 } from '@mini-harness/llm/api';
-import type { ToolDefinition } from '@mini-harness/tools/api';
+import type { ResolvedTool } from '@mini-harness/tools/api';
 import type { ToolExecution, ToolExecutorPort } from '@mini-harness/tools/execution';
 
 type Request = Omit<LlmRequest, 'signal'>;
@@ -24,7 +24,7 @@ export type ModelRetry = { delayMs?: number };
 export interface AgentTurn {
   request: Request;
   executor: ToolExecutorPort;
-  tools: ReadonlyMap<string, ToolDefinition>;
+  tools: ReadonlyMap<string, ResolvedTool>;
   execution?: Omit<ToolExecution, 'signal' | 'deliver'>;
   /** Repair the actual failed request within this turn, or decline recovery. */
   recover?(
