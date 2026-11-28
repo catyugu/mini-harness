@@ -12,7 +12,9 @@ export function validateModelOptions(model: unknown, thinkingLevel: unknown) {
     typeof model.provider !== 'string' ||
     !model.provider ||
     model.provider.length > 160 ||
-    ('id' in model && model.id !== undefined && (typeof model.id !== 'string' || !model.id || model.id.length > 160))
+    ('id' in model &&
+      model.id !== undefined &&
+      (typeof model.id !== 'string' || !model.id || model.id.length > 160))
   )
     throw new DomainError('invalid_input', 'Invalid model choice');
 }

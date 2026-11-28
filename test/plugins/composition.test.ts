@@ -704,7 +704,9 @@ export const apply = (ctx) => {
     'Scoped parent-model',
   );
   assert.equal(
-    await sendRun(app.runtime.plugins.ctx.harnessRuns, parent.id, 'Delegate provider', undefined, { model: scopedChoice }),
+    await sendRun(app.runtime.plugins.ctx.harnessRuns, parent.id, 'Delegate provider', undefined, {
+      model: scopedChoice,
+    }),
     'Scoped parent-model',
   );
   assert.equal(
@@ -718,7 +720,10 @@ export const apply = (ctx) => {
   assert.equal(children.length, 3);
   const providerChild = children.find(({ title }) => title === 'Provider child task');
   assert.ok(providerChild);
-  assert.deepEqual(app.runtime.plugins.ctx.harnessSessions.log(providerChild.id).projection().model, { provider: 'scoped-only', id: 'child-model' });
+  assert.deepEqual(app.runtime.plugins.ctx.harnessSessions.log(providerChild.id).projection().model, {
+    provider: 'scoped-only',
+    id: 'child-model',
+  });
   assert.equal(app.runtime.plugins.ctx.harnessRuns.info(providerChild.id)?.state, 'completed');
   const inherited = children.find(({ title }) => title === 'Inherited child task');
   const explicit = children.find(({ title }) => title === 'Explicit child task');

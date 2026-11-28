@@ -71,7 +71,9 @@ export function selectInputModel(
   const selected = selectModel(
     models,
     choices,
-    item.model ? 'Unknown model: ' + item.model.provider + (item.model.id === undefined ? '' : '/' + item.model.id) : undefined,
+    item.model
+      ? 'Unknown model: ' + item.model.provider + (item.model.id === undefined ? '' : '/' + item.model.id)
+      : undefined,
   );
   return {
     ...selected,

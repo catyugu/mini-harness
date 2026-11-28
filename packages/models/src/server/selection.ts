@@ -38,9 +38,10 @@ export function selectModel(
 ) {
   for (const choice of choices) {
     if (!choice) continue;
-    const model = choice.id === undefined
-      ? catalog.list().find(({ provider }) => provider === choice.provider)
-      : { provider: choice.provider, id: choice.id };
+    const model =
+      choice.id === undefined
+        ? catalog.list().find(({ provider }) => provider === choice.provider)
+        : { provider: choice.provider, id: choice.id };
     if (!model) continue;
     const resolved = catalog.resolve(model);
     if (resolved) return resolved;
