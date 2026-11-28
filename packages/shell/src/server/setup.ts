@@ -8,13 +8,15 @@ import { runShellCommand } from './command.ts';
 export function setup(ctx: Context) {
   ctx.effect(() => ctx.harnessChanges.register('files'));
   const workspace = ctx.harnessSessions;
+  const windows = process.platform === 'win32';
   const options = ctx.fiber.effectiveConfig as { timeoutMs: number; maxOutputBytes: number };
   const tool = (sessionId: string, caller = ctx) =>
     defineTool({
       name: 'shell',
       label: 'Shell',
       description:
-        'Run a shell command in the workspace. For long builds or tests, use start_background and set timeoutMs as needed.',
+        (windows ? 'Run a cmd.exe command' : 'Run a /bin/sh command') +
+        ' in the workspace. For long builds or tests, use start_background and set timeoutMs as needed.',
       parameters: Type.Object(
         {
           command: Type.String({ minLength: 1, maxLength: 16000 }),
@@ -43,16 +45,16 @@ export function setup(ctx: Context) {
         const env = { ...process.env };
         if (attachments) env.MINI_HARNESS_ATTACHMENTS = attachments;
         else delete env.MINI_HARNESS_ATTACHMENTS;
-        const command: ProcessCommand =
-          process.platform === 'win32'
-            ? {
-                file: env.ComSpec || 'cmd.exe',
-                args: ['/d', '/s', '/c', '"' + args.command + '"'],
-                cwd,
-                env,
-                windowsVerbatimArguments: true,
-              }
-            : { file: '/bin/sh', args: ['-c', args.command], cwd, env };
+        if (windows) env.PYTHONIOENCODING = 'utf-8';
+        const command: ProcessCommand = windows
+          ? {
+              file: env.ComSpec || 'cmd.exe',
+              args: ['/d', '/s', '/c', '"chcp 65001>nul && ' + args.command + '"'],
+              cwd,
+              env,
+              windowsVerbatimArguments: true,
+            }
+          : { file: '/bin/sh', args: ['-c', args.command], cwd, env };
         try {
           const startedAt = performance.now();
           const output = await runShellCommand(execution, command, timeoutMs, maxOutputBytes, signal, write);
