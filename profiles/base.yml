@@ -32,6 +32,9 @@ plugins:
     name: '@mini-harness/pi-adapter'
   - id: core:runs
     name: '@mini-harness/runs'
+  - id: conversation-title
+    name: '@mini-harness/conversation-title'
+    disabled: true
   - id: core:models
     name: '@mini-harness/models'
     live: true

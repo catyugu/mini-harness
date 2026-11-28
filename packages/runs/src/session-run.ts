@@ -13,7 +13,7 @@ import {
 } from '@mini-harness/agent/events';
 import { DomainError } from '@mini-harness/platform/errors';
 import { isDeepStrictEqual } from 'node:util';
-import type { SessionCatalog, SessionLifecycle, SessionStore } from '@mini-harness/sessions/records';
+import type { SessionStore } from '@mini-harness/sessions/records';
 import type { ModelChoice } from '@mini-harness/llm/vocabulary';
 import type { ModelCatalogPort } from '@mini-harness/models/api';
 import type { SessionRecord } from '@mini-harness/sessions/identity';
@@ -86,11 +86,7 @@ export function selectInputModel(
 }
 
 export class SessionRun {
-  constructor(
-    private readonly sessions: Pick<SessionCatalog, 'workspacePath'> &
-      Pick<SessionLifecycle, 'assertAvailable' | 'rename'> &
-      Pick<SessionStore, 'log'>,
-  ) {}
+  constructor(private readonly sessions: Pick<SessionStore, 'workspacePath' | 'assertAvailable' | 'log'>) {}
 
   /** Never retry an unknown tool outcome after restart or provider failure. */
   closeUnfinishedTools(log: SessionLogPort, cancelled = false) {
@@ -189,7 +185,6 @@ export class SessionRun {
     };
 
     const commit = async (
-      item: Input,
       prepared: Awaited<ReturnType<typeof prepare>>,
       origin: MessageOrigin,
       inboxId?: string,
@@ -206,9 +201,6 @@ export class SessionRun {
         inboxId,
         origin,
       } as const;
-      const first = log
-        .projection(edit?.parentId)
-        .timeline.every((item) => item.type !== 'message' || item.role !== 'user');
       const entry = edit ? log.revise(event, edit.parentId, edit.expectedLeafId) : log.append(event);
       await emit({
         type: 'user',
@@ -217,10 +209,6 @@ export class SessionRun {
         revised: Boolean(edit),
         message: displayMessage(entry, event.message, submissionId),
       });
-      if (record.titleSource === 'auto' && first && origin.source === 'user') {
-        const title = item.input?.userText || item.input?.attachments[0]?.name || item.text;
-        this.sessions.rename(id, title.slice(0, 72), 'auto');
-      }
     };
     const originOf = (item: InboxItem): MessageOrigin => item.origin ?? { source: 'user' };
     const deliver = (modes: MessageMode[], requireInput = false) =>
@@ -228,13 +216,12 @@ export class SessionRun {
         modes,
         signal,
         (item) => prepare(item, selection(item), originOf(item)),
-        (item, prepared) => commit(item, prepared, originOf(item), item.id),
+        (item, prepared) => commit(prepared, originOf(item), item.id),
         requireInput,
       );
     if (revision) {
       const origin = { source: 'user' } as const;
       await commit(
-        revision,
         await prepare(revision, selection(revision, log.context(revision.parentId)), origin),
         origin,
       );

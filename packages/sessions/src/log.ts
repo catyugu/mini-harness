@@ -73,11 +73,11 @@ export class SessionLog extends RecordLog<SessionEvent> implements SessionLogPor
     file: string,
     sessionId: string,
     createdAt = new Date().toISOString(),
-    changed?: (entry: SessionEntry) => void,
+    changed?: (entry: SessionEntry, log: SessionLog) => void,
     readOnly = false,
     writeFailed?: (error: unknown) => void,
   ) {
-    super(file, sessionId, changed, readOnly, writeFailed);
+    super(file, sessionId, (entry) => changed?.(entry, this), readOnly, writeFailed);
     this.open(createdAt);
   }
 
@@ -182,6 +182,12 @@ export class SessionLog extends RecordLog<SessionEvent> implements SessionLogPor
 
   setting(owner: string) {
     return structuredClone(this.settings.get(owner));
+  }
+
+  firstUserInputId() {
+    return this.records.find(
+      (entry) => entry.type === 'message' && entry.inboxId && (entry.origin?.source ?? 'user') === 'user',
+    )?.id;
   }
 
   hasInbox(id: string) {

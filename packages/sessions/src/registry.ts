@@ -218,9 +218,11 @@ export class SessionRegistry implements SessionStore {
 
   rename(id: string, title: string, source: SessionRecord['titleSource'] = 'manual') {
     const record = this.assertAvailable(id);
-    if (source === 'auto' && (record.titleSource === 'manual' || record.title !== 'New conversation'))
-      return record;
-    return this.replace(record, { title, titleSource: source });
+    if (source === 'auto' && record.titleSource === 'manual') return record;
+    return this.replace(record, {
+      title: source === 'auto' ? title.slice(0, 72) : title,
+      titleSource: source,
+    });
   }
 
   private nativeFile(record: Pick<SessionRecord, 'id' | 'workspaceId'>) {
@@ -269,9 +271,14 @@ export class SessionRegistry implements SessionStore {
   private openLog(record: SessionRecord, mode: 'read' | 'write' | 'recover') {
     const { id } = record;
     const writable = mode !== 'read';
-    const onChange = (entry: SessionEntry) => {
+    const onChange = (entry: SessionEntry, log: SessionLog) => {
+      const delivery = entry.type === 'message' && entry.inboxId;
+      if (delivery && log.firstUserInputId() === entry.id) {
+        const title = entry.presentation?.userText || entry.presentation?.attachments[0]?.name;
+        if (title) this.rename(id, title, 'auto');
+      }
       const inbox = entry.type.startsWith('inbox-');
-      if (inbox || (entry.type === 'message' && entry.inboxId)) this.notify(id, false, true);
+      if (inbox || delivery) this.notify(id, false, true);
       if (!inbox && entry.type !== 'model-request' && entry.type !== 'tool-schema')
         this.notify(
           id,

@@ -26,6 +26,8 @@ const receipt = ctx.harnessRuns.send(sessionId, {
 
 `info`, `activity` and `watch` expose current state and replay. `history` combines the selected branch with durable Run attribution and termination records. `wait` waits for the selected conversation's current Run and reads its saved settlement. `retryInput` reads the failed Run's input. `runTask` admits independent plugin work in the same exclusive lane and agent scope, so incoming messages remain durable until it settles. Runs saves admission and settlement as session-scoped plugin records. Settled runs reference the original Assistant entry. `settlements(id)` lists terminal metadata, and `result(id, runId)` reads the answer for one committed run. Startup marks unfinished Runs interrupted and starts fresh work for pending messages in unpaused sessions.
 
+`input-accepted` observes a committed input, including revisions. Its `inputEntryId` identifies the durable message and its `model` identifies the selection made for that input.
+
 ## Record publication
 
 Runs owns volatile record updates and their ordered replay. Plugins obtain `liveRecords(sessionId, runId)` and use its `set`, channel `append` and `remove` operations with stable record IDs. A committed Session display record with the same ID replaces its live counterpart. The producer defines the record's meaning and renderer; Runs does not interpret its channels. Runs dispatches `agent/records` to active contributors for each native Agent event. `runTask(provider, id, work)` schedules independent work in the conversation lane under the Fiber that implements it.

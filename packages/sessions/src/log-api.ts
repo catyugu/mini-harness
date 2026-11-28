@@ -128,6 +128,8 @@ export interface SessionLogPort {
   setting(owner: string): unknown;
   inbox(): InboxItem[];
   hasInbox(id: string): boolean;
+  /** First delivered user input in log order, independent of the selected branch. */
+  firstUserInputId(): string | undefined;
   inboxPaused(): boolean;
   queue(): QueueEntry[];
   branch(leafId?: string | null): SessionEntry[];
@@ -155,6 +157,7 @@ export interface SessionLogPort {
 export type SessionLogReader = Pick<
   SessionLogPort,
   | 'entries'
+  | 'firstUserInputId'
   | 'setting'
   | 'context'
   | 'requestDefinition'

@@ -49,6 +49,7 @@ These private source packages are built into a single npm package. Locate the ow
 ## Interaction features
 
 - [conversation](../packages/conversation/README.md): Conversation controller, composer, history and navigation.
+- [conversation-title](../packages/conversation-title/README.md): Optional model-generated titles.
 - [input](../packages/input/README.md): Message and attachment preparation.
 - [file-preview](../packages/file-preview/README.md): Typed resource preview and downloads.
 - [git-diff](../packages/git-diff/README.md): Workspace Git status and diffs.

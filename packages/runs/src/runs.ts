@@ -187,6 +187,7 @@ export class Runs implements RunPort {
               this.observe({
                 type: 'input-accepted',
                 sessionId: id,
+                inputEntryId: event.message.id,
                 parentId: record.parentId,
                 source: event.source,
                 runSource,

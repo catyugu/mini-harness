@@ -118,6 +118,7 @@ declare module '@mini-harness/plugin-api/observations' {
     'input-accepted': {
       type: 'input-accepted';
       sessionId: string;
+      inputEntryId: string;
       parentId?: string | null;
       source: InputSource;
       runSource: InputSource;
