@@ -36,7 +36,10 @@ export async function applyTransforms<Value, Input extends { signal: AbortSignal
   value: Value,
   input: Input,
 ): Promise<Value> {
-  for (const hook of hooks) value = (await invoke(hook, value, input)) ?? value;
+  for (const hook of hooks) {
+    const result = await invoke(hook, value, input);
+    if (result !== undefined) value = result;
+  }
   input.signal.throwIfAborted();
   return value;
 }

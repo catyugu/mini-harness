@@ -733,6 +733,47 @@ test('the retry policy cannot replay a model attempt after output has streamed',
   assert.deepEqual({ requests, retries, deltas }, { requests: 1, retries: 0, deltas: ['Partial'] });
 });
 
+test('explicit request recovery accepts the same request without rerunning preparation', async (t) => {
+  let requests = 0;
+  let preparations = 0;
+  let recoveries = 0;
+  const { agent, ctx, record } = await fixture(t, {
+    async *stream() {
+      if (++requests === 1) {
+        yield {
+          type: 'done',
+          message: {
+            ...answer(),
+            content: [],
+            stopReason: 'error',
+            errorMessage: 'Context limit',
+            errorKind: 'context-overflow',
+          },
+        };
+      } else {
+        yield { type: 'done', message: answer() };
+      }
+    },
+  });
+  ctx.on('agent/prepare-request', (request) => {
+    preparations++;
+    return request;
+  });
+  ctx.on('agent/recover-request', (request, { failure }) => {
+    assert.equal(failure.kind, 'context-overflow');
+    recoveries++;
+    return request;
+  });
+  assert.equal(
+    await agent.prompt(ctx, record, 'Recover', () => {}, {
+      fallback: model,
+      signal: new AbortController().signal,
+    }),
+    'Done',
+  );
+  assert.deepEqual({ requests, preparations, recoveries }, { requests: 2, preparations: 1, recoveries: 1 });
+});
+
 test('a queued follow-up can preselect the next model and thinking level', async (t) => {
   let release: () => void = () => {
     throw new Error('Not started');
