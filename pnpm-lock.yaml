@@ -253,6 +253,21 @@ importers:
         specifier: workspace:*
         version: link:../workspaces
 
+  packages/conversation-title:
+    dependencies:
+      '@mini-harness/llm':
+        specifier: workspace:*
+        version: link:../llm
+      '@mini-harness/models':
+        specifier: workspace:*
+        version: link:../models
+      '@mini-harness/plugin-api':
+        specifier: workspace:*
+        version: link:../plugin-api
+      '@mini-harness/sessions':
+        specifier: workspace:*
+        version: link:../sessions
+
   packages/file-access:
     dependencies:
       '@mini-harness/platform':

@@ -1,0 +1,17 @@
+{
+  "name": "@mini-harness/conversation-title",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@mini-harness/llm": "workspace:*",
+    "@mini-harness/models": "workspace:*",
+    "@mini-harness/plugin-api": "workspace:*",
+    "@mini-harness/sessions": "workspace:*"
+  },
+  "miniHarness": {
+    "profileModules": {
+      "@mini-harness/conversation-title": "./src/manifest.ts"
+    }
+  }
+}

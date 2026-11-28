@@ -1,6 +1,6 @@
 # Sessions
 
-Sessions owns durable conversation identity, ancestry, permissions, branch history, original uploads and deletion. It provides the persistence contract used by [Runs](../runs/README.md), [Tools](../tools/README.md) and external plugins.
+Sessions owns durable conversation identity, titles, ancestry, permissions, branch history, original uploads and deletion. It provides the persistence contract used by [Runs](../runs/README.md), [Tools](../tools/README.md) and external plugins.
 
 ## Public API and usage
 
@@ -35,6 +35,10 @@ The [public contract](src/records.ts) groups four kinds of operation:
 `log(id)` returns a record-operation port. The registry retains ownership of the underlying writer and its close/recovery lifecycle; plugins must not open a second writer for the same log. `inspectLog` provides the read-only type of the same record interface. History returns defensive projections rather than mutable backing records. The same log holds Inbox delivery IDs, message origins and the automatic wake pause.
 
 `pluginRecords(id, owner, query?)` reads an owner's committed records across all branches. A plugin can query a single key or filter by key prefix before applying a limit. `messageEntry(id, entryId)` reads a stored message by its record address. For a key reused across records, queries return the latest value at its original position. Plugins can append session-scoped records using `scope: 'session'` to keep the branch leaf unchanged. The owning plugin interprets the payload and handles recovery.
+
+The first committed user Inbox delivery assigns an automatic title from the original text or first attachment name, up to 72 characters. `firstUserInputId()` reads that delivery's message ID in durable log order across branches. Revisions and programmatic notifications do not qualify. Sessions commits the title before Runs publishes the accepted input observation.
+
+`rename` defaults to a manual title. An automatic rename can replace an automatic title and applies the same length limit. Sessions preserves manual titles and rejects renames for conversations being deleted or already removed.
 
 ## Lifecycle and dependencies
 

@@ -68,7 +68,7 @@ A Run is a Task with a conversation-specific lane and durable projection. Agent 
 | Service activation, injection, effects and Entry lifecycle                         | Cordis             |
 | Configuration reconciliation, plugin resolution, scope bindings and browser assets | Plugins            |
 | Workspace identity and canonical roots                                             | Workspaces         |
-| Conversation identity, ancestry, branch history, inbox and attachments             | Sessions           |
+| Conversation identity, titles, ancestry, branch history, inbox and attachments     | Sessions           |
 | Live task state, exclusive lanes, capacity and settlement                          | Tasks              |
 | Run admission, inbox delivery, replay and Run history                              | Runs               |
 | Independent tool work, output and completion delivery                              | Background         |
