@@ -226,7 +226,7 @@ function toProviderMessage(message: NativeMessage, selected: Model<Api>): Messag
 function fromProviderMessage(message: AssistantMessage): NativeAssistantMessage {
   const { role, content, timestamp, provider, model, usage, stopReason, errorMessage, ...providerData } =
     structuredClone(message);
-  const reason = stopReason === 'deferred' ? 'error' : stopReason;
+  const reason = stopReason === 'deferred' || stopReason === 'pending' ? 'error' : stopReason;
   return {
     role,
     content,
@@ -244,8 +244,8 @@ function fromProviderMessage(message: AssistantMessage): NativeAssistantMessage 
     },
     stopReason: reason,
     errorMessage:
-      stopReason === 'deferred'
-        ? 'Deferred responses are not supported by this agent'
+      stopReason === 'deferred' || stopReason === 'pending'
+        ? 'Nonterminal provider response: ' + stopReason
         : reason === 'error' || reason === 'aborted'
           ? errorMessage
           : undefined,
