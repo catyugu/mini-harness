@@ -376,7 +376,7 @@ ctx.effect(() => ctx.harnessModels.register({
 }, {
   accepts: (choice) => Boolean(resolve(choice)),
   async *stream() {
-    yield { type: 'done', message: { role: 'assistant', content: [{ type: 'text', text: 'Live model answer' }], timestamp: Date.now() } };
+    yield { type: 'done', message: { role: 'assistant', content: [{ type: 'text', text: 'Live model answer' }], timestamp: Date.now(), stopReason: 'stop' } };
   },
 }));
 }

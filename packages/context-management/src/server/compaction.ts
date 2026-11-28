@@ -82,7 +82,7 @@ export async function checkpoint(
       .flatMap((part) => (part.type === 'text' ? [part.text] : []))
       .join('')
       .trim();
-    if (answer.errorMessage || answer.stopReason === 'error' || answer.stopReason === 'aborted')
+    if (answer.stopReason === 'error' || answer.stopReason === 'aborted')
       throw new DomainError('unavailable', answer.errorMessage ?? 'Summary model request failed');
     if (answer.stopReason === 'length')
       throw new DomainError(

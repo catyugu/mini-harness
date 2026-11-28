@@ -780,7 +780,7 @@ export function apply(ctx) {
       const text = content[0].text;
       run.effect(() => () => appendFileSync(${JSON.stringify(file)}, text + '\\n'));
       if (text === 'fail') throw new Error('Expected custom agent failure');
-      return { role: 'assistant', content: [{ type: 'text', text: 'Custom answer' }], timestamp: Date.now() };
+      return { role: 'assistant', content: [{ type: 'text', text: 'Custom answer' }], timestamp: Date.now(), stopReason: 'stop' };
     },
   });
 }

@@ -91,6 +91,8 @@ export interface ModelAttemptMetrics {
   usage?: NativeUsage;
 }
 
+const assistantStopReasons = ['stop', 'length', 'toolUse', 'error', 'aborted'] as const;
+
 export interface NativeAssistantMessage {
   role: 'assistant';
   content: (TextPart | ThinkingPart | ToolCallPart)[];
@@ -98,12 +100,18 @@ export interface NativeAssistantMessage {
   provider?: string;
   model?: string;
   usage?: NativeUsage;
-  stopReason?: 'stop' | 'length' | 'toolUse' | 'error' | 'aborted';
+  stopReason: (typeof assistantStopReasons)[number];
+  /** Optional diagnostic for error or aborted responses; never determines the terminal state. */
   errorMessage?: string;
+  /** Classification of an error response, when the adapter knows it. */
   errorKind?: ModelErrorKind;
   /** JSON-only continuation/signature metadata interpreted exclusively by the LLM adapter. */
   providerData?: Record<string, unknown>;
 }
+export function assistantFailed(message: NativeAssistantMessage) {
+  return message.stopReason === 'error' || message.stopReason === 'aborted';
+}
+
 export const toolResultStates = ['finished', 'error', 'skipped', 'denied', 'cancelled'] as const;
 export type ToolResultState = (typeof toolResultStates)[number];
 
@@ -236,28 +244,30 @@ export function validateNativeMessage(message: NativeMessage) {
     !Number.isFinite(message.timestamp)
   )
     throw new Error('Invalid session message');
-  if (!Array.isArray(message.content)) throw new Error('Invalid session message content');
-  for (const block of message.content) {
+  if (message.role !== 'assistant') {
+    if (!isTextImageContent(message.content)) throw new Error('Invalid session message content');
+  } else {
+    if (
+      !assistantStopReasons.includes(message.stopReason) ||
+      (message.errorMessage !== undefined &&
+        (!assistantFailed(message) || typeof message.errorMessage !== 'string')) ||
+      (message.errorKind !== undefined &&
+        (message.stopReason !== 'error' ||
+          !['context-overflow', 'image-limit', 'transient', 'permanent'].includes(message.errorKind)))
+    ) throw new Error('Invalid assistant termination');
+    if (!Array.isArray(message.content)) throw new Error('Invalid session message content');
+    for (const block of message.content) {
     if (!block || typeof block !== 'object') throw new Error('Invalid session message content');
     switch (block.type) {
       case 'text':
         if (typeof block.text !== 'string') throw new Error('Invalid text content');
         break;
-      case 'image':
-        if (
-          message.role === 'assistant' ||
-          typeof block.data !== 'string' ||
-          typeof block.mimeType !== 'string'
-        )
-          throw new Error('Invalid image content');
-        break;
       case 'thinking':
-        if (message.role !== 'assistant' || typeof block.thinking !== 'string')
+        if (typeof block.thinking !== 'string')
           throw new Error('Invalid reasoning content');
         break;
       case 'toolCall':
         if (
-          message.role !== 'assistant' ||
           typeof block.id !== 'string' ||
           typeof block.name !== 'string' ||
           !block.arguments ||
@@ -268,6 +278,7 @@ export function validateNativeMessage(message: NativeMessage) {
         break;
       default:
         throw new Error('Unknown session content type');
+    }
     }
   }
   if (

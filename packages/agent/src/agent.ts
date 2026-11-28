@@ -1,9 +1,9 @@
 import type { Context } from 'mini-harness/cordis';
 import { isDeepStrictEqual } from 'node:util';
 import {
+  assistantFailed,
   validateNativeMessage,
   validateRequestSnapshot,
-  type NativeAssistantMessage,
   type ToolCallPart,
 } from '@mini-harness/llm/api';
 import type { AgentEvent, AgentPort, AgentRun } from './api.ts';
@@ -47,7 +47,7 @@ export class AgentLoop implements AgentPort {
       const { request, executor, execution, deliver } = step;
       let result = original;
       let diagnostic: Extract<AgentEvent, { type: 'assistant' }>['diagnostic'];
-      if (!failed(original)) {
+      if (!assistantFailed(original)) {
         result = executor.interpret(original, { model: request.model, turn, signal });
         if (!isDeepStrictEqual(result, original))
           diagnostic = { code: 'executor-response', message: original };
@@ -68,7 +68,7 @@ export class AgentLoop implements AgentPort {
       }
       validateNativeMessage(result);
       input.onEvent?.({ type: 'assistant', message: result, diagnostic });
-      if (failed(result)) {
+      if (assistantFailed(result)) {
         signal.throwIfAborted();
         throw new Error(result.errorMessage || 'Model request failed');
       }
@@ -100,6 +100,3 @@ export class AgentLoop implements AgentPort {
   }
 }
 
-function failed(message: NativeAssistantMessage) {
-  return Boolean(message.errorMessage || message.stopReason === 'error' || message.stopReason === 'aborted');
-}

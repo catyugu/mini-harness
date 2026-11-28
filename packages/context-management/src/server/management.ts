@@ -1,4 +1,5 @@
 import {
+  assistantFailed,
   validateRequestSnapshot,
   type LlmPort,
   type LlmRequest,
@@ -29,13 +30,7 @@ function pendingInputStart(log: SessionLogPort, projection: SessionContext) {
   for (const entry of log.branch().reverse()) {
     if (entry.type !== 'message') continue;
     const message = entry.message;
-    if (
-      message.role === 'assistant' &&
-      !message.errorMessage &&
-      message.stopReason !== 'error' &&
-      message.stopReason !== 'aborted'
-    )
-      break;
+    if (message.role === 'assistant' && !assistantFailed(message)) break;
     if (message.role === 'user') pending.add(entry.id);
   }
   const first = projection.contextEntryIds.findIndex((id) => pending.has(id));

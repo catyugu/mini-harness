@@ -7,6 +7,7 @@ test('retention includes the complete latest exchange even when it exceeds the m
     { role: 'user', content: [{ type: 'text', text: 'History' }], timestamp: 0 },
     {
       role: 'assistant',
+      stopReason: 'toolUse',
       content: [{ type: 'toolCall', id: 'probe', name: 'probe', arguments: {} }],
       timestamp: 0,
     },

@@ -499,7 +499,7 @@ export function apply(ctx) {
   }, {
     accepts: (choice) => choice.provider === 'local-fixture',
     async *stream() {
-      yield { type: 'done', message: { role: 'assistant', content: [{ type: 'text', text: 'Independent response' }], timestamp: Date.now() } };
+      yield { type: 'done', message: { role: 'assistant', content: [{ type: 'text', text: 'Independent response' }], timestamp: Date.now(), stopReason: 'stop' } };
     },
   }));
 }
@@ -563,7 +563,7 @@ export function apply(ctx) {
   }, {
     accepts: (choice) => Boolean(resolve(choice)),
     async *stream() {
-      yield { type: 'done', message: { role: 'assistant', content: [{ type: 'text', text: ${JSON.stringify(name)} }], timestamp: Date.now() } };
+      yield { type: 'done', message: { role: 'assistant', content: [{ type: 'text', text: ${JSON.stringify(name)} }], timestamp: Date.now(), stopReason: 'stop' } };
     },
   }, ${priority}));
 }

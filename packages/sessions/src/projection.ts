@@ -64,7 +64,7 @@ export function displayMessage(
         ...fields,
         role: 'assistant',
         content: message.content,
-        error: !runId && message.stopReason !== 'aborted' ? message.errorMessage : undefined,
+        error: !runId && message.stopReason === 'error' ? message.errorMessage ?? 'Model request failed' : undefined,
       };
     case 'toolResult': {
       const { details, detailKeys } = message;

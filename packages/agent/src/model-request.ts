@@ -1,5 +1,5 @@
 import { setTimeout as sleep } from 'node:timers/promises';
-import { ModelStreamError } from '@mini-harness/llm/api';
+import { ModelStreamError, validateNativeMessage } from '@mini-harness/llm/api';
 import type {
   LlmPort,
   LlmRequest,
@@ -23,7 +23,7 @@ function failedMessage(
     model: model.id,
     stopReason: signal.aborted ? 'aborted' : 'error',
     errorMessage: error instanceof Error ? error.message : String(error),
-    errorKind,
+    errorKind: signal.aborted ? undefined : errorKind,
   };
 }
 
@@ -67,6 +67,7 @@ export async function requestModel(
         }
       });
       if (!message) throw new Error('The model stream ended without a final message');
+      validateNativeMessage(message);
     } catch (error) {
       message = {
         ...failedMessage(request, error, partial, error instanceof ModelStreamError ? error.kind : undefined),
@@ -80,9 +81,7 @@ export async function requestModel(
       };
     }
     options.attempt?.({ elapsedMs: performance.now() - started, firstTokenMs, usage: message.usage });
-    const failed =
-      !!message.errorMessage || message.stopReason === 'error' || message.stopReason === 'aborted';
-    if (!failed || streamed || message.content.length || signal.aborted || message.stopReason === 'aborted')
+    if (message.stopReason !== 'error' || streamed || message.content.length || signal.aborted)
       return message;
     if (attempt >= 3) return message;
     const failure: ModelFailure = {

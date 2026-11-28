@@ -267,7 +267,7 @@ test('a third-party plugin uses tools, models and subprocesses from a Profile wi
             const content = last?.role === 'toolResult'
               ? [{ type: 'text', text: id + ': ' + last.content[0].text }]
               : [{ type: 'toolCall', id: 'standalone-call', name: 'read_model', arguments: {} }];
-            yield { type: 'done', message: { role: 'assistant', content, timestamp: Date.now() } };
+            yield { type: 'done', message: { role: 'assistant', content, timestamp: Date.now(), stopReason: last?.role === 'toolResult' ? 'stop' : 'toolUse' } };
           },
         }));
       }
