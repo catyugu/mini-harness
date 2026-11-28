@@ -27,12 +27,9 @@ interface Revision extends RunInput {
   expectedLeafId: string | null;
 }
 
-interface Activity {
-  events?: RunEvents;
-}
 export class Runs implements RunPort {
   readonly events = new EventTarget();
-  private readonly streams = new Map<string, Activity>();
+  private readonly streams = new Map<string, RunEvents>();
 
   constructor(
     private readonly ctx: Context,
@@ -61,7 +58,7 @@ export class Runs implements RunPort {
   }
 
   activity(id: string) {
-    const events = this.streams.get(id)?.events;
+    const events = this.streams.get(id);
     return {
       partial: events?.partial,
       tools: events?.activeTools ?? [],
@@ -71,7 +68,7 @@ export class Runs implements RunPort {
 
   liveRecords(id: string, runId: string) {
     return recordPublisher((event) => {
-      const events = this.streams.get(id)?.events;
+      const events = this.streams.get(id);
       if (!events || events.info.id !== runId || !isRunning(events.info))
         throw new DomainError('not_found', 'Run not found');
       events.publish(event);
@@ -79,13 +76,13 @@ export class Runs implements RunPort {
   }
 
   recordChange(id: string, executionId: string, path: string) {
-    const info = this.streams.get(id)?.events?.info;
+    const info = this.streams.get(id)?.info;
     if (info?.id === executionId && isRunning(info))
       info.changedFiles = [...new Set([...(info.changedFiles ?? []), path])];
   }
 
   branchChanged(id: string, record: RecordAppend) {
-    const events = this.streams.get(id)?.events;
+    const events = this.streams.get(id);
     if (!events || !isRunning(events.info)) return;
     events.publish({ type: 'branch', ...record });
   }
@@ -96,14 +93,16 @@ export class Runs implements RunPort {
     if (this.current(id)) throw new DomainError('conflict', 'Conversation is already running');
   }
 
-  private publish(activity: Activity, event: StreamEvent) {
-    activity.events!.publish(event);
+  private liveRun(id: string, runId: string) {
+    const events = this.streams.get(id);
+    if (!events || events.info.id !== runId) throw new Error('Missing admitted run: ' + runId);
+    return events;
   }
 
   /** The run owns its domain-specific commit, including inbox settlement. */
-  private commitRun(id: string, activity: Activity, { task, output }: TaskHistoryRecord) {
-    const info = activity.events?.info;
-    const run: RunDetails = info
+  private commitRun(id: string, { task, output }: TaskHistoryRecord) {
+    const info = this.streams.get(id)?.info;
+    const run: RunDetails = info?.id === task.id
       ? {
           inputEntryId: info.inputEntryId,
           changedFiles: info.changedFiles,
@@ -111,35 +110,30 @@ export class Runs implements RunPort {
         }
       : { sequence: 0, inputEntryId: null };
     this.registry.log(id).append({ type: 'task', task: { ...task, result: undefined }, output, run });
+    if (info?.id !== task.id) this.streams.set(id, new RunEvents(projectRun(id, task, run)));
   }
 
-  private taskChanged(id: string, activity: Activity, { type, task }: TaskEvent) {
-    if (type === 'created') {
-      if (activity.events) return;
-      activity.events = new RunEvents(projectRun(id, task, { sequence: 0, inputEntryId: null }));
-      return;
-    }
+  private taskChanged(id: string, { type, task }: TaskEvent) {
     if (type !== 'transition') return;
-    const events = activity.events;
-    if (!events || events.info.id !== task.id) return;
+    const events = this.liveRun(id, task.id);
     const info = events.info;
     const firstAdmission = !info.executedAt && task.state === 'running';
     const ended = terminal(task.state);
     try {
-      if (task.state === 'failed' && task.error) this.publish(activity, { type: 'error', error: task.error });
+      if (task.state === 'failed' && task.error) events.publish({ type: 'error', error: task.error });
       const next = projectRun(id, task, {
         inputEntryId: info.inputEntryId,
         changedFiles: info.changedFiles,
         sequence: info.sequence + 1,
       });
       Object.assign(info, next, { sequence: info.sequence });
-      this.publish(activity, { type: 'run', run: next });
+      events.publish({ type: 'run', run: next });
       if (firstAdmission)
         this.observe({ type: 'run-started', sessionId: id, run: next }, this.current(id)?.signal);
       if (ended) this.observe({ type: 'run-ended', sessionId: id, run: next });
     } finally {
       if (ended) {
-        if (this.streams.get(id) === activity) this.streams.delete(id);
+        if (this.streams.get(id) === events) this.streams.delete(id);
         events.close();
       }
       this.changed(id);
@@ -148,7 +142,6 @@ export class Runs implements RunPort {
 
   private launch(id: string, revision?: Revision) {
     this.assertIdle(id);
-    const activity: Activity = {};
     const fallback = this.recent();
     const record = this.registry.get(id);
     if (!record) throw new DomainError('not_found', 'Conversation not found');
@@ -168,70 +161,67 @@ export class Runs implements RunPort {
         .inbox()
         .map(({ id }) => id),
     );
-    this.streams.set(id, activity);
     let runSource: InputSource | undefined;
-    try {
-      const task = this.tasks.start<string>(
-        {
-          owner,
-          commit: (record) => this.commitRun(id, activity, record),
-          onEvent: (event) => this.taskChanged(id, activity, event),
-          project: (answer) => answer,
-          type: 'agent-run',
-          lane: this.lane(id),
-          provider: policy?.provider ?? this.ctx,
-          pool: policy?.pool,
-          metadata: policy?.metadata,
-        },
-        (task) =>
-          this.withAgentContext(id, task.signal, (ctx, signal) =>
-            this.sessionRun.prompt(
-              ctx,
-              record,
-              (event) => {
-                if (event.type === 'user') {
-                  activity.events!.info.inputEntryId = event.message.id;
-                  runSource ??= event.source;
-                }
-                this.publish(activity, event);
-                if (event.type === 'user')
-                  this.observe({
-                    type: 'input-accepted',
-                    sessionId: id,
-                    parentId: record.parentId,
-                    source: event.source,
-                    runSource: runSource!,
-                    model: event.model,
-                  });
-              },
-              {
-                fallback,
-                signal,
-                task,
-                revision: prepared,
-              },
-            ),
-          ).catch((error) => {
-            task.signal.throwIfAborted();
-            throw error;
-          }),
-      );
-      void task.result.then(
-        () => this.wake(id),
-        () =>
-          this.wake(
-            id,
-            pending,
-            task.signal.reason instanceof DOMException &&
-              task.signal.reason.message === 'Interrupted by a new message',
+    const task = this.tasks.start<string>(
+      {
+        owner,
+        commit: (record) => this.commitRun(id, record),
+        onEvent: (event) => this.taskChanged(id, event),
+        project: (answer) => answer,
+        type: 'agent-run',
+        lane: this.lane(id),
+        provider: policy?.provider ?? this.ctx,
+        pool: policy?.pool,
+        metadata: policy?.metadata,
+      },
+      (task) => {
+        const events = this.liveRun(id, task.id);
+        return this.withAgentContext(id, task.signal, (ctx, signal) =>
+          this.sessionRun.prompt(
+            ctx,
+            record,
+            (event) => {
+              if (event.type !== 'user') {
+                events.publish(event);
+                return;
+              }
+              events.info.inputEntryId = event.message.id;
+              runSource ??= event.source;
+              events.publish(event);
+              this.observe({
+                type: 'input-accepted',
+                sessionId: id,
+                parentId: record.parentId,
+                source: event.source,
+                runSource,
+                model: event.model,
+              });
+            },
+            {
+              fallback,
+              signal,
+              task,
+              revision: prepared,
+            },
           ),
-      );
-      this.changed(id);
-      return { info: activity.events!.info, task };
-    } catch (error) {
-      if (this.streams.get(id) === activity) this.streams.delete(id);
-      throw error;
-    }
+        ).catch((error) => {
+          task.signal.throwIfAborted();
+          throw error;
+        });
+      },
+    );
+    void task.result.then(
+      () => this.wake(id),
+      () =>
+        this.wake(
+          id,
+          pending,
+          task.signal.reason instanceof DOMException &&
+            task.signal.reason.message === 'Interrupted by a new message',
+        ),
+    );
+    this.changed(id);
+    return { info: this.liveRun(id, task.id).info, task };
   }
 
   send(id: string, input: RunSubmission) {
@@ -418,12 +408,12 @@ export class Runs implements RunPort {
   }
 
   info(id: string): RunInfo | undefined {
-    const info = this.streams.get(id)?.events?.info ?? this.registry.runSummary(id);
+    const info = this.streams.get(id)?.info ?? this.registry.runSummary(id);
     return info && structuredClone(info);
   }
 
   watch(id: string, runId: string, after: number, emit: (event: RunEvent) => void, end?: () => void) {
-    const events = this.streams.get(id)?.events;
+    const events = this.streams.get(id);
     const info = this.info(id);
     if (!info || info.id !== runId) throw new DomainError('not_found', 'Run not found');
     // A restarted run has no volatile delta cursor; its durable interrupted snapshot is authoritative.
