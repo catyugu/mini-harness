@@ -102,13 +102,14 @@ export class Runs implements RunPort {
   /** The run owns its domain-specific commit, including inbox settlement. */
   private commitRun(id: string, { task, output }: TaskHistoryRecord) {
     const info = this.streams.get(id)?.info;
-    const run: RunDetails = info?.id === task.id
-      ? {
-          inputEntryId: info.inputEntryId,
-          changedFiles: info.changedFiles,
-          sequence: info.sequence + 1 + Number(task.state === 'failed' && Boolean(task.error)),
-        }
-      : { sequence: 0, inputEntryId: null };
+    const run: RunDetails =
+      info?.id === task.id
+        ? {
+            inputEntryId: info.inputEntryId,
+            changedFiles: info.changedFiles,
+            sequence: info.sequence + 1 + Number(task.state === 'failed' && Boolean(task.error)),
+          }
+        : { sequence: 0, inputEntryId: null };
     this.registry.log(id).append({ type: 'task', task: { ...task, result: undefined }, output, run });
     if (info?.id !== task.id) this.streams.set(id, new RunEvents(projectRun(id, task, run)));
   }
