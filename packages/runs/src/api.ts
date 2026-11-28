@@ -1,4 +1,4 @@
-import type { ThinkingLevel, ModelChoice } from '@mini-harness/llm/vocabulary';
+import type { ThinkingLevel, ModelChoice, ModelSelection } from '@mini-harness/llm/vocabulary';
 import type { Attachment, InputSource } from '@mini-harness/input/message';
 import type { LiveRecord, RunEvent, ToolProgress } from './shared/stream.ts';
 import type { RecordPublisher } from '@mini-harness/sessions/display-record';
@@ -11,7 +11,7 @@ import type { RunInfo } from '@mini-harness/sessions/run-state';
 
 export interface RunInput {
   message: string;
-  model?: ModelChoice;
+  model?: ModelSelection;
   thinkingLevel?: ThinkingLevel | null;
   attachments?: Attachment[];
 }

@@ -1,6 +1,6 @@
 import type { RunPort } from '@mini-harness/runs/api';
 import type { SessionStore } from '@mini-harness/sessions/records';
-import type { ModelChoice } from '@mini-harness/llm/vocabulary';
+import type { ModelChoice, ModelSelection } from '@mini-harness/llm/vocabulary';
 
 export interface SubagentPolicy {
   maxDepth: number;
@@ -12,16 +12,10 @@ export function selectChildModel(
   request: { provider?: string; model?: string },
   defaults: ModelChoice | null,
   parent: ModelChoice | undefined,
-  models: () => readonly ModelChoice[],
-): ModelChoice {
+): ModelSelection {
   const provider = request.provider?.trim();
   const model = request.model?.trim();
-  if (provider) {
-    if (model) return { provider, id: model };
-    const choice = models().find((candidate) => candidate.provider === provider);
-    if (!choice) throw new Error('No model configured for provider: ' + provider);
-    return { provider, id: choice.id };
-  }
+  if (provider) return model ? { provider, id: model } : { provider };
   const inherited = defaults ?? parent;
   if (!inherited) throw new Error('Configure a model before delegating');
   return { provider: inherited.provider, id: model || inherited.id };
@@ -46,7 +40,6 @@ export class Delegation {
     private readonly sessions: SessionStore,
     private readonly runs: RunPort,
     private readonly settings: () => SubagentPolicy,
-    private readonly models: () => readonly ModelChoice[],
   ) {}
 
   visible(id: string) {
@@ -67,7 +60,6 @@ export class Delegation {
       request,
       this.settings().model,
       this.sessions.history(parentId).model,
-      this.models,
     );
     const record = this.sessions.create({
       parentId,

@@ -27,6 +27,17 @@ export interface ToolCallPart {
   argumentsError?: string;
 }
 export type NativeContent = TextPart | ImagePart | ThinkingPart | ToolCallPart;
+
+export function isTextImageContent(value: unknown): value is (TextPart | ImagePart)[] {
+  return (
+    Array.isArray(value) &&
+    value.every((part) =>
+      part?.type === 'text'
+        ? typeof part.text === 'string'
+        : part?.type === 'image' && typeof part.data === 'string' && typeof part.mimeType === 'string',
+    )
+  );
+}
 export interface NativeUsage {
   input: number;
   output: number;

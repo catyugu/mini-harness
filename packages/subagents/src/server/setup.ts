@@ -15,9 +15,7 @@ export function setup(ctx: Context) {
   };
   validate(policy());
   const pool = new TaskPool(policy().maxParallel);
-  const delegation = new Delegation(ctx.harnessSessions, ctx.harnessRuns, policy, () =>
-    ctx.harnessModels.list(),
-  );
+  const delegation = new Delegation(ctx.harnessSessions, ctx.harnessRuns, policy);
   ctx.on('runs/policy', (id) =>
     ctx.harnessSessions.get(id)?.parentId
       ? { pool, provider: ctx, metadata: { reportToParent: true } }

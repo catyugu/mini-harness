@@ -13,6 +13,7 @@ import type { ModelChoice } from '@mini-harness/llm/vocabulary';
 import type { ModelCatalogPort } from '@mini-harness/models/api';
 import type { SessionRecord } from '@mini-harness/sessions/identity';
 import {
+  isTextImageContent,
   validateNativeMessage,
   type LlmRequest,
   type ModelRequestContent,
@@ -25,7 +26,6 @@ import type { RecordPresentation } from '@mini-harness/sessions/display-record';
 import type { MessageOrigin, MessageMode } from '@mini-harness/sessions/queue';
 import type { SessionLogPort, InboxItem, SessionProjection } from '@mini-harness/sessions/log-api';
 import { Inbox } from './inbox.ts';
-import { isToolContent } from '@mini-harness/tools/api';
 import { applyTransforms } from './transforms.ts';
 import { toolFailure } from '@mini-harness/tools/execution';
 import {
@@ -71,7 +71,7 @@ export function selectInputModel(
   const selected = selectModel(
     models,
     choices,
-    item.model ? 'Unknown model: ' + item.model.provider + '/' + item.model.id : undefined,
+    item.model ? 'Unknown model: ' + item.model.provider + (item.model.id === undefined ? '' : '/' + item.model.id) : undefined,
   );
   return {
     ...selected,
@@ -311,7 +311,7 @@ export class SessionRun {
             try {
               const resultContext = { ...step, signal: toolSignal, tool: call.name, callId: call.id };
               const content = await applyTransforms(hooks, output.content, resultContext);
-              if (!isToolContent(content)) throw new Error('Invalid tool result content');
+              if (!isTextImageContent(content)) throw new Error('Invalid tool result content');
               output = { ...output, content };
             } catch (error) {
               if (!toolSignal.aborted) {

@@ -73,17 +73,6 @@ export interface ToolPort {
   list(selection?: ToolSelection): ToolDefinition[];
 }
 
-export function isToolContent(value: unknown): value is ToolResult['content'] {
-  return (
-    Array.isArray(value) &&
-    value.every((part) =>
-      part?.type === 'text'
-        ? typeof part.text === 'string'
-        : part?.type === 'image' && typeof part.data === 'string' && typeof part.mimeType === 'string',
-    )
-  );
-}
-
 /** Infer argument types from a JSON schema without binding plugins to a model SDK. */
 export function defineTool<Schema extends TSchema>(
   definition: Omit<ToolDefinition<Static<Schema>>, 'parameters'> & { parameters: Schema },

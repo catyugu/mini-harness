@@ -4,7 +4,7 @@ import type { TaskHistoryRecord } from '@mini-harness/tasks/api';
 import type { LogEntry } from './record-log.ts';
 import type { MessageMode, MessageOrigin, QueueEntry } from './shared/queue.ts';
 import type { ContentDelta } from './content-delta.ts';
-import type { ThinkingLevel, ModelChoice, ToolSchema } from '@mini-harness/llm/vocabulary';
+import type { ThinkingLevel, ModelChoice, ModelSelection, ToolSchema } from '@mini-harness/llm/vocabulary';
 import type { ImageInput, PreparedMessage } from '@mini-harness/input/message';
 import type {
   LlmRequest,
@@ -25,7 +25,7 @@ export interface InboxItem {
   text: string;
   images: ImageInput[];
   input?: PreparedMessage;
-  model?: ModelChoice;
+  model?: ModelSelection;
   thinkingLevel?: ThinkingLevel | null;
 }
 

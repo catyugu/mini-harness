@@ -1,4 +1,4 @@
-import { isThinkingLevel, type ThinkingLevel, type ModelChoice } from '@mini-harness/llm/vocabulary';
+import { isThinkingLevel, type ThinkingLevel, type ModelSelection } from '@mini-harness/llm/vocabulary';
 import { DomainError } from '@mini-harness/platform/errors';
 import type { ModelCatalogPort } from './api.ts';
 import type { NativeMessage } from '@mini-harness/llm/api';
@@ -33,12 +33,16 @@ export function resolveThinking(
 
 export function selectModel(
   catalog: ModelCatalogPort,
-  choices: readonly (ModelChoice | undefined)[],
+  choices: readonly (ModelSelection | undefined)[],
   unavailable = 'Configure a model before sending a message',
 ) {
   for (const choice of choices) {
     if (!choice) continue;
-    const resolved = catalog.resolve(choice);
+    const model = choice.id === undefined
+      ? catalog.list().find(({ provider }) => provider === choice.provider)
+      : { provider: choice.provider, id: choice.id };
+    if (!model) continue;
+    const resolved = catalog.resolve(model);
     if (resolved) return resolved;
   }
   throw new DomainError('invalid_input', unavailable);

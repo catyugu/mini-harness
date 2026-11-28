@@ -1,5 +1,5 @@
 import { scopeTarget } from '@mini-harness/plugin-api/scopes';
-import type { NativeToolMessage } from '@mini-harness/llm/api';
+import { isTextImageContent, type NativeToolMessage } from '@mini-harness/llm/api';
 import type { Context } from 'mini-harness/cordis';
 import type { HistoryEntry, ViewMessage } from '@mini-harness/sessions/message';
 
@@ -26,15 +26,7 @@ export function projectTool(ctx: Context, projection: ToolProjection) {
     try {
       const result = callback(structuredClone({ ...projection, content }));
       if (result === undefined) continue;
-      if (
-        !Array.isArray(result) ||
-        !result.every((block) =>
-          block?.type === 'text'
-            ? typeof block.text === 'string'
-            : block?.type === 'image' && typeof block.data === 'string' && typeof block.mimeType === 'string',
-        )
-      )
-        throw new Error('Invalid tool projection');
+      if (!isTextImageContent(result)) throw new Error('Invalid tool projection');
       content = structuredClone(result);
     } catch (error) {
       context.logger.warn('Tool projection failed: %s', String(error));
