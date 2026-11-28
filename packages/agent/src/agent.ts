@@ -99,4 +99,3 @@ export class AgentLoop implements AgentPort {
     throw new Error('Agent reached the configured turn limit (' + maxTurns + ')');
   }
 }
-

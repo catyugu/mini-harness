@@ -243,9 +243,12 @@ function fromProviderMessage(message: AssistantMessage): NativeAssistantMessage 
           : undefined,
     },
     stopReason: reason,
-    errorMessage: stopReason === 'deferred'
-      ? 'Deferred responses are not supported by this agent'
-      : reason === 'error' || reason === 'aborted' ? errorMessage : undefined,
+    errorMessage:
+      stopReason === 'deferred'
+        ? 'Deferred responses are not supported by this agent'
+        : reason === 'error' || reason === 'aborted'
+          ? errorMessage
+          : undefined,
     providerData,
   };
 }

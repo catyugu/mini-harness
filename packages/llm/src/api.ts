@@ -254,31 +254,31 @@ export function validateNativeMessage(message: NativeMessage) {
       (message.errorKind !== undefined &&
         (message.stopReason !== 'error' ||
           !['context-overflow', 'image-limit', 'transient', 'permanent'].includes(message.errorKind)))
-    ) throw new Error('Invalid assistant termination');
+    )
+      throw new Error('Invalid assistant termination');
     if (!Array.isArray(message.content)) throw new Error('Invalid session message content');
     for (const block of message.content) {
-    if (!block || typeof block !== 'object') throw new Error('Invalid session message content');
-    switch (block.type) {
-      case 'text':
-        if (typeof block.text !== 'string') throw new Error('Invalid text content');
-        break;
-      case 'thinking':
-        if (typeof block.thinking !== 'string')
-          throw new Error('Invalid reasoning content');
-        break;
-      case 'toolCall':
-        if (
-          typeof block.id !== 'string' ||
-          typeof block.name !== 'string' ||
-          !block.arguments ||
-          typeof block.arguments !== 'object' ||
-          Array.isArray(block.arguments)
-        )
-          throw new Error('Invalid tool call');
-        break;
-      default:
-        throw new Error('Unknown session content type');
-    }
+      if (!block || typeof block !== 'object') throw new Error('Invalid session message content');
+      switch (block.type) {
+        case 'text':
+          if (typeof block.text !== 'string') throw new Error('Invalid text content');
+          break;
+        case 'thinking':
+          if (typeof block.thinking !== 'string') throw new Error('Invalid reasoning content');
+          break;
+        case 'toolCall':
+          if (
+            typeof block.id !== 'string' ||
+            typeof block.name !== 'string' ||
+            !block.arguments ||
+            typeof block.arguments !== 'object' ||
+            Array.isArray(block.arguments)
+          )
+            throw new Error('Invalid tool call');
+          break;
+        default:
+          throw new Error('Unknown session content type');
+      }
     }
   }
   if (
